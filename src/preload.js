@@ -94,5 +94,18 @@ contextBridge.exposeInMainWorld('api', {
   power: {
     preventDisplaySleep: () => ipcRenderer.invoke('power:preventDisplaySleep'),
     allowDisplaySleep:   () => ipcRenderer.invoke('power:allowDisplaySleep')
+  },
+  // v2.0.0 STEP 2: 2 画面間の状態同期ブリッジ。
+  //   - subscribeStateSync: hall 側で main からの差分を受信（イベント駆動、ポーリング禁止）
+  //   - fetchInitialState:  hall 起動時に 1 回だけ呼ぶ初期同期（_dualStateCache 全体）
+  //   - notifyOperatorAction: operator → main → hall の操作リクエスト中継（STEP 3 で本格利用）
+  //   operator-solo モードでは hall が存在しないので、これらは呼ばれない（renderer 側 role ガード）。
+  dual: {
+    subscribeStateSync: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
+    },
+    fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
+    notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload })
   }
 });

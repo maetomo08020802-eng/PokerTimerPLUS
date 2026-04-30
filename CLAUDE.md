@@ -222,4 +222,15 @@
 ### v2.0.0 参照ドキュメント
 - v2 品質基準: skills/v2-dual-screen.md
 - v2 パイプライン: PIPELINE.md「v2.0.0 構築フロー」セクション
+- **CC 運用アンチパターン（公式ドキュメント準拠、全 STEP 共通絶対遵守）: skills/cc-operation-pitfalls.md** ★毎フェーズ開始時に必読
+
+### v2.0.0 公式ドキュメント準拠の絶対遵守事項（2026-05-01 追加）
+詳細は skills/cc-operation-pitfalls.md を参照。要点だけ:
+- **並列 sub-agent / Task は最大 3 体まで**（4 体以上は公式 Agent Teams 推奨違反）
+- **「念のため」のコード追加禁止**（特定入力 workaround / hard-coded 値）
+- **同じバグで 2 回修正試行する前に context 肥大化を疑う**
+- **NEXT_CC_PROMPT 指示外の追加実装は CC_REPORT「構築士への質問」に記載のみ**
+- **Plan Mode 活用**（3 ファイル以上変更時は実装前に plan）
+- **CC_REPORT に致命バグ保護 5 件への影響評価を必ず明記**
+- **CC_REPORT に並列起動した sub-agent / Task 数を必ず報告**
 
