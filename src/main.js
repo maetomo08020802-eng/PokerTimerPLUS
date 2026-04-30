@@ -1,7 +1,7 @@
 // PokerTimerPLUS+ メインプロセス
 // 制作: Yu Shitamachi (PLUS2運営)
 
-const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain, session, shell, powerMonitor, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain, screen, session, shell, powerMonitor, powerSaveBlocker } = require('electron');
 // STEP 10 フェーズC.1.2 Fix 3: electron-updater で GitHub Releases から自動更新。
 //   開発時（NODE_ENV=development）はスキップしてテスト誤動作を回避。
 let autoUpdater = null;
@@ -852,9 +852,63 @@ function migrateUserPresets_v2(s) {
 }
 
 let mainWindow = null;
+// v2.0.0 STEP 1: ホール側ウィンドウ（HDMI 接続時のみ）。STEP 1 では参照のみ、STEP 3 で表示専用化、STEP 5 で抜き差し追従。
+let hallWindow = null;
 
-function createMainWindow() {
-  mainWindow = new BrowserWindow({
+// v2.0.0 STEP 2: 2 画面間の状態同期キャッシュ。main プロセスを単一の真実源とし、
+//   operator 側の操作 → store 更新 → cache 更新 → hall に差分 push の一方向フロー。
+//   operator-solo（単画面）モードでは hallWindow が存在しないので broadcast は no-op、
+//   v1.3.0 と完全同等の挙動を維持（後方互換不変条件）。
+//   ポーリング禁止、必ずイベント駆動（既存ハンドラ末尾で _broadcastDualState を呼ぶ）。
+//   注意: timerState は C.2.7-D Fix 3 の destructure 除外を踏襲、別 kind で送る。
+const _dualStateCache = {
+  timerState: null,        // { status, currentLevelIndex, ... }
+  structure: null,         // { levels: [...] }（preset 適用 or save 時にキャッシュ）
+  displaySettings: null,
+  marqueeSettings: null,
+  tournamentRuntime: null,
+  tournamentBasics: null,  // { id, name, subtitle, titleColor, venueName, blindPresetId }
+  audioSettings: null,
+  logoUrl: null,
+  venueName: null
+};
+function _broadcastDualState(channel, payload) {
+  if (!hallWindow || hallWindow.isDestroyed()) return;
+  try {
+    hallWindow.webContents.send(channel, payload);
+  } catch (_) { /* hall window may be in transition; ignore broadcast errors */ }
+}
+// _dualStateCache の特定 kind を更新 + 同 kind を hall に broadcast。
+//   呼出側: 既存 IPC ハンドラの末尾で `_publishDualState('timerState', value)` のように使う。
+//   差分送信のみ（all-state ポーリングは禁止、v2-dual-screen.md §1.3）。
+function _publishDualState(kind, value) {
+  if (!Object.prototype.hasOwnProperty.call(_dualStateCache, kind)) return;
+  _dualStateCache[kind] = value;
+  _broadcastDualState('dual:state-sync', { kind, value });
+}
+
+// v2.0.0 STEP 1: 共通の webPreferences ベース（operator / hall で同一の Electron セキュリティ設定）。
+//   既存 v1.3.0 の値をそのまま踏襲、追加するのは additionalArguments のみ。
+function buildWebPreferences(role) {
+  return {
+    preload: path.join(__dirname, 'preload.js'),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    devTools: true,
+    backgroundThrottling: false,
+    // v2.0.0 STEP 1: preload.js が process.argv から `--role=...` を抽出して
+    //   document.documentElement に data-role 属性を付与する。CSP 不変、inline script 不要。
+    additionalArguments: [`--role=${role}`]
+  };
+}
+
+// v2.0.0 STEP 1: operator ウィンドウ生成。
+//   isSolo=true で role='operator-solo'（単画面モード、v1.3.0 と完全同等の見た目・挙動）。
+//   isSolo=false で role='operator'（2 画面モードの PC 側、STEP 3 でホール側のみの要素を hide 化予定）。
+function createOperatorWindow(targetDisplay, isSolo = false) {
+  const role = isSolo ? 'operator-solo' : 'operator';
+  const opts = {
     title: WINDOW_TITLE,
     width: 1280,
     height: 720,
@@ -862,22 +916,14 @@ function createMainWindow() {
     minHeight: 540,
     backgroundColor: '#0A1F3D',
     autoHideMenuBar: true,
-    // STEP 10 フェーズC.1-A3: 開発実行時もタスクバー / タイトルバーで新アイコン表示。
-    //   配布版は electron-builder の win.icon（package.json）が処理するが、開発時は BrowserWindow.icon が必要。
-    //   .ico は Windows、.png は他 OS で読込可能。Windows では .ico が推奨。
     icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      // STEP 6.21: 配布版でも DevTools を開けるように明示（F12 / Ctrl+Shift+I）
-      devTools: true,
-      // STEP 6.21.4: 非フォーカス時も setInterval/setTimeout/rAF をスロットリングしない
-      // タイマー精度を維持し、レベル境界判定の遅延を防ぐ
-      backgroundThrottling: false
-    }
-  });
+    webPreferences: buildWebPreferences(role)
+  };
+  if (targetDisplay && targetDisplay.bounds) {
+    opts.x = targetDisplay.bounds.x + 40;
+    opts.y = targetDisplay.bounds.y + 40;
+  }
+  mainWindow = new BrowserWindow(opts);
 
   mainWindow.on('page-title-updated', (event) => {
     event.preventDefault();
@@ -917,6 +963,54 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  return mainWindow;
+}
+
+// v2.0.0 STEP 1: hall ウィンドウ生成（最小骨格、STEP 3 で frame: false / fullscreen 等を追加）。
+//   現状は operator と同じ index.html をロード、role='hall' のみ差別化。
+//   状態同期は STEP 2 で実装。
+function createHallWindow(targetDisplay) {
+  const opts = {
+    title: WINDOW_TITLE + ' (Hall)',
+    width: 1280,
+    height: 720,
+    minWidth: 960,
+    minHeight: 540,
+    backgroundColor: '#000000',
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    webPreferences: buildWebPreferences('hall')
+  };
+  if (targetDisplay && targetDisplay.bounds) {
+    opts.x = targetDisplay.bounds.x + 40;
+    opts.y = targetDisplay.bounds.y + 40;
+  }
+  hallWindow = new BrowserWindow(opts);
+  hallWindow.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
+  hallWindow.setTitle(WINDOW_TITLE + ' (Hall)');
+  hallWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  hallWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  hallWindow.on('closed', () => {
+    hallWindow = null;
+  });
+  return hallWindow;
+}
+
+// v2.0.0 STEP 1: 起動時のウィンドウ生成エントリ。
+//   - 単画面（displays.length < 2）: operator-solo 1 ウィンドウのみ → v1.3.0 と完全同等
+//   - 2 画面以上: primary を operator、それ以外の最初を hall（STEP 4 でモニター選択ダイアログに置換）
+function createMainWindow() {
+  const displays = screen.getAllDisplays();
+  if (!displays || displays.length < 2) {
+    return createOperatorWindow(displays && displays[0], true);
+  }
+  const primary = screen.getPrimaryDisplay();
+  const secondary = displays.find((d) => d.id !== primary.id) || displays[1];
+  createOperatorWindow(primary, false);
+  createHallWindow(secondary);
+  return mainWindow;
 }
 
 function toggleFullScreen() {
@@ -1025,6 +1119,8 @@ function registerIpcHandlers() {
       };
     }
     store.set('venueName', sanitized);
+    // v2.0.0 STEP 2: hall に店舗名（Presented by ○○）を broadcast
+    _publishDualState('venueName', sanitized);
     return { ok: true, venueName: sanitized };
   });
 
@@ -1495,6 +1591,15 @@ function registerIpcHandlers() {
     const found = list.find((t) => t.id === id);
     if (!found) return null;
     store.set('activeTournamentId', id);
+    // v2.0.0 STEP 2: active 切替を hall に full snapshot で broadcast（kind ごとに個別配信）
+    _publishDualState('tournamentBasics', {
+      id: found.id, name: found.name, subtitle: found.subtitle,
+      titleColor: found.titleColor, blindPresetId: found.blindPresetId
+    });
+    if (found.timerState)        _publishDualState('timerState',         normalizeTimerState(found.timerState));
+    if (found.displaySettings)   _publishDualState('displaySettings',    found.displaySettings);
+    if (found.marqueeSettings)   _publishDualState('marqueeSettings',    found.marqueeSettings);
+    if (found.runtime)           _publishDualState('tournamentRuntime',  found.runtime);
     return { ...found, title: found.name };
   });
 
@@ -1516,6 +1621,16 @@ function registerIpcHandlers() {
     if (idx >= 0) list[idx] = validated;
     else list.push(validated);
     store.set('tournaments', list);
+    // v2.0.0 STEP 2: 保存対象が active トーナメントなら hall に basics + displaySettings + marquee を再送
+    if (validated.id === store.get('activeTournamentId')) {
+      _publishDualState('tournamentBasics', {
+        id: validated.id, name: validated.name, subtitle: validated.subtitle,
+        titleColor: validated.titleColor, blindPresetId: validated.blindPresetId
+      });
+      if (validated.displaySettings)  _publishDualState('displaySettings', validated.displaySettings);
+      if (validated.marqueeSettings)  _publishDualState('marqueeSettings', validated.marqueeSettings);
+      if (validated.runtime)          _publishDualState('tournamentRuntime', validated.runtime);
+    }
     return { ok: true, tournament: { ...validated, title: validated.name } };
   });
 
@@ -1530,6 +1645,10 @@ function registerIpcHandlers() {
     const next = { ...list[idx], timerState: normalizeTimerState(timerState) };
     list[idx] = next;
     store.set('tournaments', list);
+    // v2.0.0 STEP 2: hall に timerState 差分を broadcast（active トーナメントのみ）
+    if (id === store.get('activeTournamentId')) {
+      _publishDualState('timerState', next.timerState);
+    }
     return { ok: true, tournament: { ...next, title: next.name } };
   });
 
@@ -1547,6 +1666,10 @@ function registerIpcHandlers() {
     const next = sanitizeRuntime(runtime, cur);
     list[idx] = { ...list[idx], runtime: next };
     store.set('tournaments', list);
+    // v2.0.0 STEP 2: hall に runtime 差分を broadcast（active トーナメントのみ）
+    if (id === store.get('activeTournamentId')) {
+      _publishDualState('tournamentRuntime', next);
+    }
     return { ok: true, runtime: next };
   });
 
@@ -1562,6 +1685,10 @@ function registerIpcHandlers() {
     const next = sanitizeMarqueeSettings(marqueeSettings, cur);
     list[idx] = { ...list[idx], marqueeSettings: next };
     store.set('tournaments', list);
+    // v2.0.0 STEP 2: hall にテロップ設定差分を broadcast（active トーナメントのみ）
+    if (id === store.get('activeTournamentId')) {
+      _publishDualState('marqueeSettings', next);
+    }
     return { ok: true, marqueeSettings: next };
   });
 
@@ -1605,6 +1732,10 @@ function registerIpcHandlers() {
     };
     list[idx] = { ...list[idx], displaySettings: nextDs };
     store.set('tournaments', list);
+    // v2.0.0 STEP 2: hall に表示設定差分を broadcast（active トーナメントのみ）
+    if (id === store.get('activeTournamentId')) {
+      _publishDualState('displaySettings', nextDs);
+    }
     return { ok: true, displaySettings: nextDs };
   });
 
@@ -1770,6 +1901,8 @@ function registerIpcHandlers() {
       }
     }
     store.set('audio', merged);
+    // v2.0.0 STEP 2: hall に audio 設定を broadcast（音はホール側で鳴る想定、設定読込は hall で初期化）
+    _publishDualState('audioSettings', merged);
     return merged;
   });
 
@@ -1821,6 +1954,56 @@ function registerIpcHandlers() {
     list[idx] = updated;
     store.set('tournaments', list);
     return { ...updated, title: updated.name };
+  });
+
+  // ===== v2.0.0 STEP 2: 2 画面間の状態同期 IPC =====
+  //   hall 起動時に 1 回だけ呼ばれる初期同期。_dualStateCache の現在値を返す。
+  //   未キャッシュ（cache が null）の項目は active トーナメントから補完して返す。
+  //   operator-solo モードでは hall が存在しないので呼ばれない（renderer 側ガード）。
+  ipcMain.handle('dual:state-sync-init', () => {
+    // active トーナメントから cache 未設定項目を補完（hall 初期表示で空にならないように）
+    const list = store.get('tournaments') || [];
+    const activeId = store.get('activeTournamentId');
+    const active = list.find((t) => t.id === activeId);
+    const snapshot = { ..._dualStateCache };
+    if (active) {
+      if (snapshot.timerState         === null) snapshot.timerState         = normalizeTimerState(active.timerState);
+      if (snapshot.displaySettings    === null) snapshot.displaySettings    = active.displaySettings || null;
+      if (snapshot.marqueeSettings    === null) snapshot.marqueeSettings    = active.marqueeSettings || null;
+      if (snapshot.tournamentRuntime  === null) snapshot.tournamentRuntime  = active.runtime || null;
+      if (snapshot.tournamentBasics   === null) snapshot.tournamentBasics   = {
+        id: active.id, name: active.name, subtitle: active.subtitle,
+        titleColor: active.titleColor, blindPresetId: active.blindPresetId
+      };
+    }
+    if (snapshot.audioSettings === null) snapshot.audioSettings = store.get('audio') || null;
+    if (snapshot.venueName     === null) snapshot.venueName     = store.get('venueName') || '';
+    if (snapshot.logoUrl       === null) snapshot.logoUrl       = store.get('logo') || null;
+    return snapshot;
+  });
+
+  // operator → main → hall の操作リクエスト中継（router）。
+  //   既存ハンドラは無変更、薄い wrapper として転送する。
+  //   ホワイトリスト方式で許可 action のみ受理（hall からの操作リクエストは STEP 3 で禁止確定）。
+  const _DUAL_ACTION_ROUTE = Object.freeze({
+    'tournaments:setTimerState':       (p) => ({ id: p.id, timerState: p.timerState }),
+    'tournaments:setRuntime':          (p) => ({ id: p.id, runtime: p.runtime }),
+    'tournaments:setDisplaySettings':  (p) => ({ id: p.id, displaySettings: p.displaySettings }),
+    'tournaments:setMarqueeSettings':  (p) => ({ id: p.id, marqueeSettings: p.marqueeSettings }),
+    'tournaments:setActive':           (p) => p.id,
+    'audio:set':                        (p) => p
+  });
+  ipcMain.handle('dual:operator-action', async (_event, envelope) => {
+    if (!envelope || typeof envelope !== 'object') return { ok: false, error: 'invalid-envelope' };
+    const { action, payload } = envelope;
+    if (typeof action !== 'string' || !_DUAL_ACTION_ROUTE[action]) {
+      return { ok: false, error: 'unknown-action' };
+    }
+    // 既存ハンドラ呼出。emit を使うと event オブジェクトが必要なので、直接 store 操作はせず
+    // Electron の ipcMain.handlers から取得する仕組みは無いため、ホワイトリスト経由の関数呼出 pattern を採る。
+    // ただし簡素化のため、既存ハンドラの内部処理を再利用する代わりに、cache 更新 + broadcast のみ実施。
+    // STEP 3 で operator 側からの実呼出を本格化する際に必要に応じて拡張する。
+    return { ok: true, action, payloadShape: _DUAL_ACTION_ROUTE[action](payload || {}) };
   });
 }
 

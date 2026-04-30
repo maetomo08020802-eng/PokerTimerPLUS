@@ -4,6 +4,27 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// v2.0.0 STEP 1: BrowserWindow.webPreferences.additionalArguments で渡された
+//   `--role=operator` / `--role=hall` / `--role=operator-solo` を抽出。
+//   document.documentElement に data-role 属性を付与することで、CSS [data-role] セレクタが
+//   役割別の表示制御を行えるようにする。CSP `script-src 'self'` は不変、inline script 不要。
+//   document が loading 状態でも documentElement は早期から存在するため flicker 回避のため即時付与。
+const _roleArg = (process.argv || []).find((a) => typeof a === 'string' && a.startsWith('--role='));
+const _role = _roleArg ? _roleArg.split('=')[1] : 'operator-solo';
+function _applyRoleAttribute() {
+  if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.setAttribute('data-role', _role);
+  }
+}
+// preload は document 構築途中でも実行可能。documentElement が既に存在する場合は即時付与、
+// 未生成なら DOMContentLoaded で再試行（保険、通常は到達しない）。
+_applyRoleAttribute();
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', _applyRoleAttribute, { once: true });
+}
+// renderer 側からも参照できるよう expose（read-only、STEP 3 以降の役割分岐ロジックで利用）
+contextBridge.exposeInMainWorld('appRole', _role);
+
 contextBridge.exposeInMainWorld('api', {
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion')
@@ -73,5 +94,18 @@ contextBridge.exposeInMainWorld('api', {
   power: {
     preventDisplaySleep: () => ipcRenderer.invoke('power:preventDisplaySleep'),
     allowDisplaySleep:   () => ipcRenderer.invoke('power:allowDisplaySleep')
+  },
+  // v2.0.0 STEP 2: 2 画面間の状態同期ブリッジ。
+  //   - subscribeStateSync: hall 側で main からの差分を受信（イベント駆動、ポーリング禁止）
+  //   - fetchInitialState:  hall 起動時に 1 回だけ呼ぶ初期同期（_dualStateCache 全体）
+  //   - notifyOperatorAction: operator → main → hall の操作リクエスト中継（STEP 3 で本格利用）
+  //   operator-solo モードでは hall が存在しないので、これらは呼ばれない（renderer 側 role ガード）。
+  dual: {
+    subscribeStateSync: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
+    },
+    fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
+    notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload })
   }
 });

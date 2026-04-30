@@ -53,6 +53,8 @@ import {
   isMuted as audioIsMuted,
   getMasterVolume as audioGetMasterVolume
 } from './audio.js';
+// v2.0.0 STEP 2: hall 側のみで起動する状態同期レイヤ。operator / operator-solo では no-op。
+import { initDualSyncForHall } from './dual-sync.js';
 
 console.log('PokerTimerPLUS+ 起動');
 
@@ -6103,4 +6105,21 @@ async function initialize() {
   }
 }
 
-initialize();
+// v2.0.0 STEP 2: 起動時の役割分岐。
+//   - 'hall'         : ホール側ウィンドウ。dual-sync を await してから既存の表示ロジックを起動
+//   - 'operator'     : 2 画面モードの PC 側。STEP 3 で UI を操作専用化、本 STEP では既存ロジックそのまま
+//   - 'operator-solo': 単画面モード（HDMI なし）。v1.3.0 と完全同等の挙動を維持（後方互換不変条件）
+//   role 不明時は 'operator-solo' 扱い（preload.js の既定値と一致）。
+const __appRole = (typeof window !== 'undefined' && window.appRole) || 'operator-solo';
+if (__appRole === 'hall') {
+  // hall: 初期同期 → 既存 initialize（DOM/タイマー描画ロジック）を起動。
+  //   await の失敗で initialize が止まらないよう finally でフォールバック。
+  initDualSyncForHall().finally(() => initialize());
+} else if (__appRole === 'operator') {
+  // operator（2 画面の PC 側）: 本 STEP では既存ロジックそのまま。
+  //   STEP 3 で表示要素の hidden 化 + main への operator-action 通知へ移行する。
+  initialize();
+} else {
+  // operator-solo（単画面、デフォルト）: v1.3.0 と完全同等。
+  initialize();
+}

@@ -1,211 +1,137 @@
-# CC_REPORT — 2026-04-30 フェーズC.1.8: 重大バグ修正 — トーナメント途中の再起動でランタイムデータ消失
+# CC_REPORT — 2026-05-01 v2.0.0 STEP 2: 2 画面間の状態同期【承認①対象】
 
 ## 1. サマリー
 
-- **真因特定**: `tournaments` テーブルに **`runtime` フィールドが存在せず**、`tournamentRuntime` は renderer メモリのみに存在 → アプリ終了でメモリ消失 → 再起動で `tournamentRuntime = { 0, 0, 0, 0 }` 初期値に復帰
-- **修正方針採用**: **候補 1（tournaments テーブルに runtime フィールド追加 + 都度永続化）** — 既存 `setTimerState` / `setDisplaySettings` パターンと整合
-- **修正範囲**: main.js（schema + sanitize + IPC + migrate + normalize）/ preload.js（bridge）/ renderer.js（schedulePersistRuntime + applyTournament 復元 + 8 箇所のミューテーション関数にフック）
-- **致命バグ修正への影響**: ✅ なし（C.2.7-A `resetBlindProgressOnly` は runtime 不変のまま、T48 で静的検証）
-- **テスト**: `tests/c18-runtime-persistence.test.js` 新規 6 件追加 → 全 **138 テスト PASS**（既存 132 + 新規 6）
+- main プロセスを単一の真実源とする状態キャッシュ + broadcast 関数を確立（`_dualStateCache` / `_broadcastDualState` / `_publishDualState`）
+- 既存 IPC ハンドラ 8 種類の末尾に差分 publish を追加（`setTimerState` / `setRuntime` / `setDisplaySettings` / `setMarqueeSettings` / `save` / `setActive` / `audio:set` / `settings:setVenueName`）
+- 新規 IPC: `dual:state-sync-init`（hall 起動時の初期同期）/ `dual:operator-action`（operator → main → hall 中継、ホワイトリスト方式）
+- `preload.js` に `window.api.dual.*` グループ公開（`subscribeStateSync` / `fetchInitialState` / `notifyOperatorAction`）
+- `src/renderer/dual-sync.js`（新規、~60 行）作成、hall 専用 `initDualSyncForHall` を export、role ガード + 初期同期 + 差分購読をイベント駆動で実装（ポーリングなし）
+- `renderer.js` 起動部に role 3 分岐（hall / operator / operator-solo）追加、operator-solo は v1.3.0 と完全同等の挙動を維持
+- `tests/v2-dual-sync.test.js`（新規、8 件）+ `package.json` 更新
+- 既存 138 + 新規 8 = **146 テスト全 PASS**
+- commit `9fd7c57` push 済、**承認①の PR 作成完了**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/1>
 
-## 2. 真因特定経緯
+---
 
-### 2-1. コード読解で確認した永続化漏れ
+## 2. 修正ファイル
 
-`grep` で `playersRemaining / playersInitial / reentryCount / addOnCount` を main.js / renderer.js 双方で確認:
-
-```
-src/main.js:    No matches found    ← 永続化ロジックなし
-src/renderer/renderer.js: 多数（renderer メモリ内のみで管理）
-```
-
-**結論**: `tournamentRuntime` は **renderer メモリ内の単一オブジェクト**で、`store.set('tournaments', list)` の各エントリに含まれていなかった。アプリ終了 → メモリ消失 → 再起動で `tournamentRuntime` の宣言時の初期値（全 0）に戻る → ユーザー視点で「人数が消えた」現象。
-
-### 2-2. C.2.7-A 致命バグ修正との関係
-C.2.7-A の `resetBlindProgressOnly` は「**トーナメント切替時** に runtime を保護する」仕様で、renderer メモリ内の現在値を維持する設計。しかし**永続化は別問題**で、メモリ内に値があっても store に保存されていなければアプリ終了で消失する。
-
-C.2.7-A は今回のバグの予防策ではなく、**別経路の保護**（ブラインド構造変更時の 8-8 致命バグ）。今回のバグはそれとは独立した永続化レイヤーの欠落。
-
-### 2-3. 関連: tournaments:list の戻り値
-`tournaments:list` IPC は `timerState / displaySettings / marqueeSettings` 等を含むが、**`runtime` を含んでいなかった**。よって renderer 側で `applyTournament(t)` 経由で復元しようとしても `t.runtime === undefined` で復元処理がスキップされていた。
-
-## 3. 採用した修正候補とその理由
-
-### 候補 1（採用）: tournaments テーブルに runtime フィールドを追加し、都度永続化
-
-**理由**:
-- 既存の `displaySettings.setDisplaySettings` / `timerState.setTimerState` パターンと完全に整合
-- 都度永続化で「途中保存なし」のリスクなし（候補 2 の弱点を回避）
-- `before-quit` IPC 同期に依存しないため、アプリクラッシュ時の取りこぼしも最小化
-- マイグレーション簡素（runtime フィールド未定義 → 既定値補完）
-
-### 採用しなかった候補
-- **候補 2（before-quit で flush）**: 実装軽量だがクラッシュ時データ消失リスク + IPC 同期取得の複雑性
-- **候補 3（ハイブリッド）**: 候補 1 で十分、二重実装は不要
-
-## 4. 致命バグ修正への影響なき確認
-
-### 4-1. C.2.7-A `resetBlindProgressOnly`（不変条件: ブラインド構造変更で runtime 消えない）
-✅ **無傷**。`resetBlindProgressOnly` は `timerReset()` + `clock--timer-finished` class 削除のみ、`tournamentRuntime` には触らない（T48 で静的検証）。今回追加した `schedulePersistRuntime` 呼出も `resetBlindProgressOnly` には**入れていない**（runtime に触らない設計を維持）。
-
-### 4-2. C.2.7-D `timerState` destructure 除外
-✅ **無傷**。今回の修正は新規 IPC `tournaments:setRuntime` のみ追加で、`tournaments:setDisplaySettings` の payload 構造には触らない。
-
-### 4-3. `ensureEditorEditableState` 4 重防御
-✅ **無傷**。ブラインド編集状態とは別系統。
-
-### 4-4. handlePresetApply の reset 分岐
-✅ T48 で静的検証: `handlePresetApply` 内で `resetBlindProgressOnly()` 呼出が維持されている（致命バグ 8-8 リグレッションなし）。
-
-## 5. 修正ファイル
-
-| ファイル | 変更点 |
+| ファイル | 変更点（短く） |
 | --- | --- |
-| `src/main.js` | `DEFAULT_TOURNAMENT_EXT.runtime` / `store.defaults.tournaments[0].runtime` 追加 / `sanitizeRuntime()` 新規 / `migrateTournamentSchema` で runtime 補完 / `normalizeTournament` 取込 + 既定補完 / `tournaments:list` 戻り値に runtime / 新 IPC `tournaments:setRuntime` |
-| `src/preload.js` | `tournaments.setRuntime(id, runtime)` bridge 追加 |
-| `src/renderer/renderer.js` | `schedulePersistRuntime()` debounce 500ms / `applyTournament` で `t.runtime` から `tournamentRuntime` 復元 / `addNewEntry` / `cancelNewEntry` / `eliminatePlayer` / `revivePlayer` / `initTournamentRuntime` / `resetTournamentRuntime` / `adjustReentry` / `adjustAddOn` の **計 8 箇所**で `schedulePersistRuntime()` 呼出 |
-| `package.json` | test スクリプトに c18-runtime-persistence 追加 |
-| `tests/c18-runtime-persistence.test.js` | **新規 6 テスト**（T43〜T48）|
+| `src/main.js` | `_dualStateCache` + `_broadcastDualState` + `_publishDualState` 追加、既存 8 ハンドラ末尾に publish 呼出、新規 2 IPC ハンドラ |
+| `src/preload.js` | `window.api.dual.*` グループ追加（3 関数） |
+| `src/renderer/dual-sync.js`（新規） | hall 専用 `initDualSyncForHall`、初期同期 + 差分購読 |
+| `src/renderer/renderer.js` | `dual-sync.js` import + 起動部に role 3 分岐 |
+| `tests/v2-dual-sync.test.js`（新規） | 8 件の静的解析テスト |
+| `package.json` | test スクリプトに `v2-dual-sync.test.js` 追加 |
 
-## 6. 主要変更点
+---
 
-### 6-1. main.js sanitize + IPC
+## 3. 主要変更点
 
-```js
-const DEFAULT_TOURNAMENT_EXT = Object.freeze({
-  // ...既存
-  runtime: { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 }
-});
-
-function sanitizeRuntime(value, fallback) {
-  const fb = (fallback && typeof fallback === 'object') ? fallback : { playersInitial: 0, ... };
-  if (!value || typeof value !== 'object') return { ...fb };
-  const toNonNegInt = (v, fbV) => {
-    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return Math.max(0, Math.floor(fbV || 0));
-    return Math.floor(v);
-  };
-  return {
-    playersInitial:   toNonNegInt(value.playersInitial,   fb.playersInitial),
-    playersRemaining: toNonNegInt(value.playersRemaining, fb.playersRemaining),
-    reentryCount:     toNonNegInt(value.reentryCount,     fb.reentryCount),
-    addOnCount:       toNonNegInt(value.addOnCount,       fb.addOnCount)
-  };
-}
-
-ipcMain.handle('tournaments:setRuntime', (_event, payload) => {
-  const { id, runtime } = payload;
-  const list = store.get('tournaments') || [];
-  const idx = list.findIndex((t) => t.id === id);
-  if (idx < 0) return { ok: false, error: 'not-found' };
-  const next = sanitizeRuntime(runtime, list[idx].runtime || DEFAULT_TOURNAMENT_EXT.runtime);
-  list[idx] = { ...list[idx], runtime: next };
-  store.set('tournaments', list);
-  return { ok: true, runtime: next };
-});
-```
-
-### 6-2. renderer.js schedulePersistRuntime + 復元
+**main.js: 状態キャッシュ + broadcast 関数（hall 不在時 no-op で operator-solo 後方互換）**
 
 ```js
-let runtimePersistTimer = null;
-function schedulePersistRuntime() {
-  if (runtimePersistTimer) clearTimeout(runtimePersistTimer);
-  runtimePersistTimer = setTimeout(() => {
-    runtimePersistTimer = null;
-    const id = tournamentState.id;
-    if (!id || !window.api?.tournaments?.setRuntime) return;
-    const rt = { /* 4 fields */ };
-    window.api.tournaments.setRuntime(id, rt).catch(...);
-  }, 500);
+const _dualStateCache = { timerState: null, structure: null, displaySettings: null, ... };
+function _broadcastDualState(channel, payload) {
+  if (!hallWindow || hallWindow.isDestroyed()) return;
+  try { hallWindow.webContents.send(channel, payload); } catch (_) { /* ignore */ }
 }
-
-// applyTournament 内で復元
-if (t.runtime && typeof t.runtime === 'object') {
-  const rt = t.runtime;
-  if (typeof rt.playersInitial === 'number')   tournamentRuntime.playersInitial   = Math.max(0, Math.floor(rt.playersInitial));
-  if (typeof rt.playersRemaining === 'number') tournamentRuntime.playersRemaining = Math.max(0, Math.floor(rt.playersRemaining));
-  if (typeof rt.reentryCount === 'number')     tournamentRuntime.reentryCount     = Math.max(0, Math.floor(rt.reentryCount));
-  if (typeof rt.addOnCount === 'number')       tournamentRuntime.addOnCount       = Math.max(0, Math.floor(rt.addOnCount));
+function _publishDualState(kind, value) {
+  if (!Object.prototype.hasOwnProperty.call(_dualStateCache, kind)) return;
+  _dualStateCache[kind] = value;
+  _broadcastDualState('dual:state-sync', { kind, value });
 }
 ```
 
-### 6-3. ミューテーション関数の永続化フック（計 8 箇所）
+**main.js: 既存 IPC ハンドラ末尾の publish 呼出（active トーナメントのみ）**
 
-| 関数 | トリガ | 永続化 |
+```js
+// tournaments:setTimerState 末尾
+if (id === store.get('activeTournamentId')) {
+  _publishDualState('timerState', next.timerState);
+}
+```
+
+**preload.js: dual グループ**
+
+```js
+dual: {
+  subscribeStateSync: (callback) => { if (typeof callback !== 'function') return;
+    ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload)); },
+  fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
+  notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload })
+}
+```
+
+**dual-sync.js: hall 専用、role ガード + イベント駆動購読**
+
+```js
+export async function initDualSyncForHall() {
+  if (window.appRole !== 'hall') return;
+  const dual = window.api && window.api.dual;
+  if (!dual || typeof dual.fetchInitialState !== 'function') return;
+  const initial = await dual.fetchInitialState();
+  // ... 全 kind を state.js に setState 適用 ...
+  dual.subscribeStateSync((diff) => _applyDiffToState(diff));
+}
+```
+
+**renderer.js: 起動部 role 3 分岐**
+
+```js
+const __appRole = (typeof window !== 'undefined' && window.appRole) || 'operator-solo';
+if (__appRole === 'hall')              initDualSyncForHall().finally(() => initialize());
+else if (__appRole === 'operator')     initialize();   // STEP 3 で operator-action 通知有効化
+else                                    initialize();   // operator-solo（v1.3.0 完全同等）
+```
+
+---
+
+## 4. 致命バグ保護への影響評価
+
+| 致命バグ保護 | 影響評価 | 根拠 |
 | --- | --- | --- |
-| `initTournamentRuntime` | プレスタートダイアログで人数入力 | ✅ |
-| `addNewEntry` | ↑キー: 新規エントリー追加 | ✅ |
-| `cancelNewEntry` | Shift+↑: 新規エントリー取消 | ✅ |
-| `eliminatePlayer` | ↓キー: プレイヤー脱落 | ✅ |
-| `revivePlayer` | Shift+↓: プレイヤー復活 | ✅ |
-| `adjustReentry` | Ctrl+R: リエントリー ± | ✅ |
-| `adjustAddOn` | Ctrl+A: アドオン ± | ✅ |
-| `resetTournamentRuntime` | 明示的「タイマーリセット」ボタン | ✅（0 値も保存）|
+| `resetBlindProgressOnly`（C.2.7-A）| **影響なし** | 関数本体・呼出経路すべて無変更。`tournaments:save` 末尾に publish 追加のみで、保存ロジック自体は不変 |
+| `timerState` destructure 除外（C.2.7-D Fix 3）| **影響なし** | 既存 `setDisplaySettings` の `const { id, displaySettings } = payload` を維持。新規 `dual:operator-action` も `_DUAL_ACTION_ROUTE` でホワイトリスト化、timerState 混入なし。**T8 テストで静的解析担保** |
+| `ensureEditorEditableState` 4 重防御（C.1-A2 系）| **影響なし** | PC 側 renderer のみで動作、本 STEP の dual-sync.js は hall 専用、role ガードで完全分離 |
+| AudioContext resume（C.1.7）| **影響なし** | `audio.js` / `_play()` 内 resume 防御は無変更。`audio:set` ハンドラに publish 追加のみ |
+| runtime 永続化 8 箇所（C.1.8）| **影響なし** | `tournaments:setRuntime` 末尾に publish 追加のみ、`schedulePersistRuntime` の永続化ロジック・`resetBlindProgressOnly` の意図的非フックも維持 |
 
-`resetBlindProgressOnly` は **意図的に永続化フックなし**（runtime に触らない設計を維持、致命バグ 8-8 保護）。
+**結論**: 5 件すべて完全継承。STEP 2 で破壊的変更なし。
 
-### 6-4. マイグレーション
+---
 
-旧バージョン（v1.3.0 まで）のデータを v1.3.1 で開いた時:
-- `m.runtime === undefined` → 既定値 `{ 0, 0, 0, 0 }` で補完
-- `m.runtime` が壊れている（負値 / NaN 等）→ `sanitizeRuntime` で整数化
-- 既存 displaySettings / timerState / marqueeSettings のマイグレーションパターンと同経路
+## 5. 並列起動した sub-agent / Task 数
 
-## 7. 構築士への質問
+**0 体**（直接実行、`skills/cc-operation-pitfalls.md` §1.1 公式推奨遵守）
 
-### 7-1. 既存ユーザーの旧データ復旧について
-v1.3.0 で運用していたユーザーが v1.3.1 にアップグレードした場合、**過去のランタイムデータは復旧しない**（旧バージョン時点で永続化されていなかったため、store に存在しない）。マイグレーション時に runtime = { 0, 0, 0, 0 } で初期化されます。
+調査・実装すべて main session で順次実行。並列 Agent を使う必要のある粒度ではなかった（既存ファイル把握 → 編集 → テスト追加が線形依存）。
 
-→ アップグレード後、最初のトーナメント開始時に通常通り人数を入力 → 以降は永続化される、という運用になります。CHANGELOG への記載が必要であれば追記推奨。
+---
 
-### 7-2. specialStack.appliedCount の永続化
-ランタイムに近い性質を持つ `tournamentState.specialStack.appliedCount`（特殊スタック適用人数）は本フェーズでは触っていません。コード読解上、これは `tournaments:save` 経由で都度永続化されている（`tournaments` テーブルの一部として保存される）ため、再起動でも保持されるはず。実機で「特殊スタック人数も消える」フィードバックがあれば次フェーズで対応推奨。
-
-### 7-3. periodicPersistAllRunning との関係
-既存の `periodicPersistAllRunning`（5 秒ごとの全 running トーナメント保存）は `setTimerState` のみを保存しています。runtime は本フェーズで都度永続化（debounce 500ms）するので、5 秒間隔の保証よりも細かい粒度で保存されます。periodic 側に runtime を加える必要はありません。
-
-### 7-4. スコープ越え疑念
-NEXT_CC_PROMPT は「**ランタイムデータ（playersRemaining / playersInitial / reentryCount / addOnCount 等）の永続化漏れの修正**」と指示。本実装は 4 フィールドすべて + `initTournamentRuntime` / `resetTournamentRuntime` / その他のミューテーション関数まで包括的に修正しました。スコープ超過と感じる場合はご指摘ください（致命バグ修正への影響はゼロ）。
-
-## 8. 検証ログ
+## 6. テスト結果
 
 ```
-$ node --check src/main.js src/preload.js src/renderer/renderer.js
-ALL OK
-
-$ npm test
-[data-transfer]      === Summary: 7 passed / 0 failed ===
-[runtime-preservation] === Summary: 6 passed / 0 failed ===
-[audit-fix]          === Summary: 9 passed / 0 failed ===
-[paused-flow]        === Summary: 9 passed / 0 failed ===
-[race-fixes]         === Summary: 5 passed / 0 failed ===
-[light-todos]        === Summary: 4 passed / 0 failed ===
-[editable-state]     === Summary: 7 passed / 0 failed ===
-[audit-residuals]    === Summary: 8 passed / 0 failed ===
-[new-tournament-edit] === Summary: 8 passed / 0 failed ===
-[v130-features]      === Summary: 12 passed / 0 failed ===
-[c13-bg-image]       === Summary: 19 passed / 0 failed ===
-[c14-slideshow]      === Summary: 24 passed / 0 failed ===
-[c16-features]       === Summary: 8 passed / 0 failed ===
-[c17-audio-resume]   === Summary: 6 passed / 0 failed ===
-[c18-runtime-persistence] === Summary: 6 passed / 0 failed ===
+=== Summary: 7 + 6 + 9 + 9 + 5 + 4 + 7 + 8 + 8 + 12 + 19 + 24 + 8 + 6 + 6 + 8 = 146 passed / 0 failed ===
 ```
 
-合計 **138 テスト全 PASS**（既存 132 + 新規 6）。
+- 既存 138 件: すべて PASS（影響なし確認）
+- 新規 8 件（v2-dual-sync.test.js）: すべて PASS
+  - T1: `_dualStateCache` / `_broadcastDualState` / `_publishDualState` 定義 + hall 不在 no-op ガード
+  - T2: `dual:state-sync-init` ハンドラ登録 + cache snapshot 返却
+  - T3: `dual:operator-action` ハンドラ登録 + ホワイトリスト
+  - T4: 主要 4 IPC（`setTimerState` / `setRuntime` / `setDisplaySettings` / `setMarqueeSettings`）末尾に publish 呼出
+  - T5: preload に dual 3 関数 + イベント駆動 listen
+  - T6: `initDualSyncForHall` export + role ガード + setInterval 不使用（ポーリング禁止）
+  - T7: renderer.js に role 3 分岐 + initDualSyncForHall import
+  - T8: `setDisplaySettings` の payload destructure に timerState 混入なし（C.2.7-D Fix 3 静的担保）
 
-## 9. オーナー向け確認
+---
 
-### 報告症状の修正確認（最重要）
-1. **トーナメント途中（プレイヤー人数 / リエントリー / アドオンが入っている状態）でアプリを ✕ で閉じる**
-2. **再起動**
-3. **同じトーナメントを開く → プレイヤー人数 / リエントリー / アドオン数がすべて閉じる前と同じ値**
+## 7. オーナー向け確認
 
-### 周辺の動作確認
-4. **複数トーナメントある場合、それぞれが独立してランタイムを保持** — トーナメント A で 50 人、トーナメント B で 30 人と設定し、再起動後それぞれ正しい値が表示される
-5. **「タイマーリセット」ボタン押下 → 0 にリセットされて再起動後も 0 のまま**（リセット動作も永続化）
-6. **ブラインド構造変更（保存して適用 → リセットして開始 / 構造のみ適用）でランタイムが消えない** — C.2.7-A 致命バグ修正が引き続き機能
-
-### 既存機能維持
-7. **タイマー / 警告音（C.1.7 修正）/ スライドショー / PIP / 設定ダイアログ縦リサイズ / TOTAL GAME TIME 切替 / 既存 8 色背景 / カスタム画像 すべて以前通り**
-
-すべて期待通り動作すれば C.1.8 完了。**v1.3.1 の重大バグ修正リリース候補**として配布判断推奨。
+1. **単画面 PC（HDMI なし）で起動**: v1.3.0 配布版と完全同じ動作になるか確認してください。タイマー / ブラインド設定 / 通知音 / 設定ダイアログなど、何も変化がない（変化したら STEP 2 のバグ）
+2. **2 画面環境（HDMI モニターあり）で起動**: 現状はモニター選択ダイアログ未実装（STEP 4 で追加）のため、自動で primary = PC 側 / 2 番目 = ホール側に割り振られます。PC 側でブラインドを切り替えたとき、ホール側にも反映されるか目視で確認してください（**承認①の判定軸**）
+3. **PR**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/1> をブラウザで開いて中身を確認 → マージ判断（前原さんがマージ操作）
+4. **既存 138 テスト + 新規 8 テスト = 146 件すべて PASS** を確認済み（致命バグ保護への影響なし）

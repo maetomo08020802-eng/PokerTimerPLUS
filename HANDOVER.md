@@ -1,7 +1,22 @@
-# HANDOVER.md — PokerTimerPLUS+ 作業引継ぎ書（〜v1.3.0 完了時点）
+# HANDOVER.md — PokerTimerPLUS+ 作業引継ぎ書（v1.3.0 配布完了 + v2.0.0 STEP 1 完了時点）
 
-> 本書は、新しい CC（Claude Code）エージェントが現在の状況を即座に把握できるよう、これまでの作業履歴・確定事項・次のステップを集約したものです。
-> 関連ファイル: `CLAUDE.md`（運用ルール）、`docs/specs.md`（機能仕様）、`skills/timer-logic.md`（不変条件）、`CHANGELOG.md`（リリース履歴）、`CC_REPORT.md`（直近完了タスクの報告）。
+> 本書は、新しい CC（Claude Code）エージェントおよび **CC 構築士（Cowork mode 構築士）** が現在の状況を即座に把握できるよう、これまでの作業履歴・確定事項・次のステップを集約したものです。
+> 関連ファイル: `CLAUDE.md`（運用ルール + v2.0.0 セクション）、`docs/specs.md`（機能仕様）、`skills/timer-logic.md`（v1.x 不変条件）、`skills/v2-dual-screen.md`（v2.0.0 品質基準）、`docs/v2-design.md`（v2 設計調査結果）、`CHANGELOG.md`、`CC_REPORT.md`、`docs/RELEASE_GUIDE.md`（前原さん向けリリース手順）。
+
+---
+
+## 🎯 TL;DR（新セッション開始時にここを最初に読む）
+
+| 項目 | 状態 |
+| --- | --- |
+| **v1.3.0 配布** | ✅ 完了。GitHub Releases で `.exe` 公開済（2026-04-30 / 05-01）|
+| **GitHub repo** | <https://github.com/maetomo08020802-eng/PokerTimerPLUS> |
+| **テスト数** | **138 件全 PASS**（15 ファイル）|
+| **現在ブランチ** | `feature/v2.0.0`（v2 作業中、`main` は v1.3.0 配布版として不変）|
+| **直近フェーズ** | v2.0.0 STEP 1 完了（commit `4951f9d`、push 済）|
+| **次のステップ** | v2.0.0 STEP 2（2 画面間の状態同期）— **承認①対象** |
+| **致命バグ保護** | 5 件すべて維持（C.2.7-A / C.2.7-D / C.1-A2 系 / C.1.7 / C.1.8）|
+| **配布判定** | v1.3.0 配布クオリティ達成（C.1.5 で致命 0 / 高 0 確認）|
 
 ---
 
@@ -9,202 +24,196 @@
 
 - **製品名**: PokerTimerPLUS+
 - **形態**: Electron 製 Windows/macOS デスクトップアプリ、完全ローカル動作
-- **配布**: Yu Shitamachi（PLUS2 運営）制作の無料配布アプリ、全国のポーカールーム向け
-- **配布方針**: GitHub Releases + electron-updater による自動更新（v1.3.0〜）
-- **CSP**: `'self'` のみ（CDN 不使用、フォント・画像はすべて同梱）
-- **ライセンス**: アプリは UNLICENSED（社内配布）、フォント類は SIL OFL 1.1、効果音は効果音ラボ商用無料
-- **現在 version**: **1.3.0**（package.json）
-- **総テスト数**: **75 件**（10 ファイル）すべて静的解析ベース、`npm test` で 1 コマンド実行
+- **配布**: Yu Shitamachi（PLUS2 運営）制作の無料配布、全国のポーカールーム向け
+- **配布先**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases>
+- **owner**: `maetomo08020802-eng`（GitHub）
+- **作者表記**: Yu Shitamachi（インストーラ発行元・About 画面）
+- **CSP**: `'self'` のみ（CDN 不使用、フォント・画像はすべて同梱、不変条件）
+- **ライセンス**: アプリは UNLICENSED（無料配布）、フォント類は SIL OFL 1.1、効果音は効果音ラボ商用無料
+- **現在 version**: **1.3.0**（次は v2.0.0、STEP 7 完了で bump 予定）
+- **総テスト数**: **138 件**（15 ファイル）すべて静的解析ベース、`npm test` で 1 コマンド実行
 
 ---
 
-## 2. 現在の機能セット（v1.3.0）
+## 2. 現在の機能セット（v1.3.0、v2 着手前）
 
 ### コア機能
 - ブラインドタイマー（カウントダウン + レベル進行 + ブレイク）
-- 14 ゲーム種（NLH / PLO / PLO5 / PLO8 / Big O Blind / Big O Limit / Omaha Hi-Lo / Limit Hold'em / Short Deck / Stud / Razz / Stud Hi-Lo / **MIX (10-Game)** / **その他（自由記入）**）
-- 5 構造型（**BLIND / LIMIT_BLIND / SHORT_DECK / STUD / MIX**）
-- 同梱プリセット 8 種（demo-fast / preset-turbo / preset-regular / preset-deep / limit-regular / shortdeck-regular / stud-regular / **mix-regular**）
+- 14 ゲーム種、5 構造型、同梱プリセット 8 種
 - 通知音 5 種類 + 音量・個別 ON/OFF
 - スタートカウントダウン
-- プレイヤー / 賞金管理（バイイン / リエントリー / アドオン / 特別スタック）
+- プレイヤー / 賞金管理（バイイン / リエントリー / アドオン / 特別スタック）+ **ランタイム永続化（C.1.8）**
 - 設定永続化（electron-store）
 - PC 間データ移行（JSON Export/Import）
 - 複数トーナメントの並行進行
-- ロゴ差替（同梱 PLUS2 / カスタム / プレースホルダー）
-- 背景プリセット 8 種 + 数字フォント切替
+- 背景プリセット 8 種 + **9 種類目「カスタム画像」**（C.1.3）+ 数字フォント切替
 
-### v1.2.0 で追加
-- **MIX レベルごと自由編集**（複製して編集で各レベルのゲーム種を 10 種から自由選択）
-- **MIX ゲーム数自動カウント**（ユニーク subGameType を `MIX (○-Game)` に動的反映）
-- **「ブレイク終了後に一時停止」**（pauseAfterBreak）
-- **PAUSED 3 択モーダル**（リセット / 経過保持 / 構造のみ適用）
-- **テンプレート紐づけ表示**（`「○○」で使用中` をドロップダウン suffix）
-- **powerSaveBlocker**（タイマー進行中ディスプレイスリープ防止）
-- **JSON import の UTF-8 BOM 対応**
-- **テロップ 200 文字上限**（HTML maxlength + JS sanitize）
-- **アイコン**: 黒背景 + 白「20:40」7-segment LCD 風（`build/icon-source.svg`、フォント不使用）
-- **数字フォント**: Oswald → **Barlow Condensed 700**
-- **用語変更**（ブラインド構造文脈のみ）: 「プリセット」→「テンプレート」/「プリセット名」→「ブラインド構造名」
-- **数字縮小**: data-max-digits でカード単位統一（`space-between`、4 桁以下は `space-around`）
-
-### v1.3.0 で追加
-- **自動更新**（electron-updater + GitHub Releases、**publish の owner/repo は暫定値、要確認**）
-- **DONE 状態 'finished'**: 全レベル完走時に明示保持、緑系「トーナメント終了」オーバーレイ
+### v1.3.0 リリース版で追加済の主要機能
+- **背景画像（C.1.3）**: PNG/JPEG/WebP、5MB 以下、暗くする overlay 強度 3 段階
+- **休憩中スライドショー + PIP タイマー（C.1.4 系）**: 最大 20 枚、切替間隔 3〜60 秒、PIP サイズ 3 段階。BREAK 開始 30 秒遅延、再開 1 分前に自動復帰、初回フェードイン
+- **設定ダイアログ縦リサイズ追従（C.1.6）**: form-dialog__shell wrapper で flex column 化（`<dialog>` 自体は flex 化しない不変条件遵守）
+- **NEXT BREAK IN ↔ TOTAL GAME TIME 自動切替（C.1.6）**: 残ブレイクなしで累積時間表示
+- **AudioContext suspend 防御（C.1.7）**: PAUSED 復帰後の音欠落バグ修正
+- **ランタイム永続化（C.1.8）**: アプリ終了 → 再起動でプレイヤー人数 / リエントリー / アドオンが消失する重大バグ修正
+- **自動更新準備**: electron-updater 統合済（GitHub Releases から自動取得、v1.3.1 以降で動作）
+- **DONE 状態 'finished'**: 全レベル完走で「トーナメント終了」緑系オーバーレイ表示
 - **Ctrl+Q 状態別メッセージ**: タイマー進行中なら警告
-- **About 画面に DevTools 注記**（F12 / Ctrl+Shift+I は開発者向け）
-- **ID 衝突防止**（`generateUniqueId(prefix)` ヘルパ、tournament/preset の ID 生成 5 箇所で使用）
-- **トーナメント切替中の periodic skip**（`_tournamentSwitching` フラグ）
-- **preset 削除前に参照中トーナメント警告**（孤児化防止）
-- **「複製して編集」readonly 残存バグ**: `ensureEditorEditableState` の builtin 保護内蔵化 + 多点防御
 
 ---
 
-## 3. フェーズ履歴（直近の流れ、上が新しい）
+## 3. 配布完了後 → 現在までのフェーズ履歴（v1.3.0 配布判定後）
 
-| フェーズ | 主成果 | 件数 | 結果 |
-| --- | --- | --- | --- |
-| **C.1.2**（v1.3.0 仕上げ）| Ctrl+Q 状態別 / DONE 'finished' / electron-updater / DevTools 注記 / version bump | 5 | 全実装、12 新規テスト |
-| C.1.2-bugfix | 新規トーナメント→ひな形コピー編集の readonly 残存（追加防御）| - | ensureEditorEditableState の builtin 保護内蔵化 |
-| C.1.1 | audit 残課題 8 件中 3 件実装（switching ガード / preset 削除警告 / ID 衝突防止）| 8 | 3 実装、5 防御済み判定 |
-| C.1-B | v1.2.0 仕上げ（docs / skills / CLAUDE.md / CHANGELOG）| - | コード変更なし、ドキュメント全更新 |
-| C.1-A3 + patch | アプリアイコン変更（黒背景 + 白「20:40」）| - | 7-segment LCD 手動構築、フォント不使用 |
-| C.1-A2 | 「複製して編集」readonly 残存修正 | - | 4 重防御パターン確立 |
-| C.1-A | 軽 TODO 4 件中 2 件実装（preset name sanitize + DocumentFragment）| 4 | 2 実装、2 不要判定 |
-| C.2.7-D | 4 桁時 space-around / **timerState 上書き race 修正** | 5 | 2 実装、3 防御済み判定 |
-| C.2.7-C | 6 件 race 候補の再現確認 | 6 | 全件再現せず、コード変更ゼロ |
-| C.2.7-B | PAUSED 3 択モーダル（apply-only ボタン追加）| 4 | 全実装 |
-| C.2.7-audit-fix | UI 全般監査 117 件 + ブレイクラベル削除 + powerSaveBlocker 等 | 5 | 全実装、9 新規テスト |
-| C.2.7-A patch3〜10 | 数字縮小完成 / Barlow Condensed フォント / カード調整 | 8 patch | UI 安定化 |
-| **C.2.7-A** | **致命バグ 8-8 修正（resetBlindProgressOnly 責任分離）** | 1 | 営業データ消失防止 |
-| C.2.6 | 8 シナリオ網羅調査 | 110 件 | 修正なし、調査のみ |
-| C.2.5 | MIX レベルごと自由編集 + ゲーム数自動カウント | - | MIX 編集 UI 完成 |
-| C.2.4 | 自由記入欄バグ / 数字縮小マイルド化 / 用語変更 / テンプレ紐づけ | 4 | 全実装 |
-| C.2.3 | MIX/その他ゲーム種追加 + 大数字レイアウト + ブレイク後一時停止 | 4 | 全実装 |
-| C.2 / C.2.1〜2.2 | 中 9 件 + 軽 2 件、apply-only モード、ブレイクチェック新仕様 | 11 | 全実装 |
-| B.fix1〜12 | 入力不能バグ（fix9 で `isUserTypingInInput` 統一ヘルパに集約）| 12 | 統一防御確立 |
-| B / B.fix1〜5 | 構造型動的レンダリング、プリセット JSON フィールド名リネーム | - | 構造型基盤 |
-| A | データモデル基盤（GAMES/STRUCTURE_TYPES、EXPORT_VERSION=2）| - | データモデル確立 |
+| フェーズ | 主成果 | 結果 |
+| --- | --- | --- |
+| **v2.0.0 STEP 1**（最新）| ホール側ウィンドウ追加（最小骨格）+ ブランチ運用導入 | feature/v2.0.0 ブランチ作成、commit `4951f9d` push 済 |
+| **v2.0.0 STEP 0** | 設計調査（コード変更ゼロ）| `docs/v2-design.md` 作成、`scripts/_probes/v2-probe.js` 動作確認 |
+| **C.3-B** | 配布リポから不要ファイル除外（push 前クリーンアップ）| `docs/slides_artifacts/` + `.claude/settings.local.json` 除外、commit `57298f4` |
+| **C.3-A** | 配布準備（GitHub リポジトリ初回プッシュ + ビルド検証）| 138 テスト PASS、`dist/PokerTimerPLUS+ Setup 1.3.0.exe` 80MB 生成、git init + 2 コミット、`docs/RELEASE_GUIDE.md` 作成 |
+| **C.1.5** | 配布前 最終品質確認（実装ゼロ、検証のみ）| 4 並列 Agent で 10 カテゴリ検証 → 致命 0 / 高 0 / 中 1 / 低 12、配布クオリティ達成判定 |
+| **C.1.8** | 重大バグ: トーナメント途中の再起動でランタイム消失 | runtime 永続化（main schema 追加 + `tournaments:setRuntime` IPC + 8 箇所フック）、新規 6 テスト |
+| **C.1.7** | 音まわり調査 + バグ修正（PAUSED 復帰後の音欠落）| AudioContext suspend を真因特定、`_play()` 冒頭で resume 防御、新規 6 テスト |
+| **C.1.6** | 設定ダイアログ中身追従 + TOTAL GAME TIME 切替 | form-dialog__shell wrapper 化、`computeTotalGameTimeMs` 新規、新規 8 テスト |
+| **C.1.4-fix3** | フォント拡大 + 注意書き + 画像サイズ警告 | level-display 5.8vw / stat-value 4.55vw / 150MB 警告 + ⚠ アイコン、新規 6 テスト |
+| **C.1.4-fix2** | スライドショー 30 秒遅延 + 初回フェードイン | breakStartedAt 状態管理、新規 4 テスト |
+| **C.1.4-fix1** | 背景画像 / スライドショー実機修正 5 件 | bottom-bar overlay 保護 / warning-1min 復活 / autoEndedAt リセット / PIP ボタン左下 / readonly RAF 再呼出、新規 5 テスト |
+| **C.1.4** | 休憩中スライドショー + PIP タイマー（大規模新機能）| breakImages / pipSize / 切替ボタン / 60 秒自動復帰、新規 12 テスト |
+| **C.1.3-fix1** | 背景画像実機修正 3 件 | preview 16:9、_userBgChoice 初回反映、設定ダイアログ flex（rollback 後に C.1.6 で wrapper 化）、新規 3 テスト |
+| **C.1.3** | 背景にカスタム画像（9 種類目）| breakgroundImage / Overlay sanitize、新規 12 テスト |
+| **C.1.2-followup** | 自動更新の publish 設定を保留（後に C.3-A で再有効化）| package.json publish 削除、`hasPublishConfig` ガード |
+| **C.1.2** | v1.3.0 仕上げ（5 件）| Ctrl+Q 状態別 / DONE 'finished' / electron-updater / DevTools 注記 / version bump、新規 12 テスト |
 
 ---
 
-## 4. 重要な不変条件（破ってはいけない）
+## 4. 重要な不変条件（破ってはいけない、v2.0.0 でも継承）
 
 ### A. tournamentRuntime 保護（C.2.7-A 致命バグ 8-8 修正）
 - 「ブラインド構造を変えても tournamentRuntime（プレイヤー人数 / リエントリー / アドオン / バイイン）は**絶対に消えない**」
-- 関数の責任分離:
-  - `handleReset()`: 明示「タイマーリセット」ボタン経由のみ。`resetTournamentRuntime() + timerReset()`
-  - `resetBlindProgressOnly()`: ブラインド構造リセット専用。`timerReset()` のみ、runtime 保護
-- 「保存して適用→リセット」「適用」の reset 分岐は **必ず `resetBlindProgressOnly()`** を呼ぶ
+- `handleReset()`: 明示「タイマーリセット」ボタン経由のみ
+- `resetBlindProgressOnly()`: ブラインド構造リセット専用、runtime 保護
 - 回帰テスト: `tests/runtime-preservation.test.js`（6 件）
 
 ### B. timerState 上書き race の防御（C.2.7-D Fix 3）
-- `persistActiveTournamentBlindPresetId` で `getActive` → `save` 間に `setTimerState` の race
-- 解決: payload から timerState を destructure 除外
-```js
-const { timerState, ...rest } = active;
-const updated = { ...rest, blindPresetId: newPresetId };
-await window.api.tournaments.save(updated);
-```
+- `tournaments:setDisplaySettings` payload から `timerState` destructure 除外
+- 回帰テスト: `tests/race-fixes.test.js`（5 件）
 
 ### C. 入力中保護（fix9 確立）
 - DOM 再構築時は必ず `isUserTypingInInput()` 統一ヘルパでガード
-- ガード対象: text/number/textarea/contentEditable（checkbox/radio/button は除外）
-- ガード適用箇所: `renderBlindsTable` / `applyTournament` / `renderTournamentList` / `renderPayoutsEditor` / `populateTournamentBlindPresets` / `syncMarqueeTabFormFromCurrent` 等
-- 違反すると入力中の文字消失バグ（重大）
 
-### D. 編集モード readonly 解除（C.1-A2 + C.1.2-bugfix）
-- 「複製して編集」「新規作成」ハンドラで `ensureEditorEditableState()` を**同期 + RAF 内**で 2 回呼出（C.1-A2 4 重防御）
-- C.1.2-bugfix で **builtin 保護を内蔵化**: `meta.builtin === true` 時は no-op → 呼出側は meta 状態を気にせず多用可能
-- 追加呼出: `_handleTournamentNewImpl` 末尾、`ensureBlindsEditorLoaded` の else 分岐
+### D. 編集モード readonly 解除（C.1-A2 + C.1.2-bugfix + C.1.4-fix1 Fix 5）
+- `_handleTournamentNewImpl` 末尾で `ensureEditorEditableState()` 呼出、RAF 内でも再保証
+- `meta.builtin === true` 時は no-op（builtin 保護内蔵化）
+- 回帰テスト: `tests/editable-state.test.js`（7 件）+ `tests/new-tournament-edit.test.js`（8 件）
 
-### E. powerSaveBlocker（C.2.7-audit-fix）
-- RUNNING / PRE_START / BREAK 中はディスプレイスリープを抑止（営業中事故防止）
-- PAUSED / IDLE / FINISHED で解除（電気代節約）
-- IPC: `power:preventDisplaySleep` / `power:allowDisplaySleep`
+### E. AudioContext suspend 防御（C.1.7）
+- `_play()` 冒頭で `audioContext.state === 'suspended'` 検出 → `resume()` fire-and-forget
+- 全音発火パス（warning-1min / -10sec / countdown-tick / level-end / break-end / start）で防御
+- 回帰テスト: `tests/c17-audio-resume.test.js`（6 件）
 
-### F. PAUSED 3 択モーダル（C.2.7-B）
-- PAUSED 中の「適用」「保存して適用」で表示:
-  - **タイマーをリセットして適用**: 構造保存 + `resetBlindProgressOnly()`
-  - **経過時間を保持して適用**: 構造保存 + `applyBlindsKeepProgress()` で pausedRemainingMs 整合性チェック
-  - **構造のみ適用（一時停止維持）**: 構造保存のみ、status / pausedRemainingMs / currentLevelIndex すべて維持
-- showApplyOnly: status === States.PAUSED でのみ第 3 ボタン表示
+### F. ランタイム永続化（C.1.8）
+- `tournaments` スキーマに `runtime` フィールド追加 + `tournaments:setRuntime` IPC
+- 8 箇所のミューテーション関数で `schedulePersistRuntime()` フック
+- `resetBlindProgressOnly` には**意図的に永続化フックなし**（runtime に触らない設計を維持）
+- 回帰テスト: `tests/c18-runtime-persistence.test.js`（6 件）
 
-### G. レイアウトシフト 5 原則（既存）
-- 詳細は `skills/ui-layout.md`、`__autoCheck()` で drift 0 維持
-- transform: scale 禁止、bottom-bar / marquee は flex column、カード幅 42vw / 32vw 固定
+### G. PAUSED 3 択モーダル（C.2.7-B）
+- リセット / 経過保持で適用 / 構造のみ適用（一時停止維持）の 3 ボタン
+
+### H. レイアウトシフト 5 原則
+- transform: scale 禁止、bottom-bar / marquee は flex column、カード幅 54vw / 46vw 固定、Barlow Condensed 700
+
+### I. `<dialog>` flex 化禁止
+- `feedback_dialog_no_flex`（C.1.3-fix1-rollback 教訓）
+- 設定ダイアログは内側 `.form-dialog__shell` wrapper を flex 化（C.1.6）
 
 ---
 
 ## 5. ファイル構成
 
-### コード
+### コード（v1.3.0 + v2 STEP 1）
 ```
 src/
-├── main.js              # Electron main process
-├── preload.js           # contextBridge で window.api 公開
+├── main.js              # Electron main process（v2.0.0 STEP 1: createOperatorWindow / createHallWindow 分離）
+├── preload.js           # contextBridge + role 抽出（v2.0.0 STEP 1）
 ├── presets/             # 同梱プリセット 8 種 (.json)
 ├── audio/               # 通知音 5 種 (.mp3) + CREDITS.md
 ├── assets/
 │   ├── fonts/           # 同梱フォント 7 種 + licenses/
-│   └── logo-*.svg       # ロゴ画像
+│   └── logo-*.svg
 └── renderer/
     ├── index.html
-    ├── style.css        # ~3000 行
-    ├── renderer.js      # ~5200 行（最大ファイル）
-    ├── timer.js         # タイマーコア（performance.now ベース）
-    ├── state.js         # 状態管理（subscribe / setState）
-    ├── blinds.js        # validateStructure / cloneStructure
-    ├── audio.js         # 通知音再生
-    └── marquee.js       # テロップアニメーション
+    ├── style.css        # ~3700 行（v2 STEP 1: [data-role] バッジ追加）
+    ├── renderer.js      # ~6100 行（v1.3.0、v2 STEP 3 で役割ガード追加予定）
+    ├── timer.js         # 334 行
+    ├── state.js         # 67 行（v2 で同期基盤として流用）
+    ├── blinds.js        # 174 行
+    ├── audio.js         # 546 行（C.1.7 修正済）
+    └── marquee.js       # 108 行
+```
+
+### v2.0.0 関連ファイル
+```
+docs/v2-design.md            # STEP 0 設計調査結果（§1〜§7）
+scripts/_probes/v2-probe.js  # 2 ウィンドウ動作検証用（配布物除外、削除しない）
+skills/v2-dual-screen.md     # v2 品質基準（§1 アーキ / §2 同期精度 / §3 HDMI / §5 禁止事項）
 ```
 
 ### ビルド・配布
 ```
 build/
-├── generate-icon.js     # SVG → PNG/ICO 生成（npm run build:icon）
+├── generate-icon.js     # SVG → PNG/ICO 生成
 ├── icon-source.svg      # 黒背景 + 白「20:40」7-segment
 ├── icon.png             # 512x512
-└── icon.ico             # マルチサイズ（16/24/32/48/64/128/256）
-package.json             # build セクションで electron-builder 設定
-                         # build.publish に GitHub provider（owner/repo は暫定値、要確認）
+└── icon.ico             # マルチサイズ
+
+dist/                    # gitignore（ビルド成果物）
+├── PokerTimerPLUS+ Setup 1.3.0.exe   # 80MB、v1.3.0 配布版
+├── PokerTimerPLUS+ Setup 1.3.0.exe.blockmap
+└── latest.yml           # 自動更新マニフェスト
+
+package.json             # version: 1.3.0 / build.publish: github / build.files に !scripts/**/*
 ```
 
-### テスト（10 ファイル、合計 75 件）
+### テスト（15 ファイル、合計 138 件）
 | ファイル | 件数 | 用途 |
 | --- | --- | --- |
-| `tests/data-transfer.test.js` | 7 | PC 間データ移行（buildExportPayload / validateImportPayload）|
-| `tests/runtime-preservation.test.js` | 6 | **致命バグ 8-8 リグレッション防止**（C.2.7-A）|
-| `tests/audit-fix.test.js` | 9 | UI 監査修正（ブレイクラベル / powerSaveBlocker / BOM / marquee 上限 / 削除二重防止）|
-| `tests/paused-flow.test.js` | 9 | PAUSED 3 択モーダル（C.2.7-B）|
-| `tests/race-fixes.test.js` | 5 | 4 桁時 space-around + timerState race 修正（C.2.7-D）|
-| `tests/light-todos.test.js` | 4 | preset name sanitize + DocumentFragment（C.1-A）|
-| `tests/editable-state.test.js` | 7 | ensureEditorEditableState（C.1-A2）|
-| `tests/audit-residuals.test.js` | 8 | switching ガード / preset 削除警告 / ID 衝突防止（C.1.1）|
-| `tests/new-tournament-edit.test.js` | 8 | 新規 readonly 残存対策（C.1.2-bugfix、builtin 保護内蔵化）|
-| `tests/v130-features.test.js` | 12 | Ctrl+Q / 'finished' / electron-updater / DevTools 注記 / version（C.1.2）|
+| `tests/data-transfer.test.js` | 7 | PC 間データ移行 |
+| `tests/runtime-preservation.test.js` | 6 | **致命バグ 8-8 リグレッション防止** |
+| `tests/audit-fix.test.js` | 9 | UI 監査修正 |
+| `tests/paused-flow.test.js` | 9 | PAUSED 3 択モーダル |
+| `tests/race-fixes.test.js` | 5 | timerState race（C.2.7-D）|
+| `tests/light-todos.test.js` | 4 | preset name sanitize 等 |
+| `tests/editable-state.test.js` | 7 | ensureEditorEditableState |
+| `tests/audit-residuals.test.js` | 8 | switching ガード等 |
+| `tests/new-tournament-edit.test.js` | 8 | 新規 readonly 残存対策 |
+| `tests/v130-features.test.js` | 12 | v1.3.0 機能 |
+| `tests/c13-bg-image.test.js` | 19 | 背景画像 + フォント拡大 |
+| `tests/c14-slideshow.test.js` | 24 | スライドショー + PIP + 注意書き + サイズ警告 |
+| `tests/c16-features.test.js` | 8 | 設定ダイアログ wrapper + TOTAL GAME TIME |
+| `tests/c17-audio-resume.test.js` | 6 | AudioContext suspend 防御 |
+| `tests/c18-runtime-persistence.test.js` | 6 | runtime 永続化 |
 
-実行: `npm test`（順次実行、すべて静的解析ベース、Electron 起動なし）
+実行: `npm test`（順次、すべて静的解析、Electron 起動なし）
 
 ### ドキュメント
-- `CLAUDE.md`: CC 構築士向け運用ルール（標準制約 / 入力中保護 / readonly 解除 / runtime 不変条件）
-- `docs/specs.md`: 機能仕様書、末尾に「STEP 10 機能追加（v1.2.0）」セクション
-- `skills/timer-logic.md`: タイマー実装品質基準 + 6 つの不変条件（A〜F）明文化
-- `skills/ui-tokens.md` / `ui-layout.md` / `ui-components.md` / `ui-states.md`: UI デザインシステム（`ui-design.md` は廃止）
-- `skills/branding.md`: ブランディング保護（§15.5 静的表記等）
-- `skills/audio-system.md`: 音響仕様
+- `CLAUDE.md`: 運用ルール + v2.0.0 セクション
+- `docs/specs.md`: 機能仕様書
+- `docs/v2-design.md`: v2.0.0 設計調査結果（STEP 0）
+- `docs/RELEASE_GUIDE.md`: 前原さん向けリリース手順書（PAT 発行 / push / Releases 公開 / トラブルシューティング）
+- `skills/timer-logic.md`: タイマー実装品質基準 + 6 不変条件
+- `skills/v2-dual-screen.md`: v2.0.0 品質基準
+- `skills/ui-tokens.md` / `ui-layout.md` / `ui-components.md` / `ui-states.md` / `branding.md` / `audio-system.md`
 - `CHANGELOG.md`: Keep a Changelog 形式、v1.3.0 / v1.2.0 / v1.1.0 / v1.0.0
-- `CREDITS.md`: フォント・音声ライセンス + App Icon オリジナル制作明記
+- `CREDITS.md`: フォント・音声ライセンス
 - `CC_REPORT.md`: 直近完了タスクの報告（毎フェーズ上書き）
-- `NEXT_CC_PROMPT.md`: 次フェーズの指示書（構築士が用意、CC が読んで実装）
-- `PIPELINE.md`: 開発パイプライン（参照用）
+- `NEXT_CC_PROMPT.md`: 次フェーズの指示書（構築士が用意）
+- `PIPELINE.md`: 開発パイプライン
 
 ---
 
-## 6. CC 開発フロー（運用ルール、CLAUDE.md より）
+## 6. CC 開発フロー（運用ルール、不変）
 
 ### 役割
-- **オーナー**: Yu Shitamachi、PLUS2 運営、PCM 想定
+- **オーナー**: Yu Shitamachi（PLUS2 運営）/ 前原さん（実機検証）
 - **CC 構築士**: NEXT_CC_PROMPT.md を書き、CC_REPORT.md を読んで判断
 - **CC（このエージェント）**: NEXT_CC_PROMPT.md を読んで実装、CC_REPORT.md を書く
 
@@ -214,7 +223,7 @@ package.json             # build セクションで electron-builder 設定
        ↓
 CC → 読む → 実装 → テスト → CC_REPORT.md 作成
        ↓
-構築士 → 採点 + 次フェーズ判断 → 次の NEXT_CC_PROMPT.md
+構築士 → 採点 + 次フェーズ判断
 ```
 
 ### 標準制約（毎回適用、明記不要）
@@ -223,234 +232,156 @@ CC → 読む → 実装 → テスト → CC_REPORT.md 作成
 - 既存実装を破壊しない
 - transform: scale 禁止
 - branding.md §15 ブランディング保護
+- `<dialog>` に display: flex 禁止
+- 致命バグ保護 5 件すべて維持
 
-### スコープ管理（最重要、2026-04-30 確定）
+### スコープ管理（最重要）
 - **NEXT_CC_PROMPT.md に明示された Fix 項目以外は実装しない**
 - 調査中に発見した別問題は **CC_REPORT.md「構築士への質問」に提案として記載のみ**
-- 「ユーザー要望に最善を尽くして対処」と読んでも勝手に実装範囲を広げない
 - 致命級バグ発見時は CC_REPORT 冒頭に明示し構築士判断を仰ぐ（自動修正禁止）
-- スコープ越えは指示忠実性 30 点項目で減点
-
-### 再現性確認の必須化（C.2.7-C 以降の教訓）
-- audit 項目の中には実コードで再現できないものがある（C.2.7-C で 6 件中 6 件再現せず判定）
-- 各 Fix について実装前に「実コードで本当に再現するか」を確認
-- 再現する → 実装、新規テスト追加
-- 再現しない / 防御済み → 実装せず CC_REPORT で「再現できなかった理由」を明記
-
-### 報告フォーマット（CC_REPORT.md 簡潔版）
-```
-# CC_REPORT — YYYY-MM-DD タイトル
-
-## 1. サマリー
-（1〜2 行で何をしたか）
-
-## 2. 修正ファイル
-| ファイル | 変更点（短く） |
-
-## 3. 主要変更点（コード抜粋 5 行以内/件）
-
-## 4. 構築士への質問（あれば、なければ省略）
-
-## 5. オーナー向け確認（3〜5 項目、平易な日本語）
-```
 
 ---
 
-## 7. 既知の TODO / 構築士判断待ち事項
+## 7. v2.0.0 進行状況
 
-### 7-1. ⚠️ 最重要: GitHub repo 名の確定（v1.3.0 のリリース前必須）
-`package.json` の `build.publish` を**暫定値**で記載:
-```json
-"publish": {
-  "provider": "github",
-  "owner": "yu-shitamachi",
-  "repo": "PokerTimerPLUS"
-}
-```
-実際の GitHub repo 名と一致するか確認・修正必要。修正しないと `autoUpdater.checkForUpdatesAndNotify()` が 404 で警告のみ（クラッシュなし）。
+### v2.0.0 概要
+- 既存 v1.3.0 を**全機能維持**したまま、HDMI 拡張モニターでの 2 画面表示に対応
+- ホール側モニター（お客向け）: タイマー / スライドショー等、現状の見た目すべて
+- PC 側（前原さん操作）: 操作 UI のみ
+- HDMI 抜き差しに自動追従、起動時にホール側モニターを毎回手動選択
+- 配布タイミング: 「完璧に動くまで配布しない」（前原さん指示、急がない）
 
-### 7-2. リリース運用フロー
-electron-updater が機能するためには:
-1. `npm run build:win` で dist/ に installer + latest.yml 生成
-2. GitHub Releases に draft release 作成
-3. `*.exe` (or `*.dmg`) と `latest.yml` (or `latest-mac.yml`) をアップロード
-4. release を publish
-5. ユーザーの次回起動時に自動チェック → 通知
+### v2.0.0 STEP 順序
+- ✅ **STEP 0**: 設計調査（コード変更ゼロ）→ 完了
+- ✅ **STEP 1**: ホール側ウィンドウ追加（最小骨格）→ 完了、commit `4951f9d` 済
+- ⏳ **STEP 2**: 2 画面間の状態同期【承認①】← **次のステップ**
+- STEP 3: PC 側 UI の分離（操作専用、ホール側は表示専用）
+- STEP 4: 起動時のモニター選択ダイアログ
+- STEP 5: HDMI 抜き差し追従【承認②】
+- STEP 6: 既存 138 テスト維持 + v2 専用テスト追加
+- STEP 7: 最終検証 + ドキュメント更新 + version 2.0.0【承認③】
 
-`electron-builder publish` コマンド（GH_TOKEN 環境変数）で 1〜4 自動化可能。
+### v2.0.0 不変条件（既存 v1.3.0 不変条件に追加）
+- **既存 138 テスト全 PASS 維持**: v2 実装中に 1 件でも壊れたら即停止
+- **致命バグ保護を全て継承**
+- **単画面モード後方互換**: HDMI なし PC で v1.3.0 と完全同等動作
+- **画面間データ通信は最小化**: 状態同期は差分のみ、ポーリング禁止
+- **ホール側にお客様視点で不要な UI を出さない**
 
-### 7-3. 残 audit 項目（C.1.1 で実装せず）
-C.2.6 audit の高優先度 8 件のうち 5 件は再現せず or 防御済み判定で実装せず:
-- Fix 1（DONE 状態保存）→ **C.1.2 で実装済み**
-- Fix 3 / 4（Space ダイアログ中 / IME Space）→ keydown handler の早期 return で防御済み
-- Fix 5（Ctrl+Q 終了確認）→ **C.1.2 で状態別メッセージとして実装済み**
-- Fix 8（avgStack 負値）→ `playersRemaining <= 0` 早期 return で防御済み
+### STEP 1 で確立した役割識別の仕組み（STEP 2 以降で利用）
+- `BrowserWindow.webPreferences.additionalArguments: ['--role=...']` で role 渡し
+- 値は `operator-solo`（単画面）/ `operator`（PC 側）/ `hall`（ホール側）
+- preload.js が `process.argv` から抽出 → `documentElement` に `data-role` 属性付与
+- renderer 側で `window.appRole` から参照可能（read-only）
+- CSS `[data-role="..."]` セレクタで表示制御（STEP 1 ではバッジのみ）
 
-### 7-4. 中・低優先度の audit 残課題
-C.2.6 audit で報告された ~110 件のうち高優先度 39 件は対応済み。中・低優先度 70+ 件は構築士判断後に部分対応推奨。詳細は audit 当時の CC_REPORT 履歴参照。
-
-### 7-5. 次フェーズの設計判断候補（CC_REPORT で提案済み、未実装）
-- **「破棄」ボタン**: 編集中の draft を捨てる専用ボタン（C.1-A で「新機能要望」と判定）
-- **データ移行統一**: tournament name の HTML/JS limit 不一致解消（HTML 40 / JS 60）
-- **autoDownload オプション**: `autoUpdater.autoDownload = false` 化検討（通信量を気にするユーザー向け）
-- **DONE 状態の UX**: 「次のトーナメント開始」「リセットして再エントリー」誘導ボタン追加検討
-- **state machine for compound PAUSED operations**: C.2.7-B Fix 3 で state diagram 文書化済、追加対応は構築士判断
-- **コード署名**: Windows publisher 証明書取得（SmartScreen 警告抑止）
-
----
-
-## 8. 重要な実装パターン（CC 必読）
-
-### 8-1. ID 生成（C.1.1 確立）
-```js
-function generateUniqueId(prefix) {
-  const ts = Date.now();
-  const rand = Math.random().toString(36).slice(2, 8).padEnd(6, '0');
-  return `${prefix}-${ts}-${rand}`;
-}
-// 使用: generateUniqueId('tournament') / generateUniqueId('user')
-```
-旧 `${prefix}-${Date.now()}` パターンは **完全廃止**（衝突回避のため）。
-
-### 8-2. ensureEditorEditableState（C.1-A2 + C.1.2-bugfix）
-```js
-function ensureEditorEditableState() {
-  // builtin プリセット選択中はガード（誤って編集可能化しない）
-  if (blindsEditor.meta && blindsEditor.meta.builtin === true) return;
-  if (el.presetName) {
-    el.presetName.readOnly = false;
-    el.presetName.disabled = false;
-    el.presetName.classList.remove('is-readonly');
-  }
-  setBlindsTableReadonly(false);
-  const editorRoot = document.querySelector('.blinds-editor');
-  if (editorRoot) editorRoot.dataset.builtin = 'false';
-}
-```
-**呼出パターン**: 同期で 1 回 + RAF 内で 1 回（合計 2 回、4 重防御の一部）。
-呼出箇所: handlePresetDuplicate / handlePresetNew / `_handleTournamentNewImpl` 末尾 / `ensureBlindsEditorLoaded` の else 分岐。
-
-### 8-3. _tournamentSwitching ガード（C.1.1）
-```js
-let _tournamentSwitching = false;
-
-async function periodicPersistAllRunning() {
-  if (!window.api?.tournaments?.setTimerState) return;
-  if (_tournamentSwitching) return;   // skip during transition
-  ...
-}
-
-async function handleTournamentNew() {
-  ...
-  _tournamentSwitching = true;
-  try { return await _handleTournamentNewImpl(); }
-  finally {
-    handleTournamentNew._inFlight = false;
-    _tournamentSwitching = false;
-  }
-}
-```
-複製ハンドラも同パターン。`finally` で確実に false に戻す。
-
-### 8-4. handlePresetApply の reset 分岐（致命バグ 8-8 修正、絶対変更禁止）
-```js
-} else {
-  // 既定: リセット適用
-  setStructure(cloneStructure(blindsEditor.draft));
-  resetBlindProgressOnly();   // ★ handleReset() 禁止、runtime 保護
-  setBlindsHint(...);
-}
-```
-
-`tests/runtime-preservation.test.js` T4/T5 で静的解析担保。
-
-### 8-5. 既存テストパターン
-全テストは静的解析ベース（ソース文字列を grep）。Electron 起動なし。
-```js
-const RENDERER = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'renderer.js'), 'utf8');
-function stripComments(src) {
-  return src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
-}
-function extractFunctionBody(source, name) { /* ブレース深度カウント */ }
-test('T1: ...', () => { assert.match(...); });
-```
-
-新規テスト追加時はこのパターンを踏襲。
+### STEP 0 で特定された v2 リスク（STEP 2 以降で対処）
+1. **【高】renderer.js 6100 行の役割分離が機械的に困難** → 役割フラグでイベントリスナ登録 skip 方式
+2. **【中】ホール側 ↔ PC 側の同期遅延** → ホール側ローカル時刻計算、main からは「基準時刻 + 状態フラグ」のみ送信
+3. **【中】HDMI 抜き差し時の AudioContext suspend / resume** → `_play()` 内 resume 防御で自動対応の見込み
+4. **【低】Windows 環境では `display.label` が空** → fallback ラベル生成
+5. **【低】data-role 注入タイミング** → `additionalArguments` 経由で対応済（STEP 1）
 
 ---
 
-## 9. 既知の脆弱領域（コード変更時の注意点）
+## 8. 配布関連の現状
 
-### 9-1. renderBlindsTable とフォーカス
-`isUserTypingInInput()` ガードがある。設定ダイアログ内の入力中は早期 return。新規 DOM 操作で副作用がある場合、必ずこのガードを通す。
+### v1.3.0 配布
+- ✅ git push 済、リモートに `main` ブランチあり
+- ✅ GitHub Releases で `.exe` 公開済
+- ✅ 自動更新マニフェスト `latest.yml` 添付済
+- ✅ 全国のポーカールームに案内可能
 
-### 9-2. tournament.save IPC の payload
-`normalizeTournament` は `'X' in t` で判定して既存値を維持する設計。
-- timerState を payload に含めると上書き → race（C.2.7-D 修正済）
-- payload に含めないフィールドは fallback から維持
-- `readTournamentForm()` は timerState を含まない（既存設計、変更厳禁）
+### `.gitignore` で除外済（配布リポに含まない）
+- `node_modules/`, `dist/`, `out/`
+- `*token.json`, `*credentials.json`, `__pycache__/`, `*.pyc`
+- `docs/slides_artifacts/`（PLUS2 月次レポート関係、C.3-B で除外）
+- `.claude/settings.local.json`（C.3-B で除外）
 
-### 9-3. blindsEditor.meta の状態
-- `{ id, name, builtin }` の 3 フィールド
-- `builtin: true` → builtin プリセット（編集不可、削除不可、保存不可）
-- `builtin: false` → user preset（編集可、削除可、上書き保存可）
-- 状態遷移は `loadPresetIntoDraft` / `handlePresetNew` / `handlePresetDuplicate` / `_savePresetCore` のみ
-
-### 9-4. 状態遷移（States enum）
-`src/renderer/state.js` で IDLE / PRE_START / RUNNING / PAUSED / BREAK の 5 種。`'finished'` は store 側のみで、renderer の States enum には**ない**（applyTimerStateToTimer で 'finished' → idle に変換 + class 付与）。
-
----
-
-## 10. 次のステップ候補
-
-構築士判断後、以下のような次フェーズが考えられます:
-
-### A. v1.3.0 リリース準備（最優先候補）
-1. GitHub repo 名確定（§7-1）
-2. リリース運用フロー整備（§7-2、`electron-builder publish` 等）
-3. コード署名（Windows publisher 証明書、SmartScreen 抑止）
-4. 配布ビルドの実機検証（インストール → 起動 → 自動更新チェック確認）
-
-### B. 残 audit 項目の段階対応
-中・低優先度の項目を構築士優先度判定後にバンドル対応。
-
-### C. 新機能（未承認、構築士提案後判断）
-- 「破棄」ボタン
-- DONE 状態の UX 強化（次トーナメント開始誘導等）
-- 営業時間自動カウントダウン（specs.md 優先度高）
-- バウンティトーナメント管理（specs.md 優先度高）
-
-### D. 配布後の前原さん（オーナー）報告対応
-v1.2.0 でも前原さんから複数の bugfix 要望が来ている履歴あり。実機で観察された問題は CC_REPORT 経由で構築士に伝達 → 次フェーズで対応。
+### 自動更新
+- electron-updater 統合済、`build.publish` に GitHub provider + owner/repo 設定済
+- v1.3.1 以降の Release 公開で既存ユーザーに自動通知 → ダウンロード → 再起動確認
+- 詳細手順: `docs/RELEASE_GUIDE.md`
 
 ---
 
-## 11. CC へのアドバイス（次のエージェント向け）
+## 9. 既知の TODO / 残課題
 
-1. **NEXT_CC_PROMPT.md が来たらまず一気に読む**。スコープ制限を厳格に守ること。「ついでに直す」は禁止
-2. **再現性確認を必ず行う**。コード読解で「再現しない / 防御済み」と判定したら、実装せず CC_REPORT で根拠記載
-3. **既存テストが壊れていないか確認**を習慣化。`npm test` で 75 件全 PASS が維持されること
-4. **致命バグ 8-8 リグレッション**: `handlePresetApply` の reset 分岐で `handleReset()` を呼んだら即 NG。`tests/runtime-preservation.test.js` で検出される
-5. **入力中保護**: 新規 DOM 操作 / フォーム書込関数を追加するときは必ず `isUserTypingInInput()` でガード
-6. **構築士への質問は「実装禁止、提案のみ」**で書く。発見した別問題はここに集約
-7. **CC_REPORT.md は構築士採点用、技術詳細 OK、末尾にオーナー向け平易確認 3〜5 項目**
-8. CC は「実行する存在」、設計判断は構築士の役割。判断に迷うことは構築士に聞く
+### 9-1. C.1.5 配布前審査の中・低優先度（次マイナー版で段階対応）
+- フォント拡大の調整余地（`stat-value--md` / `--xl` の比率）
+- ⚠ アイコン配置位置（チップ未選択時の可視性）
+- 画像エラー時の i18n（現在英語のみ）
+- console.log 整理（54 箇所、`if (isDev)` で wrap 候補）
+- README に SmartScreen 警告対応手順
+- audio.js のデバッグ log 削除（TODO STEP 8 仕上げ）
+
+### 9-2. v1.3.0 マイグレーション
+- v1.3.0 → v1.3.1 アップグレード時、過去のランタイムデータは復旧不可（旧バージョン時点で永続化されていなかったため）
+- 最初のトーナメント開始時に通常通り人数入力 → 以降は永続化される
+- CHANGELOG への記載が必要であれば追記推奨
+
+### 9-3. 設定ダイアログの widening
+- C.1.6 で wrapper 化により縦リサイズ追従。実機で 7 タブすべての挙動確認は前原さん側で要確認
+
+### 9-4. v2 開発中に出るべき新規問題
+- AudioContext suspend / resume の HDMI 抜き差し対応（STEP 5 で要確認）
+- ホール側 / PC 側の同期遅延（v2-dual-screen.md §2.1: ±100ms 以内）
+- モニター選択ダイアログでの label 空対応（STEP 4）
 
 ---
 
-## 12. 連絡・参照ポイント
+## 10. CC へのアドバイス（次のエージェント向け）
+
+1. **NEXT_CC_PROMPT.md が来たらまず一気に読む**。スコープ制限を厳格に守る
+2. **v2.0.0 中はすべて `feature/v2.0.0` ブランチで作業**。`main` には触らない
+3. **既存 138 テストが壊れていないか毎回確認**。`npm test` で 1 件でも FAIL したら即停止
+4. **致命バグ保護 5 件**: 触らないのが原則。触る必要があれば事前に CC_REPORT で警告
+5. **CC_REPORT.md は構築士採点用**、技術詳細 OK、末尾にオーナー向け平易確認 3〜5 項目
+6. **CC は「実行する存在」**、設計判断は構築士の役割。判断に迷うことは構築士に質問
+7. **`<dialog>` 要素自体に display: flex を絶対に当てない**（feedback_dialog_no_flex 不可侵）
+8. **v2.0.0 各 STEP で「この致命バグ保護への影響なし」を確認してから次へ進む**
+
+---
+
+## 11. 連絡・参照ポイント
 
 - 仕様書: `docs/specs.md`
-- 不変条件: `skills/timer-logic.md` の「STEP 10 で確定した不変条件 (v1.2.0)」セクション
+- v1.x 不変条件: `skills/timer-logic.md`「STEP 10 不変条件」セクション
+- v2.0.0 品質基準: `skills/v2-dual-screen.md`
+- v2 設計調査: `docs/v2-design.md`
 - 直近完了タスク: `CC_REPORT.md`（毎フェーズ上書き）
 - 次タスク指示: `NEXT_CC_PROMPT.md`（構築士が更新）
 - リリース履歴: `CHANGELOG.md`
+- リリース手順: `docs/RELEASE_GUIDE.md`
 - ライセンス情報: `CREDITS.md` + `src/audio/CREDITS.md` + `src/assets/fonts/licenses/`
-- ブランディング: `skills/branding.md`（保護必須）
+- ブランディング: `skills/branding.md`
 
 ---
 
-**作成日**: 2026-04-30  
-**作成時 version**: 1.3.0  
-**作成時テスト数**: 75 件（10 ファイル、すべて PASS）  
-**最終フェーズ**: C.1.2（v1.3.0 仕上げバンドル 5 件、すべて実装完了）
+## 12. git ブランチ・コミット状態（2026-05-01 時点）
+
+### ブランチ
+- `main`（v1.3.0 配布版、不変）
+- `feature/v2.0.0`（v2 作業中、現在のブランチ）
+
+### `feature/v2.0.0` の最新コミット
+```
+4951f9d v2.0.0 STEP 1: ホール側ウィンドウ追加（最小骨格）
+57298f4 Remove non-distribution files from tracking
+48fc35a Add RELEASE_GUIDE.md (C.3-A 配布手順書)
+b47fb14 Initial commit: PokerTimerPLUS+ v1.3.0
+```
+
+### リモート
+- origin: <https://github.com/maetomo08020802-eng/PokerTimerPLUS.git>
+- `feature/v2.0.0` も push 済
+
+### 承認①対象（STEP 2 完了時）
+- STEP 2 完了時に PR を `main` 向けに作成予定（NEXT_CC_PROMPT.md 指示）
+
+---
+
+**作成日**: 2026-05-01
+**作成時 version**: 1.3.0（配布版）+ v2.0.0 STEP 1 進行中
+**作成時テスト数**: 138 件（15 ファイル、すべて PASS）
+**最終フェーズ**: v2.0.0 STEP 1（commit `4951f9d` push 済、PR は STEP 2 完了時にまとめて作成）

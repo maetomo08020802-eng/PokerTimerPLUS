@@ -1,197 +1,299 @@
-# フェーズC.3-A: 配布準備（GitHub リポジトリ初回プッシュ + ビルド検証）
+# v2.0.0 STEP 2: 2 画面間の状態同期【承認①対象】
 
 ## 状況
-v1.3.0 配布準備フェーズ。GitHub リポジトリが作成された:
-- URL: https://github.com/maetomo08020802-eng/PokerTimerPLUS
-- owner: `maetomo08020802-eng`
-- repo: `PokerTimerPLUS`
-- 公開設定: Public（ユーザーが手動作成、初期ファイルなし）
+v2.0.0 STEP 1 完了済（`feature/v2.0.0` ブランチ作成、ウィンドウ生成 2 関数分離、`additionalArguments` で role 渡し、`data-role` 属性付与、CSS バッジ最小サンプル、build.files に `!scripts/**/*` 追加、138 テスト全 PASS、push 完了 / PR 未作成）。
+本 STEP 2 から **2 画面間の状態同期（コア技術）** を実装する。完了時に承認①の PR を作成する。
 
-構築士で以下を直接編集済:
-- `package.json`: `build.publish` に owner/repo を追加（autoUpdate 有効化）
-- `README.md`: GitHub URL + Releases ページリンクを追記
-- `CHANGELOG.md`: 自動更新の文言を「v1.3.1 以降で動作」に修正
-- `.gitignore`: OAuth トークン / credentials.json / Python キャッシュを除外
+参照ドキュメント:
+- `docs/v2-design.md` §3（状態同期に必要な情報の最小セット 9 種類）
+- `skills/v2-dual-screen.md` §2（状態同期の精度基準）+ §1.3（画面間通信の節度）+ §5（禁止事項）+ §7（実装上のヒント）
+- **`skills/cc-operation-pitfalls.md`（公式ドキュメント準拠の絶対遵守事項、本フェーズ開始時に必ず Read）** ★追加
 
 ---
 
 ## ⚠️ スコープ制限（厳守）
 
-**本フェーズで実装するのは以下のみ:**
-1. 既存 138 テスト全 PASS 再確認
-2. Windows ビルド検証（`npm run build:win`）→ `dist/` に `.exe` 生成確認
-3. git 初期化（`git init`）+ 初回コミット
-4. リモートリポジトリの設定（`git remote add origin ...`）
-5. 前原さん向けの「最終 push 手順書」を `docs/RELEASE_GUIDE.md` として作成
+**本 STEP 2 で実行するのは以下のみ:**
+1. `src/main.js` に状態キャッシュ + broadcast 関数追加（main プロセスを単一の真実源とする）
+2. `src/main.js` に新規 IPC ハンドラ群追加: `dual:state-sync` / `dual:operator-action`（双方向に必要な最小チャンネル）
+3. `src/preload.js` に `window.api.dual.*` グループ追加（`subscribeStateSync` / `notifyOperatorAction` 等）
+4. `src/renderer/dual-sync.js`（新規）作成、ホール側で main からの state を受信 → 既存 `state.js` の `setState` で適用
+5. `src/renderer/renderer.js` の起動部に role 判定追加: `role === 'hall'` なら dual-sync 起動、`role === 'operator'` なら既存ロジックに加えて main への operator-action 通知、`role === 'operator-solo'` なら既存ロジックそのまま
+6. 既存 138 テスト全 PASS 維持
+7. v2 専用テスト最小追加（`tests/v2-dual-sync.test.js` 新規、IPC ハンドラ存在 / subscribe ロジック / 差分送信パターンの静的解析、5〜8 件程度）
+8. STEP 2 完了でコミット & push、**承認①の PR を `feature/v2.0.0` → `main` で作成**
 
 **禁止事項:**
-- コードの追加修正一切（致命バグ修正・既存機能・C.1.7 / C.1.8 系すべて維持）
-- 既存 138 テストの動作改変
-- `git push` の実行は禁止（push は前原さんが手動で行うため、最終ガイドとして手順書に記載のみ）
-- OAuth トークン・credentials の git 追跡（.gitignore で除外済、念のため CC で確認）
+- ホール側 / PC 側の UI 完全分離（STEP 3 で行う、本 STEP では同期の仕組みのみ）
+- モニター選択ダイアログ（STEP 4）
+- HDMI 抜き差し追従（STEP 5）
+- AudioContext 関連の変更（STEP 5、`docs/v2-design.md` §7 警告事項）
+- 単画面モード（`operator-solo`）の挙動変更（v1.3.0 と完全同等を維持）
+- 既存テストの skip / コメントアウト / 無効化
+- 致命バグ保護 5 件への影響変更
+- 「ついでに既存リファクタ」一切禁止
+- ポーリング（定期的な全状態取得）禁止、必ずイベント駆動
+- ホール側からの操作リクエスト送信禁止（hall は purely consumer、ただし STEP 3 で確定）
+- CSP `script-src 'self'` 不変
+- **並列 sub-agent / Task は最大 3 体まで**（公式 Agent Teams 推奨、skills/cc-operation-pitfalls.md §1.1）
+- **「念のため」コード追加禁止**（skills/cc-operation-pitfalls.md §1.2）
+- **同じバグで 2 回修正試行する前に context 肥大化を疑う**（skills/cc-operation-pitfalls.md §1.4）
 
 ---
 
-## Fix 1: 既存テスト再確認 + ビルド前検証
+## Fix 1: main.js に状態キャッシュ + broadcast 関数追加
+
+main プロセスを single source of truth とする最小実装。
+
+```js
+// 状態キャッシュ（v2 で hall に broadcast する用、operator-solo モードでは未使用）
+const _dualStateCache = {
+  timerState: null,        // { status, currentLevelIndex, ... }
+  structure: null,         // { levels: [...] }
+  displaySettings: null,
+  marqueeSettings: null,
+  tournamentRuntime: null,
+  tournamentBasics: null,  // { name, subtitle, titleColor, venueName, blindPresetId }
+  audioSettings: null,
+  logoUrl: null,
+};
+
+function _broadcastDualState(channel, payload) {
+  if (!_hallWindow || _hallWindow.isDestroyed()) return;
+  _hallWindow.webContents.send(channel, payload);
+}
+
+// 既存の tournaments:setTimerState / setDisplaySettings 等のハンドラ末尾に
+// _broadcastDualState('dual:state-sync', { kind: 'timerState', value: ... }) を追加
+```
+
+ポイント:
+- `_hallWindow` が無い（単画面モード）場合は no-op、`operator-solo` の挙動に影響しない
+- 既存 IPC ハンドラの payload 構造には**一切触らない**（致命バグ保護 C.2.7-D の `timerState` destructure 除外を踏襲）
+- broadcast は差分のみ（kind フィールドで「何が変わったか」を伝える）、全状態を毎回送信しない
+
+---
+
+## Fix 2: main.js に新規 IPC ハンドラ追加
+
+```js
+// hall 起動時の初期同期: 全キャッシュを 1 回だけ送る
+ipcMain.handle('dual:state-sync-init', async () => {
+  return { ..._dualStateCache };  // hall 側は受信して setState で一括適用
+});
+
+// operator → main → hall の操作リクエスト中継
+ipcMain.handle('dual:operator-action', async (event, { action, payload }) => {
+  // 既存ハンドラに転送
+  // 例: action === 'timer:start' なら既存の timer:start ハンドラを呼ぶ
+  //     action === 'preset:apply' なら既存の preset:apply ハンドラを呼ぶ
+  // 既存ロジックを変更せず、薄い wrapper として実装
+  return await _routeOperatorAction(action, payload);
+});
+```
+
+`_routeOperatorAction` は既存の IPC handler を呼ぶ薄い router。既存ハンドラ自体には触らない。
+
+---
+
+## Fix 3: preload.js に `window.api.dual.*` 追加
+
+```js
+// 既存 contextBridge.exposeInMainWorld('api', { ... }) の中に追加
+contextBridge.exposeInMainWorld('api', {
+  // ... 既存の api 群 ...
+  dual: {
+    subscribeStateSync: (callback) => {
+      ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
+    },
+    fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
+    notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload }),
+  },
+});
+```
+
+---
+
+## Fix 4: src/renderer/dual-sync.js 新規作成
+
+ホール側で main からの state を受信 → 既存 state.js の setState で適用。
+
+```js
+// dual-sync.js（新規、~100 行想定）
+import { setState, getState } from './state.js';
+
+export async function initDualSyncForHall() {
+  if (window.appRole !== 'hall') return;  // 安全側ガード
+
+  // 初期状態を 1 回だけ取得
+  const initial = await window.api.dual.fetchInitialState();
+  if (initial.timerState)  setState({ timerState: initial.timerState });
+  if (initial.structure)    setState({ structure: initial.structure });
+  // ... 9 種類すべて適用 ...
+
+  // 以降の差分を購読
+  window.api.dual.subscribeStateSync((diff) => {
+    if (diff.kind === 'timerState')         setState({ timerState: diff.value });
+    else if (diff.kind === 'structure')      setState({ structure: diff.value });
+    // ... 9 種類すべて分岐 ...
+  });
+}
+```
+
+注意:
+- ホール側はローカルでの timer.js による performance.now ベース計算で「±100ms 以内」を達成（v2-dual-screen.md §2.1）
+- main からは「基準時刻 + 状態フラグ」のみ送る、毎秒の timer 値を送らない（リスク 2 対処）
+- 既存の state.js / timer.js は無変更、上に薄い同期レイヤを乗せるだけ
+
+---
+
+## Fix 5: renderer.js の起動部に role 判定追加
+
+renderer.js の最上部 or DOMContentLoaded ハンドラの中で:
+
+```js
+const role = window.appRole || 'operator-solo';
+
+if (role === 'hall') {
+  // ホール側: dual-sync 起動 + 既存の表示更新ロジックは動かす（state.js の subscribe 経由）
+  // 操作系イベントリスナは登録しない（STEP 3 で role ガードを追加するが、本 STEP は最小実装）
+  await initDualSyncForHall();
+  initDisplayLogic();  // 既存の renderTimer / applyTournament 等を起動
+} else if (role === 'operator') {
+  // PC 側: 操作 UI 起動 + main への operator-action 通知経路を有効化
+  // タイマー進行は main で実行されるので、PC 側の表示用ローカル timer は無効化（STEP 3 で完全分離）
+  initOperatorLogic();
+} else {
+  // operator-solo（単画面モード）: v1.3.0 と完全同等
+  initSoloLogic();  // 既存のロジックそのまま
+}
+```
+
+実際の関数名・分岐実装は CC 判断、ただし「**operator-solo は v1.3.0 と完全同じ動作**」が絶対条件。
+
+---
+
+## Fix 6: 既存 138 テスト全 PASS 維持
 
 ```bash
-# 全テスト実行（138 件 PASS が完了条件）
 npm test
-
-# 構文確認
-node --check src/main.js
-node --check src/preload.js
-node --check src/renderer/renderer.js
+# Summary: 138 passed / 0 failed を確認
 ```
 
-すべて OK でなければ次に進まない。
+1 件でも FAIL したら**即停止**、CC_REPORT に「何が壊れたか」「致命バグ保護への影響有無」明記。
 
 ---
 
-## Fix 2: Windows ビルド検証
+## Fix 7: v2 専用テスト最小追加
+
+`tests/v2-dual-sync.test.js` を新規作成、静的解析ベース（既存パターン踏襲）。
+
+カバー対象（5〜8 件、STEP 6 でフル展開予定）:
+- T1: main.js に `_dualStateCache` / `_broadcastDualState` が定義されている
+- T2: main.js に `dual:state-sync-init` ハンドラが ipcMain.handle で登録されている
+- T3: main.js に `dual:operator-action` ハンドラが登録されている
+- T4: preload.js に `dual.subscribeStateSync` / `fetchInitialState` / `notifyOperatorAction` が含まれる
+- T5: dual-sync.js に `initDualSyncForHall` がエクスポートされている
+- T6: dual-sync.js が `window.appRole !== 'hall'` ガードを持つ
+- T7: renderer.js が `role === 'hall' / 'operator' / 'operator-solo'` の 3 分岐を持つ
+- T8: 既存 `timerState` destructure 除外（C.2.7-D Fix 3）の payload 構造に変更がない（既存テスト + 静的検査）
+
+---
+
+## Fix 8: コミット & push & 承認①の PR 作成
 
 ```bash
-# 旧ビルド成果物クリーン
-rm -rf dist
-# Windows 用 .exe 生成
-npm run build:win
+git add -A
+git status
+git -c user.name="Yu Shitamachi" -c user.email="ymng2@icloud.com" commit -m "v2.0.0 STEP 2: 2 画面間の状態同期"
+git push origin feature/v2.0.0
 ```
 
-確認項目:
-- `dist/` 配下に `.exe` インストーラ（例: `PokerTimerPLUS+ Setup 1.3.0.exe`）が生成されている
-- ビルドログに重大エラーなし（warning は許容）
-- 配布版起動でクラッシュなし（実行確認は前原さん側）
-
----
-
-## Fix 3: git 初期化 + 初回コミット
+PR 作成（**承認①対象**）:
 
 ```bash
-cd poker-clock
-git init
-git add .
-git status   # 確認: token.json / credentials.json / node_modules / dist が含まれていないこと
-git commit -m "Initial commit: PokerTimerPLUS+ v1.3.0"
-git branch -M main
-git remote add origin https://github.com/maetomo08020802-eng/PokerTimerPLUS.git
+gh pr create \
+  --base main \
+  --head feature/v2.0.0 \
+  --title "v2.0.0 STEP 0+1+2: 2 画面対応（設計調査 + ホール側ウィンドウ + 状態同期）" \
+  --body "$(cat <<'EOF'
+## サマリ
+v2.0.0 大改修の最初の PR。STEP 0（設計調査）+ STEP 1（ホール側ウィンドウ最小骨格）+ STEP 2（2 画面間の状態同期）をまとめてマージ。
+
+## 完了 STEP
+- STEP 0: docs/v2-design.md / scripts/_probes/v2-probe.js
+- STEP 1: src/main.js のウィンドウ分離 / data-role バッジ / build.files 修正
+- STEP 2: 2 画面間の状態同期（main を真実源、hall は purely consumer、operator-solo は v1.3.0 と完全同等）
+
+## 動作確認
+- 単画面 PC: v1.3.0 と完全同じ動作（operator-solo モード）
+- 2 画面環境: PC 側で操作 → ホール側に ±100ms 以内で同期反映
+
+## 致命バグ保護
+- 5 件すべて完全維持（resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState / AudioContext resume / runtime 永続化）
+
+## 残作業
+- STEP 3: PC 側 UI の完全分離
+- STEP 4: モニター選択ダイアログ
+- STEP 5: HDMI 抜き差し追従【承認②】
+- STEP 6: テスト拡充
+- STEP 7: 最終検証 + version bump【承認③】
+EOF
+)"
 ```
 
-**重要**: `git status` で以下が **追跡されていない** ことを必ず確認:
-- `node_modules/`
-- `dist/`
-- `*.token.json` / `*credentials.json`
-- `__pycache__/`
-
-含まれていたら `.gitignore` を再点検 + `git rm --cached <ファイル>` で除外する。
-
-`git push` は実行しない（前原さんに任せる、後述）。
+PR URL を CC_REPORT に記載すること。
 
 ---
 
-## Fix 4: 前原さん向けリリース手順書作成
+## Fix 9: CC_REPORT.md（簡潔版）
 
-`poker-clock/docs/RELEASE_GUIDE.md` を新規作成。内容:
+CC_REPORT.md を STEP 2 完了報告に書き換え:
 
-### docs/RELEASE_GUIDE.md の中身（CC が書く）
-
-```markdown
-# PokerTimerPLUS+ リリース手順
-
-このドキュメントは、新しいバージョンを GitHub に公開するための手順です。
-
-## 初回リリース（v1.3.0）
-
-### 手順 1: コードを GitHub にアップロード（git push）
-
-「Git Bash」を起動して、以下のコマンドを 1 行ずつ実行してください:
-
-\`\`\`bash
-cd C:/Users/user/Documents/Claude/Projects/個人アシスタント/poker-clock
-git push -u origin main
-\`\`\`
-
-- 初回は GitHub のユーザー名 + パスワード（または Personal Access Token）の入力を求められます
-- パスワード認証は 2021 年に廃止されているため、**Personal Access Token (PAT)** を使う必要があります
-- PAT 発行手順は次セクション参照
-
-### Personal Access Token (PAT) の発行（初回のみ）
-
-1. GitHub にログイン → 右上のプロフィール → Settings
-2. 左メニュー一番下「Developer settings」をクリック
-3. 「Personal access tokens」→「Tokens (classic)」
-4. 「Generate new token」→「Generate new token (classic)」
-5. 入力:
-   - Note: `PokerTimerPLUS push` など
-   - Expiration: 90 days（任意）
-   - Scope: **`repo`** にだけチェック
-6. 一番下の「Generate token」ボタン
-7. 表示された token（`ghp_xxxxxxxxxxxx` 形式）をコピー
-
-git push 時にパスワード入力欄でこの token を貼り付ければ OK。
-
-### 手順 2: GitHub Releases ページで .exe を公開
-
-1. https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases にアクセス
-2. 「Create a new release」または「Draft a new release」をクリック
-3. 入力:
-   - **Choose a tag**: `v1.3.0` を入力 → 「Create new tag: v1.3.0 on publish」を選択
-   - **Release title**: `v1.3.0 - 初回リリース`
-   - **Description**: 配布対象向けに、CHANGELOG.md からコピペ
-   - **Attach binaries**: `dist/PokerTimerPLUS+ Setup 1.3.0.exe` をドラッグ&ドロップでアップロード
-4. 「Publish release」ボタン
-
-これで配布完了。誰でも Releases ページから `.exe` をダウンロードできます。
-
-## 次回以降のリリース（v1.3.1 / v1.4.0 など）
-
-### 手順 1: バージョン変更
-- `package.json` の `version` を新値に変更
-- `CHANGELOG.md` に新セクション追加
-
-### 手順 2: ビルド + コミット + push
-
-\`\`\`bash
-npm run build:win
-git add .
-git commit -m "Release v1.3.1"
-git tag v1.3.1
-git push
-git push --tags
-\`\`\`
-
-### 手順 3: GitHub Releases で公開
-初回と同じ手順で、新しい `.exe` をアップロード → Publish release。
-
-公開した瞬間から、既存ユーザーが次回起動時に自動更新通知を受け取ります（electron-updater 動作）。
-```
-
----
-
-## Fix 5: 最終確認
-
-CC が以下を CC_REPORT に列挙:
-1. `npm test` 結果（138/138 PASS）
-2. `npm run build:win` 結果（dist/ に .exe 生成、サイズと正確なファイル名）
-3. `git status` 結果（node_modules / dist / token / credentials が追跡対象外であること）
-4. `git log` 結果（初回コミットが作成されたこと）
-5. `git remote -v` 結果（origin が GitHub URL に紐づいていること）
-6. `docs/RELEASE_GUIDE.md` が作成されたこと
-
----
-
-## 完了報告フォーマット
-
-CC_REPORT.md を C.3-A 用に書き直し:
-1. サマリ（138 テスト PASS、ビルド成功、git 初期化完了）
-2. 各 Fix の実行結果（ログ抜粋）
-3. 構築士への質問
-4. **オーナー向け最終操作手順**（RELEASE_GUIDE.md の場所 + 概要）
+1. **サマリ**: 状態キャッシュ / IPC ハンドラ / preload API / dual-sync 起動 / role 分岐 / 138+α テスト全 PASS / PR 作成完了 + URL
+2. **主要変更点**: コード抜粋 5 行以内/件
+3. **致命バグ保護への影響評価**: 5 件すべて影響なしの確認（必須セクション）
+4. **並列起動した sub-agent / Task 数の報告**（0〜3 体は OK、4 体以上は警告 + 設計見直し提案）
+5. **構築士への質問**（あれば、なければ省略）
+6. **オーナー向け確認**:
+   - 単画面 PC で起動 → v1.3.0 と完全同じ動作（変化なし）
+   - 2 画面環境（あれば）→ PC 側で操作したら、ホール側に同期反映されるか
+   - PR の URL（前原さんがブラウザで開いてマージ操作）
 
 ---
 
 ## 維持事項
-- 既存 138 テスト全 PASS 維持
-- 致命バグ修正（C.2.7-A / C.2.7-D / C.1.4-fix1 / C.1.7 / C.1.8）すべて完全維持
-- C.1.3 / C.1.4 / C.1.6 / C.1.7 / C.1.8 系の挙動完全維持
-- `<dialog>` flex 化禁止
-- カード幅 / Barlow Condensed フォント不変
+
+- 既存 138 テスト全 PASS 維持（+ v2 専用テスト最小 5〜8 件追加）
+- **`operator-solo` モード（単画面）は v1.3.0 と完全同等**
+- 致命バグ保護 5 件すべて完全維持
+- カード幅 / Barlow Condensed / `<dialog>` flex 禁止
+- skills/v2-dual-screen.md「§5 禁止事項」全項目
+- CSP `script-src 'self'` 不変
+- ポーリング禁止、イベント駆動
+
+---
+
+## 完了条件
+
+- [ ] `feature/v2.0.0` ブランチで STEP 2 のコミット作成
+- [ ] main.js に `_dualStateCache` + `_broadcastDualState` + `dual:state-sync-init` + `dual:operator-action`
+- [ ] preload.js に `window.api.dual.*` グループ
+- [ ] src/renderer/dual-sync.js（新規）作成
+- [ ] renderer.js に role 3 分岐（hall / operator / operator-solo）
+- [ ] tests/v2-dual-sync.test.js（新規）5〜8 件
+- [ ] `npm test` で **既存 138 + 新規 5〜8 件すべて PASS**
+- [ ] push 完了 + **承認①の PR 作成完了**（PR URL 取得）
+- [ ] CC_REPORT.md に PR URL 記載
+- [ ] 致命バグ保護 5 件すべて影響なし確認
+
+---
+
+## 承認①について
+
+CC が PR 作成完了したら、構築士が CC_REPORT を採点 → 前原さんに以下を案内:
+1. 単画面 PC での動作確認（v1.3.0 と同じか）
+2. 2 画面環境での同期動作確認（HDMI モニターあれば）
+3. PR の URL を開いて中身を確認 → マージ操作
+
+前原さんがマージ判断するまで STEP 3 には進まない。
