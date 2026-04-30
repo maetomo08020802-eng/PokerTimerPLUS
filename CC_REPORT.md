@@ -1,16 +1,15 @@
-# CC_REPORT — 2026-05-01 v2.0.0 STEP 2: 2 画面間の状態同期【承認①対象】
+# CC_REPORT — 2026-05-01 v2.0.0 STEP 3: PC 側 UI の分離（役割ガード方式）
 
 ## 1. サマリー
 
-- main プロセスを単一の真実源とする状態キャッシュ + broadcast 関数を確立（`_dualStateCache` / `_broadcastDualState` / `_publishDualState`）
-- 既存 IPC ハンドラ 8 種類の末尾に差分 publish を追加（`setTimerState` / `setRuntime` / `setDisplaySettings` / `setMarqueeSettings` / `save` / `setActive` / `audio:set` / `settings:setVenueName`）
-- 新規 IPC: `dual:state-sync-init`（hall 起動時の初期同期）/ `dual:operator-action`（operator → main → hall 中継、ホワイトリスト方式）
-- `preload.js` に `window.api.dual.*` グループ公開（`subscribeStateSync` / `fetchInitialState` / `notifyOperatorAction`）
-- `src/renderer/dual-sync.js`（新規、~60 行）作成、hall 専用 `initDualSyncForHall` を export、role ガード + 初期同期 + 差分購読をイベント駆動で実装（ポーリングなし）
-- `renderer.js` 起動部に role 3 分岐（hall / operator / operator-solo）追加、operator-solo は v1.3.0 と完全同等の挙動を維持
-- `tests/v2-dual-sync.test.js`（新規、8 件）+ `package.json` 更新
-- 既存 138 + 新規 8 = **146 テスト全 PASS**
-- commit `9fd7c57` push 済、**承認①の PR 作成完了**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/1>
+- `style.css` に `[data-role]` セレクタを本格実装。hall は操作 UI を完全 hidden、operator は大表示を hidden + ミニ状態バー、operator-solo は一切無変更（v1.3.0 完全同等）
+- STEP 1 の視認用バッジ（🖥 HALL / 💻 OPERATOR）は **削除**（本番運用でお客様に見える可能性を排除）
+- `renderer.js` の主要操作 handler **14 箇所**の冒頭に `window.appRole === 'hall'` ガード追加
+- `notifyOperatorActionIfNeeded` ヘルパー追加（role==="operator" 限定）+ btnStart / btnPause click で呼出有効化
+- `index.html` に `.operator-status-bar`（Level / Time / Status の 1 行表示）を新規追加 + `updateOperatorStatusBar` 関数で既存 subscribe 経由更新
+- `tests/v2-role-guard.test.js`（新規、8 件）+ `package.json` 更新
+- 既存 138 + STEP 2 新規 8 + STEP 3 新規 8 = **154 件すべて PASS**
+- 致命バグ保護 5 件すべて影響なし、commit `e577618` push 済（**PR は作らず**、承認②で STEP 3+4+5 まとめて作成予定）
 
 ---
 
@@ -18,72 +17,89 @@
 
 | ファイル | 変更点（短く） |
 | --- | --- |
-| `src/main.js` | `_dualStateCache` + `_broadcastDualState` + `_publishDualState` 追加、既存 8 ハンドラ末尾に publish 呼出、新規 2 IPC ハンドラ |
-| `src/preload.js` | `window.api.dual.*` グループ追加（3 関数） |
-| `src/renderer/dual-sync.js`（新規） | hall 専用 `initDualSyncForHall`、初期同期 + 差分購読 |
-| `src/renderer/renderer.js` | `dual-sync.js` import + 起動部に role 3 分岐 |
-| `tests/v2-dual-sync.test.js`（新規） | 8 件の静的解析テスト |
-| `package.json` | test スクリプトに `v2-dual-sync.test.js` 追加 |
+| `src/renderer/style.css` | STEP 1 バッジ削除 → `[data-role]` 本格分離（hall 4 セレクタ、operator 6 セレクタ + ミニ状態バー） |
+| `src/renderer/index.html` | `.operator-status-bar` 要素新規追加（Level / Time / Status の 3 項目） |
+| `src/renderer/renderer.js` | 主要 handler 14 箇所に hall ガード、`notifyOperatorActionIfNeeded` + `updateOperatorStatusBar` 追加 |
+| `tests/v2-role-guard.test.js`（新規） | 8 件の静的解析テスト |
+| `package.json` | test スクリプトに `v2-role-guard.test.js` 追加 |
 
 ---
 
 ## 3. 主要変更点
 
-**main.js: 状態キャッシュ + broadcast 関数（hall 不在時 no-op で operator-solo 後方互換）**
+**style.css: 役割別 UI 分離**
+
+```css
+/* hall: 操作 UI 完全 hidden */
+[data-role="hall"] .bottom-bar,
+[data-role="hall"] .form-dialog,
+[data-role="hall"] .confirm-dialog,
+[data-role="hall"] .pip-action-btn { display: none !important; }
+
+/* operator: 大表示 hidden + ミニ状態バー */
+[data-role="operator"] .clock,
+[data-role="operator"] .marquee,
+[data-role="operator"] .slideshow-stage,
+[data-role="operator"] .pip-timer,
+[data-role="operator"] .pip-action-btn,
+[data-role="operator"] .bg-image-overlay { display: none !important; }
+[data-role="operator"] .operator-status-bar {
+  display: flex !important; position: fixed; top: 0; ... height: 36px;
+}
+/* operator-solo: 何も変えない（v1.3.0 完全同等）*/
+```
+
+**renderer.js: handler 冒頭の hall ガード（14 箇所、抜粋）**
 
 ```js
-const _dualStateCache = { timerState: null, structure: null, displaySettings: null, ... };
-function _broadcastDualState(channel, payload) {
-  if (!hallWindow || hallWindow.isDestroyed()) return;
-  try { hallWindow.webContents.send(channel, payload); } catch (_) { /* ignore */ }
+function handleStartPauseToggle() {
+  if (window.appRole === 'hall') return;
+  ensureAudioReady();
+  // ... 既存ロジック
 }
-function _publishDualState(kind, value) {
-  if (!Object.prototype.hasOwnProperty.call(_dualStateCache, kind)) return;
-  _dualStateCache[kind] = value;
-  _broadcastDualState('dual:state-sync', { kind, value });
+async function handleTournamentNew() {
+  if (window.appRole === 'hall') return;
+  // ... 既存ロジック
 }
 ```
 
-**main.js: 既存 IPC ハンドラ末尾の publish 呼出（active トーナメントのみ）**
+ガード追加箇所（全 14 件）:
+1. `handleStartPauseToggle`
+2. `openResetDialog`
+3. `openPreStartDialog`
+4. `openSettingsDialog`
+5. `handleTournamentNew`
+6. `handleTournamentDuplicate`
+7. `handleTournamentRowDelete`
+8. `handleTournamentSave`
+9. `handlePresetSave`
+10. `handlePresetApply`
+11. `handleMarqueeSave`
+12. `handleReset`
+13. `addNewEntry`
+14. `eliminatePlayer`
+
+加えてボタン click handler（`btnStart` / `btnPause` / `btnReset`）の冒頭にも多重防御の hall ガードを追加。
+
+**renderer.js: notifyOperatorAction wrapper**
 
 ```js
-// tournaments:setTimerState 末尾
-if (id === store.get('activeTournamentId')) {
-  _publishDualState('timerState', next.timerState);
-}
-```
-
-**preload.js: dual グループ**
-
-```js
-dual: {
-  subscribeStateSync: (callback) => { if (typeof callback !== 'function') return;
-    ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload)); },
-  fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
-  notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload })
-}
-```
-
-**dual-sync.js: hall 専用、role ガード + イベント駆動購読**
-
-```js
-export async function initDualSyncForHall() {
-  if (window.appRole !== 'hall') return;
+function notifyOperatorActionIfNeeded(action, payload) {
+  if (typeof window === 'undefined') return;
+  if (window.appRole !== 'operator') return;     // operator-solo / hall では no-op
   const dual = window.api && window.api.dual;
-  if (!dual || typeof dual.fetchInitialState !== 'function') return;
-  const initial = await dual.fetchInitialState();
-  // ... 全 kind を state.js に setState 適用 ...
-  dual.subscribeStateSync((diff) => _applyDiffToState(diff));
+  if (!dual || typeof dual.notifyOperatorAction !== 'function') return;
+  try { dual.notifyOperatorAction(action, payload || {}); } catch (_) { /* ignore */ }
 }
 ```
 
-**renderer.js: 起動部 role 3 分岐**
+**renderer.js: ミニ状態バー更新（既存 subscribe 経由、tick ごとではなく差分更新）**
 
 ```js
-const __appRole = (typeof window !== 'undefined' && window.appRole) || 'operator-solo';
-if (__appRole === 'hall')              initDualSyncForHall().finally(() => initialize());
-else if (__appRole === 'operator')     initialize();   // STEP 3 で operator-action 通知有効化
-else                                    initialize();   // operator-solo（v1.3.0 完全同等）
+function updateOperatorStatusBar(state) {
+  if (typeof window === 'undefined' || window.appRole !== 'operator') return;
+  // Level / Time / Status の 3 要素を innerText 更新
+}
 ```
 
 ---
@@ -92,13 +108,13 @@ else                                    initialize();   // operator-solo（v1.3.
 
 | 致命バグ保護 | 影響評価 | 根拠 |
 | --- | --- | --- |
-| `resetBlindProgressOnly`（C.2.7-A）| **影響なし** | 関数本体・呼出経路すべて無変更。`tournaments:save` 末尾に publish 追加のみで、保存ロジック自体は不変 |
-| `timerState` destructure 除外（C.2.7-D Fix 3）| **影響なし** | 既存 `setDisplaySettings` の `const { id, displaySettings } = payload` を維持。新規 `dual:operator-action` も `_DUAL_ACTION_ROUTE` でホワイトリスト化、timerState 混入なし。**T8 テストで静的解析担保** |
-| `ensureEditorEditableState` 4 重防御（C.1-A2 系）| **影響なし** | PC 側 renderer のみで動作、本 STEP の dual-sync.js は hall 専用、role ガードで完全分離 |
-| AudioContext resume（C.1.7）| **影響なし** | `audio.js` / `_play()` 内 resume 防御は無変更。`audio:set` ハンドラに publish 追加のみ |
-| runtime 永続化 8 箇所（C.1.8）| **影響なし** | `tournaments:setRuntime` 末尾に publish 追加のみ、`schedulePersistRuntime` の永続化ロジック・`resetBlindProgressOnly` の意図的非フックも維持 |
+| `resetBlindProgressOnly`（C.2.7-A）| **影響なし** | 関数本体に hall ガード**追加せず**（PC 側で必ず動作する必要、T7 で静的担保）。`handleReset` のみガード追加、`resetBlindProgressOnly` 経路は無傷 |
+| `timerState` destructure 除外（C.2.7-D Fix 3）| **影響なし** | 本 STEP は CSS / handler ガードのみ、IPC payload 構造には一切触らない |
+| `ensureEditorEditableState` 4 重防御（C.1-A2 系）| **影響なし** | 関数本体に hall ガード**追加せず**（PC 側で必ず動作する必要、T7 で静的担保）。`handleTournamentNew` 等のガードは関数冒頭のみ、内部の `ensureEditorEditableState` 呼出は無傷 |
+| AudioContext resume（C.1.7）| **影響なし** | `_play()` 内 resume 防御は無変更。`audio.js` も無変更 |
+| runtime 永続化 8 箇所（C.1.8）| **影響なし** | `addNewEntry` / `eliminatePlayer` は hall ガード追加（hall で無効化）。PC 側では既存 `schedulePersistRuntime` 経路がそのまま動作 |
 
-**結論**: 5 件すべて完全継承。STEP 2 で破壊的変更なし。
+**結論**: 5 件すべて完全継承。STEP 3 で破壊的変更なし。T7 テストで「致命バグ関連関数に hall ガードが**ない**こと」を静的担保。
 
 ---
 
@@ -106,32 +122,35 @@ else                                    initialize();   // operator-solo（v1.3.
 
 **0 体**（直接実行、`skills/cc-operation-pitfalls.md` §1.1 公式推奨遵守）
 
-調査・実装すべて main session で順次実行。並列 Agent を使う必要のある粒度ではなかった（既存ファイル把握 → 編集 → テスト追加が線形依存）。
+調査・実装すべて main session で順次実行。並列 Agent を使う必要のない粒度（既存ファイル把握 → CSS 編集 → JS 編集 → テスト追加が線形依存）。
 
 ---
 
 ## 6. テスト結果
 
 ```
-=== Summary: 7 + 6 + 9 + 9 + 5 + 4 + 7 + 8 + 8 + 12 + 19 + 24 + 8 + 6 + 6 + 8 = 146 passed / 0 failed ===
+=== Summary: 7 + 6 + 9 + 9 + 5 + 4 + 7 + 8 + 8 + 12 + 19 + 24 + 8 + 6 + 6 + 8 + 8 = 154 passed / 0 failed ===
 ```
 
 - 既存 138 件: すべて PASS（影響なし確認）
-- 新規 8 件（v2-dual-sync.test.js）: すべて PASS
-  - T1: `_dualStateCache` / `_broadcastDualState` / `_publishDualState` 定義 + hall 不在 no-op ガード
-  - T2: `dual:state-sync-init` ハンドラ登録 + cache snapshot 返却
-  - T3: `dual:operator-action` ハンドラ登録 + ホワイトリスト
-  - T4: 主要 4 IPC（`setTimerState` / `setRuntime` / `setDisplaySettings` / `setMarqueeSettings`）末尾に publish 呼出
-  - T5: preload に dual 3 関数 + イベント駆動 listen
-  - T6: `initDualSyncForHall` export + role ガード + setInterval 不使用（ポーリング禁止）
-  - T7: renderer.js に role 3 分岐 + initDualSyncForHall import
-  - T8: `setDisplaySettings` の payload destructure に timerState 混入なし（C.2.7-D Fix 3 静的担保）
+- STEP 2 新規 8 件: すべて PASS（v2-dual-sync）
+- STEP 3 新規 8 件（v2-role-guard）: すべて PASS
+  - T1: `[data-role]` セレクタ群の存在（hall / operator / operator-solo + ミニ状態バー）
+  - T2: 主要 handler 5 箇所以上に hall ガード（14 箇所中 14 箇所検出）
+  - T3: STEP 1 バッジ（🖥 HALL / 💻 OPERATOR）が削除されている
+  - T4: `notifyOperatorActionIfNeeded` 内の `role !== "operator"` 早期 return + 主要操作で呼出
+  - T5: `index.html` に `.operator-status-bar` 要素 + 子 span 3 個
+  - T6: `<dialog>` 自体に `display: flex` が当たっていない（feedback_dialog_no_flex 維持）
+  - T7: `resetBlindProgressOnly` / `ensureEditorEditableState` / `resetTournamentRuntime` に hall ガードが**ない**
+  - T8: operator-solo モードで `.clock` / `.bottom-bar` / `.marquee` に hidden が当たっていない（v1.3.0 完全同等）
 
 ---
 
 ## 7. オーナー向け確認
 
-1. **単画面 PC（HDMI なし）で起動**: v1.3.0 配布版と完全同じ動作になるか確認してください。タイマー / ブラインド設定 / 通知音 / 設定ダイアログなど、何も変化がない（変化したら STEP 2 のバグ）
-2. **2 画面環境（HDMI モニターあり）で起動**: 現状はモニター選択ダイアログ未実装（STEP 4 で追加）のため、自動で primary = PC 側 / 2 番目 = ホール側に割り振られます。PC 側でブラインドを切り替えたとき、ホール側にも反映されるか目視で確認してください（**承認①の判定軸**）
-3. **PR**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/1> をブラウザで開いて中身を確認 → マージ判断（前原さんがマージ操作）
-4. **既存 138 テスト + 新規 8 テスト = 146 件すべて PASS** を確認済み（致命バグ保護への影響なし）
+1. **単画面 PC（HDMI なし）で起動**: v1.3.0 配布版と完全同じ見た目・動作になるか確認してください（operator-solo モード、`[data-role]` セレクタは一切当たらず、ミニ状態バーも hidden のまま）
+2. **2 画面環境（HDMI モニターあり）で起動**: 
+   - **ホール側**: 大きいタイマー + ブラインドカード + テロップ等の表示要素のみ表示、操作ボタン・設定ダイアログ・ショートカット説明バーは**一切表示されない**こと
+   - **PC 側（前原さん操作用）**: 大きいタイマー / ブラインドカード等は**非表示**、画面上部に小さなミニ状態バー（Level X / Time MM:SS / Status）+ 既存の操作 UI（設定ダイアログ・ボタン等）のみ表示されること
+3. **PC 側で操作 → ホール側に同期反映** が STEP 2 同様に動作するか確認してください
+4. **本フェーズで PR は作成していません**（承認②で STEP 3+4+5 まとめて 1 PR にする方針）。承認①の PR #1 が引き続き main 待ちのままです
