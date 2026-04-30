@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-05-01
+
+### Added
+- **2 画面対応（HDMI 拡張モニター）**: ホール側（お客向け）= タイマー / ブラインド / テロップ等の表示専用、PC 側（運営者操作用）= 操作 UI + 画面上部のミニ状態バー（Level / Time / Status）。役割は `BrowserWindow.webPreferences.additionalArguments: ['--role=operator|hall|operator-solo|picker']` で渡し、preload.js が `data-role` 属性付与
+- **起動時のモニター選択ダイアログ**: 検出されたモニター 2 枚以上で表示。各モニターをカード表示（ラベル / 解像度 / プライマリ / 前回選択バッジ）、毎回手動選択（自動記憶しない、前原さん要望）。キャンセルで単画面モードで起動。前回選択は `electron-store` に参考保存
+- **HDMI 抜き差し追従**: `screen.on('display-added' / 'display-removed')` イベント駆動（ポーリング禁止）。営業中の自動切替、タイマー進行は main プロセスで持続して中断ゼロ。ウィンドウ役割切替は**再生成方式**（`additionalArguments` は process.argv 注入のため reload では変更不可）
+- **状態同期インフラ**: main プロセスを単一の真実源とする `_dualStateCache`（9 種類）+ `_broadcastDualState` + `_publishDualState`。既存 IPC ハンドラ末尾に publish 呼出を追加（`tournaments:setTimerState` / `setRuntime` / `setDisplaySettings` / `setMarqueeSettings` / `save` / `setActive` / `audio:set` / `settings:setVenueName`）。ホール側は `dual-sync.js` の `initDualSyncForHall` で初期同期 + 差分購読（イベント駆動、ポーリング禁止）
+- **役割ガード**: renderer.js の主要操作 handler 14 箇所に `window.appRole === 'hall'` ガード（`handleStartPauseToggle` / `openResetDialog` / `openPreStartDialog` / `openSettingsDialog` / `handleTournamentNew` / `handleTournamentDuplicate` / `handleTournamentRowDelete` / `handleTournamentSave` / `handlePresetSave` / `handlePresetApply` / `handleMarqueeSave` / `handleReset` / `addNewEntry` / `eliminatePlayer`）。致命バグ保護関連の関数には**意図的にガードを追加せず**、PC 側で動作必須を維持
+- **operator → main 通知経路**: `window.api.dual.notifyOperatorAction` + `notifyOperatorActionIfNeeded` ヘルパ（`role === 'operator'` のみで通知、operator-solo は no-op）
+- **v2.0.0 専用テスト 52 件追加**: v2-dual-sync (8) / v2-role-guard (8) / v2-display-picker (8) / v2-display-change (8) / v2-integration (8) / v2-backward-compat (6) / v2-edge-cases (6)。既存 138 + 新規 52 = **190 件すべて PASS**
+
+### Changed
+- **AudioContext resume 強化（C.1.7 拡張）**: operator-solo 起動時に `ensureAudioReady()` 明示呼出を追加（HDMI 抜き直後のウィンドウ再生成 → AudioContext suspend のリスクに対する防御強化）。`audio.js _play()` 内 suspend resume はそのまま維持
+- **CSS `[data-role]` 役割別 UI 分離**: hall = `.bottom-bar` / `.form-dialog` / `.confirm-dialog` / `.pip-action-btn` を hidden、operator = `.clock` / `.marquee` / `.slideshow-stage` / `.pip-timer` / `.bg-image-overlay` を hidden + `.operator-status-bar` を表示、operator-solo = 何も hidden しない（v1.3.0 完全同等）
+- **`createMainWindow` async 化**: モニター選択ダイアログを await するため。`app.whenReady().then(async () => ...)` + `app.on('activate', async () => ...)` も async 化
+- **STEP 1 のバッジ削除**: `[data-role]` 視認用バッジ（🖥 HALL / 💻 OPERATOR）は本番運用での誤表示防止のため CSS から削除
+
+### Compatibility
+- **単画面モード（HDMI なし環境）は v1.3.0 と完全同等**: 自動的に `operator-solo` で起動、`[data-role="operator-solo"]` は一切の hidden ルールを当てない
+- **致命バグ保護 5 件すべて完全維持**: `resetBlindProgressOnly`（C.2.7-A）/ `timerState` destructure 除外（C.2.7-D Fix 3）/ `ensureEditorEditableState` 4 重防御（C.1-A2 系）/ AudioContext resume（C.1.7、強化）/ runtime 永続化 8 箇所（C.1.8）
+- **store スキーマ変更なし**: 新規キー `preferredHallDisplayId`（モニター選択の参考情報）のみ追加。既存 `tournaments` / `settings` / `displaySettings` / `audio` / `marquee` / `logo` / `venueName` はすべて v1.3.0 と同じ構造
+- **CSP `script-src 'self'` 不変**: 新規 `display-picker.html` も外部 `display-picker.js` を読み込む方式、inline script なし
+
+### Migration Notes
+- **v1.3.0 → v2.0.0 のデータ移行は不要**: store スキーマ変更なし、既存 tournaments / settings / displaySettings そのまま使用可
+- HDMI モニターが繋がっていない PC では v2.0.0 にアップデートしても何も変わらない（自動的に operator-solo モードで起動）
+- 2 画面環境では起動時にモニター選択ダイアログが表示される、運営者がホール側を選ぶフローに切り替わる
+
+### Tests
+- v2-dual-sync.test.js（8 件）/ v2-role-guard.test.js（8 件）/ v2-display-picker.test.js（8 件）/ v2-display-change.test.js（8 件）/ v2-integration.test.js（8 件）/ v2-backward-compat.test.js（6 件）/ v2-edge-cases.test.js（6 件）追加
+- 既存 138 + 新規 52 = **190 件全 PASS**
+
+### Documentation
+- `docs/specs.md`: 「v2.0.0 機能追加（2 画面対応大改修）」セクション追記（役割分離 / モニター選択 / HDMI 追従 / 状態同期精度基準 / AudioContext 再初期化 / 後方互換）
+- `skills/timer-logic.md`: v2.0.0 不変条件 G〜L を追加（hall purely consumer / main 真実源 / operator-solo v1.3.0 同等 / 再生成方式 / AudioContext 強化 / ポーリング禁止）
+- `skills/v2-dual-screen.md`: STEP 0 で新規作成（アーキテクチャ / 同期精度 / HDMI 追従 / モニター選択 / 禁止事項 / テスト方針）
+- `docs/v2-design.md`: STEP 0 設計調査結果（既存コード影響範囲 / 2 ウィンドウ動作検証 / 状態同期最小セット / 切替設計案 / リスク分析 / 致命バグ保護への影響評価）
+- `skills/cc-operation-pitfalls.md`: 公式準拠の絶対遵守事項（並列 sub-agent 上限 3 体 / 「念のため」コード追加禁止 / context 肥大化検知 / 致命バグ保護不変条件）
+
+---
+
 ## [1.3.0] - 2026-04-30
 
 ### Added

@@ -198,3 +198,49 @@ function ensureEditorEditableState() {
 ```
 
 **呼出パターン**: 各ハンドラで `renderBlindsTable` + `updatePresetActions` 後に同期で 1 回 + RAF 内で 1 回（合計 4 重: render内 + update内 + 同期 ensure + RAF ensure）。
+
+---
+
+## v2.0.0 で追加した不変条件（2 画面対応、2026-05-01）
+
+### G. ホール側ウィンドウは purely consumer
+
+ホール側（`window.appRole === 'hall'`）は表示専用、main への操作リクエスト送信を一切行わない。
+- renderer.js の主要操作 handler 14 箇所の冒頭に `if (window.appRole === 'hall') return;` ガード（`v2-role-guard.test.js T2` で 5 箇所以上を静的担保）
+- preload.js の `window.api.dual.notifyOperatorAction` は送信側（operator）のみが呼ぶ。`notifyOperatorActionIfNeeded` ヘルパで `role !== 'operator'` 早期 return
+- ホール側 → main の経路は `dual:state-sync-init`（初期同期 1 回）と `dual:state-sync` 受信のみ
+
+### H. main プロセスを単一の真実源とする状態同期
+
+- `_dualStateCache`（9 種類: timerState / structure / displaySettings / marqueeSettings / tournamentRuntime / tournamentBasics / audioSettings / logoUrl / venueName）を main で保持
+- 既存 IPC ハンドラ末尾で `_publishDualState(kind, value)` 呼出 → `_broadcastDualState` 経由でホール側に差分配信
+- ホール側不在時は `!hallWindow || hallWindow.isDestroyed()` 早期 return で no-op（operator-solo モードの後方互換を担保）
+- ウィンドウ間直接通信禁止、すべて main 経由 IPC に集約
+- 1 秒ごとの全データ転送禁止、差分のみ送信（`v2-dual-screen.md §1.3`）
+
+### I. 単画面モード（operator-solo）は v1.3.0 完全同等
+
+- HDMI なし環境では自動的に `operator-solo` で起動（`createOperatorWindow(_, isSolo=true)`）
+- `[data-role="operator-solo"]` の CSS ルールは「何も hidden 化しない」（`v2-backward-compat.test.js T2` で静的担保）
+- `notifyOperatorActionIfNeeded` / `initDualSyncForHall` ともに role ガードで早期 return → broadcast を起こさない
+- store スキーマ変更なし（v1.3.0 → v2.0.0 のデータ移行不要）
+- 既存 138 テストすべて PASS 維持
+
+### J. ウィンドウ役割切替は再生成方式（reload 禁止）
+
+- `additionalArguments: ['--role=...']` は `process.argv` に乗るため、`webContents.reload()` では role 変更不可
+- HDMI 抜き → operator-solo に切替: `mainWindow.close()` → `createOperatorWindow(_, true)` で再生成
+- HDMI 再接続 → 2 画面に切替: `mainWindow.close()` → `createOperatorWindow(_, false)` + `createHallWindow(_)`
+- タイマー進行は main プロセスで持続、新ウィンドウ起動時に既存 subscribe 経路で state 復元（ユーザーから見て中断ゼロ）
+
+### K. AudioContext 再初期化対応（C.1.7 強化）
+
+- HDMI 抜きでウィンドウ再生成 → AudioContext suspend のリスクに対する多重防御
+- `audio.js _play()` 内の suspend resume（C.1.7）はそのまま維持
+- 加えて renderer.js の operator-solo 経路で起動直後に `ensureAudioReady()` を明示呼出（最初の音発火を待たず）
+- `v2-display-change.test.js T6` で operator-solo 経路の `ensureAudioReady` 呼出を静的担保
+
+### L. ポーリング禁止、イベント駆動
+
+- HDMI 抜き差し追従は `screen.on('display-added' / 'display-removed')` のイベント駆動のみ（`v2-display-change.test.js T7` で `setInterval` 不使用を静的担保）
+- 状態同期は IPC イベント駆動、ホール側で `setInterval` による全状態取得は禁止（`v2-dual-sync.test.js T6` で dual-sync.js 内の `setInterval` 不使用を静的担保）
