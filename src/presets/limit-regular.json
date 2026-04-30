@@ -1,0 +1,24 @@
+{
+  "id": "limit-regular",
+  "name": "Limit 標準",
+  "structureType": "LIMIT_BLIND",
+  "levels": [
+    { "level": 1,  "sb": 25,    "bb": 50,    "smallBet": 50,    "bigBet": 100,   "durationMinutes": 20, "isBreak": false },
+    { "level": 2,  "sb": 50,    "bb": 100,   "smallBet": 100,   "bigBet": 200,   "durationMinutes": 20, "isBreak": false },
+    { "level": 3,  "sb": 75,    "bb": 150,   "smallBet": 150,   "bigBet": 300,   "durationMinutes": 20, "isBreak": false },
+    { "level": 4,  "sb": 100,   "bb": 200,   "smallBet": 200,   "bigBet": 400,   "durationMinutes": 20, "isBreak": false },
+    { "level": null, "durationMinutes": 10, "isBreak": true, "label": "休憩" },
+    { "level": 5,  "sb": 150,   "bb": 300,   "smallBet": 300,   "bigBet": 600,   "durationMinutes": 20, "isBreak": false },
+    { "level": 6,  "sb": 200,   "bb": 400,   "smallBet": 400,   "bigBet": 800,   "durationMinutes": 20, "isBreak": false },
+    { "level": 7,  "sb": 300,   "bb": 600,   "smallBet": 600,   "bigBet": 1200,  "durationMinutes": 20, "isBreak": false },
+    { "level": 8,  "sb": 400,   "bb": 800,   "smallBet": 800,   "bigBet": 1600,  "durationMinutes": 20, "isBreak": false },
+    { "level": null, "durationMinutes": 10, "isBreak": true, "label": "休憩" },
+    { "level": 9,  "sb": 500,   "bb": 1000,  "smallBet": 1000,  "bigBet": 2000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 10, "sb": 700,   "bb": 1500,  "smallBet": 1500,  "bigBet": 3000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 11, "sb": 1000,  "bb": 2000,  "smallBet": 2000,  "bigBet": 4000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 12, "sb": 1500,  "bb": 3000,  "smallBet": 3000,  "bigBet": 6000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 13, "sb": 2000,  "bb": 4000,  "smallBet": 4000,  "bigBet": 8000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 14, "sb": 3000,  "bb": 6000,  "smallBet": 6000,  "bigBet": 12000, "durationMinutes": 15, "isBreak": false },
+    { "level": 15, "sb": 5000,  "bb": 10000, "smallBet": 10000, "bigBet": 20000, "durationMinutes": 15, "isBreak": false }
+  ]
+}

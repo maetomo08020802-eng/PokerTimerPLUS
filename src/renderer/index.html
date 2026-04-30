@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="ja" data-bg="navy">
+<head>
+  <meta charset="UTF-8">
+  <!-- STEP 6.19: フォント同梱化により Google Fonts CDN 依存を完全削除（オフライン対応） -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; connect-src 'self' file:">
+  <title>PokerTimerPLUS+</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- STEP 10 フェーズC.1.3: 背景画像 overlay レイヤー（data-bg="image" 時のみ表示）。
+       既存 body::before（菱形格子）/ body::after（4隅スート）の z-index: 0 と同階層、
+       .clock 配下（z-index: 2）の背面に固定配置。pointer-events: none で操作素通し。 -->
+  <div class="bg-image-overlay" id="js-bg-image-overlay" hidden></div>
+  <!-- STEP 10 フェーズC.1.4: 休憩中スライドショー全画面ステージ（data-slideshow="active" 時のみ表示） -->
+  <!-- STEP 10 フェーズC.1.4-fix2 Fix 2: hidden 属性を外して CSS opacity フェードインを効かせる。
+       非アクティブ時は opacity: 0 + pointer-events: none で完全に操作素通し。 -->
+  <div class="slideshow-stage" id="js-slideshow-stage">
+    <img class="slideshow-stage__img" id="js-slideshow-img" alt="">
+  </div>
+  <!-- STEP 10 フェーズC.1.4: PIP タイマー（右下の縮小タイマー、スライドショー中のみ表示） -->
+  <div class="pip-timer" id="js-pip-timer">
+    <span class="pip-timer__digits" id="js-pip-digits">00:00</span>
+    <span class="pip-timer__label" id="js-pip-label">BREAK</span>
+  </div>
+  <!-- STEP 10 フェーズC.1.4: 手動切替ボタン（PIP タイマーの左隣 / 通常画面の右下） -->
+  <button type="button" class="pip-action-btn" id="js-pip-show-timer" hidden>タイマー画面に戻す</button>
+  <button type="button" class="pip-action-btn" id="js-pip-show-slideshow" hidden>スライドショーに戻る</button>
+  <main class="clock" data-status="IDLE" data-timer-state="normal">
+
+    <!-- 左カラム: ロゴ / 賞金構造 / TOTAL PRIZE POOL を3群で均等分散 -->
+    <aside class="clock__left">
+      <!-- STEP 9-B: 左上ロゴをユーザー設定可能化（placeholder / plus2 / custom 3モード）
+           クリック → 設定→ロゴタブが開く。中身は applyLogo() で動的切替 -->
+      <div class="left-group left-group--top clock__logo" id="js-clock-logo" role="button" tabindex="0" aria-label="ロゴを変更">
+        <!-- プレースホルダー（初期表示、店舗側の自己ブランディング枠の中立提示） -->
+        <div class="clock__logo-placeholder" id="js-logo-placeholder">
+          <span class="clock__logo-placeholder-icon">📷</span>
+          <span class="clock__logo-placeholder-text">ここにロゴを<br>入れてください</span>
+        </div>
+        <!-- 実画像（plus2 / custom 時に JS で src を切替表示） -->
+        <img src="" alt="" class="clock__logo-img" id="js-logo-img" hidden>
+        <!-- STEP 6.22: 店舗側の自己ブランディング枠「Presented by ○○」（空欄なら非表示）。
+             Yu Shitamachi / PLUS2 のクレジット保護枠（branding.md §15.2）とは独立した別レイヤー。 -->
+        <div class="clock__presented-by" id="js-presented-by"></div>
+      </div>
+      <div class="left-group left-group--mid clock__payouts">
+        <div class="stat-label">PAYOUTS</div>
+        <div class="payouts-list" id="js-payouts-list"></div>
+      </div>
+      <div class="left-group left-group--bot clock__pool">
+        <div class="stat-label">TOTAL PRIZE POOL</div>
+        <div class="stat-value stat-value--gold stat-value--xl" id="js-total-pool">¥0</div>
+        <!-- STEP 6.5: GTD 注記（GTD > 計算プールのときだけ表示。常時占有で layout shift しない）
+             STEP 6.10: 「GTD保証」は二重表記のため「GTD」に統一 -->
+        <div class="clock__pool-note" id="js-pool-note">（GTD）</div>
+      </div>
+    </aside>
+
+    <!-- 中央カラム: タイトル / タイマー / BLINDS NEXT カード（縦2段） -->
+    <section class="clock__center">
+      <header class="event-header">
+        <!-- STEP 6.16: ラッパー構造で「横の ellipsis」と「縦の descender 保護」を分離。
+             ラッパー側だけ overflow: hidden（軸別指定回避でスクロール格上げ防止）、
+             タイトル本体は overflow visible で descender が切れない -->
+        <div class="event-title-wrap">
+          <div class="event-title" id="js-event-title">ポーカートーナメント</div>
+        </div>
+        <div class="event-subtitle-wrap">
+          <div class="event-subtitle" id="js-event-subtitle">デモ表示</div>
+        </div>
+        <div class="event-game-type" id="js-event-game-type">No Limit Hold'em</div>
+        <!-- STEP 6.7: 賞金区分（風営法・景品表示法対応の運用カテゴリ表示）。
+             空文字なら visibility: hidden で領域占有のみ → layout shift なし -->
+        <div class="event-prize-category" id="js-event-prize-category"></div>
+        <div class="level-display" id="js-level-num">Level 1</div>
+      </header>
+
+      <div class="clock__timer">
+        <div class="clock__break-label">ブレイク中</div>
+        <div class="clock__pre-start-label">トーナメントスタートまで</div>
+        <div class="clock__time" id="js-time">01:00</div>
+        <div class="clock__pause-label">一時停止中</div>
+        <!-- STEP 6.5: トーナメント終了オーバーレイ（playersRemaining=0 で表示） -->
+        <div class="clock__finished-overlay" id="js-finished-overlay">TOURNAMENT FINISHED</div>
+        <!-- STEP 10 フェーズC.1.2 Fix 2: タイマー完走オーバーレイ（全レベル完走で finished 状態時に表示） -->
+        <div class="clock__timer-finished-overlay" id="js-timer-finished-overlay">トーナメント終了</div>
+      </div>
+
+      <div class="card-stack">
+        <!-- STEP 10 フェーズB: BLINDS / NEXT LEVEL カードを構造型ごとの動的レンダリングに刷新。
+             中身は renderer.js の renderBlindsContent() が data-structure 属性付き grid で生成。
+             NEXT LEVEL カードも同構造で、JS が同じヘルパで描画する。 -->
+        <div class="card card-blinds">
+          <div class="card-label">BLINDS</div>
+          <div class="blinds-content" id="js-blinds-content" data-structure="BLIND" data-state="empty"></div>
+        </div>
+        <div class="card card-next">
+          <div class="card-label">NEXT LEVEL</div>
+          <div class="blinds-content blinds-content--next" id="js-blinds-next-content" data-structure="BLIND" data-state="empty"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右カラム: NEXT BREAK / AVG STACK / PLAYERS+REBUY+ADDON を3群で均等分散 -->
+    <aside class="clock__right">
+      <div class="stat-group stat-group--top">
+        <div class="stat stat--right">
+          <div class="stat-label" id="js-next-break-label">NEXT BREAK IN</div>
+          <div class="next-break-value" id="js-next-break">00:00:00</div>
+        </div>
+      </div>
+
+      <div class="stat-group stat-group--mid">
+        <div class="stat stat--right">
+          <div class="stat-label">AVG STACK</div>
+          <div class="stat-value" id="js-avg-stack">0</div>
+        </div>
+      </div>
+
+      <div class="stat-group stat-group--bot">
+        <div class="stat stat--right stat--lead">
+          <div class="stat-label">PLAYERS</div>
+          <div class="stat-value stat-value--md" id="js-players">0 / 0</div>
+        </div>
+        <div class="stat-group__inline">
+          <!-- STEP 6.11: 0 時は visibility: hidden、0→1 遷移で「ぼわーん」フェードイン -->
+          <div class="stat-row stat-row--right stat-row--reentry" id="js-reentry-row">
+            <!-- STEP 6.9: REBUY → REENTRY 改名 -->
+            <span class="stat-label-inline">REENTRY</span>
+            <span class="stat-value-small" id="js-reentry">0</span>
+          </div>
+          <div class="stat-row stat-row--right stat-row--addon" id="js-addon-row">
+            <span class="stat-label-inline">ADDON</span>
+            <span class="stat-value-small" id="js-addon">0</span>
+          </div>
+          <!-- STEP 6.9: 特殊スタック配布表示。enabled かつ appliedCount>0 のときのみ visibility: visible
+               STEP 6.10: 1行表示「特殊配布: {label} {合計chips}」に整理。「(N人)」表記は廃止 -->
+          <div class="stat-row stat-row--right special-stack-row" id="js-special-stack-row">
+            <span class="special-stack-text" id="js-special-stack-text">—</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- ボトムバー: マーキー直上、Grid 1fr auto で「ショートカット | 操作ボタン」の重なり禁止配置 -->
+  <div class="bottom-bar">
+    <!-- STEP 6.17: 各項目を span にラップして項目単位で改行（途中で切れない） -->
+    <div class="bottom-bar__shortcut">
+      <span class="shortcut-item">Space: 一時停止/再開</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">←/→: ±30秒</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">↑/Shift+↑: エントリー＋/取消</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">↓/Shift+↓: 脱落/復活</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">Ctrl+R/Ctrl+Shift+R: リエントリー＋/−</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">Ctrl+A/Ctrl+Shift+A: アドオン＋/−</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">Ctrl+E/Ctrl+Shift+E: 特殊スタック＋/−</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">R: リセット</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">S: 設定</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">M: ミュート</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">H: 下部バー非表示</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">Ctrl+T: テロップ編集</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">F11: フルスクリーン</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">Ctrl+Q: 終了</span>
+    </div>
+    <div class="bottom-bar__buttons">
+      <button type="button" class="btn-start is-primary" id="js-btn-start">スタート</button>
+      <button type="button" class="btn-pause" id="js-btn-pause" disabled>一時停止</button>
+      <button type="button" class="btn-reset" id="js-btn-reset">リセット</button>
+    </div>
+  </div>
+
+  <!-- マーキー（最下段、body flex column の最終行）。表示制御は body.has-marquee クラス一本 -->
+  <div class="marquee" id="js-marquee">
+    <div class="marquee-content" id="js-marquee-content"></div>
+  </div>
+
+  <!-- プレスタート時間選択ダイアログ（STEP 5）
+       スタートボタン押下時に開く。選択肢を選んで「開始」で startPreStart(minutes) を呼ぶ。
+       「今すぐ開始」は startPreStart(0) → 即 startAtLevel(0) -->
+  <dialog class="confirm-dialog confirm-dialog--prestart" id="js-prestart-dialog">
+    <h2 class="confirm-dialog__title">トーナメント開始時刻</h2>
+    <!-- STEP 6: 参加人数入力 -->
+    <div class="prestart-players-row">
+      <label class="prestart-players-label" for="js-prestart-players">参加人数</label>
+      <input type="number" id="js-prestart-players" class="prestart-players-input" min="1" max="500" step="1" value="10">
+      <span class="prestart-players-unit">人</span>
+    </div>
+    <p class="confirm-dialog__message">何分後にスタートしますか？</p>
+    <div class="prestart-options" id="js-prestart-options">
+      <label class="prestart-option"><input type="radio" name="prestart-mode" value="0" checked> <span>今すぐ開始</span></label>
+      <label class="prestart-option"><input type="radio" name="prestart-mode" value="5"> <span>5分後</span></label>
+      <label class="prestart-option"><input type="radio" name="prestart-mode" value="15"> <span>15分後</span></label>
+      <label class="prestart-option"><input type="radio" name="prestart-mode" value="30"> <span>30分後</span></label>
+      <label class="prestart-option"><input type="radio" name="prestart-mode" value="60"> <span>60分後</span></label>
+      <label class="prestart-option prestart-option--custom">
+        <input type="radio" name="prestart-mode" value="custom">
+        <span>任意</span>
+        <input type="number" id="js-prestart-custom-min" class="prestart-option__custom-input" min="1" max="180" step="1" value="10">
+        <span>分後</span>
+      </label>
+    </div>
+    <div class="confirm-dialog__actions">
+      <button type="button" class="btn btn--ghost" value="cancel" id="js-prestart-cancel">キャンセル</button>
+      <button type="button" class="btn btn--primary" value="ok" id="js-prestart-ok">開始</button>
+    </div>
+  </dialog>
+
+  <!-- STEP 6.8 / STEP 10 フェーズC.2.7-B: 「保存して適用」モード選択ダイアログ
+       リセット / 継続 / 適用のみ（PAUSED 専用） / キャンセル。新構造のレベル数不足時は「継続」を非活性。 -->
+  <dialog class="confirm-dialog confirm-dialog--apply" id="js-apply-mode-dialog">
+    <h2 class="confirm-dialog__title">適用方法を選択</h2>
+    <p class="confirm-dialog__message">保存内容をメイン画面に反映します。タイマーをどうしますか？</p>
+    <p class="confirm-dialog__hint" id="js-apply-mode-hint"></p>
+    <div class="confirm-dialog__actions confirm-dialog__actions--apply">
+      <button type="button" class="btn btn--ghost" id="js-apply-cancel">キャンセル</button>
+      <!-- STEP 10 フェーズC.2.7-B Fix 4: PAUSED 中のみ表示。構造のみ反映、一時停止状態を維持 -->
+      <button type="button" class="btn" id="js-apply-only" hidden>構造のみ適用（一時停止維持）</button>
+      <button type="button" class="btn" id="js-apply-continue">現在のタイマーを継続</button>
+      <button type="button" class="btn btn--primary" id="js-apply-reset">タイマーをリセットして開始</button>
+    </div>
+  </dialog>
+
+  <!-- STEP 6.21.5.1 / STEP 10 フェーズC.2.7-B: ブラインド構造「適用」3択ダイアログ
+       タイマー進行中のブラインド変更で、リセット/経過時間保持/適用のみ(PAUSED)/キャンセルを選択 -->
+  <dialog class="confirm-dialog confirm-dialog--apply" id="js-blinds-apply-mode-dialog">
+    <h2 class="confirm-dialog__title">ブラインド変更を適用</h2>
+    <p class="confirm-dialog__message">このトーナメントは現在進行中です。どのように適用しますか？</p>
+    <p class="confirm-dialog__hint" id="js-blinds-apply-mode-hint"></p>
+    <div class="confirm-dialog__actions confirm-dialog__actions--apply">
+      <button type="button" class="btn btn--ghost" id="js-blinds-apply-cancel">キャンセル</button>
+      <!-- STEP 10 フェーズC.2.7-B Fix 1: PAUSED 中のみ表示。構造のみ反映、一時停止状態を維持 -->
+      <button type="button" class="btn" id="js-blinds-apply-only" hidden>構造のみ適用（一時停止維持）</button>
+      <button type="button" class="btn" id="js-blinds-apply-continue">経過時間を保持して適用</button>
+      <button type="button" class="btn btn--primary" id="js-blinds-apply-reset">タイマーをリセットして適用</button>
+    </div>
+  </dialog>
+
+  <!-- STEP 7.x ③-d: トーナメント削除確認ダイアログ -->
+  <dialog class="confirm-dialog" id="js-tournament-delete-dialog">
+    <h2 class="confirm-dialog__title">トーナメントを削除</h2>
+    <p class="confirm-dialog__message">「<span id="js-tournament-delete-name"></span>」を削除しますか？この操作は取り消せません。</p>
+    <div class="confirm-dialog__actions">
+      <button type="button" class="btn btn--ghost" id="js-tournament-delete-cancel">キャンセル</button>
+      <button type="button" class="btn btn--danger" id="js-tournament-delete-ok">削除する</button>
+    </div>
+  </dialog>
+
+  <!-- STEP 6.23: PC間データ移行 — インポート戦略選択ダイアログ -->
+  <dialog class="confirm-dialog confirm-dialog--apply" id="js-import-strategy-dialog">
+    <h2 class="confirm-dialog__title">インポート方法</h2>
+    <p class="confirm-dialog__message">取り込むトーナメント: <span id="js-import-count">0</span> 件</p>
+    <p class="confirm-dialog__hint">既存 ID と重複した場合、どう扱いますか？</p>
+    <div class="confirm-dialog__actions confirm-dialog__actions--apply">
+      <button type="button" class="btn btn--ghost" id="js-import-cancel">キャンセル</button>
+      <button type="button" class="btn" id="js-import-strategy-rename">すべて別名で追加</button>
+      <button type="button" class="btn btn--primary" id="js-import-strategy-overwrite">同 ID は上書き</button>
+    </div>
+  </dialog>
+
+  <!-- リセット確認ダイアログ -->
+  <dialog class="confirm-dialog" id="js-reset-dialog">
+    <p class="confirm-dialog__message">タイマーをリセットしますか？</p>
+    <div class="confirm-dialog__actions">
+      <button type="button" class="btn btn--ghost" value="cancel" id="js-reset-cancel">キャンセル</button>
+      <button type="button" class="btn btn--primary" value="ok" id="js-reset-ok">リセット</button>
+    </div>
+  </dialog>
+
+  <!-- 設定ダイアログ（S キー）: STEP 3a でタブ式に再構築
+       タブ: トーナメント / ブラインド構造 / 背景・時計フォント / テロップ / 音 / ハウス情報
+       STEP 10 フェーズC.1.6 Fix 1: dialog 直下に form-dialog__shell wrapper を挟むことで、
+       dialog 自体の display:flex 禁止（feedback_dialog_no_flex）を守りつつ
+       中身を flex column 化 → 縦リサイズで本文も追従。 -->
+  <dialog class="form-dialog form-dialog--tabs" id="js-settings-dialog">
+    <div class="form-dialog__shell">
+    <header class="form-dialog__header">
+      <h2 class="form-dialog__title">設定</h2>
+      <button type="button" class="form-dialog__close" id="js-settings-close" aria-label="閉じる">×</button>
+    </header>
+
+    <nav class="settings-tab-nav" role="tablist">
+      <!-- STEP 6.22.fix: 順序変更（トーナメント最左）+ 「アプリ情報」→「ハウス情報」リネーム。
+           data-tab 属性値はロジック識別子のため不変、ボタン並び順とラベルのみ変更 -->
+      <button type="button" class="settings-tab-btn is-active" data-tab="tournament" role="tab">トーナメント</button>
+      <button type="button" class="settings-tab-btn"           data-tab="blinds"     role="tab">ブラインド構造</button>
+      <button type="button" class="settings-tab-btn"           data-tab="display"    role="tab">背景・時計フォント</button>
+      <!-- STEP 9-B: ロゴタブ（display と marquee の間） -->
+      <button type="button" class="settings-tab-btn"           data-tab="logo"       role="tab">ロゴ</button>
+      <button type="button" class="settings-tab-btn"           data-tab="marquee"    role="tab">テロップ</button>
+      <button type="button" class="settings-tab-btn"           data-tab="audio"      role="tab">音</button>
+      <button type="button" class="settings-tab-btn"           data-tab="about"      role="tab">ハウス情報</button>
+    </nav>
+
+    <div class="form-dialog__body">
+
+      <!-- 表示タブ: 背景プリセット + レイアウト検証 -->
+      <section class="settings-tab" data-tab="display" role="tabpanel">
+        <div class="form-row">
+          <span class="form-row__label">背景</span>
+          <div class="bg-picker" id="js-bg-picker">
+            <button type="button" class="bg-thumb" data-bg-value="black">
+              <span class="bg-thumb__swatch" data-bg-swatch="black"></span>
+              <span class="bg-thumb__label">ブラック</span>
+            </button>
+            <button type="button" class="bg-thumb" data-bg-value="navy">
+              <span class="bg-thumb__swatch" data-bg-swatch="navy"></span>
+              <span class="bg-thumb__label">ネイビー</span>
+            </button>
+            <button type="button" class="bg-thumb" data-bg-value="carbon">
+              <span class="bg-thumb__swatch" data-bg-swatch="carbon"></span>
+              <span class="bg-thumb__label">カーボン</span>
+            </button>
+            <button type="button" class="bg-thumb" data-bg-value="felt">
+              <span class="bg-thumb__swatch" data-bg-swatch="felt"></span>
+              <span class="bg-thumb__label">フェルト</span>
+            </button>
+            <button type="button" class="bg-thumb" data-bg-value="burgundy">
+              <span class="bg-thumb__swatch" data-bg-swatch="burgundy"></span>
+              <span class="bg-thumb__label">バーガンディ</span>
+            </button>
+            <button type="button" class="bg-thumb" data-bg-value="midnight">
+              <span class="bg-thumb__swatch" data-bg-swatch="midnight"></span>
+              <span class="bg-thumb__label">ミッドナイト</span>
+            </button>
+            <button type="button" class="bg-thumb" data-bg-value="emerald">
+              <span class="bg-thumb__swatch" data-bg-swatch="emerald"></span>
+              <span class="bg-thumb__label">エメラルド</span>
+            </button>
+            <button type="button" class="bg-thumb" data-bg-value="obsidian">
+              <span class="bg-thumb__swatch" data-bg-swatch="obsidian"></span>
+              <span class="bg-thumb__label">オブシディアン</span>
+            </button>
+            <!-- STEP 10 フェーズC.1.3: 9 種類目「カスタム画像」 -->
+            <button type="button" class="bg-thumb" data-bg-value="image">
+              <span class="bg-thumb__swatch" data-bg-swatch="image">画像</span>
+              <span class="bg-thumb__label">カスタム画像</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 10 フェーズC.1.3: カスタム画像の詳細設定（image 選択中のみ表示） -->
+        <div class="bg-image-panel" id="js-bg-image-panel" hidden>
+          <h3 class="bg-image-panel__title">カスタム画像<span class="size-warning-icon" id="js-size-warning-bg" hidden title="">⚠</span></h3>
+          <div class="bg-image-panel__row">
+            <button type="button" class="btn btn--ghost" id="js-bg-image-select">画像を選ぶ</button>
+            <span class="bg-image-panel__hint">PNG / JPEG / WebP、5MB 以下</span>
+          </div>
+          <div class="bg-image-panel__preview" id="js-bg-image-preview-wrap">
+            <img id="js-bg-image-preview" alt="背景画像プレビュー" hidden>
+            <span class="bg-image-panel__placeholder" id="js-bg-image-placeholder">画像が選ばれていません</span>
+          </div>
+          <div class="bg-image-panel__row">
+            <span class="bg-image-panel__label">暗くする強度</span>
+            <label class="bg-image-panel__radio">
+              <input type="radio" name="bg-overlay-intensity" value="low"> 弱（30%）
+            </label>
+            <label class="bg-image-panel__radio">
+              <input type="radio" name="bg-overlay-intensity" value="mid" checked> 中（50%）
+            </label>
+            <label class="bg-image-panel__radio">
+              <input type="radio" name="bg-overlay-intensity" value="high"> 強（70%）
+            </label>
+          </div>
+          <div class="bg-image-panel__row">
+            <button type="button" class="btn btn--ghost" id="js-bg-image-clear">画像を解除</button>
+            <span class="bg-image-panel__error" id="js-bg-image-error" hidden></span>
+          </div>
+        </div>
+
+        <!-- STEP 10 フェーズC.1.4: 休憩中の画像（スライドショー）セクション -->
+        <hr class="form-divider">
+        <div class="break-images-panel">
+          <h3 class="break-images-panel__title">休憩中の画像（スライドショー）<span class="size-warning-icon" id="js-size-warning-break" hidden title="">⚠</span></h3>
+          <p class="break-images-panel__hint">休憩・スタート前カウントダウン中に画像をスライドショー表示。タイマーは右下に縮小表示されます。残り 1 分で自動的に通常画面に戻ります。</p>
+          <p class="break-images-panel__note">※ 休憩中のスライドショーは休憩開始から 30 秒後に始まり、再開 1 分前にタイマーに戻ります</p>
+          <div class="break-images-panel__row">
+            <button type="button" class="btn btn--ghost" id="js-break-images-add">画像を追加（複数選択可）</button>
+            <span class="break-images-panel__count" id="js-break-images-count">0 / 20 枚</span>
+          </div>
+          <div class="break-images-panel__list" id="js-break-images-list">
+            <span class="break-images-panel__placeholder" id="js-break-images-placeholder">画像が登録されていません</span>
+          </div>
+          <div class="break-images-panel__row">
+            <label class="break-images-panel__label" for="js-break-image-interval">切替間隔（秒）</label>
+            <input type="number" id="js-break-image-interval" class="break-images-panel__input" min="3" max="60" step="1" value="10">
+            <span class="break-images-panel__hint">3〜60 秒</span>
+          </div>
+          <div class="break-images-panel__row">
+            <span class="break-images-panel__label">縮小タイマーのサイズ</span>
+            <label class="break-images-panel__radio">
+              <input type="radio" name="pip-size" value="small"> 小
+            </label>
+            <label class="break-images-panel__radio">
+              <input type="radio" name="pip-size" value="medium" checked> 中
+            </label>
+            <label class="break-images-panel__radio">
+              <input type="radio" name="pip-size" value="large"> 大
+            </label>
+          </div>
+          <div class="break-images-panel__row">
+            <button type="button" class="btn btn--ghost btn--danger" id="js-break-images-clear">すべて削除</button>
+            <span class="break-images-panel__error" id="js-break-images-error" hidden></span>
+          </div>
+        </div>
+
+        <hr class="form-divider">
+
+        <div class="form-row">
+          <span class="form-row__label">数字フォント</span>
+          <div class="font-picker" id="js-font-picker">
+            <button type="button" class="font-thumb" data-font-value="jetbrains">
+              <span class="font-thumb__preview" data-font-preview="jetbrains">12:34</span>
+              <span class="font-thumb__label">JetBrains Mono</span>
+            </button>
+            <button type="button" class="font-thumb" data-font-value="roboto">
+              <span class="font-thumb__preview" data-font-preview="roboto">12:34</span>
+              <span class="font-thumb__label">Roboto Mono</span>
+            </button>
+            <button type="button" class="font-thumb" data-font-value="space">
+              <span class="font-thumb__preview" data-font-preview="space">12:34</span>
+              <span class="font-thumb__label">Space Mono</span>
+            </button>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ブラインド構造タブ: STEP 3b 本実装 -->
+      <section class="settings-tab" data-tab="blinds" role="tabpanel">
+        <div class="blinds-editor">
+
+          <!-- STEP 7.x ①: 同梱テンプレート編集時の警告（ユーザーに「コピーすれば編集可」と誘導） -->
+          <div class="blinds-editor__builtin-warning" id="js-blinds-builtin-warning" hidden>
+            📋 このテンプレートは元のまま編集できません。変更したい場合は「<strong>複製して編集</strong>」を押してコピーを作ってください。
+          </div>
+
+          <!-- テンプレート選択行 -->
+          <div class="blinds-editor__header">
+            <label class="blinds-editor__preset-label" for="js-preset-select">テンプレート</label>
+            <select id="js-preset-select" class="blinds-editor__preset-select"></select>
+            <!-- STEP 6.7: 保存済みテンプレート数表示 -->
+            <span class="blinds-editor__count" id="js-preset-count">保存済みテンプレート: 0/100 件</span>
+            <div class="blinds-editor__preset-actions">
+              <button type="button" class="btn btn--ghost" id="js-preset-new">新規</button>
+              <button type="button" class="btn btn--ghost" id="js-preset-duplicate">複製して編集</button>
+              <button type="button" class="btn btn--ghost btn--danger" id="js-preset-delete">削除</button>
+            </div>
+          </div>
+
+          <!-- ブラインド構造名 + ダーティフラグ -->
+          <div class="blinds-editor__name-row">
+            <label class="blinds-editor__name-label" for="js-preset-name">ブラインド構造名</label>
+            <input type="text" id="js-preset-name" class="blinds-editor__name-input" maxlength="50">
+            <span class="blinds-editor__dirty-flag" id="js-preset-dirty" hidden>● 未保存の変更があります</span>
+          </div>
+
+          <!-- STEP 6.21.5: ブラインド共有 / フォーマット化のヒント。状況により文言を切替 -->
+          <p class="form-row__hint blinds-editor__share-hint" id="js-blinds-share-hint"></p>
+
+          <!-- STEP 6.9: 「＋↓」ボタンの使い方ヒント（テーブル直上） -->
+          <p class="blinds-editor__row-action-hint">行末の <strong>＋↓</strong> で任意の位置にレベルを挿入できます</p>
+
+          <!-- レベル一覧テーブル -->
+          <!-- STEP 10 フェーズB: thead を構造型ごとに JS で動的生成。
+               table[data-structure] で CSS が列幅などを切替できる -->
+          <div class="blinds-editor__table-wrap">
+            <table class="blinds-table" id="js-blinds-table" data-structure="BLIND">
+              <thead id="js-blinds-thead"></thead>
+              <tbody id="js-blinds-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- 追加ボタン（STEP 6.8: 「+ブレイクを追加」は削除。ブレイクは行の「ブレイク」チェックボックスで作成） -->
+          <div class="blinds-editor__add-row">
+            <button type="button" class="btn btn--ghost" id="js-add-level">＋ レベルを末尾に追加</button>
+          </div>
+
+          <!-- フッタ: 左にエクスポート/インポート、右に「保存」「適用」 -->
+          <div class="blinds-editor__footer">
+            <div class="blinds-editor__footer-left">
+              <button type="button" class="btn btn--ghost" id="js-preset-export">JSON エクスポート</button>
+              <button type="button" class="btn btn--ghost" id="js-preset-import">JSON インポート</button>
+              <input type="file" id="js-preset-import-file" accept=".json,application/json" hidden>
+            </div>
+            <div class="blinds-editor__footer-right">
+              <button type="button" class="btn" id="js-preset-save">保存</button>
+              <button type="button" class="btn btn--primary" id="js-preset-apply">適用</button>
+            </div>
+          </div>
+
+          <p class="blinds-editor__hint" id="js-blinds-hint"></p>
+        </div>
+      </section>
+
+      <!-- トーナメントタブ: イベント名・サブタイトル・通貨記号（最小構成、STEP 6 でバイイン等を追加） -->
+      <section class="settings-tab is-active" data-tab="tournament" role="tabpanel">
+        <div class="tournament-editor">
+
+          <!-- トーナメント選択行（STEP 3b 拡張: 複数保存・選択 / STEP 6.21: 状態別リスト追加） -->
+          <div class="tournament-editor__header">
+            <label class="tournament-editor__select-label" for="js-tournament-select">トーナメント</label>
+            <!-- STEP 6.21: 既存 select は互換のため hidden 保持。実 UI は下のリスト -->
+            <select id="js-tournament-select" class="tournament-editor__select" hidden></select>
+            <!-- STEP 6.7: 保存数表示「保存中: N/100 件」。100到達時は赤字 -->
+            <span class="tournament-editor__count" id="js-tournament-count">保存中: 0/100 件</span>
+            <div class="tournament-editor__actions">
+              <button type="button" class="btn btn--ghost" id="js-tournament-new">新規</button>
+              <button type="button" class="btn btn--ghost" id="js-tournament-duplicate">複製して編集</button>
+              <!-- STEP 7.x ③-a: ヘッダーの「削除」ボタンは撤去（各行の🗑ボタンへ移行、Y案） -->
+            </div>
+          </div>
+          <!-- STEP 6.21: 状態バッジ + 経過情報 + 操作ボタンの構造化リスト -->
+          <ul class="tournament-list" id="js-tournament-list" aria-label="トーナメント一覧"></ul>
+          <hr class="tournament-editor__divider">
+
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-title">イベント名</label>
+            <input type="text" id="js-tournament-title" class="tournament-editor__input" maxlength="40" placeholder="例: PLUS2 デイリートーナメント">
+            <!-- STEP 6.7 / 6.14 / 6.20.1: 文字数カウンタ + 警告（約22文字超で見切れの可能性） -->
+            <span class="tournament-editor__counter" id="js-tournament-title-counter">0 / 40</span>
+          </div>
+          <p class="form-row__hint">※ 約22文字を超えると画面で見切れる可能性があります。実機でご確認の上調整ください</p>
+
+          <!-- STEP 6.17 / 6.18: 「イベント名の色」セクションをイベント名入力欄の直下に配置（名称変更も） -->
+          <div class="form-row">
+            <span class="form-row__label">イベント名の色</span>
+            <div class="title-color-picker" id="js-tournament-title-color-picker">
+              <button type="button" class="title-color-swatch" data-color="#FFFFFF" style="background:#FFFFFF" title="白"></button>
+              <button type="button" class="title-color-swatch" data-color="#FFC107" style="background:#FFC107" title="ゴールド"></button>
+              <button type="button" class="title-color-swatch" data-color="#C0C0C0" style="background:#C0C0C0" title="シルバー"></button>
+              <button type="button" class="title-color-swatch" data-color="#E53935" style="background:#E53935" title="レッド"></button>
+              <button type="button" class="title-color-swatch" data-color="#00BCD4" style="background:#00BCD4" title="シアン"></button>
+              <button type="button" class="title-color-swatch" data-color="#4CAF50" style="background:#4CAF50" title="グリーン"></button>
+              <button type="button" class="title-color-swatch" data-color="#9C27B0" style="background:#9C27B0" title="パープル"></button>
+              <button type="button" class="title-color-swatch" data-color="#FF9800" style="background:#FF9800" title="オレンジ"></button>
+              <input type="color" id="js-tournament-title-color-custom" class="title-color-custom" value="#FFFFFF" title="任意の色を選択">
+            </div>
+          </div>
+          <p class="form-row__hint">イベント名の文字色を選択（プリセットまたは任意の色）。サブタイトル色は固定です。</p>
+
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-subtitle">サブタイトル</label>
+            <input type="text" id="js-tournament-subtitle" class="tournament-editor__input" maxlength="60" placeholder="例: 2026年4月25日">
+            <!-- STEP 6.17: サブタイトル文字数カウンタ + 警告（約30文字超で見切れる可能性） -->
+            <span class="tournament-editor__counter" id="js-tournament-subtitle-counter">0 / 60</span>
+          </div>
+          <!-- STEP 6.14: サブタイトルも実測値ベースの注意書きを追加 -->
+          <p class="form-row__hint">※ 約30文字を超えると画面で見切れる可能性があります。実機でご確認の上調整ください</p>
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-currency">通貨記号</label>
+            <input type="text" id="js-tournament-currency" class="tournament-editor__input tournament-editor__input--narrow" maxlength="3" placeholder="¥">
+          </div>
+
+          <!-- STEP 6.7 / 6.11: 賞金区分カスタマイズ（風営法・景品表示法対応）。
+               STEP 6.11: 表示は「※ ◯◯として付与」形式に変更、placeholder/注釈も意図が伝わるよう改善 -->
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-prize-category">賞金区分（任意）</label>
+            <input type="text" id="js-tournament-prize-category" class="tournament-editor__input"
+                   maxlength="20" placeholder="例: ポイント / 景品 / ハウスチケット">
+          </div>
+          <p class="form-row__hint">
+            景品表示法・風営法対応: 入力した語句が画面上部に「※ PRIZEは◯◯として付与」と表示され、賞金ではなく入力した形態（ポイント・景品など）で配布する旨を明示できます。空白なら表示なし。
+          </p>
+
+          <!-- ゲーム種（STEP 6）-->
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-game-type">ゲーム種</label>
+            <select id="js-tournament-game-type" class="tournament-editor__input">
+              <!-- STEP 10 フェーズB: 11 ゲーム × 4 構造型対応。順序は GAMES 宣言順 -->
+              <!-- STEP 10 フェーズC.2.3: Limit Hold'em / MIX (10-Game) / その他 を追加 -->
+              <option value="nlh">NLH</option>
+              <option value="plo">PLO</option>
+              <option value="plo5">5 Card PLO</option>
+              <option value="plo8">PLO8</option>
+              <option value="big-o-blind">Big O (Blind)</option>
+              <option value="big-o-limit">Big O (Limit)</option>
+              <option value="omaha-hilo">Omaha Hi-Lo</option>
+              <option value="limit-holdem">Limit Hold'em</option>
+              <option value="short-deck">Short Deck</option>
+              <option value="stud">Stud</option>
+              <option value="razz">Razz</option>
+              <option value="stud-hilo">Stud Hi-Lo</option>
+              <option value="mix">MIX (10-Game)</option>
+              <option value="other">その他（自由記入）</option>
+            </select>
+          </div>
+          <!-- STEP 10 フェーズC.2.3: 「その他」選択時のみ表示（renderer の syncTournamentFormFromState / change handler で hidden 切替）-->
+          <div class="form-row" id="js-tournament-custom-game-wrapper" hidden>
+            <label class="form-row__label" for="js-tournament-custom-game">ゲーム名</label>
+            <input type="text" id="js-tournament-custom-game" class="tournament-editor__input" maxlength="30" placeholder="例: クレイジーパイナップル">
+          </div>
+
+          <!-- ブラインド構造への参照（STEP 3b 仕上げ）。タイマー反映は「保存して適用」のみ -->
+          <hr class="tournament-editor__divider">
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-blind-preset">ブラインド構造</label>
+            <select id="js-tournament-blind-preset" class="tournament-editor__input"></select>
+          </div>
+          <div class="tournament-editor__blind-actions">
+            <button type="button" class="btn btn--ghost" id="js-tournament-edit-blinds">このブラインド構造を編集</button>
+            <span class="tournament-editor__hint-inline">編集はブラインド構造タブで行います</span>
+          </div>
+
+          <!-- STEP 6: バイイン・リバイ・アドオン -->
+          <hr class="tournament-editor__divider">
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-starting-stack">スタートスタック</label>
+            <input type="number" id="js-tournament-starting-stack" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000">
+          </div>
+          <div class="form-row">
+            <span class="form-row__label">バイイン</span>
+            <div class="tournament-editor__inline-fields">
+              <label class="tournament-editor__inline-label">フィー <input type="number" id="js-tournament-buyin-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="3000"></label>
+              <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-buyin-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
+            </div>
+          </div>
+          <!-- STEP 6.9: リバイ → リエントリー 改名（運用実態に合わせて） -->
+          <div class="form-row">
+            <span class="form-row__label">リエントリー</span>
+            <div class="tournament-editor__inline-fields">
+              <label class="tournament-editor__inline-label">フィー <input type="number" id="js-tournament-reentry-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000"></label>
+              <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-reentry-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="8000"></label>
+            </div>
+          </div>
+          <div class="form-row">
+            <span class="form-row__label">アドオン</span>
+            <div class="tournament-editor__inline-fields">
+              <label class="tournament-editor__inline-label">フィー <input type="number" id="js-tournament-addon-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000"></label>
+              <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-addon-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
+            </div>
+          </div>
+
+          <!-- STEP 6.9: 特殊スタック追加（早期着席特典・VIP特典等） -->
+          <hr class="tournament-editor__divider">
+          <div class="form-row form-row--checkbox">
+            <label>
+              <input type="checkbox" id="js-tournament-special-stack-enabled">
+              <span>特殊スタックを有効化</span>
+            </label>
+          </div>
+          <div class="form-row">
+            <span class="form-row__label">特殊スタック</span>
+            <div class="tournament-editor__inline-fields">
+              <label class="tournament-editor__inline-label">ラベル <input type="text"   id="js-tournament-special-stack-label" class="tournament-editor__input" maxlength="20" placeholder="例：早期着席特典" value="早期着席特典"></label>
+              <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-special-stack-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="5000"></label>
+              <label class="tournament-editor__inline-label">適用人数 <input type="number" id="js-tournament-special-stack-count" class="tournament-editor__input tournament-editor__input--narrow" min="0" max="999" step="1" value="0"></label>
+            </div>
+          </div>
+          <p class="form-row__hint">初回エントリーとは別に追加チップを配布する場合に使用（早期着席特典・VIP特典など）。</p>
+
+          <!-- STEP 6.5: 保証賞金（GTD）と端数処理 -->
+          <hr class="tournament-editor__divider">
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-guarantee">保証賞金（GTD）</label>
+            <input type="number" id="js-tournament-guarantee" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="0">
+            <span class="tournament-editor__hint-inline">0 で無効。計算プールが GTD を超えれば計算プールが優先</span>
+          </div>
+          <!-- STEP 6.8: 端数表記を通貨記号と連動（applyTournament で動的にラベル更新） -->
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-payout-rounding">賞金端数</label>
+            <select id="js-tournament-payout-rounding" class="tournament-editor__input tournament-editor__input--narrow">
+              <option value="1">¥1</option>
+              <option value="10">¥10</option>
+              <option value="100" selected>¥100</option>
+              <option value="1000">¥1000</option>
+            </select>
+            <span class="tournament-editor__hint-inline">配当を丸める単位。余りは1位に上乗せ</span>
+          </div>
+
+          <!-- STEP 6: 賞金構造（順位数 + %テーブル + プリセット） + STEP 6.5: %/金額 切替 -->
+          <hr class="tournament-editor__divider">
+          <div class="form-row">
+            <label class="form-row__label" for="js-tournament-payout-count">賞金順位数</label>
+            <!-- STEP 6.7: 1〜30 の全整数（30 option）に拡張。プリセット非定義の値（4,6,7,8,10〜14,16〜19,21〜29）は等分配 -->
+            <select id="js-tournament-payout-count" class="tournament-editor__input tournament-editor__input--narrow">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+              <option value="11">11</option>
+              <option value="12">12</option>
+              <option value="13">13</option>
+              <option value="14">14</option>
+              <option value="15">15</option>
+              <option value="16">16</option>
+              <option value="17">17</option>
+              <option value="18">18</option>
+              <option value="19">19</option>
+              <option value="20">20</option>
+              <option value="21">21</option>
+              <option value="22">22</option>
+              <option value="23">23</option>
+              <option value="24">24</option>
+              <option value="25">25</option>
+              <option value="26">26</option>
+              <option value="27">27</option>
+              <option value="28">28</option>
+              <option value="29">29</option>
+              <option value="30">30</option>
+            </select>
+            <button type="button" class="btn btn--ghost" id="js-tournament-payout-preset">プリセット適用</button>
+          </div>
+          <!-- 入力モード切替（% or 金額）。内部スキーマは常に % を保持 -->
+          <div class="form-row payouts-mode-row">
+            <span class="form-row__label">入力モード</span>
+            <div class="payouts-mode-toggle" id="js-tournament-payout-mode">
+              <label><input type="radio" name="payout-mode" value="percent" checked> <span>% で入力</span></label>
+              <label><input type="radio" name="payout-mode" value="amount"> <span>金額で入力</span></label>
+            </div>
+          </div>
+          <div class="payouts-editor" id="js-tournament-payouts-editor"></div>
+          <p class="payouts-editor__sum" id="js-tournament-payouts-sum">合計: 100% ✓</p>
+
+          <!-- STEP 10 フェーズC.2.3: ブレイク終了後に一時停止 -->
+          <div class="form-row">
+            <label class="form-row__label">
+              <input type="checkbox" id="js-tournament-pause-after-break">
+              <span>ブレイク終了後に一時停止する</span>
+            </label>
+            <p class="settings-hint">休憩後に自動で次のレベルが始まらず、再開ボタンを押すまで停止します</p>
+          </div>
+
+          <!-- STEP 10 フェーズB.fix7: 保存ボタンの違いを各ボタン直下の小注で示す -->
+          <div class="tournament-editor__footer tournament-save-buttons">
+            <div class="save-btn-with-note">
+              <button type="button" class="btn" id="js-tournament-save">保存</button>
+              <small class="btn-note">名前・賞金などの基本情報のみ反映</small>
+            </div>
+            <div class="save-btn-with-note">
+              <button type="button" class="btn btn--primary" id="js-tournament-save-apply">保存して適用</button>
+              <small class="btn-note">ブラインド構造も含めて反映（タイマー処理を選択）</small>
+            </div>
+            <span id="js-tournament-hint" class="tournament-editor__hint"></span>
+          </div>
+          <p class="settings-hint">タイマー進行中の場合、「保存」だけでは表示が更新されません。ブラインド構造の変更を反映するには「保存して適用」を使ってください（タイマー進行中は『経過時間を保持』『リセット』『キャンセル』を選べます）。賞金構造は合計100%でないと保存できません。</p>
+
+          <!-- STEP 6.23: PC間データ移行（ファイル / クリップボード経由） -->
+          <hr class="form-divider">
+          <h3 class="form-section-title">データ移行（PC間）</h3>
+          <div class="data-transfer-actions">
+            <button type="button" class="btn" id="js-export-single-file">📤 このトーナメントをファイルに保存</button>
+            <button type="button" class="btn" id="js-export-single-clipboard">📋 このトーナメントをコピー</button>
+            <button type="button" class="btn" id="js-export-bulk-file">📦 すべてをファイルに保存</button>
+            <button type="button" class="btn" id="js-import-file">📥 ファイルから読み込む</button>
+            <button type="button" class="btn" id="js-import-clipboard">📝 クリップボードから貼り付け</button>
+          </div>
+          <p class="settings-hint" id="js-data-transfer-hint" hidden></p>
+        </div>
+      </section>
+
+      <!-- 音タブ（STEP 4）: Web Audio 合成、mp3不要 -->
+      <section class="settings-tab" data-tab="audio" role="tabpanel">
+        <div class="audio-editor">
+          <div class="form-row">
+            <label class="form-row__label" for="js-audio-master-volume">マスター音量</label>
+            <div class="audio-editor__volume-row">
+              <input type="range" id="js-audio-master-volume" class="audio-editor__slider" min="0" max="100" step="1" value="80">
+              <span class="audio-editor__volume-display" id="js-audio-volume-display">80%</span>
+            </div>
+          </div>
+
+          <hr class="audio-editor__divider">
+
+          <div class="form-row form-row--checkbox">
+            <label><input type="checkbox" id="js-audio-warning-1min"> <span>1分前警告音</span></label>
+          </div>
+          <div class="form-row form-row--checkbox">
+            <label><input type="checkbox" id="js-audio-warning-10sec"> <span>10秒前警告音</span></label>
+          </div>
+          <div class="form-row form-row--checkbox">
+            <label><input type="checkbox" id="js-audio-countdown-5sec"> <span>5秒前カウントダウン音（5,4,3,2,1秒）</span></label>
+          </div>
+          <div class="form-row form-row--checkbox">
+            <label><input type="checkbox" id="js-audio-level-end"> <span>レベル終了チャイム</span></label>
+          </div>
+          <div class="form-row form-row--checkbox">
+            <label><input type="checkbox" id="js-audio-break-end"> <span>ブレイク終了音</span></label>
+          </div>
+          <div class="form-row form-row--checkbox">
+            <label><input type="checkbox" id="js-audio-start"> <span>スタート音（プレスタート終了時 / レベル1開始時）</span></label>
+          </div>
+
+          <hr class="audio-editor__divider">
+
+          <div class="form-row">
+            <label class="form-row__label" for="js-audio-variant-level-end">レベル終了の音色</label>
+            <select id="js-audio-variant-level-end" class="audio-editor__variant-select">
+              <option value="default">音色1</option>
+              <option value="variant2">音色2</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label class="form-row__label" for="js-audio-variant-countdown-tick">5秒カウントの音色</label>
+            <select id="js-audio-variant-countdown-tick" class="audio-editor__variant-select">
+              <option value="default">音色1</option>
+              <option value="variant2">音色2</option>
+            </select>
+          </div>
+
+          <hr class="audio-editor__divider">
+
+          <div class="audio-editor__test-section">
+            <p class="settings-hint">各音の試聴（チェック状態を無視して必ず鳴ります）:</p>
+            <div class="audio-editor__test-buttons">
+              <button type="button" class="btn btn--ghost" data-test-sound="warning-1min">1分前</button>
+              <button type="button" class="btn btn--ghost" data-test-sound="warning-10sec">10秒前</button>
+              <button type="button" class="btn btn--ghost" data-test-sound="countdown-tick">カウント</button>
+              <button type="button" class="btn btn--ghost" data-test-sound="level-end">レベル終了</button>
+              <button type="button" class="btn btn--ghost" data-test-sound="break-end">ブレイク終了</button>
+            </div>
+          </div>
+
+          <div class="audio-editor__footer">
+            <span id="js-audio-hint" class="audio-editor__hint"></span>
+          </div>
+          <p class="settings-hint">M キーでミュート切替（その場限り、保存されません）。スタートカウントダウン音は STEP 5 で追加予定です。</p>
+        </div>
+      </section>
+
+      <!-- STEP 9-B: ロゴタブ（メイン画面左上ロゴの3モード切替） -->
+      <section class="settings-tab" data-tab="logo" role="tabpanel">
+        <p class="settings-hint">メイン画面の左上ロゴを設定できます。<strong>推奨サイズ: 512×512px の正方形（縦横比 1:1）</strong>、透過 PNG 推奨、最大 5MB（PNG / JPG / SVG 対応）。アスペクト比が崩れた画像は枠内で自動的にフィットします。</p>
+        <div class="form-row form-row--logo-mode">
+          <span class="form-row__label">表示モード</span>
+          <div class="form-radio-group">
+            <label><input type="radio" name="logo-mode" value="placeholder"> プレースホルダー（初期）</label>
+            <label><input type="radio" name="logo-mode" value="plus2"> PLUS2 ロゴ</label>
+            <label><input type="radio" name="logo-mode" value="custom"> カスタム画像</label>
+          </div>
+        </div>
+        <div class="form-dialog__actions">
+          <span id="js-logo-hint" class="settings-hint"></span>
+          <button type="button" class="btn" id="js-logo-select-file">📁 画像を選ぶ</button>
+        </div>
+        <p class="settings-hint">ヒント: メイン画面の左上ロゴをクリックしてもこのタブが開きます。</p>
+      </section>
+
+      <!-- テロップタブ: Ctrl+T ダイアログと同じデータ（electron-store）を共有 -->
+      <section class="settings-tab" data-tab="marquee" role="tabpanel">
+        <div class="form-row">
+          <label class="form-row__label">
+            <input type="checkbox" id="js-marquee-tab-enabled">
+            <span>テロップを表示する</span>
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label class="form-row__label" for="js-marquee-tab-text">表示テキスト</label>
+          <textarea id="js-marquee-tab-text" class="form-textarea" rows="4" placeholder="複数行入力可。改行は半角スペース3つで連結されます。"></textarea>
+        </div>
+
+        <div class="form-row">
+          <span class="form-row__label">スクロール速度</span>
+          <div class="form-radio-group">
+            <label><input type="radio" name="marquee-tab-speed" value="slow"> 遅い (30秒/周)</label>
+            <label><input type="radio" name="marquee-tab-speed" value="normal"> 普通 (20秒/周)</label>
+            <label><input type="radio" name="marquee-tab-speed" value="fast"> 速い (12秒/周)</label>
+          </div>
+        </div>
+
+        <!-- STEP 6.8: プレビュー（一時表示のみ）と保存（永続化＋メイン画面反映）を分離
+             STEP 6.22.1.fix2: ヒントを最左に移動 + margin-right: auto で残余領域専有 → ボタン位置不変 -->
+        <div class="form-dialog__actions">
+          <span id="js-marquee-tab-hint" class="tournament-editor__hint"></span>
+          <button type="button" class="btn" id="js-marquee-tab-preview">プレビュー</button>
+          <button type="button" class="btn btn--primary" id="js-marquee-tab-save">保存</button>
+        </div>
+
+        <p class="settings-hint">プレビュー: その場で表示確認のみ（再起動で消えます）／保存: メイン画面に反映し永続化。Ctrl+T でも同じ編集ダイアログが開けます。</p>
+      </section>
+
+      <!-- ハウス情報タブ: branding.md §15.2 準拠の Yu Shitamachi/PLUS2 クレジット欄（編集不可）+ 店舗名入力（編集可、venueName） -->
+      <section class="settings-tab" data-tab="about" role="tabpanel">
+        <div class="about-content">
+          <img src="../assets/logo-yushitamachi.svg" alt="Yu Shitamachi" class="about-logo">
+          <h3 class="about-app-name">PokerTimerPLUS+</h3>
+          <p class="about-version">バージョン <span id="js-app-version">—</span></p>
+          <p class="about-credit">制作: Yu Shitamachi（PLUS2運営）</p>
+          <p class="about-copyright">© 2026 Yu Shitamachi / PLUS2. All rights reserved.</p>
+          <p class="about-distribution">このアプリは無料で配布されています</p>
+          <p class="about-credit-attribution">効果音: <a href="https://soundeffect-lab.info/" target="_blank" rel="noopener">効果音ラボ</a></p>
+          <!-- STEP 10 フェーズC.1.2 Fix 4: DevTools 注記（配布版でも F12 / Ctrl+Shift+I で開く） -->
+          <p class="about-devtools-note">F12 / Ctrl+Shift+I で開発者ツールが開きます（開発者向け機能、通常使用には不要）</p>
+
+          <!-- STEP 6.22: 店舗名入力（venueName）。クレジット欄とは <hr> で明示分離（branding.md §15.2 影響なし）
+               STEP 6.22.fix: placeholder 短縮 + 9文字超見切れ注記追加 -->
+          <hr class="form-divider">
+          <div class="form-row form-row--venue">
+            <label class="form-row__label" for="js-venue-name">店舗名（任意）</label>
+            <input type="text" id="js-venue-name" class="tournament-editor__input" maxlength="30" placeholder="例: PLUS2">
+          </div>
+          <p class="settings-hint">
+            左上ロゴの下に「Presented by ○○」として表示されます。半角英数とスペース、記号 (' - &amp; . ,) のみ、先頭は英数。空欄なら非表示。<br>
+            <strong>※ 9文字を超えるとロゴ枠を超えて末尾が「…」で省略されます。9文字以内推奨。</strong>
+          </p>
+          <!-- STEP 6.22.1.fix2: ヒント要素を保存ボタンの下に移動。
+               JS 側でクラス（settings-hint--error / --success）を動的付与するため、
+               初期はクラスを外して中立の settings-hint のみで保持。 -->
+          <div class="form-dialog__actions">
+            <button type="button" class="btn btn--primary" id="js-venue-save">保存</button>
+          </div>
+          <p class="settings-hint" id="js-venue-name-error" hidden></p>
+        </div>
+      </section>
+
+    </div>
+    </div><!-- /.form-dialog__shell (C.1.6 Fix 1) -->
+  </dialog>
+
+  <!-- マーキー編集ダイアログ（Ctrl+T） -->
+  <dialog class="form-dialog" id="js-marquee-dialog">
+    <h2 class="form-dialog__title">テロップ編集</h2>
+
+    <div class="form-row">
+      <label class="form-row__label">
+        <input type="checkbox" id="js-marquee-enabled">
+        <span>テロップを表示する</span>
+      </label>
+    </div>
+
+    <div class="form-row">
+      <label class="form-row__label" for="js-marquee-text">表示テキスト</label>
+      <textarea id="js-marquee-text" class="form-textarea" rows="4" maxlength="200" placeholder="複数行入力可。改行は半角スペース3つで連結されます。最大 200 文字。"></textarea>
+    </div>
+
+    <div class="form-row">
+      <span class="form-row__label">スクロール速度</span>
+      <div class="form-radio-group">
+        <label><input type="radio" name="marquee-speed" value="slow"> 遅い (30秒/周)</label>
+        <label><input type="radio" name="marquee-speed" value="normal"> 普通 (20秒/周)</label>
+        <label><input type="radio" name="marquee-speed" value="fast"> 速い (12秒/周)</label>
+      </div>
+    </div>
+
+    <!-- STEP 6.8: プレビュー（一時表示のみ）と保存（永続化＋メイン画面反映）を分離 -->
+    <div class="form-dialog__actions">
+      <button type="button" class="btn btn--ghost" id="js-marquee-close">閉じる</button>
+      <button type="button" class="btn" id="js-marquee-preview">プレビュー</button>
+      <button type="button" class="btn btn--primary" id="js-marquee-save">保存</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

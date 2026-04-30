@@ -1,0 +1,1059 @@
+[
+  {
+    "updatePageProperties": {
+      "objectId": "slide_04",
+      "pageProperties": {
+        "pageBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.047058823529411764,
+                "green": 0.09411764705882353,
+                "blue": 0.1607843137254902
+              }
+            }
+          }
+        }
+      },
+      "fields": "pageBackgroundFill"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_ovl",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 720,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 405,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s04_ovl",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.09019607843137255,
+                "green": 0.17647058823529413,
+                "blue": 0.27058823529411763
+              }
+            },
+            "alpha": 0.25
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_title",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 56,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 56,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_title",
+      "text": "メイン画面の見方"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_title",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 28,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 1.0,
+              "green": 1.0,
+              "blue": 1.0
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_title",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_acc",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 80,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 3,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 124,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s04_acc",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_sub",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 102,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_sub",
+      "text": "各エリアの意味を覚えれば、誰でも操作できる"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_sub",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 12,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.5607843137254902,
+              "green": 0.6588235294117647,
+              "blue": 0.7450980392156863
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_sub",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_imframe",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 322,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 184,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 199,
+          "translateY": 153,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s04_imframe",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            },
+            "alpha": 0.5
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createImage": {
+      "objectId": "s04_img",
+      "url": "https://drive.google.com/uc?id=1-ezrzWa_AnF0Fyg3Eegi78MdcfLlDA57",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 320,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 182,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 200,
+          "translateY": 154,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_an0",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 130,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 32,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 148,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_an0",
+      "text": "▍レベル / 大会名"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_an0",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_an0",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_an1",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 130,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 32,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 526,
+          "translateY": 148,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_an1",
+      "text": "▍残り時間 / 次レベル"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_an1",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_an1",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_an2",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 130,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 32,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 196,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_an2",
+      "text": "▍賞金プール\nペイアウト 1〜3 位"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_an2",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_an2",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_an3",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 130,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 50,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 526,
+          "translateY": 196,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_an3",
+      "text": "▍人数 / リエントリー\nアドオン / アベスタック"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_an3",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_an3",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_an4",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 130,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 32,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 256,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_an4",
+      "text": "▍SB / BB / アンティ\n（現在レベル）"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_an4",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_an4",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_an5",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 130,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 32,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 526,
+          "translateY": 256,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_an5",
+      "text": "▍次レベルのブラインド\n プレビュー"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_an5",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_an5",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_n1",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 320,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 200,
+          "translateY": 340,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_n1",
+      "text": "中央の数字 = 現在レベルの残り時間"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_n1",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": true
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_n1",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_fdiv",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 0.5,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 376,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s04_fdiv",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_fl",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 400,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 16,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 382,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_fl",
+      "text": "PokerTimerPLUS+ v1.3.0"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_fl",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 9,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.35294117647058826,
+              "green": 0.47843137254901963,
+              "blue": 0.5803921568627451
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_fl",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s04_fp",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 60,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 16,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 596,
+          "translateY": 382,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s04_fp",
+      "text": "04 / 11"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s04_fp",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 9,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.35294117647058826,
+              "green": 0.47843137254901963,
+              "blue": 0.5803921568627451
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s04_fp",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "END",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createImage": {
+      "objectId": "plus2_logo_04",
+      "url": "https://drive.google.com/uc?id=12S6HkIC_v-ZaDgkHpVQzhAs21eYo83i6",
+      "elementProperties": {
+        "pageObjectId": "slide_04",
+        "size": {
+          "width": {
+            "magnitude": 50,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 35,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 640,
+          "translateY": 340,
+          "unit": "PT"
+        }
+      }
+    }
+  }
+]

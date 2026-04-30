@@ -1,0 +1,13 @@
+{
+  "id": "demo-fast",
+  "name": "デモ用ファスト構造",
+  "structureType": "BLIND",
+  "levels": [
+    { "level": 1, "sb": 25, "bb": 50, "bbAnte": 0, "durationMinutes": 1, "isBreak": false },
+    { "level": 2, "sb": 50, "bb": 100, "bbAnte": 0, "durationMinutes": 1, "isBreak": false },
+    { "level": null, "durationMinutes": 1, "isBreak": true, "label": "休憩" },
+    { "level": 3, "sb": 100, "bb": 200, "bbAnte": 25, "durationMinutes": 1, "isBreak": false },
+    { "level": 4, "sb": 200, "bb": 400, "bbAnte": 50, "durationMinutes": 1, "isBreak": false },
+    { "level": 5, "sb": 50000, "bb": 100000, "bbAnte": 100000, "durationMinutes": 1, "isBreak": false }
+  ]
+}

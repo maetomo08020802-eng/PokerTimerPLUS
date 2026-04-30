@@ -1,0 +1,673 @@
+[
+  {
+    "updatePageProperties": {
+      "objectId": "p",
+      "pageProperties": {
+        "pageBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.047058823529411764,
+                "green": 0.09411764705882353,
+                "blue": 0.1607843137254902
+              }
+            }
+          }
+        }
+      },
+      "fields": "pageBackgroundFill"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_glow",
+      "shapeType": "ELLIPSE",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 320,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 240,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": -80,
+          "translateY": -60,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s01_glow",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            },
+            "alpha": 0.12
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_glow2",
+      "shapeType": "ELLIPSE",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 280,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 200,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 480,
+          "translateY": 280,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s01_glow2",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.6039215686274509,
+                "green": 0.4588235294117647,
+                "blue": 0.12549019607843137
+              }
+            },
+            "alpha": 0.1
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_vbar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 4,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 56,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 130,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s01_vbar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_eyebrow",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 480,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 80,
+          "translateY": 132,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s01_eyebrow",
+      "text": "POKER TOURNAMENT CLOCK"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s01_eyebrow",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s01_eyebrow",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_main",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 600,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 64,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 80,
+          "translateY": 158,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s01_main",
+      "text": "PokerTimerPLUS+ 取扱説明書"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s01_main",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 38,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 1.0,
+              "green": 1.0,
+              "blue": 1.0
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s01_main",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_hbar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 100,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 3,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 80,
+          "translateY": 232,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s01_hbar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_sub",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 480,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 30,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 80,
+          "translateY": 244,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s01_sub",
+      "text": "v1.3.0 / 2026.04"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s01_sub",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 20,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s01_sub",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_desc",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 480,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 80,
+          "translateY": 282,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s01_desc",
+      "text": "全国のポーカールームへ無料配布する Electron 製ポーカークロック"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s01_desc",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 12,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.5607843137254902,
+              "green": 0.6588235294117647,
+              "blue": 0.7450980392156863
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s01_desc",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 150
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_author",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 400,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 80,
+          "translateY": 340,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s01_author",
+      "text": "制作 ：Yu Shitamachi（PLUS2 運営）"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s01_author",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.5607843137254902,
+              "green": 0.6588235294117647,
+              "blue": 0.7450980392156863
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s01_author",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s01_note",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 400,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 14,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 80,
+          "translateY": 360,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s01_note",
+      "text": "Free distribution to all poker rooms in Japan."
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s01_note",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.35294117647058826,
+              "green": 0.47843137254901963,
+              "blue": 0.5803921568627451
+            }
+          }
+        },
+        "bold": false,
+        "italic": true
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s01_note",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createImage": {
+      "objectId": "plus2_logo_01",
+      "url": "https://drive.google.com/uc?id=12S6HkIC_v-ZaDgkHpVQzhAs21eYo83i6",
+      "elementProperties": {
+        "pageObjectId": "p",
+        "size": {
+          "width": {
+            "magnitude": 75,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 52,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 608,
+          "translateY": 320,
+          "unit": "PT"
+        }
+      }
+    }
+  }
+]

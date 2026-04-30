@@ -1,0 +1,24 @@
+{
+  "id": "stud-regular",
+  "name": "Stud 標準",
+  "structureType": "STUD",
+  "levels": [
+    { "level": 1,  "ante": 25,   "bringIn": 50,   "smallBet": 100,   "bigBet": 200,    "durationMinutes": 20, "isBreak": false },
+    { "level": 2,  "ante": 50,   "bringIn": 75,   "smallBet": 150,   "bigBet": 300,    "durationMinutes": 20, "isBreak": false },
+    { "level": 3,  "ante": 75,   "bringIn": 100,  "smallBet": 200,   "bigBet": 400,    "durationMinutes": 20, "isBreak": false },
+    { "level": 4,  "ante": 100,  "bringIn": 150,  "smallBet": 300,   "bigBet": 600,    "durationMinutes": 20, "isBreak": false },
+    { "level": null, "durationMinutes": 10, "isBreak": true, "label": "休憩" },
+    { "level": 5,  "ante": 150,  "bringIn": 200,  "smallBet": 400,   "bigBet": 800,    "durationMinutes": 20, "isBreak": false },
+    { "level": 6,  "ante": 200,  "bringIn": 300,  "smallBet": 600,   "bigBet": 1200,   "durationMinutes": 20, "isBreak": false },
+    { "level": 7,  "ante": 300,  "bringIn": 400,  "smallBet": 800,   "bigBet": 1600,   "durationMinutes": 20, "isBreak": false },
+    { "level": 8,  "ante": 400,  "bringIn": 500,  "smallBet": 1000,  "bigBet": 2000,   "durationMinutes": 20, "isBreak": false },
+    { "level": null, "durationMinutes": 10, "isBreak": true, "label": "休憩" },
+    { "level": 9,  "ante": 500,  "bringIn": 700,  "smallBet": 1400,  "bigBet": 2800,   "durationMinutes": 15, "isBreak": false },
+    { "level": 10, "ante": 700,  "bringIn": 1000, "smallBet": 2000,  "bigBet": 4000,   "durationMinutes": 15, "isBreak": false },
+    { "level": 11, "ante": 1000, "bringIn": 1500, "smallBet": 3000,  "bigBet": 6000,   "durationMinutes": 15, "isBreak": false },
+    { "level": 12, "ante": 1500, "bringIn": 2000, "smallBet": 4000,  "bigBet": 8000,   "durationMinutes": 15, "isBreak": false },
+    { "level": 13, "ante": 2000, "bringIn": 3000, "smallBet": 6000,  "bigBet": 12000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 14, "ante": 3000, "bringIn": 4000, "smallBet": 8000,  "bigBet": 16000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 15, "ante": 5000, "bringIn": 6000, "smallBet": 12000, "bigBet": 24000,  "durationMinutes": 15, "isBreak": false }
+  ]
+}

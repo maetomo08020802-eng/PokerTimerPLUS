@@ -1,0 +1,25 @@
+node_modules/
+dist/
+out/
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.local
+.idea/
+.vscode/
+Thumbs.db
+
+# OAuth トークン・認証情報（絶対に公開しない）
+*token.json
+*credentials.json
+plus2_token.json
+docs/slides_artifacts/__pycache__/
+docs/slides_artifacts/plus2_token.json
+docs/slides_artifacts/credentials.json
+
+# Python キャッシュ
+__pycache__/
+*.pyc

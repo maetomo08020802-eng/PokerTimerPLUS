@@ -1,0 +1,63 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- STEP 10 フェーズC.1-A3 patch: 黒背景 + 白「20:40」のデジタル時計風アイコン
+       設計判断（patch 後）:
+         - 数字「15:00」→「20:40」: 「1」の右寄せ視覚問題を解消、全数字フルセグメント幅で均等
+         - 色 #FFC107 → #FFFFFF: 黒背景での視認性最大化（ハイコントラスト）
+         - SVG <rect> による 7-segment LCD 手動構築は維持（フォント不使用、portability 最大）
+         - 角丸 80px は Windows アプリアイコン慣例 -->
+
+  <!-- 黒背景（角丸） -->
+  <rect width="512" height="512" fill="#000000" rx="80" ry="80"/>
+
+  <!-- 「20:40」全体配置（4 桁 + コロン、すべてフルセグメント幅）
+       digit cell (scaled): 80w × 144h
+       layout (centered): "2"@x=61, "0"@x=155, ":"@x=249, "4"@x=284, "0"@x=378
+       y offset = (512-144)/2 = 184
+       右端 458, 左端 61, 中心 (61+458)/2 ≈ 256（canvas 中央 256 と一致） -->
+  <g fill="#FFFFFF">
+
+    <!-- 「2」(a, b, g, e, d の 5 segments) at x=61 -->
+    <g transform="translate(61,184) scale(1.6)">
+      <rect x="8"  y="0"  width="34" height="6"/>   <!-- a: top -->
+      <rect x="44" y="8"  width="6"  height="32"/>  <!-- b: upper-right -->
+      <rect x="8"  y="41" width="34" height="6"/>   <!-- g: middle -->
+      <rect x="0"  y="48" width="6"  height="32"/>  <!-- e: lower-left -->
+      <rect x="8"  y="82" width="34" height="6"/>   <!-- d: bottom -->
+    </g>
+
+    <!-- 「0」(a, b, c, d, e, f の 6 segments) at x=155 -->
+    <g transform="translate(155,184) scale(1.6)">
+      <rect x="8"  y="0"  width="34" height="6"/>   <!-- a -->
+      <rect x="44" y="8"  width="6"  height="32"/>  <!-- b -->
+      <rect x="44" y="48" width="6"  height="32"/>  <!-- c -->
+      <rect x="8"  y="82" width="34" height="6"/>   <!-- d -->
+      <rect x="0"  y="48" width="6"  height="32"/>  <!-- e -->
+      <rect x="0"  y="8"  width="6"  height="32"/>  <!-- f -->
+    </g>
+
+    <!-- 「:」コロン (2 dots) at x=249 -->
+    <g transform="translate(249,184) scale(1.6)">
+      <rect x="6" y="32" width="6" height="6"/>     <!-- top dot -->
+      <rect x="6" y="58" width="6" height="6"/>     <!-- bottom dot -->
+    </g>
+
+    <!-- 「4」(f, g, b, c の 4 segments) at x=284 -->
+    <g transform="translate(284,184) scale(1.6)">
+      <rect x="0"  y="8"  width="6"  height="32"/>  <!-- f: upper-left -->
+      <rect x="8"  y="41" width="34" height="6"/>   <!-- g: middle -->
+      <rect x="44" y="8"  width="6"  height="32"/>  <!-- b: upper-right -->
+      <rect x="44" y="48" width="6"  height="32"/>  <!-- c: lower-right -->
+    </g>
+
+    <!-- 「0」(a, b, c, d, e, f の 6 segments) at x=378 -->
+    <g transform="translate(378,184) scale(1.6)">
+      <rect x="8"  y="0"  width="34" height="6"/>
+      <rect x="44" y="8"  width="6"  height="32"/>
+      <rect x="44" y="48" width="6"  height="32"/>
+      <rect x="8"  y="82" width="34" height="6"/>
+      <rect x="0"  y="48" width="6"  height="32"/>
+      <rect x="0"  y="8"  width="6"  height="32"/>
+    </g>
+
+  </g>
+</svg>

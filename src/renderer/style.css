@@ -1,0 +1,3738 @@
+/* PokerTimerPLUS+ レンダラスタイル
+   skills/ui-design.md (デザインシステム) を厳守
+   カジノ・ラグジュアリー × WPTブロードキャスト風ハイブリッド */
+
+/* ===== STEP 6.19: フォント同梱（@font-face ローカル参照、CDN依存解消）=====
+   全ファイル src/assets/fonts/ 配下の .woff2 を相対参照。
+   Noto Sans JP は japanese サブセット（日本語表示に必須）、他は latin サブセット。
+   Roboto Mono は 700 まで（@fontsource 側に 800 が存在しない＝Google Fonts 仕様）→ 800 は省略 */
+
+@font-face {
+  font-family: 'Oswald';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('../assets/fonts/oswald-300.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Oswald';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/oswald-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Oswald';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/oswald-700.woff2') format('woff2');
+}
+
+/* STEP 10 フェーズC.2.7-A patch3: BLINDS / NEXT LEVEL の数字に Barlow Condensed 700 を採用。
+   Oswald よりさらに細身。6/7/8 桁すべてフルサイズで重ならず表示するための根本転換。 */
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/barlow-condensed-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/jetbrains-mono-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('../assets/fonts/jetbrains-mono-800.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/roboto-mono-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/space-mono-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/inter-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/fonts/inter-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/inter-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('../assets/fonts/inter-900.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Noto Sans JP';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/noto-sans-jp-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Sans JP';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/noto-sans-jp-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Sans JP';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('../assets/fonts/noto-sans-jp-900.woff2') format('woff2');
+}
+
+/* ===== カラートークン ===== */
+
+:root {
+  /* 背景 */
+  --bg-base: #0A1F3D;
+  --bg-deep: #061224;
+  --bg-elevated: #1A2B4A;
+  --bg-card: rgba(6, 14, 28, 0.92);
+  --bg-card-hover: rgba(6, 14, 28, 0.96);
+  --bg-card-soft: rgba(10, 31, 61, 0.65);
+
+  /* アクセント */
+  --gold: #D4AF37;
+  --gold-bright: #F0CB66;
+  --gold-dim: #8A6F25;
+  --cyan: #4FC3F7;
+  --cyan-bright: #82DCFF;
+
+  /* 警告 */
+  --warn: #FFC107;
+  --danger: #E53935;
+  /* STEP 7: 成功フィードバック（緑、保存しました等の hint で使用） */
+  --success: #4ade80;
+
+  /* テキスト */
+  --text-primary: #FFFFFF;
+  --text-secondary: #B0BEC5;
+  --text-muted: #607D8B;
+
+  /* ボーダー */
+  --border-gold: rgba(212, 175, 55, 0.35);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+
+  /* フォント */
+  /* STEP 10 フェーズC.2.7-A patch3: 数字フォントを Barlow Condensed 700 に置換（Oswald より細身）。
+     縮小ロジック廃止 + 根本転換。Oswald はフォールバックとして残す。 */
+  --font-numeric: 'Barlow Condensed', 'Oswald', 'BIZ UDPGothic', sans-serif;
+  --font-timer: 'JetBrains Mono', 'Roboto Mono', 'Consolas', monospace;
+  --font-label: 'Inter', 'Helvetica Neue', 'Noto Sans JP', sans-serif;
+  --font-body: 'Noto Sans JP', 'BIZ UDPGothic', sans-serif;
+  --font-display: 'Noto Sans JP', 'Inter', 'BIZ UDPGothic', sans-serif;
+
+  /* スペーシング */
+  --space-xs: 0.5vw;
+  --space-sm: 1vw;
+  --space-md: 1.5vw;
+  --space-lg: 2.5vw;
+  --space-xl: 4vw;
+  --space-2xl: 6vw;
+
+  /* ボーダー半径 */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  /* マーキー */
+  --marquee-height: 5vh;
+}
+
+/* 背景プリセット 8種（html 要素の data-bg 属性で切替、CSS のみ、画像不要）
+   べた塗は black のみ、他はグラデーションまたはパターン */
+
+/* タイマーフォント切替（中央タイマー / NEXT BREAK IN は --font-timer を参照） */
+/* --font-timer-scale はフォント固有の字幅差を吸収する安全装置（はみ出し防止） */
+:root[data-timer-font="jetbrains"] {
+  --font-timer: 'JetBrains Mono', 'Consolas', monospace;
+  --font-timer-scale: 1;
+}
+:root[data-timer-font="roboto"] {
+  --font-timer: 'Roboto Mono', 'Consolas', monospace;
+  --font-timer-scale: 1;
+}
+:root[data-timer-font="space"] {
+  --font-timer: 'Space Mono', 'Consolas', monospace;
+  --font-timer-scale: 1;
+}
+
+/* CSS 変数（カード等が参照するため代表色を保持）
+   STEP 10 フェーズB.fix10: black 以外の 7 色を彩度強化（明度はやや上げ、彩度を中心に強化）
+   タイマー文字（白）の視認性は確保しつつ、各色がはっきり判別できるよう調整 */
+:root[data-bg="black"]   { --bg-base: #050505; --bg-deep: #000000; }
+:root[data-bg="navy"]    { --bg-base: #0E2D5C; --bg-deep: #08183A; }
+:root[data-bg="carbon"]  { --bg-base: #22252C; --bg-deep: #101116; }
+:root[data-bg="felt"]    { --bg-base: #0E5538; --bg-deep: #082E1B; }
+:root[data-bg="burgundy"]{ --bg-base: #4A0815; --bg-deep: #2A0610; }
+:root[data-bg="midnight"]{ --bg-base: #15275C; --bg-deep: #0A1230; }
+:root[data-bg="emerald"] { --bg-base: #0E4540; --bg-deep: #08221F; }
+:root[data-bg="obsidian"]{ --bg-base: #1E1A2A; --bg-deep: #100C1A; }
+/* STEP 10 フェーズC.1.3: 9 種類目「カスタム画像」。
+   --custom-bg-image は applyBackground が url("data:image/...") をセット。
+   --bg-overlay-alpha は強度ラジオ low(0.3) / mid(0.5) / high(0.7) でセット。 */
+:root[data-bg="image"] {
+  --bg-base: #000;
+  --bg-deep: #000;
+  --custom-bg-image: none;
+  --bg-overlay-alpha: 0.5;
+}
+
+/* 1. ピュアブラック（唯一のソリッド） */
+:root[data-bg="black"] body {
+  background: #050505;
+}
+
+/* 2. ネイビー（上部 cyan ハイライト + 3段 radial） */
+:root[data-bg="navy"] body {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(79, 195, 247, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse at center, #154080 0%, #0A1F3D 35%, #030814 100%);
+}
+
+/* 3. カーボン（チャコール + 32px グリッド + 中央 radial） */
+:root[data-bg="carbon"] body {
+  background-color: #1F2024;
+  background-image:
+    radial-gradient(ellipse at center, rgba(255, 255, 255, 0.05) 0%, transparent 70%),
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
+}
+
+/* 4. フェルトグリーン（深緑 + 太い斜線 + 反対斜線 + 強いスポット） */
+:root[data-bg="felt"] body {
+  background-color: #0F4D38;
+  background-image:
+    radial-gradient(ellipse at center, rgba(255, 255, 255, 0.08) 0%, rgba(0, 0, 0, 0.45) 80%),
+    repeating-linear-gradient(45deg, transparent 0 6px, rgba(0, 0, 0, 0.14) 6px 7px),
+    repeating-linear-gradient(-45deg, transparent 0 6px, rgba(255, 255, 255, 0.03) 6px 7px);
+}
+
+/* 5. バーガンディ（多段グラデ + ゴールドの淡い天井光） */
+:root[data-bg="burgundy"] body {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 25%, rgba(212, 175, 55, 0.12) 0%, transparent 60%),
+    linear-gradient(135deg, #5A1A2E 0%, #3A0E1A 30%, #1A0508 70%, #0A0204 100%);
+}
+
+/* 6. ミッドナイト（強い紫スポット + 多層） */
+:root[data-bg="midnight"] body {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, #4A24A0 0%, transparent 50%),
+    radial-gradient(ellipse at center, #1A0838 0%, #0A0420 50%, #03010A 100%);
+}
+
+/* 7. エメラルド（深緑グラデ + 上部トロピカルハイライト） */
+:root[data-bg="emerald"] body {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(80, 200, 180, 0.12) 0%, transparent 50%),
+    linear-gradient(180deg, #0F4848 0%, #0A2F2F 40%, #051818 70%, #020909 100%);
+}
+
+/* 8. オブシディアン（強いヴィネット） */
+:root[data-bg="obsidian"] body {
+  background: radial-gradient(ellipse 50% 50% at center, #353841 0%, #1A1C22 40%, #050609 80%);
+}
+
+/* 9. カスタム画像（STEP 10 フェーズC.1.3）
+   ユーザー指定の画像を全画面に cover 表示し、
+   .bg-image-overlay で暗くする overlay を被せる（数字視認性確保）。
+   既存 body::before（菱形格子）/ body::after（4隅スート）は image 時に opacity 0 で消す。 */
+:root[data-bg="image"] body {
+  background-color: #000;
+  background-image: var(--custom-bg-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+:root[data-bg="image"] body::before,
+:root[data-bg="image"] body::after {
+  opacity: 0;
+}
+.bg-image-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, var(--bg-overlay-alpha, 0.5));
+  display: none;
+}
+:root[data-bg="image"] .bg-image-overlay {
+  display: block;
+}
+
+/* ===== リセット & ベース ===== */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ビューポート全体レイアウト（最上位）
+   ui-layout.md「ビューポート全体レイアウト」準拠:
+   body 全体を flex column で組み、各行を明示的な高さで分割する。
+   position: fixed は使わない（bottom-bar / marquee も flex child として配置）。 */
+html, body {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 背景は --bg-base で全画面均一 */
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* STEP 6.20: 背景模様レイヤー（C案ハイブリッド）
+   L1: 全画面に菱形格子（ポーカーカード裏面の意匠、極控えめ）
+   L2: 4隅に♠♥♦♣（対角配置）
+   両層とも全8テーマ共通、white + opacity で各テーマに馴染ませる
+   pointer-events: none で操作素通し、z-index: 0 で .clock 配下（z-index: 2）の背面 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'><path d='M30 0 L60 30 L30 60 L0 30 Z' fill='none' stroke='white' stroke-width='0.8'/></svg>");
+  background-size: 60px 60px;
+  background-repeat: repeat;
+  opacity: 0.05;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M32 6 C20 22 12 30 12 40 C12 48 18 52 24 50 C28 49 30 47 31 44 L28 58 L36 58 L33 44 C34 47 36 49 40 50 C46 52 52 48 52 40 C52 30 44 22 32 6 Z' fill='white'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M32 56 C32 56 8 40 8 22 C8 14 14 8 22 8 C26 8 30 10 32 14 C34 10 38 8 42 8 C50 8 56 14 56 22 C56 40 32 56 32 56 Z' fill='white'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M32 6 L56 32 L32 58 L8 32 Z' fill='white'/></svg>"),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='18' r='10' fill='white'/><circle cx='20' cy='34' r='10' fill='white'/><circle cx='44' cy='34' r='10' fill='white'/><path d='M28 38 L24 58 L40 58 L36 38 Z' fill='white'/></svg>");
+  background-position:
+    3vw 3vw,
+    calc(100% - 3vw) 3vw,
+    3vw calc(100% - 3vw),
+    calc(100% - 3vw) calc(100% - 3vw);
+  background-size: 6vw 6vw, 6vw 6vw, 6vw 6vw, 6vw 6vw;
+  background-repeat: no-repeat;
+  opacity: 0.08;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* ===== クロック画面（3カラム grid: 左=情報密度低 / 中央=タイマー支配 / 右=情報密度低） ===== */
+
+/* メインGrid: 列幅を vw で完全固定（中央列の内容変化で左右が動かない）
+   レイアウト安定性ルール（ui-design.md §レイアウト安定性ルール）準拠 */
+.clock {
+  flex: 1 1 auto;
+  display: grid;
+  /* STEP 6.16: 左右 22vw → 18vw に圧縮、中央列を +8vw 拡張（タイトル収容を増量） */
+  grid-template-columns: 18vw 1fr 18vw;
+  grid-template-rows: minmax(0, 1fr);  /* 行も明示し、列がコンテンツ高で押し広がらない */
+  gap: var(--space-md);
+  padding: 1vh var(--space-xl);        /* 縦パディングを抑え、内部に下方向の余裕を確保 */
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 各列の共通設定（overflow は列ごとに個別指定: 中央列だけ visible でグローを通す）*/
+.clock > * {
+  position: relative;
+  z-index: 2;
+  min-height: 0;
+}
+
+/* 左右列のみ overflow: hidden（横方向のはみ出し防止）。
+   中央列はタイマーグロー (text-shadow 0 0 8vw...) が column 端で
+   クリップされないよう overflow: visible のままにする
+   （ui-states.md「タイマーグローのクリッピング防止」準拠） */
+.clock__left,
+.clock__right {
+  overflow: hidden;
+}
+
+/* ===== 左カラム（STEP 6.6: top固定 / mid PAYOUTS スクロール / bot TOTAL POOL固定） ===== */
+
+.clock__left {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-md);
+  height: 100%;
+  overflow: hidden;       /* 子の overflow-y: auto を機能させるため、親は overflow: hidden で高さ確定 */
+}
+
+.left-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* ロゴ: 固定高 */
+.left-group--top {
+  align-items: flex-start;
+  flex: 0 0 auto;
+}
+
+/* STEP 6.22.fix2: ロゴと「Presented by ○○」を密着させる。
+   親 .left-group の gap: var(--space-sm) を打ち消し、
+   .clock__presented-by の margin-top: 0.2vh のみを唯一の間隔にする。
+   .left-group--mid / --bot の gap は影響を受けない（このセレクタ単体の上書き）。 */
+.clock__logo {
+  gap: 0;
+}
+
+/* PAYOUTS: 残余領域を専有。ラベルは top 固定、リストだけ縦スクロール（30位対応） */
+.left-group--mid {
+  flex: 1 1 auto;
+  min-height: 0;          /* flex の overflow を効かせる必須指定 */
+  overflow: hidden;       /* 子の payouts-list にスクロールを委譲 */
+}
+.left-group--mid .stat-label {
+  flex: 0 0 auto;          /* PAYOUTS ラベルは固定 */
+}
+.left-group--mid .payouts-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.left-group--mid .payouts-list::-webkit-scrollbar { width: 4px; }
+.left-group--mid .payouts-list::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+
+/* TOTAL POOL: 固定高で常に下端表示 */
+.left-group--bot {
+  align-items: flex-start;
+  flex: 0 0 auto;
+}
+
+/* STEP 9-B: 左上ロゴはユーザー設定で 3 モード切替可（placeholder / plus2 / custom）。
+   branding.md §15.5「logo-yushitamachi.svg は差替不可、logo-plus2-default.png は選択肢として保持」を遵守 */
+.clock__logo-img {
+  max-width: 14vw;     /* STEP 5 微調整②: 9vw → 14vw（≒1.55倍） */
+  max-height: 18vh;    /* STEP 5 微調整②: 12vh → 18vh（≒1.5倍） */
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+  transition: filter 0.15s;
+}
+
+/* STEP 9-B: ロゴ全体（クリッカブル領域） */
+.clock__logo[role="button"] {
+  cursor: pointer;
+  outline: none;
+}
+.clock__logo[role="button"]:focus-visible {
+  outline: 2px solid var(--gold-dim);
+  outline-offset: 4px;
+  border-radius: 0.4vw;
+}
+
+/* STEP 9-B: プレースホルダー（点線枠 + アイコン + テキスト）
+   既存ロゴ枠と同じ寸法（max-width: 14vw / max-height: 18vh）に揃え、layout shift を起こさない */
+.clock__logo-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4vh;
+  width: 14vw;
+  height: 18vh;
+  border: 2px dashed var(--text-muted);
+  border-radius: 0.6vw;
+  color: var(--text-muted);
+  font-size: 0.9vw;
+  line-height: 1.3;
+  text-align: center;
+  transition: border-color 0.15s, color 0.15s;
+  user-select: none;
+}
+.clock__logo-placeholder-icon {
+  font-size: 2.4vw;
+}
+.clock__logo:hover .clock__logo-placeholder {
+  border-color: var(--gold-dim);
+  color: var(--gold-dim);
+}
+.clock__logo:hover .clock__logo-img {
+  filter: drop-shadow(0 2px 12px rgba(212, 175, 55, 0.4));
+}
+
+/* STEP 9.fix: HTML5 hidden 属性が CSS の display: flex / display: block 指定に上書きされる
+   バグ対策。プロジェクト全体（[hidden]）には適用しない（.event-subtitle[hidden] /
+   .event-game-type[hidden] が意図的に display: block + visibility: hidden で
+   layout 占有を維持しているため）。本ロゴ周りのみスコープ限定で強制。 */
+.clock__logo-placeholder[hidden],
+.clock__logo-img[hidden] {
+  display: none !important;
+}
+
+/* ===== 中央カラム（タイトル / タイマー / BLINDS NEXT カード縦2段） ===== */
+
+.clock__center {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 0.8vh;          /* 旧 var(--space-md) ≒ 2.66vh は overstuff の主因。0.8vh に圧縮 */
+  min-width: 0;
+  overflow: visible;   /* タイマーグローを中央列の外まで拡散させる（必須） */
+}
+
+.event-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  /* STEP 6.18: 0.4vh → 0.1vh に詰めてタイトル/サブタイトルを近接表示
+     STEP 6.18.1: 0.1vh → 0 に追加圧縮（完全密着） */
+  gap: 0;
+  text-align: center;
+  /* STEP 6.12: 子要素（nowrap タイトル）の intrinsic min-width が
+     親 grid item を blowout する問題を撲滅。明示的に 0 を指定。
+     STEP 6.16: 軸別 overflow（x:hidden + y:visible）はスクロール格上げの罠があるため、
+     overflow を全て解除。横の ellipsis は内側 .event-title-wrap が担当、
+     descender 保護は wrapper 内側の .event-title が overflow visible（デフォルト）で実現 */
+  min-width: 0;
+  width: 100%;
+}
+
+/* STEP 6.16: タイトル/サブタイトル ラッパー
+   - wrapper: 両軸 overflow: hidden（軸別指定で起きるスクロール auto 化を回避）
+              横は ellipsis、縦は padding-bottom で descender 余白を確保
+   - 内側 .event-title / .event-subtitle: overflow 指定なし（visible デフォルト）→ descender 保護 */
+.event-title-wrap,
+.event-subtitle-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* スクロールバーが万一出ても見えなくする最終防御 */
+  scrollbar-width: none;
+}
+
+/* STEP 6.18: タイトル/サブタイトル個別に padding-bottom を再調整（より近接させる）
+   STEP 6.18.1: title-wrap 0.1vh → 0、subtitle-wrap 0.2vh → 0.1vh（descender 限界まで圧縮） */
+.event-title-wrap    { padding-bottom: 0; }
+.event-subtitle-wrap { padding-bottom: 0.1vh; }
+
+.event-title-wrap::-webkit-scrollbar,
+.event-subtitle-wrap::-webkit-scrollbar {
+  display: none;
+}
+
+/* イベントタイトル: ゴシック調（Noto Sans JP Black 900）。
+   ブロードキャスト感を出すため letter-spacing 0.04em で字間をやや広めに */
+.event-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  /* STEP 6.14: 収容文字数を ~14 → ~18 に増やすため font-size と letter-spacing を圧縮。
+     太字ゴシック感（weight 900）は維持。 */
+  font-size: 2.6vw;
+  letter-spacing: 0.02em;
+  /* STEP 6.17: タイトル色を CSS 変数経由で運営側が変更可能。
+     グローも同色のソフト光（color-mix で透明度合成）に追従 */
+  color: var(--title-color, #FFFFFF);
+  text-shadow:
+    0 0 1vw color-mix(in srgb, var(--title-color, #FFFFFF) 50%, transparent),
+    0 0 2vw color-mix(in srgb, var(--title-color, #FFFFFF) 30%, transparent);
+  /* STEP 6.15 / 6.16: line-height で descender 余白を確保。padding は wrapper 側に移譲。
+     overflow は指定しない（デフォルト visible）→ descender 切れない */
+  line-height: 1.4;
+  display: block;
+  white-space: nowrap;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* サブタイトル: 空文字でも min-height で行高を確保（レイアウト安定）
+   `[hidden]` でも display: none にせず visibility: hidden で占有を維持 */
+.event-subtitle {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 1.4vw;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  text-align: center;
+  /* STEP 6.17: タイトルとの間隔を詰める（0.5vh → 0、wrapper の gap で十分な間隔を確保） */
+  margin-top: 0;
+  min-height: 1.4vw;
+  line-height: 1.4;
+  /* STEP 6.16: padding/overflow は wrapper 側（.event-subtitle-wrap）に移譲 */
+  display: block;
+  white-space: nowrap;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.event-subtitle[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+/* STEP 6: ゲーム種ラベル（イベントタイトル下、サブタイトル と Level 表示の間に配置）
+   常時 min-height で領域確保 → ゲーム種が空でも layout shift しない */
+.event-game-type {
+  font-family: var(--font-label);
+  font-size: 1vw;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-align: center;
+  min-height: 1vw;
+  line-height: 1.4;
+  text-shadow: 0 0 12px rgba(79, 195, 247, 0.25);
+}
+
+.event-game-type[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+.level-display {
+  font-family: var(--font-numeric);
+  font-weight: 700;
+  /* STEP 10 フェーズC.1.4-fix3 Fix 1: 3.4vw → 5.8vw（×1.7）に拡大。
+     第一案 6.8vw（×2.0）は line-height 1 でフルHDだと約 12vh を占め、event-header
+     合計（title 2.6vw + level 6.8vw + subtitle）が clock__timer min-height: 22vh を
+     圧迫するため、構築士事前合意済の代替値 5.8vw を採用。 */
+  font-size: 5.8vw;
+  color: var(--gold);
+  letter-spacing: 0;
+  line-height: 1;
+  margin-top: 0.4vh;
+}
+
+/* タイマー領域 */
+
+/* タイマー枠は flex: 1 1 auto で残余を吸収。
+   STEP 6.6: min-height を 22vh まで縮小して、event-header / card-stack と縦方向で衝突しないようにする
+   overflow: visible は text-shadow 拡散をクリップしないため必須 */
+.clock__timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 22vh;       /* STEP 6.6: 30vh → 22vh */
+  min-width: 0;           /* 過剰な font-size での横はみ出し緩和 */
+  overflow: visible;
+}
+
+/* タイマーは等幅モノスペース --font-timer を使い、単一要素テキストで実装する。
+   per-digit span は使わない（モノスペース＝桁幅が常に同じため不要）。
+   font-size は ui-tokens.md タイプスケールに従い 26vw、ただし vh も併用して縦overflow を防ぐ
+
+   グロー: text-shadow を 3 層重ねで描画（vw 相対 ＝ タイマーサイズに比例して拡縮）
+   - 0 0 2vw 0.40 ... 内側のシャープな金縁（核）
+   - 0 0 4vw 0.25 ... 中域のソフトグロー
+   - 0 0 8vw 0.15 ... 外周のうっすら拡散光
+   旧 0 0 40px 単層では、26vw に拡大したタイマー幅に対し blur が小さく右端の数字まで届かなかった */
+.clock__time {
+  font-family: var(--font-timer);
+  font-weight: 700;
+  /* STEP 6.16: clamp() で下限8vw / 上限26vw、ウィンドウ縮小時もスムーズ追従。
+     vh も併用（縦長ウィンドウで縦 overflow 防止）。
+     min(26vw, 32vh) は2軸の小さい方、それを 8vw 〜 26vw でクランプ
+     STEP 6.18.1: 下限を min(8vw, 16vh) に変更。横が広く縦が狭い場合に 16vh が選ばれ、
+     縦圧縮時にもタイマーが縮む。横長運用時は 8vw が選ばれるため通常運用に影響なし。
+     STEP 6.18.2: vw 上限を 26vw → 22vw に変更（正方形比率で中央列 64vw を侵食する問題対応）。
+     フルHD（1920×1080）では 32vh = 345.6px が選ばれるため、22vw 制約は発動せず影響なし。 */
+  font-size: clamp(min(8vw, 16vh), calc(min(22vw, 32vh) * var(--font-timer-scale, 1)), 22vw);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+  text-shadow:
+    0 0 2vw rgba(212, 175, 55, 0.40),
+    0 0 4vw rgba(212, 175, 55, 0.25),
+    0 0 8vw rgba(212, 175, 55, 0.15);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: color 0.3s ease-out, transform 0.3s ease-out, text-shadow 0.3s ease-out;
+}
+
+/* タイマー警告: 60〜11秒 黄（同じく 3 層 vw 相対で全文字カバー） */
+.clock[data-timer-state="warn"] .clock__time {
+  color: var(--warn);
+  text-shadow:
+    0 0 2vw rgba(255, 193, 7, 0.55),
+    0 0 4vw rgba(255, 193, 7, 0.35),
+    0 0 8vw rgba(255, 193, 7, 0.20);
+}
+
+/* タイマー警告: 10秒以下 赤 + 0.5s周期点滅 + 1.05倍 */
+.clock[data-timer-state="danger"] .clock__time {
+  color: var(--danger);
+  text-shadow:
+    0 0 2vw rgba(229, 57, 53, 0.65),
+    0 0 4vw rgba(229, 57, 53, 0.40),
+    0 0 8vw rgba(229, 57, 53, 0.22);
+  animation: timer-pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes timer-pulse {
+  from { transform: scale(1.0); opacity: 1; }
+  to   { transform: scale(1.05); opacity: 0.85; }
+}
+
+/* ブレイク中ラベル: position: absolute で配置（一時停止と同じパターン）
+   既存のflex/grid子要素として挿入しないため、表示切替で layout shift が起きない
+   skills/ui-design.md「ブレイク中」セクションに準拠 */
+/* STEP 10 フェーズC.2.7-audit-fix: ブレイクラベル削除（前原さん要望、A 案）。
+   理由: 薄い青のカタカナ「ブレイク中」が邪魔。明色背景でコントラスト低下。
+   安全策: HTML 削除せず CSS で display:none。将来復活させたい場合はこの 1 行を消すだけ。
+   維持: BLINDS カード内の「休憩」表記、ブレイク中タイマー進行、pauseAfterBreak 機能、一時停止ラベル、警告色は無変更。 */
+.clock__break-label {
+  display: none;
+  /* 旧来の visual style（復活時の参考、非適用）:
+     position:absolute; top:-3.5vh; left:50%; transform:translateX(-50%);
+     font-size:2vw; color:var(--cyan); letter-spacing:0.2em;
+     text-shadow:0 0 16px rgba(79,195,247,0.4); z-index:3;
+     opacity:0 → BREAK 時 opacity:1 で表示 */
+}
+
+/* PRE_START ラベル: 中央タイマー上部にブレイクラベルと同じ配置パターンで配置
+   常時 DOM に存在 / 透明化のみで visibility 切替（layout shift なし） */
+.clock__pre-start-label {
+  position: absolute;
+  top: -3.5vh;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 1.6vw;
+  letter-spacing: 0.18em;
+  /* シアン: NEXT BREAK IN と同色で UI トーンを揃え、ゴールドのタイマーと色で区別 */
+  color: var(--cyan);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 0 16px rgba(79, 195, 247, 0.4);
+  transition: opacity 0.3s ease-out;
+  z-index: 3;
+}
+
+.clock[data-status="PRE_START"] .clock__pre-start-label {
+  opacity: 1;
+}
+
+/* PRE_START 中は「Level X」を非表示にして「トーナメントスタートまで」と重ならないようにする
+   visibility: hidden で領域は占有させるため、event-header のレイアウトが崩れない */
+.clock[data-status="PRE_START"] .level-display {
+  visibility: hidden;
+}
+
+/* PRE_START 中はタイマーをゴールドで染め、レベル進行と区別する */
+.clock[data-status="PRE_START"] .clock__time {
+  color: var(--gold);
+  text-shadow:
+    0 0 2vw rgba(212, 175, 55, 0.50),
+    0 0 4vw rgba(212, 175, 55, 0.30),
+    0 0 8vw rgba(212, 175, 55, 0.18);
+}
+
+/* PRE_START のタイマーは桁数（HH:MM:SS / MM:SS）で font-size を切替えて画面はみ出し回避
+   data-prestart-format は startPreStart 時にセット、reset 時にクリア */
+.clock[data-status="PRE_START"][data-prestart-format="hms"] .clock__time {
+  /* 中央列は 1fr（≒56vw）。Space Mono 等のモノスペースは ~0.6em/char、
+     8文字（HH:MM:SS）× 0.6em = 4.8em → 11vw × 4.8 = 52.8vw で中央列に余裕で収まる */
+  font-size: calc(min(11vw, 18vh) * var(--font-timer-scale, 1));
+  max-width: 54vw;     /* 念のため左右領域への侵食をハード制限 */
+}
+.clock[data-status="PRE_START"][data-prestart-format="ms"] .clock__time {
+  font-size: calc(min(20vw, 26vh) * var(--font-timer-scale, 1));
+}
+
+/* STEP 6.5: トーナメント終了オーバーレイ（playersRemaining = 0 で表示）
+   .clock--finished クラスを追加してオーバーレイを可視化。
+   常時 DOM に存在 / opacity 切替で layout shift なし */
+.clock__finished-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+  font-family: var(--font-label);
+  font-weight: 900;
+  font-size: 4vw;
+  letter-spacing: 0.15em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow:
+    0 0 2vw rgba(79, 195, 247, 0.55),
+    0 0 4vw rgba(79, 195, 247, 0.30),
+    0 0 8vw rgba(79, 195, 247, 0.15);
+  transition: opacity 0.4s ease-out;
+  z-index: 5;
+}
+
+.clock--finished .clock__finished-overlay {
+  opacity: 1;
+}
+
+/* タイマーをやや透過して FINISHED ラベルを際立たせる */
+.clock--finished .clock__time {
+  opacity: 0.25;
+}
+
+/* STEP 10 フェーズC.1.2 Fix 2: 全レベル完走オーバーレイ（緑系で完了感）。
+   .clock__finished-overlay と同じレイアウトだが色違い。日本語表記。 */
+.clock__timer-finished-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+  font-family: var(--font-label);
+  font-weight: 900;
+  font-size: 4vw;
+  letter-spacing: 0.15em;
+  color: var(--success);   /* 緑系（既存トークン #4ade80）*/
+  white-space: nowrap;
+  text-shadow:
+    0 0 2vw rgba(74, 222, 128, 0.55),
+    0 0 4vw rgba(74, 222, 128, 0.30),
+    0 0 8vw rgba(74, 222, 128, 0.15);
+  transition: opacity 0.4s ease-out;
+  z-index: 5;
+}
+.clock--timer-finished .clock__timer-finished-overlay {
+  opacity: 1;
+}
+.clock--timer-finished .clock__time {
+  opacity: 0.25;
+}
+
+/* PRE_START 最後10秒の赤警告色（PRE_START のゴールドルールより後に置くことで特異度＋宣言順で勝つ）
+   既存 RUNNING 用 .clock[data-timer-state="danger"] と同じグロー＋点滅パターンで統一 */
+.clock[data-status="PRE_START"][data-timer-state="danger"] .clock__time {
+  color: var(--danger);
+  text-shadow:
+    0 0 2vw rgba(229, 57, 53, 0.65),
+    0 0 4vw rgba(229, 57, 53, 0.40),
+    0 0 8vw rgba(229, 57, 53, 0.22);
+  animation: timer-pulse 0.5s ease-in-out infinite alternate;
+}
+
+.clock[data-status="BREAK"] .clock__time {
+  color: var(--gold);
+  text-shadow:
+    0 0 2vw rgba(212, 175, 55, 0.50),
+    0 0 4vw rgba(212, 175, 55, 0.30),
+    0 0 8vw rgba(212, 175, 55, 0.18);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 一時停止中: ラベルは position: absolute でフロー外に置き、layout shift を起こさない
+   オーバーレイは ::before で同様に absolute 配置（pointer-events: none）
+   STEP 10 フェーズB.fix8: ラベルを 2 倍に拡大（1.4vw → 2.8vw）+ 太い白枠で囲んで目立たせる */
+.clock__pause-label {
+  position: absolute;
+  bottom: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 2.8vw;
+  letter-spacing: 0.25em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  white-space: nowrap;
+  /* STEP 10 フェーズB.fix8: 枠付き背景 + 内側余白で「目立つ表示」化 */
+  padding: 1.2vh 2.4vw;
+  border: 0.3vw solid var(--text-primary);
+  border-radius: 0.6vw;
+  background: rgba(0, 0, 0, 0.6);
+  transition: opacity 0.2s ease-out;
+  z-index: 3;
+}
+
+.clock[data-status="PAUSED"] .clock__time {
+  filter: grayscale(40%);
+}
+
+.clock[data-status="PAUSED"] .clock__pause-label {
+  opacity: 1;
+}
+
+.clock[data-status="PAUSED"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* BLINDS / NEXT LEVEL カードを縦2段で配置（BLINDS が上、NEXT LEVEL が下）
+   操作ボタンとの重なり回避のため縦方向にコンパクトにする */
+
+.card-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  flex: 0 0 auto;          /* STEP 6.6: タイマー伸長で押し出されないよう own-size を確保 */
+}
+
+/* ===== 右カラム（3群均等分散: NEXT BREAK / AVG STACK / PLAYERS+REBUY+ADDON） ===== */
+
+.clock__right {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-md);
+}
+
+.stat-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.stat-group--bot {
+  gap: var(--space-sm);
+}
+
+.stat-group__inline {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4vw;
+  margin-top: 0.3vw;
+}
+
+/* ===== カード（BLINDS / NEXT LEVEL） ===== */
+
+.card {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 2px solid var(--border-gold);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  white-space: nowrap;
+  /* min-width: max-content は禁止（コンテンツ幅で card が成長 → drift 発生）。
+     代わりに .card-blinds / .card-next で固定幅を指定 */
+  overflow: hidden;
+}
+
+/* hover/focus/active を完全に無効化（誤クリック誘導防止）
+   !important で他ルールに勝つ。transform-origin だけは card-next の scale に合わせて維持 */
+.card,
+.card:hover,
+.card:focus,
+.card:active,
+.card-blinds,
+.card-blinds:hover,
+.card-blinds:focus,
+.card-blinds:active,
+.card-next,
+.card-next:hover,
+.card-next:focus,
+.card-next:active {
+  background: var(--bg-card) !important;
+  cursor: default !important;
+  transition: none !important;
+  transform-origin: top center;
+}
+
+/* BLINDS（上段）:
+   STEP 10 フェーズB.fix2: 42vw → 60vw に拡大（中央タイマー同等の幅）
+   STEP 10 フェーズB.fix3: 60vw → 54vw に縮小（実機で左右カラムに被ったため）
+   STEP 10 フェーズC.2.7-A patch9: patch8 の 62vw → 54vw に巻き戻し（左右列との重なり解消、fix3 確定値に復元）
+   高さ 20vh は据え置き（layout shift 防止）。 */
+.card-blinds {
+  /* STEP 10 フェーズC.2.7-A patch10: 横 padding を 1.5vw → 0.5vw に縮小（+2vw 内側空間確保） */
+  padding: 1vh 0.5vw;
+  width: 54vw;
+  min-width: 54vw;
+  max-width: 54vw;
+  min-height: 20vh;
+  max-height: 20vh;
+  justify-content: space-evenly;
+}
+
+/* NEXT LEVEL（下段）:
+   STEP 10 フェーズB.fix2: 32vw → 50vw に拡大
+   STEP 10 フェーズB.fix3: 50vw → 46vw に縮小（BLINDS と比例的に狭める）
+   STEP 10 フェーズC.2.7-A patch9: patch8 の 52vw → 46vw に巻き戻し（fix3 確定値に復元）
+   注意: margin-top は付けない。.card-stack の gap で十分（二重スペーシング防止）
+   高さ 14vh は据え置き */
+.card-next {
+  /* STEP 10 フェーズC.2.7-A patch10: 横 padding を 1.5vw → 0.5vw に縮小（同比率） */
+  padding: 0.6vh 0.5vw;
+  width: 46vw;
+  min-width: 46vw;
+  max-width: 46vw;
+  min-height: 14vh;
+  max-height: 14vh;
+  justify-content: space-evenly;
+}
+
+.card-next .card-label      { font-size: 1.1vw; }
+.card-next .card-value      { font-size: 3.4vw; }
+.card-next .card-ante-label { font-size: 1.1vw; }
+.card-next .card-ante-value { font-size: 1.8vw; }
+
+.card-label {
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 1.3vw;
+  line-height: 1.1;
+  letter-spacing: 0.18em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  /* margin-bottom は撤廃。space-evenly で 3 行が均等配置されるため不要 */
+}
+
+/* SB/BB 値: min-width で固定幅化（桁が変わっても周囲が押されない） */
+.card-value {
+  font-family: var(--font-numeric);
+  font-weight: 700;
+  font-size: 4.8vw;
+  line-height: 0.95;
+  color: var(--text-primary);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: visible;
+  min-width: 14vw;
+  text-align: center;
+}
+
+/* NEXT LEVEL の値は色のみオーバーライド（font-size は ui-components.md 準拠で 3.4vw、上の .card-next .card-value で定義済み） */
+.card-next .card-value {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* ANTE 行: ラベル + 値を横並び、主値の下に配置
+   レイアウト安定性ルール: 値0でも display: none にせず、visibility: hidden で常時占有
+   margin-top は撤廃。space-evenly が 3 行を均等にハンドルする */
+.card-ante {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--space-sm);
+  white-space: nowrap;
+  visibility: visible;
+}
+
+.card-ante.is-zero {
+  visibility: hidden;
+}
+
+.card-ante-label {
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 1.4vw;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.card-ante-value {
+  font-family: var(--font-numeric);
+  font-weight: 700;
+  font-size: 2.4vw;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== STEP 10 フェーズB: BLINDS / NEXT LEVEL カードの動的レンダリング =====
+   構造型（BLIND/LIMIT_BLIND/SHORT_DECK/STUD）に応じて grid-template-columns を切替。
+   外形幅は既存の .card-blinds (42vw × 20vh) / .card-next (32vw × 14vh) を維持し、
+   内側でフィールド数に合わせて等分配（C 確定事項）。 */
+.blinds-content {
+  display: grid;
+  width: 100%;
+  align-items: center;
+  /* STEP 10 フェーズC.2.7-A patch10: 1fr 等分配 → auto 列 + space-between に変更。
+     SB（短い数値）はその数値分だけ占有、BB / BB ANTE（長い数値）にスペースが回るので
+     7 桁混在で重ならない。空きスペースはセル間に等分配。 */
+  gap: 0.6vw;
+  grid-template-columns: repeat(3, auto);
+  justify-content: space-between;
+}
+/* STEP 10 フェーズC.2.7-D Fix 1: 4 桁以下の小さな数値時は space-around で項目間隔均等。
+   space-between は両端固定で 7 桁の物理スペース確保用。小さな値では両端に張り付き不細工。
+   data-max-digits=1〜4（最大値が 4 桁以下）→ space-around、5 以上は既存通り space-between。
+   data-max-digits 属性なしの状態（break/empty）は space-around で中央寄せ感を保つ。 */
+.blinds-content:not([data-max-digits]),
+.blinds-content[data-max-digits="1"],
+.blinds-content[data-max-digits="2"],
+.blinds-content[data-max-digits="3"],
+.blinds-content[data-max-digits="4"] {
+  justify-content: space-around;
+}
+.blinds-content[data-structure="BLIND"]       { grid-template-columns: repeat(3, auto); }
+.blinds-content[data-structure="LIMIT_BLIND"] { grid-template-columns: repeat(4, auto); }
+.blinds-content[data-structure="SHORT_DECK"]  { grid-template-columns: repeat(2, auto); }
+.blinds-content[data-structure="STUD"]        { grid-template-columns: repeat(4, auto); }
+/* break / empty 状態は単一セルで全幅占有（グリッド崩しなく中央表示） */
+.blinds-content[data-state="break"],
+.blinds-content[data-state="empty"] {
+  grid-template-columns: 1fr;
+  justify-content: stretch;
+}
+
+/* 各フィールドセル: 上にラベル、下に値（中央揃え） */
+.blinds-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3vh;
+  white-space: nowrap;
+  min-width: 0;
+}
+.blinds-field--full {
+  /* break / empty 状態の単一セル：値だけを大きく表示 */
+  width: 100%;
+}
+/* STEP 10 フェーズB.fix4: フォントサイズをさらに拡大しつつ、6 桁数値（"100,000"）でも
+   はみ出さないよう clamp() 採用 + .blinds-field の overflow 制御で安全側。
+   clamp(min, ideal, max) は viewport が小さくなった時 / 桁数増で文字幅が広い時に min まで自動縮小。 */
+.blinds-field {
+  /* 桁数増による横方向はみ出しを視覚的にブロック（カード幅は固定なので layout shift しない） */
+  overflow: hidden;
+  min-width: 0;
+}
+.blinds-field__label {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 1.4vw;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+.blinds-field__value {
+  font-family: var(--font-numeric);
+  font-weight: 700;
+  /* STEP 10 フェーズC.2.4 Fix 2-B: clamp 下限を C.2.3 から半分戻す（米粒対策） */
+  font-size: clamp(2.1vw, 3.6vw, 4.0vw);
+  color: var(--text-primary);
+  letter-spacing: 0;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  max-width: 100%;
+  white-space: nowrap;
+}
+/* BLIND 型 3 列構造: フィールド幅 ≒ 18vw 確保、より大きく */
+.blinds-content[data-structure="BLIND"] .blinds-field__value {
+  font-size: clamp(2.8vw, 4.6vw, 5.0vw);
+}
+/* SHORT_DECK 型 2 列構造: フィールド幅 ≒ 27vw、最も大きく */
+.blinds-content[data-structure="SHORT_DECK"] .blinds-field__value {
+  font-size: clamp(3.2vw, 5.2vw, 5.6vw);
+}
+
+/* STEP 10 フェーズC.2.7-A patch4: Condensed フォントで物理幅は縮んだが、7 桁混在でギリギリ重なる
+   ケースに対応するためカード単位の軽縮小を 7-8 桁に復活。フィールド単位の不揃いは出ない。
+   6 桁以下はフルサイズ、7 桁=0.95em (5%)、8 桁=0.90em (10%)、9-10 桁=0.85em (15% 安全網) */
+[data-max-digits="7"] .blinds-field__value { font-size: 0.95em; }
+[data-max-digits="8"] .blinds-field__value { font-size: 0.90em; }
+[data-max-digits="9"] .blinds-field__value,
+[data-max-digits="10"] .blinds-field__value { font-size: 0.85em; }
+
+/* NEXT LEVEL カード（card-next）: BLINDS の約 70% サイズ */
+.blinds-content--next .blinds-field__label {
+  font-size: 1.1vw;
+}
+.blinds-content--next .blinds-field__value {
+  /* 4 列基準（NEXT 版） ideal 2.7vw、最小 1.8vw、最大 2.9vw */
+  font-size: clamp(1.8vw, 2.7vw, 2.9vw);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.blinds-content--next[data-structure="BLIND"] .blinds-field__value {
+  font-size: clamp(2.2vw, 3.2vw, 3.4vw);
+}
+.blinds-content--next[data-structure="SHORT_DECK"] .blinds-field__value {
+  font-size: clamp(2.6vw, 3.6vw, 3.8vw);
+}
+
+/* break / empty 状態の値表示は通常の値より控えめ（ラベル無し、灰色寄り） */
+.blinds-content[data-state="break"] .blinds-field__value,
+.blinds-content[data-state="empty"] .blinds-field__value {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* 編集テーブル: 列数可変（構造型により 5〜7 列）。
+   既存 .blinds-table のセル幅指定はクラス（.blinds-table__col-num 等）に分離されているため、
+   data-structure 属性は CSS のフック用として data 属性を確保するのみ（具体ルール追加なし）。
+   フィールド数が多い STUD 型でも auto レイアウトで横スクロールせず収まる想定。 */
+
+/* ===== スタットブロック ===== */
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2vw;
+}
+
+.stat--right {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.stat-label {
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 1.4vw;
+  letter-spacing: 0.18em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-family: var(--font-numeric);
+  font-weight: 700;
+  /* STEP 10 フェーズC.1.4-fix3 Fix 1: 3.5vw → 4.55vw（×1.3）に拡大。
+     第一案 5.25vw（×1.5）は 8 桁以上の数字（avg stack 99,999,999 等）で
+     右カラム親幅 18vw を超えるため、構築士事前合意済の代替値 4.55vw を採用。
+     md / xl も同じ比率（×1.3）で整合: 3 → 3.9vw / 4.5 → 5.85vw。 */
+  font-size: 4.55vw;
+  line-height: 1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value--md { font-size: 3.9vw; }
+/* C.1.7-patch 2026-04-30: .stat-value--xl は TOTAL PRIZE POOL 専用。
+   C.1.4-fix3 で 4.5vw → 5.85vw に拡大したが、見切れが発生したため元の 4.5vw に戻す。
+   7 桁以上の時のみ is-7digit クラスで 0.85 倍縮小（後段ルール参照）。 */
+.stat-value--xl { font-size: 4.5vw; }
+
+/* C.1.4-fix3-patch 2026-04-30: avg stack が 8 桁以上の時のみ font-size を 0.8 倍に縮小
+   （4.55vw × 0.8 = 3.64vw）。renderer.js が `is-8digit` クラスを動的に付与する。 */
+.stat-value.is-8digit { font-size: 3.64vw; }
+
+/* C.1.7-patch 2026-04-30: TOTAL PRIZE POOL が 7 桁（¥1,000,000）以上の時のみ縮小
+   （4.5vw × 0.85 ≒ 3.83vw）。renderer.js が `is-7digit` クラスを動的に付与する。 */
+.stat-value--xl.is-7digit { font-size: 3.83vw; }
+
+.stat-value--cyan {
+  color: var(--cyan);
+  text-shadow: 0 0 24px rgba(79, 195, 247, 0.3);
+}
+
+/* NEXT BREAK IN の値はモノスペース（桁ズレ防止）+ 幅固定
+   "00:00:00" / "—" / "00:02:00" など表示が変わっても width が動かないよう min-width を当てる
+   親 .stat--right が右端揃えなので text-align: right で内容も右寄せに統一
+   C.1.5-patch 2026-04-30: 前原さん要望で 1.4 倍に拡大（2.6vw → 3.64vw、min-width も連動拡大） */
+.next-break-value {
+  font-family: var(--font-timer);
+  font-size: calc(3.64vw * var(--font-timer-scale, 1));
+  font-weight: 700;
+  color: var(--cyan);
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 24px rgba(79, 195, 247, 0.3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1;
+  min-width: 16vw;
+  text-align: right;
+}
+
+.stat-value--gold {
+  color: var(--gold);
+  text-shadow: 0 0 28px rgba(212, 175, 55, 0.3);
+}
+
+.stat-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+}
+
+.stat-row--right {
+  justify-content: flex-end;
+}
+
+.stat-label-inline {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 1.1vw;
+  letter-spacing: 0.18em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.stat-value-small {
+  font-family: var(--font-numeric);
+  font-weight: 600;
+  /* STEP 10 フェーズC.1.4-fix3 Fix 1: 2vw → 3vw（×1.5）に拡大。
+     プレイヤー / リエントリー / アドオン人数の 1〜3 桁数値なので
+     右カラム圧迫の懸念なし、第一案そのまま採用。 */
+  font-size: 3vw;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 3vw;
+  text-align: right;
+}
+
+/* ===== 賞金構造リスト ===== */
+
+.payouts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6vw;
+  /* STEP 6.6: スクロールは親の .left-group--mid 側で吸収するため、ここは高さ制限なし */
+  max-height: none;
+}
+
+.payouts-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 0.6vw var(--space-md);
+  border-left: 3px solid var(--gold);
+  background: rgba(212, 175, 55, 0.06);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* STEP 6.5: 4位以下はコンパクト表示で詰める（業界標準の見せ方） */
+.payouts-row--secondary {
+  padding: 0.35vw var(--space-md);
+  background: rgba(212, 175, 55, 0.03);
+  border-left-color: var(--gold-dim);
+}
+
+.payouts-row--secondary .payouts-row__rank {
+  font-size: 1vw;
+}
+
+.payouts-row--secondary .payouts-row__amount {
+  font-size: 1.6vw;
+}
+
+.payouts-row__rank {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 1.2vw;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.payouts-row__amount {
+  font-family: var(--font-numeric);
+  font-weight: 700;
+  font-size: 2.2vw;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* STEP 6.5: GTD注記（TOTAL PRIZE POOL の下）。GTDが計算プールを上回るときだけ visible
+   常時 min-height で領域占有 → 表示切替で layout shift しない */
+.clock__pool-note {
+  font-family: var(--font-label);
+  font-size: 0.95vw;
+  color: var(--cyan);
+  letter-spacing: 0.1em;
+  margin-top: 0.4vh;
+  min-height: 1vw;
+  visibility: hidden;
+}
+
+.clock__pool-note.is-visible {
+  visibility: visible;
+}
+
+/* ===== 操作バー ===== */
+
+/* ボトムバー: body flex column 内の一行として配置（position: fixed は使わない）
+   Grid 1fr auto で「ショートカット | 操作ボタン」を構造的に分離（重なり禁止）
+   背景は控えめな半透明濃紺 + 上端極薄ライン（領域分離・視認性向上）
+
+   高さ 6vh の根拠:
+   - ボタン height: 4vh（min-width 7vw、内部テキスト 1.1vw）
+   - 縦パディング 0.5vh × 2 = 1vh
+   - 4vh + 1vh = 5vh、安全マージン 1vh で 6vh を確保
+   - 旧 5vh + パディング 1vw（= 1.78vh × 2 = 3.56vh）では content area 1.44vh しか取れず、
+     ボタン (4vh) が上下に約 1.3vh ずつはみ出してマーキーを侵食していた
+   ui-components.md「ボトムバー」/ ui-layout.md「ビューポート全体レイアウト」準拠 */
+.bottom-bar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 0.5vh var(--space-lg);
+  /* STEP 6.18: 6vh 固定 → min-height で内容に応じて縦に伸長（狭幅で3行になっても切れない）。
+     項目は STEP 6.17 で flex-wrap、font 縮小（後述）と併せてフルHDなら2行以内に収容 */
+  flex: 0 0 auto;
+  min-height: 6vh;
+  background: rgba(6, 14, 28, 0.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  /* STEP 10 フェーズC.1.4-fix1 Fix 1: 背景画像 overlay (.bg-image-overlay z:0) より前面に置き、
+     不透明背景でショートカット説明 + ボタンの視認性を確保。 */
+  position: relative;
+  z-index: 3;
+}
+/* image 背景時のみ、overlay の暗くする層を素通しさせないよう不透明 deep 色を被せる */
+:root[data-bg="image"] .bottom-bar {
+  background: var(--bg-deep, #000);
+}
+
+/* 左カラム: ショートカット説明（STEP 6: 改行で2行に分割し切れを防ぐ）
+   font-size を 1vw → 0.85vw に微縮小、white-space: normal で2行折返し。
+   bottom-bar の高さ 6vh は維持（line-height 1.2 で2行 = 2.04vh、余白に十分収まる） */
+.bottom-bar__shortcut {
+  font-family: var(--font-label);
+  /* STEP 6.18: フォント・行間を縮小して 2 行に収まりやすく */
+  font-size: 0.72vw;
+  line-height: 1.25;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  /* STEP 6.17: flex-wrap で項目単位の折返し（項目が途中で切れない） */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2vw 0.4vw;       /* 行間 / 項目間も少し詰める */
+  min-width: 0;           /* grid 1fr の縮小を許可 */
+}
+
+.shortcut-item {
+  display: inline-block;
+  white-space: nowrap;     /* 項目内では絶対に改行しない */
+}
+
+.shortcut-sep {
+  display: inline-block;
+  white-space: nowrap;
+  opacity: 0.5;            /* 区切り「／」を控えめに */
+}
+
+/* 右カラム: 操作ボタン群（縮まない） */
+.bottom-bar__buttons {
+  display: flex;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+/* ボトムバー内のボタン（既存 .btn とは別の小型スタイル） */
+.bottom-bar__buttons button {
+  height: 4vh;
+  min-width: 7vw;
+  padding: 0 var(--space-md);
+  background: transparent;
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 1.1vw;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.bottom-bar__buttons button:hover:not(:disabled) {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: var(--gold);
+}
+
+.bottom-bar__buttons button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bottom-bar__buttons .is-primary {
+  background: var(--gold);
+  color: #000;
+  font-weight: 700;
+}
+
+.bottom-bar__buttons .is-primary:hover:not(:disabled) {
+  background: var(--gold-bright);
+}
+/* STEP 10 フェーズB.fix7 で追加した .btn-pause 独自スタイルは fix8 で撤回。
+   前原さんの本意は「一時停止中」ラベル（.clock__pause-label）の方を強調することだった。 */
+
+/* ===== マーキー（テロップ） =====
+   flex ではなく block にする。
+   .marquee-content は inline-block + padding-left:100% で右端から開始、
+   translateX(-100%) で自身の幅分だけ左に流れて完全に退場する。 */
+
+/* マーキー: body flex column の最下行として配置（position: fixed は使わない）
+   has-marquee クラスが付いていないとき・hidden 属性のときは display:none */
+.marquee {
+  flex: 0 0 var(--marquee-height);
+  width: 100%;
+  height: var(--marquee-height);
+  background: rgba(6, 14, 28, 0.92);
+  border-top: 1px solid var(--gold);
+  overflow: hidden;
+  white-space: nowrap;
+  z-index: 50;
+}
+
+/* 表示制御は body.has-marquee クラス一本に統一（hidden 属性は使わない） */
+body:not(.has-marquee) .marquee { display: none; }
+
+.marquee-content {
+  display: inline-block;
+  padding-left: 100%;
+  line-height: var(--marquee-height);
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 1.6vw;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  animation-name: marquee-scroll;
+  animation-duration: var(--marquee-duration, 20s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+
+/* ===== ボタン ===== */
+
+/* 操作ボタン: 控えめだが押しやすい。ホバーでゴールド淡色 + ボーダー明るく */
+.btn {
+  min-width: 6vw;
+  min-height: 4vh;
+  padding: 0.6vw 1.6vw;
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 1.2vw;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.btn:hover:not(:disabled) {
+  background-color: rgba(212, 175, 55, 0.15);
+  border-color: var(--gold);
+}
+
+.btn:active:not(:disabled) {
+  background-color: rgba(212, 175, 55, 0.3);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* スタートボタンのみアクティブ時にゴールド充填（運用開始の一押しを目立たせる） */
+.btn--primary:not(:disabled) {
+  background-color: var(--gold);
+  border-color: var(--gold);
+  color: var(--bg-deep);
+  font-weight: 700;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background-color: var(--gold-bright);
+  border-color: var(--gold-bright);
+}
+
+/* 無効時はゴールド充填を外し、他のボタンと同じ控えめな見た目に */
+.btn--primary:disabled {
+  background-color: transparent;
+  border-color: var(--gold-dim);
+  color: var(--text-muted);
+}
+
+/* STEP 10 フェーズB.fix6: フォーマット選択時の「複製して編集」ボタン強調表示
+   通常時は .btn--ghost のままで控えめ。.blinds-editor[data-builtin="true"] のスコープでだけ
+   ゴールド充填の primary ライク表示にして「ここを押してから編集する」という導線を強調。 */
+.blinds-editor[data-builtin="true"] #js-preset-duplicate {
+  background-color: var(--gold);
+  border-color: var(--gold);
+  color: var(--bg-deep);
+  font-weight: 700;
+  font-size: 1.05em;
+}
+.blinds-editor[data-builtin="true"] #js-preset-duplicate:hover:not(:disabled) {
+  background-color: var(--gold-bright);
+  border-color: var(--gold-bright);
+}
+
+.btn--ghost {
+  border-color: var(--text-muted);
+  color: var(--text-secondary);
+}
+
+/* ===== 確認ダイアログ ===== */
+
+.confirm-dialog {
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: var(--space-xl) var(--space-2xl);
+  min-width: 32vw;
+  font-family: var(--font-body);
+}
+
+.confirm-dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.confirm-dialog__message {
+  font-size: 1.6vw;
+  margin-bottom: var(--space-lg);
+  text-align: center;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-md);
+}
+
+/* プレスタート確認ダイアログ（STEP 5） */
+.confirm-dialog__title {
+  font-family: var(--font-label);
+  font-size: 1.8vw;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin: 0 0 var(--space-sm);
+  text-align: center;
+  color: var(--gold);
+}
+
+.confirm-dialog--prestart {
+  min-width: 36vw;
+}
+
+.prestart-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.prestart-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6vw;
+  padding: 0.6vh 0.8vw;
+  font-size: 1.15vw;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.prestart-option:hover {
+  background: var(--bg-card-soft);
+  border-color: var(--border-subtle);
+}
+
+.prestart-option input[type="radio"] {
+  width: 1.1vw;
+  height: 1.1vw;
+  accent-color: var(--gold);
+}
+
+.prestart-option--custom {
+  flex-wrap: wrap;
+}
+
+.prestart-option__custom-input {
+  width: 5vw;
+  padding: 0.3vh 0.5vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1vw;
+}
+
+/* ===== フォームダイアログ（マーキー編集） ===== */
+
+.form-dialog {
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: var(--space-xl) var(--space-2xl);
+  min-width: 48vw;
+  max-width: 70vw;
+  font-family: var(--font-body);
+}
+
+.form-dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.form-dialog__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 2vw;
+  color: var(--gold);
+  margin-bottom: var(--space-lg);
+  letter-spacing: 0.02em;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+/* STEP 10 フェーズC.2.4 Fix 1: .form-row { display: flex } が [hidden] 属性の display:none を上書きしてしまう問題対策。
+   .form-row[hidden] を明示的に隠す（自由記入欄が常時表示されるバグの根本原因） */
+.form-row[hidden] {
+  display: none;
+}
+
+.form-row__label {
+  font-family: var(--font-label);
+  font-size: 1.2vw;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.form-row__label input[type="checkbox"] {
+  width: 1.4vw;
+  height: 1.4vw;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.form-textarea {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 1.2vw;
+  color: var(--text-primary);
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  resize: vertical;
+  min-height: 6vh;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.form-radio-group {
+  display: flex;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.form-radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.6vw;
+  font-family: var(--font-body);
+  font-size: 1.1vw;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.form-radio-group input[type="radio"] {
+  width: 1.2vw;
+  height: 1.2vw;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.form-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+/* STEP 6.22.1.fix2: テロップタブのヒント表示でボタン位置を不変に保つ。
+   .form-dialog__actions（flex）の最左に置き、margin-right: auto で
+   自分は左端固定、他要素（ボタン群）は右端に押し出される。
+   align-self: center でボタン群と縦中央揃え、min-height で表示有無の縦変動を抑制。 */
+.form-dialog__actions #js-marquee-tab-hint {
+  margin-right: auto;
+  text-align: left;
+  align-self: center;
+  min-height: 1em;
+}
+
+/* ===== タブ式ダイアログ（STEP 3a で導入） =====
+   form-dialog--tabs は通常の form-dialog より広く、padding 0 でヘッダ／タブナビ／本文を独立配置 */
+
+.form-dialog.form-dialog--tabs {
+  /* STEP 9.fix3: タブ7個（トーナメント / ブラインド構造 / 背景・時計フォント / ロゴ /
+     テロップ / 音 / ハウス情報）が1段に収まるよう拡幅 + ユーザーリサイズ可能化。
+     既存マーキー編集ダイアログ（.form-dialog 単体）は影響を受けない（このセレクタのみ）。
+     ※ C.1.3-fix1 Fix 3 の flex 化は <dialog> 要素の挙動を壊し ✕ボタン / resize ハンドル両方が
+        効かなくなったため緊急ロールバック（C.1.3-fix1-rollback 2026-04-30）。 */
+  min-width: 600px;
+  /* C.1.3-fix3 2026-04-30: 初期サイズが画面右端いっぱいだとリサイズハンドルが
+     見えにくい問題を解消。width / height を画面より一回り小さい固定値（min で画面サイズに頭打ち）に。
+     ユーザーは resize: both のハンドルでさらに max-width / max-height まで拡大できる。 */
+  width: min(1000px, 92vw);
+  height: min(700px, 92vh);
+  max-width: 95vw;
+  min-height: 400px;
+  max-height: 95vh;
+  resize: both;
+  overflow: auto;
+  padding: 0;
+}
+
+.form-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.form-dialog__header .form-dialog__title {
+  margin-bottom: 0;
+  font-size: 1.6vw;
+}
+
+.form-dialog__close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 2vw;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 var(--space-sm);
+}
+
+.form-dialog__close:hover {
+  color: var(--text-primary);
+}
+
+.settings-tab-nav {
+  display: flex;
+  /* STEP 9.fix3: タブ7個を1段強制（折り返し禁止）+ はみ出し時は横スクロール（最終フォールバック） */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: var(--space-xs);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 var(--space-md);
+}
+
+.settings-tab-btn {
+  padding: 0.8vh 1.2vw;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 1.1vw;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  /* STEP 9.fix3: タブ自体も折り返さず、縮みもさせない（テキスト切れ防止） */
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.settings-tab-btn:hover { color: var(--text-primary); }
+
+.settings-tab-btn.is-active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+.form-dialog__body {
+  padding: 0;
+  /* STEP 10 フェーズC.1.6 Fix 1: max-height 撤廃。スクロールは form-dialog__shell 経由の flex で一元管理。
+     旧値（70vh / 85vh）は wrapper 配下のルールで none に上書き。 */
+  overflow-y: auto;
+}
+
+/* STEP 10 フェーズC.1.6 Fix 1: 設定ダイアログ内側 wrapper を flex column 化。
+   <dialog> 自体には display: flex を当てない（feedback_dialog_no_flex 不可侵）。 */
+.form-dialog__shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+.form-dialog__shell > .form-dialog__header,
+.form-dialog__shell > .settings-tab-nav {
+  flex-shrink: 0;
+}
+.form-dialog__shell > .form-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;       /* flex item の overflow を効かせる必須指定 */
+  max-height: none;    /* 旧 70vh / 85vh を明示無効化 */
+  overflow-y: auto;
+}
+
+.settings-tab {
+  display: none;
+  padding: var(--space-lg) var(--space-lg);
+  /* STEP 10 フェーズC.1.6 Fix 1: max-height / overflow-y 撤廃 → 親 form-dialog__body のスクロールに統一。
+     これによりダイアログ縦リサイズで各タブも追従して見える範囲が広がる。 */
+}
+
+.settings-tab.is-active { display: block; }
+
+.settings-placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 6vh 0;
+  text-align: center;
+  font-family: var(--font-body);
+  font-size: 1.1vw;
+}
+
+.settings-hint {
+  margin-top: var(--space-md);
+  color: var(--text-muted);
+  font-size: 0.95vw;
+  font-style: italic;
+}
+
+/* ===== ハウス情報タブ（branding.md §15.2 準拠の Yu Shitamachi/PLUS2 クレジット欄は編集不可） ===== */
+
+.about-content {
+  text-align: center;
+  padding: var(--space-md) var(--space-md) var(--space-lg);
+}
+
+.about-logo {
+  width: 14vw;
+  max-width: 260px;
+  height: auto;
+  margin: 0 auto var(--space-lg);
+  display: block;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+}
+
+.about-app-name {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 2vw;
+  color: var(--gold);
+  margin-bottom: var(--space-sm);
+  letter-spacing: 0.04em;
+}
+
+.about-version,
+.about-credit,
+.about-copyright,
+.about-distribution {
+  font-family: var(--font-body);
+  color: var(--text-secondary);
+  margin-bottom: 0.6vh;
+  font-size: 1vw;
+  line-height: 1.5;
+}
+
+.about-version #js-app-version {
+  font-family: var(--font-numeric);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.about-copyright {
+  color: var(--text-muted);
+  font-size: 0.9vw;
+  margin-top: var(--space-sm);
+}
+
+.about-distribution {
+  margin-top: var(--space-md);
+  color: var(--text-muted);
+  font-size: 0.95vw;
+}
+
+/* 効果音ラボ等の任意 attribution 表記（branding.md §15.5: 設定で隠せない静的表記） */
+.about-credit-attribution {
+  margin-top: var(--space-sm);
+  font-size: 0.95vw;
+  color: var(--text-muted);
+}
+.about-credit-attribution a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+.about-credit-attribution a:hover {
+  color: var(--gold);
+}
+
+/* STEP 10 フェーズC.1.2 Fix 4: DevTools 注記（配布版でも F12 が開発者向けに使える旨の明示） */
+.about-devtools-note {
+  margin-top: var(--space-md);
+  font-size: 0.85vw;
+  color: var(--text-muted);
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+
+/* ===== STEP 6.22: 店舗名「Presented by ○○」表記 =====
+   メインクロック左上ロゴ下に控えめな italic + 金色（dim）。
+   ロゴ画像と同じ幅（14vw）で ellipsis。空欄時は display:none で
+   layout 占有もゼロにする（layout shift 完全回避） */
+.clock__presented-by {
+  font-family: 'Inter', sans-serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1vw;
+  color: var(--gold-dim);
+  letter-spacing: 0.04em;
+  /* STEP 6.22.fix: ロゴとの距離を詰める（0.6vh → 0.2vh） */
+  margin-top: 0.2vh;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 14vw;
+  display: none;
+}
+.clock__presented-by.is-visible {
+  display: block;
+}
+
+/* STEP 6.23: PC間データ移行セクション */
+.form-section-title {
+  font-size: 1.2vw;
+  margin: 1.2vh 0 0.4vh;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.data-transfer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6vw;
+  margin: 0.8vh 0;
+}
+
+/* venueName 入力エラーヒント（赤字） */
+.settings-hint--error {
+  color: var(--danger);
+}
+/* STEP 6.22.1.fix: 保存成功フィードバック（緑字） */
+.settings-hint--success {
+  color: var(--success);
+}
+
+/* ===== ブラインド構造エディタ（STEP 3b） ===== */
+
+.blinds-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  font-family: var(--font-body);
+}
+
+.blinds-editor__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.blinds-editor__preset-label,
+.blinds-editor__name-label {
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 1vw;
+  color: var(--text-secondary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.blinds-editor__preset-select,
+.blinds-editor__name-input {
+  flex: 1 1 auto;
+  min-width: 12vw;
+  padding: 0.6vh 0.8vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1vw;
+}
+
+.blinds-editor__preset-select:focus,
+.blinds-editor__name-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+/* readonly 状態（同梱プリセット選択時）— 灰色背景でクリック不可を示唆 */
+.blinds-editor__name-input[readonly],
+.blinds-editor__name-input.is-readonly {
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+/* ===== トーナメントエディタ（設定タブ「トーナメント」） ===== */
+
+.tournament-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  font-family: var(--font-body);
+}
+
+.tournament-editor__input {
+  width: 100%;
+  padding: 0.8vh 0.8vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1.1vw;
+}
+
+.tournament-editor__input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.tournament-editor__input--narrow {
+  max-width: 8vw;
+}
+
+.tournament-editor__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* STEP 10 フェーズB.fix7: 保存ボタン群を縦積み（ボタン+小注のセット）*/
+.tournament-save-buttons {
+  align-items: flex-start;
+}
+.save-btn-with-note {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4vh;
+  align-items: stretch;
+}
+.btn-note {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* セクション区切り（イベント情報 / ブラインド構造） */
+.tournament-editor__divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-md) 0;
+}
+
+/* 「このブラインド構造を編集」ボタン行 */
+.tournament-editor__blind-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.tournament-editor__hint-inline {
+  font-size: 0.95vw;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.tournament-editor__hint {
+  margin: 0;
+  font-size: 0.95vw;
+  color: var(--text-muted);
+  font-style: italic;
+  min-height: 1.4vw;       /* メッセージ有無で layout shift しない */
+}
+
+.tournament-editor__hint.is-error   { color: var(--danger); font-style: normal; }
+.tournament-editor__hint.is-success { color: #50C878;       font-style: normal; }
+
+/* STEP 6: バイイン/リバイ/アドオンの横並び入力群 */
+.tournament-editor__inline-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.tournament-editor__inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4vw;
+  font-size: 1vw;
+  color: var(--text-secondary);
+  white-space: nowrap;     /* STEP 6.6: 「許可ブレイク」「許可レベル」が2段折返しせず1段表示 */
+}
+
+/* STEP 6.6: フォーム行の補足説明（リバイ/アドオンの「許可レベル/ブレイク」の意味） */
+.form-row__hint {
+  font-size: 0.85vw;
+  color: var(--text-muted);
+  margin-top: 0.3vh;
+  margin-bottom: 1vh;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* STEP 6: 賞金構造エディタ（順位×% テーブル） */
+.payouts-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7vw, 1fr));
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.payouts-editor__row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3vh;
+  padding: 0.6vh 0.6vw;
+  background: var(--bg-card-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.payouts-editor__rank {
+  font-family: var(--font-label);
+  font-size: 0.95vw;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+}
+
+.payouts-editor__pct-input {
+  width: 100%;
+  text-align: center;
+  padding: 0.3vh 0.4vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1.05vw;
+}
+
+.payouts-editor__sum {
+  margin-top: var(--space-sm);
+  font-size: 1vw;
+  color: var(--text-secondary);
+}
+
+.payouts-editor__sum.is-invalid {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* STEP 6.5: 入力モード切替（% / 金額） */
+.payouts-mode-row {
+  align-items: center;
+}
+
+.payouts-mode-toggle {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+}
+
+.payouts-mode-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4vw;
+  cursor: pointer;
+  font-size: 1vw;
+  color: var(--text-secondary);
+}
+
+.payouts-mode-toggle input[type="radio"] {
+  accent-color: var(--gold);
+}
+
+/* STEP 6: プレスタートダイアログの参加人数入力行 */
+.prestart-players-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6vw;
+  margin-bottom: var(--space-md);
+  font-size: 1.2vw;
+}
+
+.prestart-players-label {
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.04em;
+}
+
+.prestart-players-input {
+  width: 6vw;
+  padding: 0.5vh 0.7vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1.2vw;
+  text-align: center;
+}
+
+.prestart-players-unit {
+  color: var(--text-secondary);
+}
+
+/* トーナメント選択ヘッダ（複数保存対応） */
+.tournament-editor__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.tournament-editor__select-label {
+  font-size: 1.05vw;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.tournament-editor__select {
+  flex: 1 1 auto;
+  min-width: 14vw;
+  padding: 0.8vh 0.8vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1.1vw;
+}
+
+.tournament-editor__select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.tournament-editor__actions {
+  display: flex;
+  gap: var(--space-xs);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* STEP 7.x ①: 同梱プリセット編集時の警告枠（金色トーン、控えめだが視認可能） */
+.blinds-editor__builtin-warning {
+  padding: 1.2vh 1.4vw;
+  margin-bottom: 1.2vh;
+  border: 1px solid var(--gold-dim);
+  border-radius: 0.4vw;
+  background-color: rgba(212, 175, 55, 0.08);
+  color: var(--gold);
+  font-size: 1vw;
+  line-height: 1.5;
+}
+
+/* STEP 7.x ③-f: トーナメント各行の削除ボタン（🗑） */
+.tournament-list__delete-btn {
+  margin-left: var(--space-xs);
+  padding: 0.4vh 0.6vw;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1.1vw;
+  border-radius: 0.3vw;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.tournament-list__delete-btn:hover:not(:disabled) {
+  background-color: rgba(220, 38, 38, 0.12);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.tournament-list__delete-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* STEP 6.21: トーナメント一覧（状態バッジ + 操作ボタン） */
+/* STEP 6.21.5: 件数増加でタブが伸びすぎないようスクロール化（約15行で打ち止め） */
+.tournament-list {
+  list-style: none;
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  max-height: 75vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.tournament-list::-webkit-scrollbar {
+  width: 0.6vw;
+}
+.tournament-list::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+
+.tournament-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0.6vh 0.8vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 1.0vw;
+}
+
+.tournament-list__item.is-active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold) inset;
+}
+
+.tournament-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4vw;
+  padding: 0.3vh 0.6vw;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 0.9vw;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tournament-status-badge::before {
+  content: '';
+  display: inline-block;
+  width: 0.55vw;
+  height: 0.55vw;
+  border-radius: 50%;
+  background-color: var(--text-muted, #888);
+}
+
+.tournament-status-badge.is-running {
+  background-color: rgba(220, 38, 38, 0.18);
+  color: #fca5a5;
+}
+.tournament-status-badge.is-running::before { background-color: #ef4444; }
+
+.tournament-status-badge.is-paused {
+  background-color: rgba(234, 179, 8, 0.18);
+  color: #fde68a;
+}
+.tournament-status-badge.is-paused::before { background-color: #eab308; }
+
+.tournament-list__name {
+  flex: 1 1 auto;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tournament-list__actions {
+  display: flex;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.tournament-list__btn {
+  padding: 0.4vh 0.7vw;
+  background-color: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.9vw;
+  cursor: pointer;
+}
+
+.tournament-list__btn:hover {
+  border-color: var(--gold);
+}
+
+.tournament-list__btn.is-primary {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+/* ===== 音タブ（STEP 4） ===== */
+
+.audio-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  font-family: var(--font-body);
+}
+
+.audio-editor__divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-sm) 0;
+}
+
+.audio-editor__volume-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex: 1 1 auto;
+}
+
+.audio-editor__slider {
+  flex: 1 1 auto;
+  min-width: 12vw;
+  max-width: 24vw;
+}
+
+.audio-editor__volume-display {
+  min-width: 3.5vw;       /* layout shift 防止: 0%〜100% で幅固定 */
+  text-align: right;
+  color: var(--text-primary);
+  font-family: var(--font-mono, var(--font-body));
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05vw;
+}
+
+/* チェックボックス行（音 ON/OFF） */
+.form-row--checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.form-row--checkbox label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 1.05vw;
+}
+
+.audio-editor__test-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.audio-editor__test-buttons {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.audio-editor__footer {
+  min-height: 1.4vw;        /* layout shift 防止 */
+}
+
+.audio-editor__hint {
+  margin: 0;
+  font-size: 0.95vw;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.audio-editor__hint.is-error   { color: var(--danger); font-style: normal; }
+.audio-editor__hint.is-success { color: #50C878;       font-style: normal; }
+
+.audio-editor__variant-select {
+  padding: 0.5vh 0.8vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1.1vw;
+  min-width: 8vw;
+}
+
+.blinds-editor__preset-actions {
+  display: flex;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.blinds-editor__name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.blinds-editor__dirty-flag {
+  color: var(--warn);
+  font-size: 0.9vw;
+  font-style: italic;
+}
+
+.blinds-editor__dirty-flag[hidden] { display: none; }
+
+/* テーブル */
+.blinds-editor__table-wrap {
+  max-height: 36vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.blinds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-body);
+  font-size: 1vw;
+}
+
+.blinds-table thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--bg-deep);
+  z-index: 1;
+}
+
+.blinds-table th {
+  padding: 0.8vh 0.6vw;
+  text-align: center;
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 0.95vw;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.blinds-table td {
+  padding: 0.4vh 0.4vw;
+  text-align: center;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.blinds-table tr:hover td {
+  background-color: rgba(212, 175, 55, 0.04);
+}
+
+/* ブレイク行は薄シアン寄りで区別 */
+.blinds-table tr.is-break td {
+  background-color: rgba(79, 195, 247, 0.05);
+}
+
+.blinds-table tr.is-break:hover td {
+  background-color: rgba(79, 195, 247, 0.10);
+}
+
+.blinds-table__col-num    { width: 8%; }
+.blinds-table__col-break  { width: 10%; }
+.blinds-table__col-actions{ width: 16%; }
+/* STEP 10 フェーズC.2.5: MIX 編集テーブル用ゲーム種列 + 空セル */
+.blinds-table__col-game   { width: 12%; }
+.blinds-table__col-num--empty {
+  /* 行ごとに表示しないフィールドの空セル。レイアウトシフトを起こさず列幅を固定維持 */
+  background: transparent;
+}
+.blinds-table__game-select {
+  width: 100%;
+  padding: 0.4vh 0.4vw;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-label);
+  font-size: 0.95vw;
+  cursor: pointer;
+}
+.blinds-table__game-select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.blinds-table__game-select:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+/* MIX テーブル: ブレイク行のゲーム種セルは空表示（既存 is-break 背景は維持） */
+.blinds-table tr.is-break .blinds-table__col-game {
+  /* スパンは空、視覚的にもグレーアウト効果は親 tr.is-break で十分 */
+}
+
+.blinds-table input[type="number"],
+.blinds-table input[type="text"] {
+  width: 100%;
+  padding: 0.4vh 0.4vw;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-numeric);
+  font-size: 1vw;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.blinds-table input[type="number"]:hover,
+.blinds-table input[type="text"]:hover {
+  border-color: var(--border-subtle);
+}
+
+.blinds-table input[type="number"]:focus,
+.blinds-table input[type="text"]:focus {
+  outline: none;
+  border-color: var(--gold);
+  background-color: var(--bg-deep);
+}
+
+.blinds-table input[type="number"]:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.blinds-table input[type="checkbox"] {
+  width: 1.2vw;
+  height: 1.2vw;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.blinds-table .row-level-num {
+  font-family: var(--font-numeric);
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.blinds-table .break-label-text {
+  font-style: italic;
+  color: var(--cyan);
+  font-size: 0.95vw;
+}
+
+/* 操作ボタン（↑ ↓ ✕） */
+.blinds-table__row-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.3vw;
+}
+
+.blinds-table__action-btn {
+  width: 2.4vw;
+  min-width: 24px;
+  height: 2.4vw;
+  min-height: 24px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1vw;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.blinds-table__action-btn:hover:not(:disabled) {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+
+.blinds-table__action-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.blinds-table__action-btn--delete:hover:not(:disabled) {
+  background: rgba(229, 57, 53, 0.18);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* 追加 / フッタ */
+.blinds-editor__add-row {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* フッタ: 左にエクスポート/インポート、右に「保存」「適用」を justify-content: space-between で配置 */
+.blinds-editor__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.blinds-editor__footer-left,
+.blinds-editor__footer-right {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* 旧 spacer は不要だが互換のため残置（HTML から削除済みのため実質未使用） */
+.blinds-editor__spacer {
+  flex: 1 1 auto;
+}
+
+.blinds-editor__hint {
+  margin: 0;
+  font-size: 0.9vw;
+  color: var(--text-muted);
+  font-style: italic;
+  min-height: 1.4vw;       /* メッセージ有無で layout shift しない */
+}
+
+.blinds-editor__hint.is-error  { color: var(--danger); font-style: normal; }
+.blinds-editor__hint.is-success{ color: #50C878;     font-style: normal; }
+
+/* btn--danger: 削除系ボタン用 */
+.btn--danger {
+  border-color: rgba(229, 57, 53, 0.4);
+  color: var(--danger);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background-color: rgba(229, 57, 53, 0.18);
+  border-color: var(--danger);
+}
+
+.btn--danger:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ===== 背景プリセット選択（設定ダイアログ内） ===== */
+
+/* 4列 × 2段の Grid で 8 サムネイルを配置 */
+.bg-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-sm);
+}
+
+.bg-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5vw;
+  padding: 0.6vw;
+  background: transparent;
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.2s;
+  font-family: inherit;
+}
+
+.bg-thumb:hover {
+  border-color: var(--gold-dim);
+}
+
+.bg-thumb.is-selected {
+  border-color: var(--gold);
+}
+
+.bg-thumb__swatch {
+  display: block;
+  width: 100%;
+  height: 4vw;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* 各サムネイルは本体の背景CSSを同じ式で縮小再現（パターンの間隔は小さくスケール） */
+.bg-thumb__swatch[data-bg-swatch="black"] {
+  background: #050505;
+}
+.bg-thumb__swatch[data-bg-swatch="navy"] {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(79, 195, 247, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse at center, #154080 0%, #0A1F3D 35%, #030814 100%);
+}
+.bg-thumb__swatch[data-bg-swatch="carbon"] {
+  background-color: #1F2024;
+  background-image:
+    radial-gradient(ellipse at center, rgba(255, 255, 255, 0.06) 0%, transparent 70%),
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: auto, 8px 8px, 8px 8px;
+}
+.bg-thumb__swatch[data-bg-swatch="felt"] {
+  background-color: #0F4D38;
+  background-image:
+    radial-gradient(ellipse at center, rgba(255, 255, 255, 0.10) 0%, rgba(0, 0, 0, 0.45) 80%),
+    repeating-linear-gradient(45deg, transparent 0 3px, rgba(0, 0, 0, 0.16) 3px 4px),
+    repeating-linear-gradient(-45deg, transparent 0 3px, rgba(255, 255, 255, 0.04) 3px 4px);
+}
+.bg-thumb__swatch[data-bg-swatch="burgundy"] {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 25%, rgba(212, 175, 55, 0.14) 0%, transparent 60%),
+    linear-gradient(135deg, #5A1A2E 0%, #3A0E1A 30%, #1A0508 70%, #0A0204 100%);
+}
+.bg-thumb__swatch[data-bg-swatch="midnight"] {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, #4A24A0 0%, transparent 50%),
+    radial-gradient(ellipse at center, #1A0838 0%, #0A0420 50%, #03010A 100%);
+}
+.bg-thumb__swatch[data-bg-swatch="emerald"] {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(80, 200, 180, 0.14) 0%, transparent 50%),
+    linear-gradient(180deg, #0F4848 0%, #0A2F2F 40%, #051818 70%, #020909 100%);
+}
+.bg-thumb__swatch[data-bg-swatch="obsidian"] {
+  background: radial-gradient(ellipse 50% 50% at center, #353841 0%, #1A1C22 40%, #050609 80%);
+}
+/* STEP 10 フェーズC.1.3: 9 種類目「カスタム画像」サムネイル — グラデ + 「画像」テキスト */
+.bg-thumb__swatch[data-bg-swatch="image"] {
+  background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0 6px, transparent 6px 12px),
+    linear-gradient(135deg, #3a3a4a 0%, #1a1a22 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-label);
+  font-size: 1.1vw;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 0.1em;
+}
+
+.bg-thumb__label {
+  font-family: var(--font-label);
+  font-size: 0.95vw;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+
+/* ===== STEP 10 フェーズC.1.3: カスタム画像詳細パネル ===== */
+.bg-image-panel {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-card-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.bg-image-panel[hidden] {
+  display: none;
+}
+.bg-image-panel__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+.bg-image-panel__label {
+  font-family: var(--font-label);
+  font-size: 0.95vw;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+}
+.bg-image-panel__radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4vw;
+  font-size: 0.95vw;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.bg-image-panel__hint {
+  font-size: 0.85vw;
+  color: var(--text-muted);
+}
+.bg-image-panel__preview {
+  /* STEP 10 フェーズC.1.3-fix1 Fix 1: 16:9 + 中央配置 + max-width で肥大化抑止 */
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  margin: 0 auto;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.bg-image-panel__preview img {
+  width: 100%;
+  height: 100%;
+  /* STEP 10 フェーズC.1.3-fix1 Fix 1: cover → contain（見切れなし、全体表示） */
+  object-fit: contain;
+}
+.bg-image-panel__placeholder {
+  font-size: 0.95vw;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.bg-image-panel__error {
+  font-size: 0.9vw;
+  color: var(--danger, #ef4444);
+}
+.bg-image-panel__error[hidden] {
+  display: none;
+}
+
+/* ===== STEP 10 フェーズC.1.4: 休憩中スライドショー設定パネル ===== */
+.break-images-panel {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-card-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.break-images-panel__title,
+.bg-image-panel__title {
+  font-family: var(--font-label);
+  font-size: 1.05vw;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+/* STEP 10 フェーズC.1.4-fix3 Fix 2: スライドショー注意書き */
+.break-images-panel__note {
+  font-size: 0.85vw;
+  color: var(--text-muted);
+  margin: var(--space-sm) 0 0;
+  line-height: 1.5;
+}
+/* STEP 10 フェーズC.1.4-fix3 Fix 3: 画像合計サイズが閾値超過時の ⚠ アイコン */
+.size-warning-icon {
+  color: var(--warning, #f59e0b);
+  margin-left: var(--space-xs);
+  font-size: 1.2vw;
+  cursor: help;
+}
+.size-warning-icon[hidden] { display: none; }
+.break-images-panel__hint {
+  font-size: 0.85vw;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+.break-images-panel__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+.break-images-panel__label {
+  font-family: var(--font-label);
+  font-size: 0.95vw;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+}
+.break-images-panel__input {
+  width: 5vw;
+  padding: 0.4vh 0.6vw;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 1vw;
+}
+.break-images-panel__radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4vw;
+  font-size: 0.95vw;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.break-images-panel__count {
+  font-size: 0.85vw;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.break-images-panel__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6vw;
+  min-height: 5vw;
+  padding: 0.5vw;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  align-items: flex-start;
+}
+.break-images-panel__placeholder {
+  font-size: 0.95vw;
+  color: var(--text-muted);
+  font-style: italic;
+  align-self: center;
+}
+.break-images-panel__thumb {
+  position: relative;
+  width: 8vw;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+.break-images-panel__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.break-images-panel__thumb-remove {
+  position: absolute;
+  top: 0.2vw;
+  right: 0.2vw;
+  width: 1.5vw;
+  height: 1.5vw;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  font-size: 0.9vw;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.break-images-panel__thumb-remove:hover {
+  background: var(--danger, #ef4444);
+}
+.break-images-panel__error {
+  font-size: 0.9vw;
+  color: var(--danger, #ef4444);
+}
+.break-images-panel__error[hidden] {
+  display: none;
+}
+
+/* ===== STEP 10 フェーズC.1.4: スライドショー全画面ステージ =====
+   STEP 10 フェーズC.1.4-fix2 Fix 2: 初回フェードイン演出。
+   display: none → block の切替では transition が効かないため、常時 display: block にして
+   opacity と pointer-events で表示制御。これで 0.8 秒のじんわりフェードインが効く。 */
+.slideshow-stage {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.8s ease-in;
+}
+.slideshow-stage[hidden] {
+  display: none;
+}
+.slideshow-stage__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: opacity 0.5s;
+}
+:root[data-slideshow="active"] .slideshow-stage {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* スライドショー中は通常 UI を非表示 */
+:root[data-slideshow="active"] .clock,
+:root[data-slideshow="active"] .bottom-bar,
+:root[data-slideshow="active"] .marquee,
+:root[data-slideshow="active"] .event-header {
+  display: none;
+}
+
+/* ===== STEP 10 フェーズC.1.4: PIP（右下の縮小タイマー） =====
+   STEP 10 フェーズC.1.4-fix2 Fix 2: スライドショー stage と同期してフェードイン。
+   常時 display: flex、opacity と pointer-events で表示制御。 */
+.pip-timer {
+  display: flex;
+  position: fixed;
+  right: 2vw;
+  bottom: 2vw;
+  z-index: 6;
+  background: rgba(0, 0, 0, 0.65);
+  border: 2px solid var(--gold);
+  border-radius: 8px;
+  padding: 1.2vh 1.6vw;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.8s ease-in;
+}
+.pip-timer[hidden] { display: none; }
+:root[data-slideshow="active"] .pip-timer {
+  opacity: 1;
+  pointer-events: auto;
+}
+.pip-timer__digits {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 6vw;   /* medium 既定 */
+  color: var(--gold);
+  line-height: 1;
+}
+.pip-timer__label {
+  font-family: var(--font-label);
+  font-size: 1.2vw;
+  color: var(--text-secondary);
+  margin-top: 0.4vh;
+  letter-spacing: 0.1em;
+}
+/* PIP サイズ切替（pipSize データ属性で 3 段階） */
+:root[data-pip-size="small"]  .pip-timer__digits { font-size: 4.5vw; }
+:root[data-pip-size="medium"] .pip-timer__digits { font-size: 6vw; }
+:root[data-pip-size="large"]  .pip-timer__digits { font-size: 8vw; }
+
+/* ===== STEP 10 フェーズC.1.4: 手動切替ボタン ===== */
+.pip-action-btn {
+  position: fixed;
+  z-index: 7;
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--text-primary);
+  border: 1px solid var(--gold-dim);
+  border-radius: 6px;
+  padding: 0.8vh 1.2vw;
+  font-family: var(--font-label);
+  font-size: 1vw;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+}
+.pip-action-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  background: rgba(0, 0, 0, 0.85);
+}
+.pip-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+.pip-action-btn[hidden] { display: none; }
+/* STEP 10 フェーズC.1.4-fix1 Fix 4: bottom-bar の右下「リセット / 一時停止 / 次レベル」等と
+   物理的に離すため、両ボタンとも画面左下に配置。スライドショー中は PIP（右下）と対角線で離れ、
+   通常画面（force-timer 状態）でも右下のボタン群と誤操作の可能性なし。 */
+#js-pip-show-timer {
+  left: 2vw;
+  bottom: 2vw;
+}
+#js-pip-show-slideshow {
+  left: 2vw;
+  bottom: 2vw;
+}
+
+/* ===== タイマーフォント選択（設定ダイアログ内） ===== */
+
+.font-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+}
+
+.font-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5vw;
+  padding: 1vw;
+  background: var(--bg-card-soft);
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  font-family: inherit;
+}
+
+.font-thumb:hover {
+  border-color: var(--gold-dim);
+  background: var(--bg-card-hover);
+}
+
+.font-thumb.is-selected {
+  border-color: var(--gold);
+  background: var(--bg-card);
+}
+
+.font-thumb__preview {
+  font-size: 2vw;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+/* 各サムネは自分が表すフォントで "12:34" を描画する。Google Fonts 読込済前提 */
+.font-thumb__preview[data-font-preview="jetbrains"] {
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+}
+.font-thumb__preview[data-font-preview="roboto"] {
+  font-family: 'Roboto Mono', 'Consolas', monospace;
+}
+.font-thumb__preview[data-font-preview="space"] {
+  font-family: 'Space Mono', 'Consolas', monospace;
+  font-weight: 700;
+}
+
+.font-thumb__label {
+  font-family: var(--font-label);
+  font-size: 0.85vw;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+
+/* 表示タブ内の区切り線（背景プリセットとフォント選択の間） */
+.form-divider {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-md) 0;
+}
+
+/* ===== STEP 6.7: ボトムバー非表示モード（H キー） =====
+   body.bottom-bar-hidden 時:
+   - .bottom-bar を完全に隠す（領域も解放、clock 領域が拡大）
+   - マーキー領域を 9vh まで拡大、フォントを 1.5倍（1.6vw → 2.4vw）
+   ※ position: fixed は使わず、flex column の flex-basis を切り替えて配置を維持 */
+body.bottom-bar-hidden .bottom-bar {
+  display: none;
+}
+
+body.bottom-bar-hidden {
+  --marquee-height: 9vh;
+}
+
+body.bottom-bar-hidden .marquee-content {
+  font-size: 2.4vw;
+  line-height: 9vh;
+}
+
+/* ===== STEP 6.7: 賞金区分（メイン画面、event-game-type の下） =====
+   常時 min-height で領域占有 → 空文字でも layout shift しない
+   visibility: hidden による占有制御で、prizeCategory 設定時のみ表示 */
+.event-prize-category {
+  font-family: var(--font-label);
+  font-size: 0.95vw;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 0.3vh;
+  min-height: 0.95vw;
+  line-height: 1.3;
+  visibility: hidden;
+}
+
+.clock--has-prize-category .event-prize-category {
+  visibility: visible;
+}
+
+/* ===== STEP 6.7: トーナメント保存数表示「保存中: N/100 件」 ===== */
+.tournament-editor__count {
+  font-family: var(--font-label);
+  font-size: 0.95vw;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tournament-editor__count.is-limit {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* ===== STEP 6.7: ユーザープリセット数表示「ユーザープリセット: M/100 件」 ===== */
+.blinds-editor__count {
+  font-family: var(--font-label);
+  font-size: 0.95vw;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.blinds-editor__count.is-limit {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* ===== STEP 6.7: イベント名カウンタ + 警告 ===== */
+.tournament-editor__counter {
+  font-family: var(--font-label);
+  font-size: 0.85vw;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-top: 0.3vh;
+  min-height: 0.85vw;
+  line-height: 1.3;
+}
+
+.tournament-editor__counter.is-warn {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+/* STEP 6.18: メインタイトル / サブタイトル両方とも、警告色のみ（黄色＋太字）で統一。
+   注釈テキストは tooltip（title 属性）に集約し、画面上には ::after で出さない。
+   旧 STEP 6.14 / 6.16 の ::after 注釈はサブタイトル側で誤認を招くため撤去。 */
+
+/* ===== STEP 6.7: トーナメントタブ縦長圧縮 =====
+   form-row の縦余白を 1.5vw → 0.6vw に圧縮し、divider のマージンも縮小。
+   トーナメントタブ内に閉じる（他タブには影響しない）。 */
+.settings-tab[data-tab="tournament"] .form-row {
+  margin-bottom: 0.6vw;
+  gap: 0.4vw;
+}
+
+.settings-tab[data-tab="tournament"] .tournament-editor__divider {
+  margin: 0.6vw 0;
+}
+
+.settings-tab[data-tab="tournament"] .form-row__hint {
+  margin-bottom: 0.4vw;
+  margin-top: 0.1vh;
+}
+
+.settings-tab[data-tab="tournament"] .tournament-editor {
+  gap: 0.6vw;
+}
+
+/* STEP 6.10: トーナメントタブのチェックボックス行を他項目と左端揃えに固定。
+   ブラウザデフォルトの input/label margin を 0 に正規化し、
+   チェックボックスの左端＝他 form-row の label 左端（x=0）に一致させる */
+.settings-tab[data-tab="tournament"] .form-row--checkbox {
+  margin-left: 0;
+  padding-left: 0;
+  justify-content: flex-start;
+}
+
+.settings-tab[data-tab="tournament"] .form-row--checkbox > label {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.settings-tab[data-tab="tournament"] .form-row--checkbox input[type="checkbox"] {
+  margin: 0;
+  width: 1.4vw;
+  height: 1.4vw;
+  accent-color: var(--gold);
+  flex-shrink: 0;
+}
+
+.settings-tab[data-tab="tournament"] .form-row--checkbox label > span {
+  /* リエントリー/アドオン等の form-row__label と視覚的に揃うサイズ感に統一 */
+  font-size: 1.05vw;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+/* ===== STEP 6.8: 「保存して適用」モード選択ダイアログ =====
+   ※ 行操作「＋」ボタンのスタイルは STEP 6.9 で「＋↓」アイコンに刷新（下記参照） */
+.confirm-dialog--apply {
+  min-width: 38vw;
+  max-width: 540px;
+}
+
+.confirm-dialog__hint {
+  font-family: var(--font-body);
+  font-size: 0.95vw;
+  color: var(--warn);
+  text-align: center;
+  margin: 0 0 var(--space-md);
+  min-height: 1.2vw;       /* メッセージ有無で layout shift しない */
+  font-style: italic;
+}
+
+.confirm-dialog__hint:empty {
+  visibility: hidden;
+}
+
+.confirm-dialog__actions--apply {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.confirm-dialog__actions--apply .btn {
+  min-width: 12vw;
+}
+
+.confirm-dialog__actions--apply .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ===== STEP 6.11: REENTRY / ADDON 行は 0 のとき非表示、0→1 でフェードイン =====
+   visibility: hidden で領域占有のみ → layout shift しない。
+   transform: scale は禁止のため filter: blur で「ぼわーん」感を表現。 */
+.stat-row--reentry,
+.stat-row--addon {
+  visibility: hidden;
+}
+
+.stat-row--reentry.is-visible,
+.stat-row--addon.is-visible {
+  visibility: visible;
+}
+
+@keyframes fade-in-soft {
+  0%   { opacity: 0; filter: blur(4px); }
+  60%  { opacity: 1; filter: blur(1px); }
+  100% { opacity: 1; filter: blur(0); }
+}
+
+.stat-row--reentry.is-just-revealed,
+.stat-row--addon.is-just-revealed {
+  animation: fade-in-soft 0.6s ease-out;
+}
+
+/* ===== STEP 6.9 / 6.10: 特殊配布行（メイン画面 PLAYERS カード下） =====
+   enabled かつ appliedCount > 0 のときのみ visibility: visible。
+   常時 min-height で領域占有 → layout shift 防止。
+   STEP 6.10: 1行に固定（折返し禁止、はみ出しは ellipsis で省略）。
+              文字数増による横はみ出しは clamp() による font-size 自動縮小で吸収。 */
+.special-stack-row {
+  visibility: hidden;
+  min-height: 1.4vh;
+  /* clamp(下限, 通常, 上限) — 通常は 0.95vw、長文時に右カラム幅へ収まるよう自動縮小 */
+  font-size: clamp(0.7vw, 0.95vw, 1vw);
+  color: var(--cyan);
+  letter-spacing: 0.04em;
+  /* STEP 6.10: 1行強制 */
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.special-stack-row.is-visible {
+  visibility: visible;
+}
+
+/* 単一テキスト要素：折返し禁止＋はみ出し ellipsis
+   STEP 6.11: italic を削除（右端の斜体切れ対策で通常体に統一） */
+.special-stack-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--cyan-bright);
+  font-weight: 600;
+}
+
+/* ===== STEP 6.9: 「＋↓」ボタン（直下挿入）視認性向上 =====
+   既存の「＋」用 cyan tint（STEP 6.8）に加え、フォントサイズ少し小さく＋文字幅広めで「＋↓」が読める */
+.blinds-table__action-btn[data-action="insert"] {
+  font-weight: 700;
+  font-size: 0.85vw;          /* 「＋↓」2文字を 2.4vw 内に収める */
+  letter-spacing: -0.05em;
+  background: rgba(79, 195, 247, 0.10);
+  border-color: rgba(79, 195, 247, 0.4);
+  color: var(--cyan-bright);
+}
+
+.blinds-table__action-btn[data-action="insert"]:hover:not(:disabled) {
+  background: rgba(79, 195, 247, 0.28);
+  border-color: var(--cyan);
+  color: #FFFFFF;
+}
+
+/* 挿入直後の行 flash アニメーション（0.6s） */
+@keyframes flash-insert {
+  0%   { background-color: rgba(0, 200, 255, 0.40); }
+  100% { background-color: transparent; }
+}
+
+.blinds-table__row.level-row--just-inserted,
+.blinds-editor__table-wrap tr.level-row--just-inserted,
+tr.level-row--just-inserted {
+  animation: flash-insert 0.6s ease-out;
+}
+
+/* 行アクションのヒント文（テーブル直上） */
+.blinds-editor__row-action-hint {
+  margin: 0;
+  font-size: 0.85vw;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.blinds-editor__row-action-hint strong {
+  color: var(--cyan-bright);
+  font-style: normal;
+  letter-spacing: -0.02em;
+}
+
+/* ===== STEP 6.17: メインタイトル色ピッカー（プリセット8色＋カラーピッカー） ===== */
+.title-color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5vw;
+}
+
+.title-color-swatch {
+  width: 2vw;
+  height: 2vw;
+  min-width: 24px;
+  min-height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.15s, transform 0.1s;
+}
+
+.title-color-swatch:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.title-color-swatch.is-selected {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.4);
+}
+
+.title-color-custom {
+  width: 2.4vw;
+  height: 2vw;
+  min-width: 28px;
+  min-height: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}

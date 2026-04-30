@@ -1,0 +1,2589 @@
+[
+  {
+    "updatePageProperties": {
+      "objectId": "slide_03",
+      "pageProperties": {
+        "pageBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.047058823529411764,
+                "green": 0.09411764705882353,
+                "blue": 0.1607843137254902
+              }
+            }
+          }
+        }
+      },
+      "fields": "pageBackgroundFill"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_ovl",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 720,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 405,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_ovl",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.09019607843137255,
+                "green": 0.17647058823529413,
+                "blue": 0.27058823529411763
+              }
+            },
+            "alpha": 0.25
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_title",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 56,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 56,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_title",
+      "text": "このアプリでできること"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_title",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 28,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 1.0,
+              "green": 1.0,
+              "blue": 1.0
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_title",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_acc",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 80,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 3,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 124,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_acc",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_sub",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 102,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_sub",
+      "text": "ポーカートーナメント運営に必要な機能を 1 画面に集約"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_sub",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 12,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.5607843137254902,
+              "green": 0.6588235294117647,
+              "blue": 0.7450980392156863
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_sub",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b0_bar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 3,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 150,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b0_bar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b0_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 148,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b0_h",
+      "text": "ブラインドタイマー"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b0_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b0_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 110
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b0_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b0_t",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 167,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b0_t",
+      "text": "警告音 + スタート前カウント"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b0_t",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b0_t",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b0_t",
+      "shapeProperties": {
+        "contentAlignment": "TOP"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b1_bar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 3,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 192,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b1_bar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b1_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 190,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b1_h",
+      "text": "多彩なゲーム種対応"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b1_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b1_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 110
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b1_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b1_t",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 209,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b1_t",
+      "text": "NLH / PLO / 10-Game MIX / 自由記入"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b1_t",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b1_t",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b1_t",
+      "shapeProperties": {
+        "contentAlignment": "TOP"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b2_bar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 3,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 234,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b2_bar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b2_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 232,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b2_h",
+      "text": "複数大会並行 + 店名表示"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b2_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b2_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 110
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b2_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b2_t",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 251,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b2_t",
+      "text": "タブ切替・店名常時表示"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b2_t",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b2_t",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b2_t",
+      "shapeProperties": {
+        "contentAlignment": "TOP"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b3_bar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 3,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 276,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b3_bar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b3_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 274,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b3_h",
+      "text": "賞金プール / PRIZE 設定"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b3_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b3_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 110
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b3_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b3_t",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 293,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b3_t",
+      "text": "自動計算 + 順位別ペイアウト"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b3_t",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b3_t",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b3_t",
+      "shapeProperties": {
+        "contentAlignment": "TOP"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b4_bar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 3,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 318,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b4_bar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b4_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 316,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b4_h",
+      "text": "+スタック対応"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b4_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b4_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 110
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b4_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b4_t",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 74,
+          "translateY": 335,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b4_t",
+      "text": "リエントリー / アドオン / リバイ"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b4_t",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b4_t",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b4_t",
+      "shapeProperties": {
+        "contentAlignment": "TOP"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b5_bar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 3,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 256,
+          "translateY": 150,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b5_bar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b5_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 266,
+          "translateY": 148,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b5_h",
+      "text": "背景 8 種 + カスタム画像"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b5_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b5_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 110
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b5_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b5_t",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 266,
+          "translateY": 167,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b5_t",
+      "text": "暗さ 3 段階で視認性確保"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b5_t",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b5_t",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b5_t",
+      "shapeProperties": {
+        "contentAlignment": "TOP"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b6_bar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 3,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 256,
+          "translateY": 192,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b6_bar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b6_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 266,
+          "translateY": 190,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b6_h",
+      "text": "休憩中スライドショー"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b6_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b6_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 110
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b6_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b6_t",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 266,
+          "translateY": 209,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b6_t",
+      "text": "30 秒遅延 / 1 分前自動復帰"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b6_t",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b6_t",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b6_t",
+      "shapeProperties": {
+        "contentAlignment": "TOP"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b7_bar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 3,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 256,
+          "translateY": 234,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b7_bar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b7_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 266,
+          "translateY": 232,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b7_h",
+      "text": "テロップ + サウンド選択"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b7_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b7_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 110
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b7_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b7_t",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 266,
+          "translateY": 251,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b7_t",
+      "text": "流れる文字 / カウント音試聴"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b7_t",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b7_t",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b7_t",
+      "shapeProperties": {
+        "contentAlignment": "TOP"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b8_bar",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 3,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 36,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 256,
+          "translateY": 276,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b8_bar",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b8_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 18,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 266,
+          "translateY": 274,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b8_h",
+      "text": "PC 間データ移行"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b8_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 11,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b8_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 110
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b8_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_b8_t",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 174,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 266,
+          "translateY": 293,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_b8_t",
+      "text": "エクスポート / インポート対応"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_b8_t",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_b8_t",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_b8_t",
+      "shapeProperties": {
+        "contentAlignment": "TOP"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_imframe",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 212,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 121,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 448,
+          "translateY": 148,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_imframe",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            },
+            "alpha": 0.5
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createImage": {
+      "objectId": "s03_img",
+      "url": "https://drive.google.com/uc?id=1-ezrzWa_AnF0Fyg3Eegi78MdcfLlDA57",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 208,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 117,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 450,
+          "translateY": 150,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_imcap",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 212,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 14,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 448,
+          "translateY": 270,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_imcap",
+      "text": "メイン画面 — テレビ全画面表示推奨"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_imcap",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 8,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.5607843137254902,
+              "green": 0.6588235294117647,
+              "blue": 0.7450980392156863
+            }
+          }
+        },
+        "bold": false,
+        "italic": true
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_imcap",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_tl",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 14,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 360,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_tl",
+      "text": "テレビに映してそのまま運営できる、無料のオフラインアプリ。"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_tl",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_tl",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_fdiv",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 0.5,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 376,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s03_fdiv",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_fl",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 400,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 16,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 382,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_fl",
+      "text": "PokerTimerPLUS+ v1.3.0"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_fl",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 9,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.35294117647058826,
+              "green": 0.47843137254901963,
+              "blue": 0.5803921568627451
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_fl",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s03_fp",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 60,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 16,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 596,
+          "translateY": 382,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s03_fp",
+      "text": "03 / 11"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s03_fp",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 9,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.35294117647058826,
+              "green": 0.47843137254901963,
+              "blue": 0.5803921568627451
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s03_fp",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "END",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createImage": {
+      "objectId": "plus2_logo_03",
+      "url": "https://drive.google.com/uc?id=12S6HkIC_v-ZaDgkHpVQzhAs21eYo83i6",
+      "elementProperties": {
+        "pageObjectId": "slide_03",
+        "size": {
+          "width": {
+            "magnitude": 50,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 35,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 640,
+          "translateY": 340,
+          "unit": "PT"
+        }
+      }
+    }
+  }
+]

@@ -1,0 +1,24 @@
+{
+  "id": "shortdeck-regular",
+  "name": "Short Deck 標準",
+  "structureType": "SHORT_DECK",
+  "levels": [
+    { "level": 1,  "ante": 100,    "buttonBlind": 100,    "durationMinutes": 20, "isBreak": false },
+    { "level": 2,  "ante": 200,    "buttonBlind": 200,    "durationMinutes": 20, "isBreak": false },
+    { "level": 3,  "ante": 300,    "buttonBlind": 300,    "durationMinutes": 20, "isBreak": false },
+    { "level": 4,  "ante": 500,    "buttonBlind": 500,    "durationMinutes": 20, "isBreak": false },
+    { "level": null, "durationMinutes": 10, "isBreak": true, "label": "休憩" },
+    { "level": 5,  "ante": 700,    "buttonBlind": 700,    "durationMinutes": 20, "isBreak": false },
+    { "level": 6,  "ante": 1000,   "buttonBlind": 1000,   "durationMinutes": 20, "isBreak": false },
+    { "level": 7,  "ante": 1500,   "buttonBlind": 1500,   "durationMinutes": 20, "isBreak": false },
+    { "level": 8,  "ante": 2000,   "buttonBlind": 2000,   "durationMinutes": 20, "isBreak": false },
+    { "level": null, "durationMinutes": 10, "isBreak": true, "label": "休憩" },
+    { "level": 9,  "ante": 3000,   "buttonBlind": 3000,   "durationMinutes": 15, "isBreak": false },
+    { "level": 10, "ante": 5000,   "buttonBlind": 5000,   "durationMinutes": 15, "isBreak": false },
+    { "level": 11, "ante": 7000,   "buttonBlind": 7000,   "durationMinutes": 15, "isBreak": false },
+    { "level": 12, "ante": 10000,  "buttonBlind": 10000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 13, "ante": 15000,  "buttonBlind": 15000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 14, "ante": 20000,  "buttonBlind": 20000,  "durationMinutes": 15, "isBreak": false },
+    { "level": 15, "ante": 30000,  "buttonBlind": 30000,  "durationMinutes": 15, "isBreak": false }
+  ]
+}

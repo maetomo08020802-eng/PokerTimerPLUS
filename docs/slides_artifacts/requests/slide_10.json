@@ -1,0 +1,3219 @@
+[
+  {
+    "updatePageProperties": {
+      "objectId": "slide_10",
+      "pageProperties": {
+        "pageBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.047058823529411764,
+                "green": 0.09411764705882353,
+                "blue": 0.1607843137254902
+              }
+            }
+          }
+        }
+      },
+      "fields": "pageBackgroundFill"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_ovl",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 720,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 405,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 0,
+          "translateY": 0,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_ovl",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.09019607843137255,
+                "green": 0.17647058823529413,
+                "blue": 0.27058823529411763
+              }
+            },
+            "alpha": 0.25
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_title",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 56,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 56,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_title",
+      "text": "ショートカットキー一覧"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_title",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 28,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 1.0,
+              "green": 1.0,
+              "blue": 1.0
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_title",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 120
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_acc",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 80,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 3,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 124,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_acc",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_sub",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 22,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 102,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_sub",
+      "text": "マウスなしでテレビの前から運営できる"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_sub",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 12,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.5607843137254902,
+              "green": 0.6588235294117647,
+              "blue": 0.7450980392156863
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_sub",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_card",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 308,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 232,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 136,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_card",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.09019607843137255,
+                "green": 0.17647058823529413,
+                "blue": 0.27058823529411763
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_top",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 308,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 3,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 136,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_top",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 280,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 24,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 78,
+          "translateY": 144,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_h",
+      "text": "プレイヤー管理"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 13,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_k0",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 78,
+          "translateY": 176,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k0",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_k0",
+      "text": "↑"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_k0",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_k0",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k0",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_d0",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 184,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 174,
+          "translateY": 176,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_d0",
+      "text": "新規エントリー追加"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_d0",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_d0",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_d0",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_k1",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 78,
+          "translateY": 200,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k1",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_k1",
+      "text": "Shift + ↑"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_k1",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_k1",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k1",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_d1",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 184,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 174,
+          "translateY": 200,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_d1",
+      "text": "エントリー取消"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_d1",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_d1",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_d1",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_k2",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 78,
+          "translateY": 224,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k2",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_k2",
+      "text": "↓"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_k2",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_k2",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k2",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_d2",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 184,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 174,
+          "translateY": 224,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_d2",
+      "text": "脱落"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_d2",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_d2",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_d2",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_k3",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 78,
+          "translateY": 248,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k3",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_k3",
+      "text": "Shift + ↓"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_k3",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_k3",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k3",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_d3",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 184,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 174,
+          "translateY": 248,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_d3",
+      "text": "復活"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_d3",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_d3",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_d3",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_k4",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 78,
+          "translateY": 272,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k4",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_k4",
+      "text": "Ctrl + R"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_k4",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_k4",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k4",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_d4",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 184,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 174,
+          "translateY": 272,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_d4",
+      "text": "リエントリー ±"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_d4",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_d4",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_d4",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_k5",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 78,
+          "translateY": 296,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k5",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_k5",
+      "text": "Ctrl + A"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_k5",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_k5",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_k5",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_p_d5",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 184,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 174,
+          "translateY": 296,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_p_d5",
+      "text": "アドオン ±"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_p_d5",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_p_d5",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_p_d5",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_t_card",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 268,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 116,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 388,
+          "translateY": 136,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_card",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.09019607843137255,
+                "green": 0.17647058823529413,
+                "blue": 0.27058823529411763
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_t_top",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 268,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 3,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 388,
+          "translateY": 136,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_top",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_t_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 240,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 24,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 402,
+          "translateY": 144,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_t_h",
+      "text": "タイマー操作"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_t_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 13,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_t_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_t_k0",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 402,
+          "translateY": 176,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_k0",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_t_k0",
+      "text": "Space"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_t_k0",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_t_k0",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_k0",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_t_d0",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 144,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 498,
+          "translateY": 176,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_t_d0",
+      "text": "スタート / 一時停止"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_t_d0",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_t_d0",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_d0",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_t_k1",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 402,
+          "translateY": 200,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_k1",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_t_k1",
+      "text": "["
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_t_k1",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_t_k1",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_k1",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_t_d1",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 144,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 498,
+          "translateY": 200,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_t_d1",
+      "text": "30 秒戻る"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_t_d1",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_t_d1",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_d1",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_t_k2",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 402,
+          "translateY": 224,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_k2",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_t_k2",
+      "text": "]"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_t_k2",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_t_k2",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_k2",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_t_d2",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 144,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 498,
+          "translateY": 224,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_t_d2",
+      "text": "30 秒進む"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_t_d2",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_t_d2",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_t_d2",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_s_card",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 268,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 116,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 388,
+          "translateY": 256,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_card",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.09019607843137255,
+                "green": 0.17647058823529413,
+                "blue": 0.27058823529411763
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_s_top",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 268,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 3,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 388,
+          "translateY": 256,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_top",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.8313725490196079,
+                "green": 0.6588235294117647,
+                "blue": 0.2627450980392157
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_s_h",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 240,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 24,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 402,
+          "translateY": 264,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_s_h",
+      "text": "画面操作"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_s_h",
+      "style": {
+        "fontFamily": "Noto Sans JP",
+        "fontSize": {
+          "magnitude": 13,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.9568627450980393,
+              "blue": 0.9725490196078431
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_s_h",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_h",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_s_k0",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 402,
+          "translateY": 296,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_k0",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_s_k0",
+      "text": "F11"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_s_k0",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_s_k0",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_k0",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_s_d0",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 144,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 498,
+          "translateY": 296,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_s_d0",
+      "text": "フルスクリーン切替"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_s_d0",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_s_d0",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_d0",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_s_k1",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 402,
+          "translateY": 320,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_k1",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_s_k1",
+      "text": "F12"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_s_k1",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_s_k1",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_k1",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_s_d1",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 144,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 498,
+          "translateY": 320,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_s_d1",
+      "text": "開発者ツール"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_s_d1",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_s_d1",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_d1",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_s_k2",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 86,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 402,
+          "translateY": 344,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_k2",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_s_k2",
+      "text": "Ctrl + Q"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_s_k2",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.9411764705882353,
+              "green": 0.7529411764705882,
+              "blue": 0.3764705882352941
+            }
+          }
+        },
+        "bold": true,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_s_k2",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "CENTER",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_k2",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_s_d2",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 144,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 20,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 498,
+          "translateY": 344,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_s_d2",
+      "text": "アプリ終了"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_s_d2",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 10,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.7843137254901961,
+              "green": 0.8470588235294118,
+              "blue": 0.9098039215686274
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_s_d2",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 100
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_s_d2",
+      "shapeProperties": {
+        "contentAlignment": "MIDDLE"
+      },
+      "fields": "contentAlignment"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_fdiv",
+      "shapeType": "RECTANGLE",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 592,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 0.5,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 376,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "updateShapeProperties": {
+      "objectId": "s10_fdiv",
+      "shapeProperties": {
+        "shapeBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red": 0.11764705882352941,
+                "green": 0.22745098039215686,
+                "blue": 0.33725490196078434
+              }
+            }
+          }
+        },
+        "outline": {
+          "propertyState": "NOT_RENDERED"
+        }
+      },
+      "fields": "shapeBackgroundFill,outline"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_fl",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 400,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 16,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 64,
+          "translateY": 382,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_fl",
+      "text": "PokerTimerPLUS+ v1.3.0"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_fl",
+      "style": {
+        "fontFamily": "BIZ UDPGothic",
+        "fontSize": {
+          "magnitude": 9,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.35294117647058826,
+              "green": 0.47843137254901963,
+              "blue": 0.5803921568627451
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_fl",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "START",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createShape": {
+      "objectId": "s10_fp",
+      "shapeType": "TEXT_BOX",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 60,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 16,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 596,
+          "translateY": 382,
+          "unit": "PT"
+        }
+      }
+    }
+  },
+  {
+    "insertText": {
+      "objectId": "s10_fp",
+      "text": "10 / 11"
+    }
+  },
+  {
+    "updateTextStyle": {
+      "objectId": "s10_fp",
+      "style": {
+        "fontFamily": "Roboto",
+        "fontSize": {
+          "magnitude": 9,
+          "unit": "PT"
+        },
+        "foregroundColor": {
+          "opaqueColor": {
+            "rgbColor": {
+              "red": 0.35294117647058826,
+              "green": 0.47843137254901963,
+              "blue": 0.5803921568627451
+            }
+          }
+        },
+        "bold": false,
+        "italic": false
+      },
+      "fields": "fontFamily,fontSize,foregroundColor,bold,italic",
+      "textRange": {
+        "type": "ALL"
+      }
+    }
+  },
+  {
+    "updateParagraphStyle": {
+      "objectId": "s10_fp",
+      "textRange": {
+        "type": "ALL"
+      },
+      "style": {
+        "alignment": "END",
+        "lineSpacing": 140
+      },
+      "fields": "alignment,lineSpacing"
+    }
+  },
+  {
+    "createImage": {
+      "objectId": "plus2_logo_10",
+      "url": "https://drive.google.com/uc?id=12S6HkIC_v-ZaDgkHpVQzhAs21eYo83i6",
+      "elementProperties": {
+        "pageObjectId": "slide_10",
+        "size": {
+          "width": {
+            "magnitude": 50,
+            "unit": "PT"
+          },
+          "height": {
+            "magnitude": 35,
+            "unit": "PT"
+          }
+        },
+        "transform": {
+          "scaleX": 1,
+          "scaleY": 1,
+          "translateX": 640,
+          "translateY": 340,
+          "unit": "PT"
+        }
+      }
+    }
+  }
+]
