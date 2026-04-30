@@ -1,299 +1,251 @@
-# v2.0.0 STEP 2: 2 画面間の状態同期【承認①対象】
+# v2.0.0 STEP 3: PC 側 UI の分離（役割ガード方式）
 
 ## 状況
-v2.0.0 STEP 1 完了済（`feature/v2.0.0` ブランチ作成、ウィンドウ生成 2 関数分離、`additionalArguments` で role 渡し、`data-role` 属性付与、CSS バッジ最小サンプル、build.files に `!scripts/**/*` 追加、138 テスト全 PASS、push 完了 / PR 未作成）。
-本 STEP 2 から **2 画面間の状態同期（コア技術）** を実装する。完了時に承認①の PR を作成する。
+v2.0.0 STEP 0+1+2 完了 + **承認①の PR #1 マージ済**（main に反映、2026-05-01）。
+本 STEP 3 は **役割ガードによる UI 分離**。CC の STEP 0 調査結果（v2-design.md §5 リスク 1）に従い、別ファイル分離ではなく **既存 renderer.js 流用 + 役割フラグでガード** 方式を採用。
 
 参照ドキュメント:
-- `docs/v2-design.md` §3（状態同期に必要な情報の最小セット 9 種類）
-- `skills/v2-dual-screen.md` §2（状態同期の精度基準）+ §1.3（画面間通信の節度）+ §5（禁止事項）+ §7（実装上のヒント）
-- **`skills/cc-operation-pitfalls.md`（公式ドキュメント準拠の絶対遵守事項、本フェーズ開始時に必ず Read）** ★追加
+- `skills/v2-dual-screen.md` §1.1（役割分離原則）+ §5（禁止事項）
+- `skills/cc-operation-pitfalls.md`（公式準拠の絶対遵守事項、本フェーズ開始時に必ず Read）
+- `docs/v2-design.md` §5 リスク 1（renderer.js 6106 行の役割分離方針 = 流用方式）
 
 ---
 
 ## ⚠️ スコープ制限（厳守）
 
-**本 STEP 2 で実行するのは以下のみ:**
-1. `src/main.js` に状態キャッシュ + broadcast 関数追加（main プロセスを単一の真実源とする）
-2. `src/main.js` に新規 IPC ハンドラ群追加: `dual:state-sync` / `dual:operator-action`（双方向に必要な最小チャンネル）
-3. `src/preload.js` に `window.api.dual.*` グループ追加（`subscribeStateSync` / `notifyOperatorAction` 等）
-4. `src/renderer/dual-sync.js`（新規）作成、ホール側で main からの state を受信 → 既存 `state.js` の `setState` で適用
-5. `src/renderer/renderer.js` の起動部に role 判定追加: `role === 'hall'` なら dual-sync 起動、`role === 'operator'` なら既存ロジックに加えて main への operator-action 通知、`role === 'operator-solo'` なら既存ロジックそのまま
-6. 既存 138 テスト全 PASS 維持
-7. v2 専用テスト最小追加（`tests/v2-dual-sync.test.js` 新規、IPC ハンドラ存在 / subscribe ロジック / 差分送信パターンの静的解析、5〜8 件程度）
-8. STEP 2 完了でコミット & push、**承認①の PR を `feature/v2.0.0` → `main` で作成**
+**本 STEP 3 で実行するのは以下のみ:**
+1. `src/renderer/style.css` の `[data-role]` セレクタを本格分離に発展
+   - `role=hall`: 操作 UI（設定ダイアログ、操作ボタン、編集 UI 等）を完全 hidden
+   - `role=operator`: 大きい表示要素（タイマー大表示、ブラインドカード等）を hidden、最低限の状態把握用ミニ表示を組み込み
+   - `role=operator-solo`: **すべて ON（v1.3.0 完全同等）**
+2. `src/renderer/renderer.js` の主要 handler 関数冒頭に role ガード追加（`if (window.appRole === 'hall') return;`）
+3. STEP 1 で追加した視認用バッジ（🖥 HALL / 💻 OPERATOR）を「開発時のみ表示 or 完全削除」に変更（CC 判断）
+4. operator → main への `notifyOperatorAction` 通知を有効化（STEP 2 で作った枠組みを実装で使う、主要操作のみ）
+5. 既存 138 + STEP 2 新規 8 = 146 テスト全 PASS 維持
+6. v2 専用テスト追加（`tests/v2-role-guard.test.js` 新規、5〜8 件、静的解析ベース）
 
 **禁止事項:**
-- ホール側 / PC 側の UI 完全分離（STEP 3 で行う、本 STEP では同期の仕組みのみ）
-- モニター選択ダイアログ（STEP 4）
 - HDMI 抜き差し追従（STEP 5）
-- AudioContext 関連の変更（STEP 5、`docs/v2-design.md` §7 警告事項）
-- 単画面モード（`operator-solo`）の挙動変更（v1.3.0 と完全同等を維持）
-- 既存テストの skip / コメントアウト / 無効化
+- モニター選択ダイアログ（STEP 4）
+- AudioContext 関連変更（STEP 5）
+- **単画面モード（operator-solo）の挙動変更**（v1.3.0 完全同等を維持）
+- 既存 138 テストの skip / 無効化
 - 致命バグ保護 5 件への影響変更
+- **並列 sub-agent / Task は最大 3 体まで**（公式 Agent Teams 推奨、`skills/cc-operation-pitfalls.md` §1.1）
+- **「念のため」コード追加禁止**（`skills/cc-operation-pitfalls.md` §1.2）
 - 「ついでに既存リファクタ」一切禁止
-- ポーリング（定期的な全状態取得）禁止、必ずイベント駆動
-- ホール側からの操作リクエスト送信禁止（hall は purely consumer、ただし STEP 3 で確定）
 - CSP `script-src 'self'` 不変
-- **並列 sub-agent / Task は最大 3 体まで**（公式 Agent Teams 推奨、skills/cc-operation-pitfalls.md §1.1）
-- **「念のため」コード追加禁止**（skills/cc-operation-pitfalls.md §1.2）
-- **同じバグで 2 回修正試行する前に context 肥大化を疑う**（skills/cc-operation-pitfalls.md §1.4）
+- ポーリング禁止、必ずイベント駆動
+- ホール側 renderer.js から `index.html` を別ファイル化しない（v2-design.md §5 リスク 1 の方針）
 
 ---
 
-## Fix 1: main.js に状態キャッシュ + broadcast 関数追加
+## Fix 1: `src/renderer/style.css` の `[data-role]` セレクタ本格分離
 
-main プロセスを single source of truth とする最小実装。
+STEP 1 で追加した最小サンプル（バッジのみ）を発展させ、本格的な UI 分離を実装。
 
-```js
-// 状態キャッシュ（v2 で hall に broadcast する用、operator-solo モードでは未使用）
-const _dualStateCache = {
-  timerState: null,        // { status, currentLevelIndex, ... }
-  structure: null,         // { levels: [...] }
-  displaySettings: null,
-  marqueeSettings: null,
-  tournamentRuntime: null,
-  tournamentBasics: null,  // { name, subtitle, titleColor, venueName, blindPresetId }
-  audioSettings: null,
-  logoUrl: null,
-};
+```css
+/* === v2.0.0 STEP 3: 役割別 UI 分離 === */
 
-function _broadcastDualState(channel, payload) {
-  if (!_hallWindow || _hallWindow.isDestroyed()) return;
-  _hallWindow.webContents.send(channel, payload);
+/* === role=hall: 表示専用、操作 UI 完全 hidden === */
+[data-role="hall"] .settings-button,
+[data-role="hall"] .tournament-controls,
+[data-role="hall"] .blinds-editor-trigger,
+[data-role="hall"] .form-dialog,           /* 設定ダイアログ */
+[data-role="hall"] .preset-controls,
+[data-role="hall"] .reset-button,
+[data-role="hall"] .start-button,
+[data-role="hall"] .pause-button,
+[data-role="hall"] .player-edit-controls,
+/* ★ 実際の class 名は CC が renderer 側を grep で特定して列挙 */
+{
+  display: none !important;
 }
 
-// 既存の tournaments:setTimerState / setDisplaySettings 等のハンドラ末尾に
-// _broadcastDualState('dual:state-sync', { kind: 'timerState', value: ... }) を追加
-```
-
-ポイント:
-- `_hallWindow` が無い（単画面モード）場合は no-op、`operator-solo` の挙動に影響しない
-- 既存 IPC ハンドラの payload 構造には**一切触らない**（致命バグ保護 C.2.7-D の `timerState` destructure 除外を踏襲）
-- broadcast は差分のみ（kind フィールドで「何が変わったか」を伝える）、全状態を毎回送信しない
-
----
-
-## Fix 2: main.js に新規 IPC ハンドラ追加
-
-```js
-// hall 起動時の初期同期: 全キャッシュを 1 回だけ送る
-ipcMain.handle('dual:state-sync-init', async () => {
-  return { ..._dualStateCache };  // hall 側は受信して setState で一括適用
-});
-
-// operator → main → hall の操作リクエスト中継
-ipcMain.handle('dual:operator-action', async (event, { action, payload }) => {
-  // 既存ハンドラに転送
-  // 例: action === 'timer:start' なら既存の timer:start ハンドラを呼ぶ
-  //     action === 'preset:apply' なら既存の preset:apply ハンドラを呼ぶ
-  // 既存ロジックを変更せず、薄い wrapper として実装
-  return await _routeOperatorAction(action, payload);
-});
-```
-
-`_routeOperatorAction` は既存の IPC handler を呼ぶ薄い router。既存ハンドラ自体には触らない。
-
----
-
-## Fix 3: preload.js に `window.api.dual.*` 追加
-
-```js
-// 既存 contextBridge.exposeInMainWorld('api', { ... }) の中に追加
-contextBridge.exposeInMainWorld('api', {
-  // ... 既存の api 群 ...
-  dual: {
-    subscribeStateSync: (callback) => {
-      ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
-    },
-    fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
-    notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload }),
-  },
-});
-```
-
----
-
-## Fix 4: src/renderer/dual-sync.js 新規作成
-
-ホール側で main からの state を受信 → 既存 state.js の setState で適用。
-
-```js
-// dual-sync.js（新規、~100 行想定）
-import { setState, getState } from './state.js';
-
-export async function initDualSyncForHall() {
-  if (window.appRole !== 'hall') return;  // 安全側ガード
-
-  // 初期状態を 1 回だけ取得
-  const initial = await window.api.dual.fetchInitialState();
-  if (initial.timerState)  setState({ timerState: initial.timerState });
-  if (initial.structure)    setState({ structure: initial.structure });
-  // ... 9 種類すべて適用 ...
-
-  // 以降の差分を購読
-  window.api.dual.subscribeStateSync((diff) => {
-    if (diff.kind === 'timerState')         setState({ timerState: diff.value });
-    else if (diff.kind === 'structure')      setState({ structure: diff.value });
-    // ... 9 種類すべて分岐 ...
-  });
+/* === role=operator: 操作専用、大表示 hidden、ミニ状態表示残す === */
+[data-role="operator"] .timer-display-large,
+[data-role="operator"] .blinds-card,
+[data-role="operator"] .next-blinds-card,
+[data-role="operator"] .marquee,
+[data-role="operator"] .pip-timer,
+[data-role="operator"] .slideshow-stage,
+[data-role="operator"] .background-image-overlay,
+/* ★ 実際の class 名は CC が renderer 側を grep で特定 */
+{
+  display: none !important;
 }
+
+/* operator 側ミニ状態表示（最低限の状況把握用、操作 UI に組み込み） */
+[data-role="operator"] .operator-status-bar {
+  display: flex;   /* 既存に無ければ新規追加 */
+  /* レイアウト詳細は CC 判断、画面上部に小さく「Level X / 残時間 / 状態」程度 */
+}
+
+/* === role=operator-solo: 全部 ON、v1.3.0 完全同等 === */
+[data-role="operator-solo"] .operator-status-bar {
+  display: none;   /* solo モードでは大表示があるので mini 不要 */
+}
+/* それ以外は何も変えない（既存 v1.3.0 のレイアウトそのまま）*/
 ```
 
 注意:
-- ホール側はローカルでの timer.js による performance.now ベース計算で「±100ms 以内」を達成（v2-dual-screen.md §2.1）
-- main からは「基準時刻 + 状態フラグ」のみ送る、毎秒の timer 値を送らない（リスク 2 対処）
-- 既存の state.js / timer.js は無変更、上に薄い同期レイヤを乗せるだけ
+- 実際の class 名・id は CC が renderer.js / index.html を grep で特定して列挙
+- **operator-solo の見た目は v1.3.0 と完全同等**を維持（カード幅 54vw / 46vw、Barlow Condensed、すべて不変）
+- `<dialog>` 要素自体に `display: flex` 等を当ててはいけない（feedback_dialog_no_flex 不変条件）
+- ホール側でダイアログを完全 hidden にするのは `display: none` で OK
 
 ---
 
-## Fix 5: renderer.js の起動部に role 判定追加
+## Fix 2: `src/renderer/renderer.js` の handler 関数に role ガード
 
-renderer.js の最上部 or DOMContentLoaded ハンドラの中で:
+主要 handler 関数の冒頭に role ガードを追加:
 
 ```js
-const role = window.appRole || 'operator-solo';
-
-if (role === 'hall') {
-  // ホール側: dual-sync 起動 + 既存の表示更新ロジックは動かす（state.js の subscribe 経由）
-  // 操作系イベントリスナは登録しない（STEP 3 で role ガードを追加するが、本 STEP は最小実装）
-  await initDualSyncForHall();
-  initDisplayLogic();  // 既存の renderTimer / applyTournament 等を起動
-} else if (role === 'operator') {
-  // PC 側: 操作 UI 起動 + main への operator-action 通知経路を有効化
-  // タイマー進行は main で実行されるので、PC 側の表示用ローカル timer は無効化（STEP 3 で完全分離）
-  initOperatorLogic();
-} else {
-  // operator-solo（単画面モード）: v1.3.0 と完全同等
-  initSoloLogic();  // 既存のロジックそのまま
+function someHandler(...) {
+  if (window.appRole === 'hall') return;  // ホール側は操作不可
+  // 既存ロジック
 }
 ```
 
-実際の関数名・分岐実装は CC 判断、ただし「**operator-solo は v1.3.0 と完全同じ動作**」が絶対条件。
+**ガード対象（CC が grep で該当箇所を特定して追加）:**
+
+操作系（hall で動作してはいけない）:
+- `handleTournamentNew` / `handleTournamentDuplicate` / `handleTournamentDelete`
+- `handlePresetApply` / `handlePresetSave` / `handlePresetDiscard` / `handlePresetDuplicate`
+- `handleResetButton` / `_handleResetImpl`
+- `handleStartButton` / `handlePauseButton` / `handleNextLevelButton`
+- `showSettingsDialog` / `closeSettingsDialog`
+- `showApplyOnlyDialog` / `showApplyModeDialog`
+- `handleAddPlayer` / `handleEliminatePlayer` / `handleAddOn` / `handleReentry`
+- 編集系: `handleBlindsTableEdit` / `handleMarqueeEdit` / `handleDisplaySettingsEdit`
+
+表示更新系（両側で動作 OK、ガード不要）:
+- `renderTimer` / `renderBlindsTable` / `applyTournament` / `renderTournamentList` 等
+- これらは hall 側で表示更新のため必須
+
+**重要**:
+- 全 handler に機械的に追加するのは禁止（スコープ越え）
+- 上記の「操作系」のみガード追加、表示更新系は触らない
+- ガード追加箇所は CC_REPORT に列挙
 
 ---
 
-## Fix 6: 既存 138 テスト全 PASS 維持
+## Fix 3: STEP 1 のバッジを開発時のみ表示 or 削除
+
+STEP 1 で追加した `[data-role="hall"] body::before { content: "🖥 HALL"; }` 等のバッジ:
+- 本番運用では不要（お客様に見える可能性、運営感を損なう）
+- 推奨対応: **完全削除**（最もシンプル）
+- 別案: `process.env.NODE_ENV === 'development'` で分岐、本番ビルドで除外
+
+CC 判断で OK、CC_REPORT で「どちらを採用したか」を明記。
+
+---
+
+## Fix 4: operator → main の operator-action 通知有効化
+
+STEP 2 で作った `window.api.dual.notifyOperatorAction(action, payload)` を**実際に呼ぶ**。
+
+対象（最小限、主要操作のみ）:
+- タイマー start / pause / next-level
+- preset apply
+- tournament setActive
+
+**operator-solo モードでは呼ばない**（main 経由 broadcast の必要なし、直接 timer.js / state.js を操作）。`role === 'operator'` のみで通知有効化。
+
+実装パターン:
+```js
+async function handleStartButton() {
+  if (window.appRole === 'hall') return;
+  if (window.appRole === 'operator') {
+    await window.api.dual.notifyOperatorAction('timer:start', { ... });
+  } else {
+    // operator-solo: 既存ロジックそのまま
+    await timerStart();
+  }
+}
+```
+
+---
+
+## Fix 5: v2 専用テスト追加
+
+`tests/v2-role-guard.test.js`（新規、5〜8 件）:
+- T1: `style.css` に `[data-role="hall"]` / `[data-role="operator"]` / `[data-role="operator-solo"]` のセレクタが存在
+- T2: `renderer.js` の主要 handler 関数（5 箇所以上指定）冒頭に `window.appRole === 'hall'` ガードが存在
+- T3: バッジセレクタが本番ビルドで生成されない（削除 or 開発モード分岐）
+- T4: `operator-solo` モードで全 UI 要素が表示される（hidden が当たっていない）
+- T5: `notifyOperatorAction` の呼出が `role === 'operator'` 限定（条件分岐の存在）
+- T6: `<dialog>` 要素自体に `display: flex` / `flex-direction: column` / `overflow: hidden` が当たっていない（feedback_dialog_no_flex 静的担保）
+- T7: 致命バグ保護関連の関数（`resetBlindProgressOnly` / `ensureEditorEditableState`）が role ガードで誤って skip されていない（PC 側で動作必須）
+
+---
+
+## Fix 6: 138 + 8 + α テスト全 PASS 維持
 
 ```bash
 npm test
-# Summary: 138 passed / 0 failed を確認
+# Summary: 138 + 8 + N (>=5) = >=151 passed / 0 failed
 ```
 
 1 件でも FAIL したら**即停止**、CC_REPORT に「何が壊れたか」「致命バグ保護への影響有無」明記。
 
 ---
 
-## Fix 7: v2 専用テスト最小追加
-
-`tests/v2-dual-sync.test.js` を新規作成、静的解析ベース（既存パターン踏襲）。
-
-カバー対象（5〜8 件、STEP 6 でフル展開予定）:
-- T1: main.js に `_dualStateCache` / `_broadcastDualState` が定義されている
-- T2: main.js に `dual:state-sync-init` ハンドラが ipcMain.handle で登録されている
-- T3: main.js に `dual:operator-action` ハンドラが登録されている
-- T4: preload.js に `dual.subscribeStateSync` / `fetchInitialState` / `notifyOperatorAction` が含まれる
-- T5: dual-sync.js に `initDualSyncForHall` がエクスポートされている
-- T6: dual-sync.js が `window.appRole !== 'hall'` ガードを持つ
-- T7: renderer.js が `role === 'hall' / 'operator' / 'operator-solo'` の 3 分岐を持つ
-- T8: 既存 `timerState` destructure 除外（C.2.7-D Fix 3）の payload 構造に変更がない（既存テスト + 静的検査）
-
----
-
-## Fix 8: コミット & push & 承認①の PR 作成
+## Fix 7: コミット & push（PR はまだ作らない）
 
 ```bash
 git add -A
 git status
-git -c user.name="Yu Shitamachi" -c user.email="ymng2@icloud.com" commit -m "v2.0.0 STEP 2: 2 画面間の状態同期"
+git -c user.name="Yu Shitamachi" -c user.email="ymng2@icloud.com" commit -m "v2.0.0 STEP 3: PC 側 UI の分離（役割ガード方式）"
 git push origin feature/v2.0.0
 ```
 
-PR 作成（**承認①対象**）:
-
-```bash
-gh pr create \
-  --base main \
-  --head feature/v2.0.0 \
-  --title "v2.0.0 STEP 0+1+2: 2 画面対応（設計調査 + ホール側ウィンドウ + 状態同期）" \
-  --body "$(cat <<'EOF'
-## サマリ
-v2.0.0 大改修の最初の PR。STEP 0（設計調査）+ STEP 1（ホール側ウィンドウ最小骨格）+ STEP 2（2 画面間の状態同期）をまとめてマージ。
-
-## 完了 STEP
-- STEP 0: docs/v2-design.md / scripts/_probes/v2-probe.js
-- STEP 1: src/main.js のウィンドウ分離 / data-role バッジ / build.files 修正
-- STEP 2: 2 画面間の状態同期（main を真実源、hall は purely consumer、operator-solo は v1.3.0 と完全同等）
-
-## 動作確認
-- 単画面 PC: v1.3.0 と完全同じ動作（operator-solo モード）
-- 2 画面環境: PC 側で操作 → ホール側に ±100ms 以内で同期反映
-
-## 致命バグ保護
-- 5 件すべて完全維持（resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState / AudioContext resume / runtime 永続化）
-
-## 残作業
-- STEP 3: PC 側 UI の完全分離
-- STEP 4: モニター選択ダイアログ
-- STEP 5: HDMI 抜き差し追従【承認②】
-- STEP 6: テスト拡充
-- STEP 7: 最終検証 + version bump【承認③】
-EOF
-)"
-```
-
-PR URL を CC_REPORT に記載すること。
+**PR は作らない**。承認②（STEP 5 完了時）で STEP 3+4+5 を 1 つの PR にまとめる方針。
 
 ---
 
-## Fix 9: CC_REPORT.md（簡潔版）
+## Fix 8: CC_REPORT.md（公式準拠フォーマット）
 
-CC_REPORT.md を STEP 2 完了報告に書き換え:
-
-1. **サマリ**: 状態キャッシュ / IPC ハンドラ / preload API / dual-sync 起動 / role 分岐 / 138+α テスト全 PASS / PR 作成完了 + URL
-2. **主要変更点**: コード抜粋 5 行以内/件
-3. **致命バグ保護への影響評価**: 5 件すべて影響なしの確認（必須セクション）
-4. **並列起動した sub-agent / Task 数の報告**（0〜3 体は OK、4 体以上は警告 + 設計見直し提案）
-5. **構築士への質問**（あれば、なければ省略）
-6. **オーナー向け確認**:
-   - 単画面 PC で起動 → v1.3.0 と完全同じ動作（変化なし）
-   - 2 画面環境（あれば）→ PC 側で操作したら、ホール側に同期反映されるか
-   - PR の URL（前原さんがブラウザで開いてマージ操作）
+CC_REPORT.md を STEP 3 完了報告に書き換え:
+1. **サマリ**: CSS 分離 / role ガード追加箇所数 / バッジ対応 / operator-action 有効化 / テスト件数
+2. **修正ファイル**: 表形式
+3. **主要変更点**: コード抜粋 5 行以内/件
+4. **致命バグ保護への影響評価**: 5 件すべて「影響なし / 要注意 / 影響あり」明記（必須）
+5. **並列起動した sub-agent / Task 数**（0〜3 体は OK、4 体以上は警告 + 設計見直し提案）
+6. **構築士への質問**（あれば、なければ省略）
+7. **オーナー向け確認**:
+   - 単画面で起動 → v1.3.0 と完全同等の見た目・動作（変化なし）
+   - 2 画面で起動（HDMI あれば）→ ホール側に操作ボタン・設定ダイアログが**出ない**、PC 側に大きいタイマー表示が**出ない**（操作 UI のみ）
+   - PC 側で操作 → ホール側に反映される（STEP 2 の同期が役割ガード適用後も動く）
 
 ---
 
 ## 維持事項
 
-- 既存 138 テスト全 PASS 維持（+ v2 専用テスト最小 5〜8 件追加）
+- 既存 138 + STEP 2 新規 8 = 146 テスト全 PASS 維持（+ STEP 3 新規 5〜8 件追加）
 - **`operator-solo` モード（単画面）は v1.3.0 と完全同等**
-- 致命バグ保護 5 件すべて完全維持
-- カード幅 / Barlow Condensed / `<dialog>` flex 禁止
-- skills/v2-dual-screen.md「§5 禁止事項」全項目
+- 致命バグ保護 5 件すべて完全維持:
+  - `resetBlindProgressOnly`（C.2.7-A）
+  - `timerState` destructure 除外（C.2.7-D Fix 3）
+  - `ensureEditorEditableState` 4 重防御（C.1-A2 + C.1.2-bugfix + C.1.4-fix1）
+  - AudioContext resume in `_play()`（C.1.7、本 STEP では触らない）
+  - runtime 永続化 8 箇所（C.1.8）
+- カード幅 54vw / 46vw、Barlow Condensed 700、`<dialog>` flex 禁止
+- `skills/v2-dual-screen.md`「§5 禁止事項」全項目
+- `skills/cc-operation-pitfalls.md`「§1 絶対禁止事項」全項目
 - CSP `script-src 'self'` 不変
-- ポーリング禁止、イベント駆動
 
 ---
 
 ## 完了条件
 
-- [ ] `feature/v2.0.0` ブランチで STEP 2 のコミット作成
-- [ ] main.js に `_dualStateCache` + `_broadcastDualState` + `dual:state-sync-init` + `dual:operator-action`
-- [ ] preload.js に `window.api.dual.*` グループ
-- [ ] src/renderer/dual-sync.js（新規）作成
-- [ ] renderer.js に role 3 分岐（hall / operator / operator-solo）
-- [ ] tests/v2-dual-sync.test.js（新規）5〜8 件
-- [ ] `npm test` で **既存 138 + 新規 5〜8 件すべて PASS**
-- [ ] push 完了 + **承認①の PR 作成完了**（PR URL 取得）
-- [ ] CC_REPORT.md に PR URL 記載
+- [ ] `feature/v2.0.0` ブランチで STEP 3 のコミット作成 + push
+- [ ] `style.css` に role 別の本格 UI 分離セレクタ追加
+- [ ] `renderer.js` の主要操作系 handler 5 箇所以上に role ガード追加
+- [ ] バッジ本番除外（削除 or 開発モード分岐）
+- [ ] `notifyOperatorAction` を主要操作で有効化（`role === 'operator'` 限定）
+- [ ] `tests/v2-role-guard.test.js`（新規）5〜8 件
+- [ ] `npm test` で **既存 146 + 新規 5〜8 = >=151 件すべて PASS**
 - [ ] 致命バグ保護 5 件すべて影響なし確認
-
----
-
-## 承認①について
-
-CC が PR 作成完了したら、構築士が CC_REPORT を採点 → 前原さんに以下を案内:
-1. 単画面 PC での動作確認（v1.3.0 と同じか）
-2. 2 画面環境での同期動作確認（HDMI モニターあれば）
-3. PR の URL を開いて中身を確認 → マージ操作
-
-前原さんがマージ判断するまで STEP 3 には進まない。
+- [ ] 並列 sub-agent / Task 数を CC_REPORT で報告（4 体以上禁止）
+- [ ] CC_REPORT.md 完了報告（オーナー向け確認 3 項目記載）

@@ -58,6 +58,20 @@ import { initDualSyncForHall } from './dual-sync.js';
 
 console.log('PokerTimerPLUS+ 起動');
 
+// v2.0.0 STEP 3: operator モード（2 画面の PC 側）でのみ main に operator-action を通知する薄い wrapper。
+//   - operator-solo（単画面）では既存ロジックが直接 timer.js を動かすので通知不要 → no-op
+//   - hall では呼び出し元側で role ガード済 + ここでも安全側に no-op
+//   - operator は main 経由で hall に状態を伝播する経路を活性化（実 IPC は STEP 2 で確立済）
+function notifyOperatorActionIfNeeded(action, payload) {
+  if (typeof window === 'undefined') return;
+  if (window.appRole !== 'operator') return;
+  const dual = window.api && window.api.dual;
+  if (!dual || typeof dual.notifyOperatorAction !== 'function') return;
+  try {
+    dual.notifyOperatorAction(action, payload || {});
+  } catch (_) { /* 通知失敗は致命ではないので握り潰す（STEP 5 で HDMI 抜き差しの過渡状態に対応） */ }
+}
+
 const WARN_THRESHOLD_MS = 60 * 1000;
 const DANGER_THRESHOLD_MS = 10 * 1000;
 
@@ -1557,7 +1571,29 @@ subscribe((state, prev) => {
   }
   // STEP 10 フェーズC.1.4: スライドショー / PIP の状態同期
   syncSlideshowFromState(state.remainingMs);
+  // v2.0.0 STEP 3: operator モードのみミニ状態バーを更新（hall / operator-solo は no-op）
+  updateOperatorStatusBar(state);
 });
+
+// v2.0.0 STEP 3: operator モード（PC 側）専用のミニ状態バー更新。
+//   既存 subscribe からのみ呼ばれるため tick ごとの再計算ではなく差分更新になる。
+//   hall / operator-solo では DOM 自体が hidden なので早期 return（DOM 操作も省略）。
+function updateOperatorStatusBar(state) {
+  if (typeof window === 'undefined' || window.appRole !== 'operator') return;
+  const levelEl = document.getElementById('js-operator-status-level');
+  const timeEl  = document.getElementById('js-operator-status-time');
+  const stateEl = document.getElementById('js-operator-status-state');
+  if (!levelEl || !timeEl || !stateEl) return;
+  // Level: 1-indexed 表示（getLevel は 0-indexed）
+  levelEl.textContent = String((state.currentLevelIndex || 0) + 1);
+  // Time: MM:SS 表示（既存 renderTime と同じ formatter を再利用したいが、最小実装のため自前計算）
+  const ms = Math.max(0, state.remainingMs || 0);
+  const totalSec = Math.ceil(ms / 1000);
+  const mm = String(Math.floor(totalSec / 60)).padStart(2, '0');
+  const ss = String(totalSec % 60).padStart(2, '0');
+  timeEl.textContent = `${mm}:${ss}`;
+  stateEl.textContent = state.status || 'IDLE';
+}
 
 // 通知音発火: 同じ秒で複数フレーム検出されても1回だけ鳴らすためのガード
 // レベルが変わったら -1 にリセット（次レベルの 60s/10s/5..1 で再発火可能に）
@@ -1644,6 +1680,8 @@ setHandlers({
 // ===== 入力ハンドラ =====
 
 function handleStartPauseToggle() {
+  // v2.0.0 STEP 3: ホール側では一切の操作を受け付けない（CSS でも hidden だが多重防御）
+  if (window.appRole === 'hall') return;
   // 初回ユーザー操作時に AudioContext を resume（fire-and-forget）
   ensureAudioReady();
   const { status } = getState();
@@ -1654,6 +1692,7 @@ function handleStartPauseToggle() {
 }
 
 function openResetDialog() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側はダイアログを開かせない
   if (typeof el.resetDialog.showModal === 'function') {
     el.resetDialog.showModal();
   } else if (window.confirm('タイマーをリセットしますか？')) {
@@ -1663,6 +1702,7 @@ function openResetDialog() {
 
 // プレスタート時間選択ダイアログ（STEP 5 + STEP 6: 参加人数入力）
 function openPreStartDialog() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側はダイアログを開かせない
   if (!el.prestartDialog) return;
   // 開く度に「今すぐ開始」をデフォルトに戻す（前回の選択を引きずらない）
   const radios = el.prestartDialog.querySelectorAll('input[name="prestart-mode"]');
@@ -1711,8 +1751,13 @@ function readPreStartMinutes() {
 }
 
 el.btnStart.addEventListener('click', () => {
+  // v2.0.0 STEP 3: ホール側ではボタン自体が hidden だが多重防御
+  if (window.appRole === 'hall') return;
   // 初回スタート時に AudioContext を resume（ブラウザ自動再生ポリシー対策）
   ensureAudioReady();
+  // v2.0.0 STEP 3: operator モード（2 画面の PC 側）では main に通知して hall に伝播経路を活性化。
+  //   既存の openPreStartDialog → timerStart 経路は通常通り動かす（main 経由で hall に同期）。
+  notifyOperatorActionIfNeeded('timer:start', {});
   if (getState().status === States.IDLE) openPreStartDialog();
 });
 
@@ -1736,10 +1781,14 @@ el.prestartCustomMin?.addEventListener('focus', () => {
   if (customRadio) customRadio.checked = true;
 });
 el.btnPause.addEventListener('click', () => {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: 多重防御
   ensureAudioReady();
+  // v2.0.0 STEP 3: operator のみ main に通知（同期経路活性化）
+  notifyOperatorActionIfNeeded('timer:pause', {});
   handleStartPauseToggle();
 });
 el.btnReset.addEventListener('click', () => {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: 多重防御
   ensureAudioReady();
   openResetDialog();
 });
@@ -2559,6 +2608,7 @@ async function toggleBottomBar() {
 }
 
 function openSettingsDialog() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は設定ダイアログを開かせない
   if (typeof el.settingsDialog?.showModal === 'function') {
     // STEP 6.22.fix: 開く度に「トーナメント」タブをデフォルト active（最左との整合性）
     activateSettingsTab('tournament');
@@ -3425,6 +3475,7 @@ function generateUniqueId(prefix) {
 }
 
 async function handleTournamentNew() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は新規作成不可
   if (!window.api?.tournaments) return;
   // STEP 10 フェーズC.2 軽 11: 連打ガード（async 中の重複実行で複数の新規が作られないよう）
   if (handleTournamentNew._inFlight) return;
@@ -3505,6 +3556,7 @@ async function _handleTournamentNewImpl() {
 // 「複製」: 現在のフォーム値を新 id でコピー
 // STEP 6.7: 100件上限チェック
 async function handleTournamentDuplicate() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は複製不可
   if (!window.api?.tournaments) return;
   // STEP 10 フェーズC.1.1 Fix 2: 複製も active 切替を伴うため periodic skip（finally で確実解除）
   _tournamentSwitching = true;
@@ -3596,6 +3648,7 @@ function showTournamentDeleteConfirm(name) {
 // STEP 10 フェーズC.2.7-audit-fix: 二重起動防止（ダイアログ表示中に他行の🗑連打しても無視）
 let _tournamentDeleteInFlight = false;
 async function handleTournamentRowDelete(id, name) {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は削除不可
   if (!window.api?.tournaments) return;
   if (_tournamentDeleteInFlight) return;   // ダイアログまたは IPC 進行中
   _tournamentDeleteInFlight = true;
@@ -3792,6 +3845,7 @@ function isPayoutsValid() {
 
 // 「保存」: 現在の active トーナメントへ上書き保存。タイマー無変更、メイン画面の表示のみ更新
 async function handleTournamentSave() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は保存不可
   if (!el.tournamentTitle) return;
   if (!window.api?.tournaments?.save) {
     setTournamentHint('保存 API が利用できません', 'error');
@@ -5109,6 +5163,7 @@ async function _savePresetCore() {
 
 // 「保存」ボタン: 保存のみ、タイマーには触らない（メインクロックは無変更）
 async function handlePresetSave() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側はプリセット保存不可
   if (!blindsEditor.draft) return;
   // STEP 10 フェーズC.2.5: MIX 専用事前チェック（より明確なエラーメッセージ）
   //   ブレイク以外の全レベルに subGameType が設定されているか確認。
@@ -5227,6 +5282,7 @@ async function applyBlindsKeepProgress(newDraft) {
 // 「適用」ボタン: 保存（dirty 時のみ）+ 構造を active へ commit
 // STEP 6.21.5.1: 進行中なら 3択モーダル（reset / continue / cancel）。idle は即時適用
 async function handlePresetApply() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側はプリセット適用不可
   if (!blindsEditor.draft) return;
   // STEP 10 フェーズC.2.5: MIX 専用事前チェック（保存と同じ整合性検証）
   if (blindsEditor.draft.structureType === 'MIX') {
@@ -5618,6 +5674,7 @@ function handleMarqueePreview() {
 // STEP 6.8: Ctrl+T ダイアログの「保存」ボタン → 永続化＋メイン画面反映
 // STEP 6.22.1: 保存先を active トーナメントの marqueeSettings に切替（グローバル marquee は触らない）
 async function handleMarqueeSave() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側はテロップ保存不可
   const next = readMarqueeForm();
   lastMarqueeSettings = next;
   _marqueePreviewing = false;   // STEP 6.22.1.fix: 保存したのでプレビュー解除
@@ -5763,6 +5820,7 @@ window.addEventListener('keydown', (event) => {
 //   - 結果: TOTAL POOL が buyIn.fee 分増加、PLAYERS が "N+1 / N+1"
 //   - 上限 999（実用上の安全弁）
 function addNewEntry() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側はランタイム操作不可
   const MAX_PLAYERS = 999;
   if (tournamentRuntime.playersInitial >= MAX_PLAYERS) return;
   tournamentRuntime.playersInitial += 1;
@@ -5788,6 +5846,7 @@ function cancelNewEntry() {
 //   - 結果: PLAYERS が "N-1 / total" に、AVG STACK 再計算
 //   - 下限 0
 function eliminatePlayer() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は脱落操作不可
   if (tournamentRuntime.playersRemaining <= 0) return;
   tournamentRuntime.playersRemaining -= 1;
   renderStaticInfo();
@@ -5828,6 +5887,7 @@ function resetTournamentRuntime() {
 //   【不変条件】ブラインド構造を変えても tournamentRuntime は絶対に消えない。
 //   明示的「タイマーリセット」ボタン押下時のみ runtime クリアを許可する。
 function handleReset() {
+  if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側はリセット操作不可
   resetTournamentRuntime();
   timerReset();
   // STEP 10 フェーズC.1.2 Fix 2: タイマーリセットで finished オーバーレイも解除

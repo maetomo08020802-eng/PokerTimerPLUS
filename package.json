@@ -14,7 +14,7 @@
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:icon": "node build/generate-icon.js",
-    "test": "node tests/data-transfer.test.js && node tests/runtime-preservation.test.js && node tests/audit-fix.test.js && node tests/paused-flow.test.js && node tests/race-fixes.test.js && node tests/light-todos.test.js && node tests/editable-state.test.js && node tests/audit-residuals.test.js && node tests/new-tournament-edit.test.js && node tests/v130-features.test.js && node tests/c13-bg-image.test.js && node tests/c14-slideshow.test.js && node tests/c16-features.test.js && node tests/c17-audio-resume.test.js && node tests/c18-runtime-persistence.test.js && node tests/v2-dual-sync.test.js"
+    "test": "node tests/data-transfer.test.js && node tests/runtime-preservation.test.js && node tests/audit-fix.test.js && node tests/paused-flow.test.js && node tests/race-fixes.test.js && node tests/light-todos.test.js && node tests/editable-state.test.js && node tests/audit-residuals.test.js && node tests/new-tournament-edit.test.js && node tests/v130-features.test.js && node tests/c13-bg-image.test.js && node tests/c14-slideshow.test.js && node tests/c16-features.test.js && node tests/c17-audio-resume.test.js && node tests/c18-runtime-persistence.test.js && node tests/v2-dual-sync.test.js && node tests/v2-role-guard.test.js"
   },
   "dependencies": {
     "electron-store": "^8.2.0",
