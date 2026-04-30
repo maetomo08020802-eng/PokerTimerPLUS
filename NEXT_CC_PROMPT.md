@@ -1,241 +1,197 @@
-# v2.0.0 STEP 2: 2 画面間の状態同期【承認①対象】
+# v2.0.0 STEP 5: HDMI 抜き差し追従【承認②対象】
 
 ## 状況
-v2.0.0 STEP 1 完了済（`feature/v2.0.0` ブランチ作成、ウィンドウ生成 2 関数分離、`additionalArguments` で role 渡し、`data-role` 属性付与、CSS バッジ最小サンプル、build.files に `!scripts/**/*` 追加、138 テスト全 PASS、push 完了 / PR 未作成）。
-本 STEP 2 から **2 画面間の状態同期（コア技術）** を実装する。完了時に承認①の PR を作成する。
+v2.0.0 STEP 0+1+2+3+4 完了。承認①の PR #1 は main マージ済み。STEP 3+4 は feature/v2.0.0 にコミット蓄積中。
+本 STEP 5 は **HDMI 抜き差し追従（v2.0.0 最後のコア技術）+ AudioContext 再初期化対応**（CC が STEP 0 で警告した懸念事項、`docs/v2-design.md` §5 リスク 3 / §7）。
+完了時に **承認②の PR を作成**（feature/v2.0.0 → main、STEP 3+4+5 まとめて）。
 
 参照ドキュメント:
-- `docs/v2-design.md` §3（状態同期に必要な情報の最小セット 9 種類）
-- `skills/v2-dual-screen.md` §2（状態同期の精度基準）+ §1.3（画面間通信の節度）+ §5（禁止事項）+ §7（実装上のヒント）
-- **`skills/cc-operation-pitfalls.md`（公式ドキュメント準拠の絶対遵守事項、本フェーズ開始時に必ず Read）** ★追加
+- `skills/v2-dual-screen.md` §3（HDMI 抜き差し追従）
+- `skills/cc-operation-pitfalls.md`（公式準拠の絶対遵守事項、本フェーズ開始時に必ず Read）
+- `docs/v2-design.md` §5 リスク 3 + §7（AudioContext 再初期化警告）
 
 ---
 
 ## ⚠️ スコープ制限（厳守）
 
-**本 STEP 2 で実行するのは以下のみ:**
-1. `src/main.js` に状態キャッシュ + broadcast 関数追加（main プロセスを単一の真実源とする）
-2. `src/main.js` に新規 IPC ハンドラ群追加: `dual:state-sync` / `dual:operator-action`（双方向に必要な最小チャンネル）
-3. `src/preload.js` に `window.api.dual.*` グループ追加（`subscribeStateSync` / `notifyOperatorAction` 等）
-4. `src/renderer/dual-sync.js`（新規）作成、ホール側で main からの state を受信 → 既存 `state.js` の `setState` で適用
-5. `src/renderer/renderer.js` の起動部に role 判定追加: `role === 'hall'` なら dual-sync 起動、`role === 'operator'` なら既存ロジックに加えて main への operator-action 通知、`role === 'operator-solo'` なら既存ロジックそのまま
-6. 既存 138 テスト全 PASS 維持
-7. v2 専用テスト最小追加（`tests/v2-dual-sync.test.js` 新規、IPC ハンドラ存在 / subscribe ロジック / 差分送信パターンの静的解析、5〜8 件程度）
-8. STEP 2 完了でコミット & push、**承認①の PR を `feature/v2.0.0` → `main` で作成**
+**本 STEP 5 で実行するのは以下のみ:**
+1. `src/main.js` に `screen.on('display-added')` / `screen.on('display-removed')` ハンドラ追加
+2. **display-removed**: hallWindow が抜けた display にあれば close、operator を operator-solo モードに切替
+3. **display-added**: 2 画面以上検出 → `chooseHallDisplayInteractive` 再呼出 → ホール側決定 → createHallWindow + state 再同期、operator を operator モードに切替
+4. ウィンドウ役割切替（operator ↔ operator-solo）は **ウィンドウ再生成方式**（`additionalArguments` は process.argv に乗るため reload では role 変更不可、再生成が必須）
+5. **AudioContext 再初期化対応**: operator-solo 切替時、新しい renderer で audio.js が初期化される。C.1.7 の `_play()` 内 resume を踏襲、明示的な静的解析テストで担保
+6. **state 同期維持**: タイマー進行は main プロセスで持続、新しいウィンドウ起動時に既存の subscribe 経路で state 復元（ユーザーから見て中断ゼロ）
+7. `tests/v2-display-change.test.js`（新規、5〜8 件）
+8. 既存 162 テスト全 PASS 維持
+9. **承認②の PR 作成**（feature/v2.0.0 → main、STEP 3+4+5 をまとめる）
 
 **禁止事項:**
-- ホール側 / PC 側の UI 完全分離（STEP 3 で行う、本 STEP では同期の仕組みのみ）
-- モニター選択ダイアログ（STEP 4）
-- HDMI 抜き差し追従（STEP 5）
-- AudioContext 関連の変更（STEP 5、`docs/v2-design.md` §7 警告事項）
-- 単画面モード（`operator-solo`）の挙動変更（v1.3.0 と完全同等を維持）
-- 既存テストの skip / コメントアウト / 無効化
+- 単画面モード（HDMI なし環境）の挙動変更
+- 既存 162 テストの skip / 無効化
 - 致命バグ保護 5 件への影響変更
-- 「ついでに既存リファクタ」一切禁止
-- ポーリング（定期的な全状態取得）禁止、必ずイベント駆動
-- ホール側からの操作リクエスト送信禁止（hall は purely consumer、ただし STEP 3 で確定）
+- **並列 sub-agent / Task は最大 3 体まで**（`skills/cc-operation-pitfalls.md` §1.1）
+- **「念のため」コード追加禁止**（`skills/cc-operation-pitfalls.md` §1.2）
+- ポーリング禁止、必ず `display-added` / `display-removed` のイベント駆動のみ
+- ホール側ウィンドウから main への送信（hall は purely consumer 維持）
+- `<dialog>` flex 禁止
 - CSP `script-src 'self'` 不変
-- **並列 sub-agent / Task は最大 3 体まで**（公式 Agent Teams 推奨、skills/cc-operation-pitfalls.md §1.1）
-- **「念のため」コード追加禁止**（skills/cc-operation-pitfalls.md §1.2）
-- **同じバグで 2 回修正試行する前に context 肥大化を疑う**（skills/cc-operation-pitfalls.md §1.4）
 
 ---
 
-## Fix 1: main.js に状態キャッシュ + broadcast 関数追加
-
-main プロセスを single source of truth とする最小実装。
+## Fix 1: main.js の display イベント購読
 
 ```js
-// 状態キャッシュ（v2 で hall に broadcast する用、operator-solo モードでは未使用）
-const _dualStateCache = {
-  timerState: null,        // { status, currentLevelIndex, ... }
-  structure: null,         // { levels: [...] }
-  displaySettings: null,
-  marqueeSettings: null,
-  tournamentRuntime: null,
-  tournamentBasics: null,  // { name, subtitle, titleColor, venueName, blindPresetId }
-  audioSettings: null,
-  logoUrl: null,
-};
+function setupDisplayChangeListeners() {
+  screen.on('display-removed', async (event, removedDisplay) => {
+    if (!hallWindow || hallWindow.isDestroyed()) return;
+    const hallBounds = hallWindow.getBounds();
+    // hallWindow が抜けた display 上にあったか判定
+    if (isWindowOnDisplay(hallBounds, removedDisplay)) {
+      hallWindow.close();
+      hallWindow = null;
+      _dualStateCache = clearHallSubscription();   // hall 側 broadcast 停止
+      await switchOperatorToSolo();
+    }
+  });
 
-function _broadcastDualState(channel, payload) {
-  if (!_hallWindow || _hallWindow.isDestroyed()) return;
-  _hallWindow.webContents.send(channel, payload);
-}
-
-// 既存の tournaments:setTimerState / setDisplaySettings 等のハンドラ末尾に
-// _broadcastDualState('dual:state-sync', { kind: 'timerState', value: ... }) を追加
-```
-
-ポイント:
-- `_hallWindow` が無い（単画面モード）場合は no-op、`operator-solo` の挙動に影響しない
-- 既存 IPC ハンドラの payload 構造には**一切触らない**（致命バグ保護 C.2.7-D の `timerState` destructure 除外を踏襲）
-- broadcast は差分のみ（kind フィールドで「何が変わったか」を伝える）、全状態を毎回送信しない
-
----
-
-## Fix 2: main.js に新規 IPC ハンドラ追加
-
-```js
-// hall 起動時の初期同期: 全キャッシュを 1 回だけ送る
-ipcMain.handle('dual:state-sync-init', async () => {
-  return { ..._dualStateCache };  // hall 側は受信して setState で一括適用
-});
-
-// operator → main → hall の操作リクエスト中継
-ipcMain.handle('dual:operator-action', async (event, { action, payload }) => {
-  // 既存ハンドラに転送
-  // 例: action === 'timer:start' なら既存の timer:start ハンドラを呼ぶ
-  //     action === 'preset:apply' なら既存の preset:apply ハンドラを呼ぶ
-  // 既存ロジックを変更せず、薄い wrapper として実装
-  return await _routeOperatorAction(action, payload);
-});
-```
-
-`_routeOperatorAction` は既存の IPC handler を呼ぶ薄い router。既存ハンドラ自体には触らない。
-
----
-
-## Fix 3: preload.js に `window.api.dual.*` 追加
-
-```js
-// 既存 contextBridge.exposeInMainWorld('api', { ... }) の中に追加
-contextBridge.exposeInMainWorld('api', {
-  // ... 既存の api 群 ...
-  dual: {
-    subscribeStateSync: (callback) => {
-      ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
-    },
-    fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
-    notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload }),
-  },
-});
-```
-
----
-
-## Fix 4: src/renderer/dual-sync.js 新規作成
-
-ホール側で main からの state を受信 → 既存 state.js の setState で適用。
-
-```js
-// dual-sync.js（新規、~100 行想定）
-import { setState, getState } from './state.js';
-
-export async function initDualSyncForHall() {
-  if (window.appRole !== 'hall') return;  // 安全側ガード
-
-  // 初期状態を 1 回だけ取得
-  const initial = await window.api.dual.fetchInitialState();
-  if (initial.timerState)  setState({ timerState: initial.timerState });
-  if (initial.structure)    setState({ structure: initial.structure });
-  // ... 9 種類すべて適用 ...
-
-  // 以降の差分を購読
-  window.api.dual.subscribeStateSync((diff) => {
-    if (diff.kind === 'timerState')         setState({ timerState: diff.value });
-    else if (diff.kind === 'structure')      setState({ structure: diff.value });
-    // ... 9 種類すべて分岐 ...
+  screen.on('display-added', async () => {
+    const displays = screen.getAllDisplays();
+    if (displays.length < 2) return;
+    if (hallWindow && !hallWindow.isDestroyed()) return;   // 既に 2 画面
+    const hallId = await chooseHallDisplayInteractive(displays);
+    if (hallId == null) return;   // キャンセル時は単画面のまま
+    const hallDisplay = displays.find((d) => d.id === hallId);
+    await switchSoloToOperator(hallDisplay);
   });
 }
 ```
 
-注意:
-- ホール側はローカルでの timer.js による performance.now ベース計算で「±100ms 以内」を達成（v2-dual-screen.md §2.1）
-- main からは「基準時刻 + 状態フラグ」のみ送る、毎秒の timer 値を送らない（リスク 2 対処）
-- 既存の state.js / timer.js は無変更、上に薄い同期レイヤを乗せるだけ
+`isWindowOnDisplay(bounds, display)` ヘルパで「window がこの display 上に位置するか」判定。`bounds.x / y` と `display.bounds` で重なり判定。
 
 ---
 
-## Fix 5: renderer.js の起動部に role 判定追加
-
-renderer.js の最上部 or DOMContentLoaded ハンドラの中で:
+## Fix 2: switchOperatorToSolo / switchSoloToOperator（ウィンドウ再生成）
 
 ```js
-const role = window.appRole || 'operator-solo';
+async function switchOperatorToSolo() {
+  if (!operatorWindow || operatorWindow.isDestroyed()) return;
+  const display = screen.getPrimaryDisplay();
+  operatorWindow.close();
+  operatorWindow = null;
+  // タイマー進行は main で持続、新しいウィンドウは subscribe で state 復元
+  createOperatorWindow(display, true);   // isSolo=true、role=operator-solo
+}
 
-if (role === 'hall') {
-  // ホール側: dual-sync 起動 + 既存の表示更新ロジックは動かす（state.js の subscribe 経由）
-  // 操作系イベントリスナは登録しない（STEP 3 で role ガードを追加するが、本 STEP は最小実装）
-  await initDualSyncForHall();
-  initDisplayLogic();  // 既存の renderTimer / applyTournament 等を起動
-} else if (role === 'operator') {
-  // PC 側: 操作 UI 起動 + main への operator-action 通知経路を有効化
-  // タイマー進行は main で実行されるので、PC 側の表示用ローカル timer は無効化（STEP 3 で完全分離）
-  initOperatorLogic();
-} else {
-  // operator-solo（単画面モード）: v1.3.0 と完全同等
-  initSoloLogic();  // 既存のロジックそのまま
+async function switchSoloToOperator(hallDisplay) {
+  if (!operatorWindow || operatorWindow.isDestroyed()) return;
+  const operatorDisplay = screen.getPrimaryDisplay();
+  operatorWindow.close();
+  operatorWindow = null;
+  createOperatorWindow(operatorDisplay, false);   // isSolo=false、role=operator
+  createHallWindow(hallDisplay);   // role=hall
 }
 ```
 
-実際の関数名・分岐実装は CC 判断、ただし「**operator-solo は v1.3.0 と完全同じ動作**」が絶対条件。
+注意:
+- `additionalArguments` は process.argv に乗るため、`webContents.reload()` では role 変更不可
+- `BrowserWindow` の再生成が必須
+- 再生成中の数百ミリ秒間、ユーザーから見て一瞬黒画面 or 既存ウィンドウ消失 → 許容範囲
+- タイマー進行は main プロセスで持続、新しいウィンドウは `dual-sync.js` の `initDualSyncForHall` or 既存 subscribe 経路で state 復元
+- 切替閾値: skills/v2-dual-screen.md §3.1 の **2 秒以内**（ウィンドウ再生成 ~250ms × 2 = ~500ms、余裕で達成）
 
 ---
 
-## Fix 6: 既存 138 テスト全 PASS 維持
+## Fix 3: AudioContext 再初期化対応
+
+C.1.7 修正により `audio.js` の `_play()` 内で AudioContext が suspend なら自動 resume する設計。
+operator-solo 切替時、新しい renderer で `audio.js` が initAudio を実行 → 最初の音発火時に自動 resume。
+
+**追加の対策**: 切替直後に `ensureAudioReady()` を明示呼出する経路を確保（renderer.js の DOMContentLoaded ハンドラに追加 or 既存 initialize() 内）。
+
+```js
+// renderer.js の起動部
+if (window.appRole === 'operator-solo') {
+  initialize();
+  ensureAudioReady();   // ★ 切替後の音欠落防止
+}
+```
+
+これで HDMI 抜き差し直後に音が鳴らない期間を最小化。テスト T6 で静的担保。
+
+---
+
+## Fix 4: state 同期の維持
+
+main プロセスの `_dualStateCache` は hall 抜き差しでも維持。
+operator 再生成時、既存の `state.js` subscribe + 既存 IPC ハンドラで state を main から取得 → 描画。
+
+operator-solo モードでは `dual-sync` を使わず、既存の v1.3.0 経路で state を扱う（`store.get('activeTournamentId')` 等）。
+
+注意:
+- hall 切替時の `_dualStateCache` クリア / 維持の判断: 残しても害なし（次の hall 起動時に再利用可能）
+- ただし stale な timerState を hall に送らないよう、hall window が destroyed なら `_broadcastDualState` 内で no-op（既存実装）
+
+---
+
+## Fix 5: `tests/v2-display-change.test.js` 新規作成（5〜8 件）
+
+静的解析ベース:
+- T1: `setupDisplayChangeListeners` 関数が定義され、`screen.on('display-removed')` と `screen.on('display-added')` の両方に購読
+- T2: `display-removed` ハンドラで `hallWindow` の close + `switchOperatorToSolo` 呼出
+- T3: `display-added` ハンドラで `displays.length < 2` 早期 return + `chooseHallDisplayInteractive` 再呼出
+- T4: `switchOperatorToSolo` / `switchSoloToOperator` がウィンドウ close → 再生成パターン（`webContents.reload` を使わない）
+- T5: `isWindowOnDisplay` ヘルパが `bounds.x / y` と `display.bounds` を比較
+- T6: renderer.js の `operator-solo` 起動時に `ensureAudioReady` が呼ばれる（HDMI 抜き差し後の音欠落対策）
+- T7: ポーリング不使用（`setInterval` で displays を監視するコードがない、イベント駆動のみ）
+- T8: `_broadcastDualState` の hall 不在 no-op ガードが維持されている（既存 STEP 2 実装、再確認）
+
+---
+
+## Fix 6: 既存 162 テスト全 PASS 維持
 
 ```bash
 npm test
-# Summary: 138 passed / 0 failed を確認
+# Summary: 162 + N (>=5) = >=167 passed / 0 failed
 ```
 
 1 件でも FAIL したら**即停止**、CC_REPORT に「何が壊れたか」「致命バグ保護への影響有無」明記。
 
 ---
 
-## Fix 7: v2 専用テスト最小追加
-
-`tests/v2-dual-sync.test.js` を新規作成、静的解析ベース（既存パターン踏襲）。
-
-カバー対象（5〜8 件、STEP 6 でフル展開予定）:
-- T1: main.js に `_dualStateCache` / `_broadcastDualState` が定義されている
-- T2: main.js に `dual:state-sync-init` ハンドラが ipcMain.handle で登録されている
-- T3: main.js に `dual:operator-action` ハンドラが登録されている
-- T4: preload.js に `dual.subscribeStateSync` / `fetchInitialState` / `notifyOperatorAction` が含まれる
-- T5: dual-sync.js に `initDualSyncForHall` がエクスポートされている
-- T6: dual-sync.js が `window.appRole !== 'hall'` ガードを持つ
-- T7: renderer.js が `role === 'hall' / 'operator' / 'operator-solo'` の 3 分岐を持つ
-- T8: 既存 `timerState` destructure 除外（C.2.7-D Fix 3）の payload 構造に変更がない（既存テスト + 静的検査）
-
----
-
-## Fix 8: コミット & push & 承認①の PR 作成
+## Fix 7: コミット & push & 承認②の PR 作成
 
 ```bash
 git add -A
 git status
-git -c user.name="Yu Shitamachi" -c user.email="ymng2@icloud.com" commit -m "v2.0.0 STEP 2: 2 画面間の状態同期"
+git -c user.name="Yu Shitamachi" -c user.email="ymng2@icloud.com" commit -m "v2.0.0 STEP 5: HDMI 抜き差し追従 + AudioContext 再初期化対応"
 git push origin feature/v2.0.0
-```
 
-PR 作成（**承認①対象**）:
-
-```bash
+# 承認②の PR 作成（STEP 3+4+5 まとめて）
 gh pr create \
   --base main \
   --head feature/v2.0.0 \
-  --title "v2.0.0 STEP 0+1+2: 2 画面対応（設計調査 + ホール側ウィンドウ + 状態同期）" \
+  --title "v2.0.0 STEP 3+4+5: PC 側 UI 分離 + モニター選択 + HDMI 抜き差し追従" \
   --body "$(cat <<'EOF'
 ## サマリ
-v2.0.0 大改修の最初の PR。STEP 0（設計調査）+ STEP 1（ホール側ウィンドウ最小骨格）+ STEP 2（2 画面間の状態同期）をまとめてマージ。
+v2.0.0 大改修の 2 つ目の PR。STEP 3（PC 側 UI 分離）+ STEP 4（起動時モニター選択）+ STEP 5（HDMI 抜き差し追従 + AudioContext 再初期化）をまとめてマージ。
 
 ## 完了 STEP
-- STEP 0: docs/v2-design.md / scripts/_probes/v2-probe.js
-- STEP 1: src/main.js のウィンドウ分離 / data-role バッジ / build.files 修正
-- STEP 2: 2 画面間の状態同期（main を真実源、hall は purely consumer、operator-solo は v1.3.0 と完全同等）
+- STEP 3: CSS [data-role] 本格分離 + renderer.js 主要 handler 14 箇所に hall ガード + バッジ削除 + operator-action 通知有効化
+- STEP 4: src/renderer/display-picker.html / .js + main.js 起動シーケンス + 前回選択保存（参考情報）
+- STEP 5: screen.on('display-added' / 'display-removed') イベント駆動追従 + ウィンドウ再生成方式で role 切替 + AudioContext 再初期化対応
 
 ## 動作確認
-- 単画面 PC: v1.3.0 と完全同じ動作（operator-solo モード）
-- 2 画面環境: PC 側で操作 → ホール側に ±100ms 以内で同期反映
+- 単画面 PC: v1.3.0 と完全同等（operator-solo モード）
+- 2 画面環境: 起動時ダイアログ → 選択 → 2 画面同期動作
+- 営業中 HDMI 抜き → 単画面復帰、タイマー進行中断なし、音継続
+- HDMI 再接続 → ダイアログ → 2 画面復帰、状態自動復元
 
 ## 致命バグ保護
 - 5 件すべて完全維持（resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState / AudioContext resume / runtime 永続化）
+- T7（v2-role-guard）で「致命バグ関連関数に hall ガードがない」を静的担保
+- T6（v2-display-change）で「HDMI 抜き差し後の AudioContext 再初期化」を静的担保
 
 ## 残作業
-- STEP 3: PC 側 UI の完全分離
-- STEP 4: モニター選択ダイアログ
-- STEP 5: HDMI 抜き差し追従【承認②】
 - STEP 6: テスト拡充
 - STEP 7: 最終検証 + version bump【承認③】
 EOF
@@ -246,29 +202,37 @@ PR URL を CC_REPORT に記載すること。
 
 ---
 
-## Fix 9: CC_REPORT.md（簡潔版）
+## Fix 8: CC_REPORT.md（公式準拠フォーマット）
 
-CC_REPORT.md を STEP 2 完了報告に書き換え:
-
-1. **サマリ**: 状態キャッシュ / IPC ハンドラ / preload API / dual-sync 起動 / role 分岐 / 138+α テスト全 PASS / PR 作成完了 + URL
-2. **主要変更点**: コード抜粋 5 行以内/件
-3. **致命バグ保護への影響評価**: 5 件すべて影響なしの確認（必須セクション）
-4. **並列起動した sub-agent / Task 数の報告**（0〜3 体は OK、4 体以上は警告 + 設計見直し提案）
-5. **構築士への質問**（あれば、なければ省略）
-6. **オーナー向け確認**:
-   - 単画面 PC で起動 → v1.3.0 と完全同じ動作（変化なし）
-   - 2 画面環境（あれば）→ PC 側で操作したら、ホール側に同期反映されるか
+CC_REPORT.md を STEP 5 完了報告に書き換え:
+1. **サマリ**: display イベント購読 / ウィンドウ再生成切替 / AudioContext 対応 / テスト件数 / PR URL
+2. **修正ファイル**: 表形式
+3. **主要変更点**: コード抜粋 5 行以内/件
+4. **致命バグ保護への影響評価**: 5 件すべて「影響なし / 要注意 / 影響あり」明記（必須）
+5. **並列起動した sub-agent / Task 数**（0〜3 体は OK、4 体以上は警告）
+6. **構築士への質問**（あれば、なければ省略）
+7. **オーナー向け確認**:
+   - 単画面 PC で起動 → v1.3.0 と完全同等
+   - 2 画面環境（あれば）→ 起動時ダイアログ → 選択 → 2 画面表示
+   - **営業中 HDMI 抜き → 単画面復帰、タイマー継続、音継続**（**承認②の判定軸**）
+   - **HDMI 再接続 → ダイアログ → 2 画面復帰**（**承認②の判定軸**）
    - PR の URL（前原さんがブラウザで開いてマージ操作）
 
 ---
 
 ## 維持事項
 
-- 既存 138 テスト全 PASS 維持（+ v2 専用テスト最小 5〜8 件追加）
+- 既存 162 テスト全 PASS 維持（+ STEP 5 新規 5〜8 件追加）
 - **`operator-solo` モード（単画面）は v1.3.0 と完全同等**
-- 致命バグ保護 5 件すべて完全維持
+- 致命バグ保護 5 件すべて完全維持:
+  - `resetBlindProgressOnly`（C.2.7-A）
+  - `timerState` destructure 除外（C.2.7-D Fix 3）
+  - `ensureEditorEditableState` 4 重防御
+  - **AudioContext resume in `_play()`（C.1.7、本 STEP で再初期化対応強化）**
+  - runtime 永続化 8 箇所（C.1.8）
 - カード幅 / Barlow Condensed / `<dialog>` flex 禁止
-- skills/v2-dual-screen.md「§5 禁止事項」全項目
+- `skills/v2-dual-screen.md`「§5 禁止事項」全項目
+- `skills/cc-operation-pitfalls.md`「§1 絶対禁止事項」全項目
 - CSP `script-src 'self'` 不変
 - ポーリング禁止、イベント駆動
 
@@ -276,24 +240,12 @@ CC_REPORT.md を STEP 2 完了報告に書き換え:
 
 ## 完了条件
 
-- [ ] `feature/v2.0.0` ブランチで STEP 2 のコミット作成
-- [ ] main.js に `_dualStateCache` + `_broadcastDualState` + `dual:state-sync-init` + `dual:operator-action`
-- [ ] preload.js に `window.api.dual.*` グループ
-- [ ] src/renderer/dual-sync.js（新規）作成
-- [ ] renderer.js に role 3 分岐（hall / operator / operator-solo）
-- [ ] tests/v2-dual-sync.test.js（新規）5〜8 件
-- [ ] `npm test` で **既存 138 + 新規 5〜8 件すべて PASS**
-- [ ] push 完了 + **承認①の PR 作成完了**（PR URL 取得）
-- [ ] CC_REPORT.md に PR URL 記載
+- [ ] `feature/v2.0.0` ブランチで STEP 5 のコミット作成 + push
+- [ ] main.js に `setupDisplayChangeListeners` + `switchOperatorToSolo` + `switchSoloToOperator`
+- [ ] renderer.js の `operator-solo` 起動時に `ensureAudioReady` 明示呼出
+- [ ] `tests/v2-display-change.test.js`（新規）5〜8 件
+- [ ] `npm test` で **既存 162 + 新規 5〜8 = >=167 件すべて PASS**
 - [ ] 致命バグ保護 5 件すべて影響なし確認
-
----
-
-## 承認①について
-
-CC が PR 作成完了したら、構築士が CC_REPORT を採点 → 前原さんに以下を案内:
-1. 単画面 PC での動作確認（v1.3.0 と同じか）
-2. 2 画面環境での同期動作確認（HDMI モニターあれば）
-3. PR の URL を開いて中身を確認 → マージ操作
-
-前原さんがマージ判断するまで STEP 3 には進まない。
+- [ ] 並列 sub-agent / Task 数を CC_REPORT で報告（4 体以上禁止）
+- [ ] **承認②の PR 作成完了**（feature/v2.0.0 → main、STEP 3+4+5 まとめ）
+- [ ] CC_REPORT.md に PR URL 記載

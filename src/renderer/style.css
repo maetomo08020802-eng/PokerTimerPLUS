@@ -3738,29 +3738,76 @@ tr.level-row--just-inserted {
 }
 
 /* ============================================================
-   v2.0.0 STEP 1: 役割確認用バッジ（STEP 3 で本格的な操作 UI / 表示 UI 分離に置換予定）
-   - data-role="hall"           → ホール側ウィンドウ（お客向けモニター）
-   - data-role="operator"       → PC 側ウィンドウ（前原さん操作用、HDMI 2 画面モード時のみ）
-   - data-role="operator-solo"  → 単画面モード（v1.3.0 と完全同等、バッジ非表示）
-   ============================================================
-   既存の body::before（菱形格子）/ body::after（4 隅スート）は z-index:0 で背景装飾に
-   使われているため、それらと衝突しないよう html 要素の擬似要素にバッジを乗せる。
-   pointer-events: none で操作干渉防止、z-index: 9999 で他 UI の上に出す。 */
-[data-role="hall"]::before,
-[data-role="operator"]::before {
-  position: fixed;
-  top: 4px;
-  right: 4px;
-  background: rgba(0, 0, 0, 0.5);
-  color: #fff;
-  padding: 2px 8px;
-  font-size: 10px;
-  font-family: monospace;
-  z-index: 9999;
-  pointer-events: none;
-  border-radius: 2px;
+   v2.0.0 STEP 3: 役割別 UI 分離（本格実装）
+   - data-role="hall"           → ホール側（お客向け）。操作 UI を完全 hidden、表示専用
+   - data-role="operator"       → PC 側（前原さん操作用）。大表示を hidden、ミニ状態バー + 操作 UI
+   - data-role="operator-solo"  → 単画面モード。v1.3.0 完全同等、何も hidden しない
+   STEP 1 で追加していた視認用バッジ（🖥 HALL / 💻 OPERATOR）は削除（本番運用ではお客様に
+   見える可能性、運営感を損なうため）。役割は機能側 CSS で完結する。
+   ============================================================ */
+
+/* === role=hall: 操作 UI を完全 hidden、表示専用 === */
+/* ボトムバー（ショートカット説明 + 操作ボタン群）はホール側で完全に不要 */
+[data-role="hall"] .bottom-bar {
+  display: none !important;
 }
-[data-role="hall"]::before     { content: "🖥 HALL"; }
-[data-role="operator"]::before { content: "💻 OPERATOR"; }
-/* operator-solo / data-role 未指定 は擬似要素を生成しない（バッジ非表示）。
-   v1.3.0 と完全同じ見た目を維持。 */
+/* 設定ダイアログ系（form-dialog）。<dialog> 自体への display:none で showModal も無効化される。
+   feedback_dialog_no_flex 不変条件遵守: display:flex は当てない、display:none のみ。 */
+[data-role="hall"] .form-dialog,
+[data-role="hall"] .confirm-dialog {
+  display: none !important;
+}
+/* PIP の操作ボタン（タイマー / スライドショー切替）はホール側でも触らせない */
+[data-role="hall"] .pip-action-btn {
+  display: none !important;
+}
+
+/* === role=operator: 大表示要素を hidden、ミニ状態バー + 操作 UI のみ === */
+/* メインタイマー / ロゴ / ブラインドカード を含む clock セクション全体を hidden */
+[data-role="operator"] .clock {
+  display: none !important;
+}
+/* 大表示系の補助要素（テロップ / スライドショー / PIP / 背景画像 overlay） */
+[data-role="operator"] .marquee,
+[data-role="operator"] .slideshow-stage,
+[data-role="operator"] .pip-timer,
+[data-role="operator"] .pip-action-btn,
+[data-role="operator"] .bg-image-overlay {
+  display: none !important;
+}
+/* operator 側ミニ状態バー（hall に表示されている内容を一行で要約、運営者が状況把握する用）。
+   index.html に id="js-operator-status" を追加、hidden 属性は CSS で打ち消す。 */
+[data-role="operator"] .operator-status-bar {
+  display: flex !important;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: rgba(10, 31, 61, 0.95);
+  color: #fff;
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  z-index: 100;
+  pointer-events: none;
+}
+[data-role="operator"] .operator-status-bar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+[data-role="operator"] .operator-status-bar__label {
+  opacity: 0.6;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* === role=operator-solo: v1.3.0 と完全同等。何も変えない（hidden ルールも一切当てない） === */
+/* operator-solo / data-role 未指定では .operator-status-bar は HTML 側 hidden 属性で非表示のまま */

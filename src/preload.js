@@ -106,6 +106,12 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
     },
     fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
-    notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload })
+    notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload }),
+    // v2.0.0 STEP 4: モニター選択ダイアログ（display-picker.html 専用）。
+    //   fetchDisplays: 検出済の displays + 前回選択 id を取得（invoke、結果を返す）
+    //   selectHallMonitor: ユーザーが選んだモニター id を main に通知（send、結果不要）
+    //   ※ ipcRenderer.send は通知系（main 側 ipcMain.on で受信）。invoke と区別。
+    fetchDisplays: () => ipcRenderer.invoke('display-picker:fetch'),
+    selectHallMonitor: (displayId) => ipcRenderer.send('dual:select-hall-monitor', displayId)
   }
 });

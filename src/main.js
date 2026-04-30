@@ -998,18 +998,159 @@ function createHallWindow(targetDisplay) {
   return hallWindow;
 }
 
-// v2.0.0 STEP 1: 起動時のウィンドウ生成エントリ。
+// v2.0.0 STEP 4: 2 画面検出時、ホール側にするモニターを起動時に毎回手動選択させる。
+//   - displays.length < 2: 単画面 → null を返して呼出側で operator-solo 起動
+//   - 選択完了: 該当 display.id を返す（store.preferredHallDisplayId に「次回参考用」として保存）
+//   - キャンセル（ウィンドウを閉じる）: null を返す → 単画面モード（operator-solo）で起動
+//   skills/v2-dual-screen.md §4.2 「起動ごとに毎回選択（記憶しない）」要件を満たす。
+//   保存値は次回ダイアログのデフォルト選択（バッジ表示）にのみ使い、自動選択はしない。
+async function chooseHallDisplayInteractive(displays) {
+  if (!displays || displays.length < 2) return null;
+
+  const lastSelected = store.get('preferredHallDisplayId') || null;
+
+  return new Promise((resolve) => {
+    const pickerWin = new BrowserWindow({
+      width: 480,
+      height: 360,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      autoHideMenuBar: true,
+      title: 'PokerTimerPLUS+ — モニター選択',
+      backgroundColor: '#0A1F3D',
+      icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        additionalArguments: ['--role=picker']
+      }
+    });
+
+    pickerWin.on('page-title-updated', (event) => event.preventDefault());
+    pickerWin.setTitle('PokerTimerPLUS+ — モニター選択');
+    // picker 内の「前回選択」用に lastSelected を渡す（fetchDisplays IPC で再取得）
+    // picker → main の選択結果は ipcMain.on('dual:select-hall-monitor', ...) で受信
+    let resolved = false;
+    const handler = (_event, displayId) => {
+      if (resolved) return;
+      resolved = true;
+      ipcMain.removeListener('dual:select-hall-monitor', handler);
+      if (typeof displayId === 'number' || typeof displayId === 'string') {
+        store.set('preferredHallDisplayId', displayId);
+        resolve(displayId);
+      } else {
+        resolve(null);
+      }
+      if (!pickerWin.isDestroyed()) pickerWin.close();
+    };
+    ipcMain.on('dual:select-hall-monitor', handler);
+
+    pickerWin.on('closed', () => {
+      ipcMain.removeListener('dual:select-hall-monitor', handler);
+      if (!resolved) {
+        resolved = true;
+        resolve(null);   // キャンセル相当
+      }
+    });
+
+    pickerWin.loadFile(path.join(__dirname, 'renderer', 'display-picker.html'));
+  });
+}
+
+// v2.0.0 STEP 5: HDMI 抜き差し追従用ヘルパ。
+//   window.getBounds() の (x, y) が target display.bounds 矩形内に含まれているかで判定。
+//   左上座標で判定するシンプル方式（ウィンドウが完全に display 上にあるかではなく
+//   「主にこの display 上にある」程度の精度で十分）。
+function isWindowOnDisplay(windowBounds, display) {
+  if (!windowBounds || !display || !display.bounds) return false;
+  const wb = windowBounds;
+  const db = display.bounds;
+  return (
+    wb.x >= db.x &&
+    wb.x < db.x + db.width &&
+    wb.y >= db.y &&
+    wb.y < db.y + db.height
+  );
+}
+
+// v2.0.0 STEP 5: HDMI 抜き → 単画面モードに統合。
+//   - hallWindow が抜けた display 上にあった場合に呼ばれる
+//   - operator (mainWindow) を close → operator-solo モードで再生成
+//   - additionalArguments は process.argv に乗るため reload では role 変更不可、再生成必須
+//   - タイマー進行は main プロセスで持続（store の timerState）、新ウィンドウは起動時 subscribe で復元
+async function switchOperatorToSolo() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const display = screen.getPrimaryDisplay();
+  try { mainWindow.close(); } catch (_) { /* ignore */ }
+  mainWindow = null;
+  // 新しい mainWindow を operator-solo（v1.3.0 同等）で再生成
+  createOperatorWindow(display, true);
+}
+
+// v2.0.0 STEP 5: HDMI 再接続 → 2 画面モードに復帰。
+//   - operator (mainWindow) を close → operator モードで再生成 + hallWindow を新規生成
+//   - hall 側は hall 側起動時に initDualSyncForHall で main から state を再同期（既存 STEP 2 経路）
+async function switchSoloToOperator(hallDisplay) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!hallDisplay) return;
+  const operatorDisplay = screen.getPrimaryDisplay();
+  try { mainWindow.close(); } catch (_) { /* ignore */ }
+  mainWindow = null;
+  createOperatorWindow(operatorDisplay, false);
+  createHallWindow(hallDisplay);
+}
+
+// v2.0.0 STEP 5: display-added / display-removed のイベント駆動追従（ポーリング禁止）。
+//   - removed: hallWindow がその display 上にあれば close + operator-solo 切替
+//   - added:   2 画面以上検出 + hallWindow 不在 → モニター選択ダイアログ → 2 画面復帰
+//   v2-dual-screen.md §3.1: 検出から状態切替まで 2 秒以内（ウィンドウ再生成 ~250ms × 2 で達成）
+function setupDisplayChangeListeners() {
+  screen.on('display-removed', async (_event, removedDisplay) => {
+    if (!hallWindow || hallWindow.isDestroyed()) return;
+    let bounds;
+    try { bounds = hallWindow.getBounds(); } catch (_) { bounds = null; }
+    if (!bounds) return;
+    if (isWindowOnDisplay(bounds, removedDisplay)) {
+      try { hallWindow.close(); } catch (_) { /* ignore */ }
+      hallWindow = null;
+      // hall 不在のため _broadcastDualState は STEP 2 で確立した no-op ガードで自動的に止まる
+      await switchOperatorToSolo();
+    }
+  });
+
+  screen.on('display-added', async () => {
+    const displays = screen.getAllDisplays();
+    if (!displays || displays.length < 2) return;
+    if (hallWindow && !hallWindow.isDestroyed()) return;   // 既に 2 画面状態
+    const hallId = await chooseHallDisplayInteractive(displays);
+    if (hallId == null) return;   // キャンセル時は単画面のまま
+    const hallDisplay = displays.find((d) => d.id === hallId);
+    if (!hallDisplay) return;
+    await switchSoloToOperator(hallDisplay);
+  });
+}
+
+// v2.0.0 STEP 1+4: 起動時のウィンドウ生成エントリ。
 //   - 単画面（displays.length < 2）: operator-solo 1 ウィンドウのみ → v1.3.0 と完全同等
-//   - 2 画面以上: primary を operator、それ以外の最初を hall（STEP 4 でモニター選択ダイアログに置換）
-function createMainWindow() {
+//   - 2 画面以上: モニター選択ダイアログ → 選択結果でホール側決定 → 2 ウィンドウ生成
+//   - ダイアログをキャンセル: 単画面モード（operator-solo）で起動
+async function createMainWindow() {
   const displays = screen.getAllDisplays();
   if (!displays || displays.length < 2) {
     return createOperatorWindow(displays && displays[0], true);
   }
-  const primary = screen.getPrimaryDisplay();
-  const secondary = displays.find((d) => d.id !== primary.id) || displays[1];
-  createOperatorWindow(primary, false);
-  createHallWindow(secondary);
+  const hallId = await chooseHallDisplayInteractive(displays);
+  if (hallId == null) {
+    // キャンセル → 単画面モード（primary に operator-solo）
+    return createOperatorWindow(screen.getPrimaryDisplay(), true);
+  }
+  const hallDisplay = displays.find((d) => d.id === hallId);
+  const operatorDisplay = displays.find((d) => d.id !== hallId) || screen.getPrimaryDisplay();
+  createOperatorWindow(operatorDisplay, false);
+  createHallWindow(hallDisplay);
   return mainWindow;
 }
 
@@ -1956,6 +2097,25 @@ function registerIpcHandlers() {
     return { ...updated, title: updated.name };
   });
 
+  // ===== v2.0.0 STEP 4: モニター選択ダイアログ用 IPC =====
+  //   picker.html → preload (window.api.dual.fetchDisplays) → ここで displays + lastSelected を返す。
+  //   ipcMain.on('dual:select-hall-monitor', ...) は chooseHallDisplayInteractive 内で動的登録するため、
+  //   ここで登録するのは fetch のみ（永続ハンドラ）。
+  ipcMain.handle('display-picker:fetch', () => {
+    const all = screen.getAllDisplays();
+    const primaryId = (() => { try { return screen.getPrimaryDisplay().id; } catch (_) { return null; } })();
+    const list = (Array.isArray(all) ? all : []).map((d) => ({
+      id: d.id,
+      label: typeof d.label === 'string' ? d.label : '',
+      bounds: { width: d.bounds?.width || 0, height: d.bounds?.height || 0 },
+      isPrimary: d.id === primaryId
+    }));
+    return {
+      displays: list,
+      lastSelected: store.get('preferredHallDisplayId') || null
+    };
+  });
+
   // ===== v2.0.0 STEP 2: 2 画面間の状態同期 IPC =====
   //   hall 起動時に 1 回だけ呼ばれる初期同期。_dualStateCache の現在値を返す。
   //   未キャッシュ（cache が null）の項目は active トーナメントから補完して返す。
@@ -2007,14 +2167,18 @@ function registerIpcHandlers() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!isDev) {
     Menu.setApplicationMenu(null);
   }
 
   registerIpcHandlers();
-  createMainWindow();
+  // v2.0.0 STEP 4: createMainWindow が async（モニター選択ダイアログを await）になったため、
+  //   shortcuts 登録より前に await して mainWindow が確実に生成された状態にする。
+  await createMainWindow();
   registerShortcuts();
+  // v2.0.0 STEP 5: HDMI 抜き差しイベント駆動追従の購読開始（ポーリング禁止、screen API のみ）
+  setupDisplayChangeListeners();
 
   // STEP 9.fix2: 全権限要求を明示的に拒否（位置情報・カメラ・マイク・通知等は一切使用しない）。
   //   配布版 Windows 側で「位置情報を許可しますか？」ダイアログが出る件を抑止。
@@ -2090,9 +2254,10 @@ app.whenReady().then(() => {
     }
   });
 
-  app.on('activate', () => {
+  app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
+      // v2.0.0 STEP 4: dock click 等での再起動時もモニター選択をやり直す（毎回手動の要件）
+      await createMainWindow();
     }
   });
 });

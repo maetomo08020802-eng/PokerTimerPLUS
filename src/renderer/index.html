@@ -12,6 +12,24 @@
        既存 body::before（菱形格子）/ body::after（4隅スート）の z-index: 0 と同階層、
        .clock 配下（z-index: 2）の背面に固定配置。pointer-events: none で操作素通し。 -->
   <div class="bg-image-overlay" id="js-bg-image-overlay" hidden></div>
+  <!-- v2.0.0 STEP 3: operator モード（PC 側）専用のミニ状態バー。
+       ホール側に出ている内容（Level / 残時間 / 状態）を画面上部に一行で要約表示。
+       hall / operator-solo モードでは hidden 属性 + CSS [data-role] で非表示のまま。
+       表示は CSS [data-role="operator"] .operator-status-bar { display: flex } で打ち消す。 -->
+  <div class="operator-status-bar" id="js-operator-status" hidden>
+    <span class="operator-status-bar__item">
+      <span class="operator-status-bar__label">Level</span>
+      <span id="js-operator-status-level">—</span>
+    </span>
+    <span class="operator-status-bar__item">
+      <span class="operator-status-bar__label">Time</span>
+      <span id="js-operator-status-time">--:--</span>
+    </span>
+    <span class="operator-status-bar__item">
+      <span class="operator-status-bar__label">Status</span>
+      <span id="js-operator-status-state">IDLE</span>
+    </span>
+  </div>
   <!-- STEP 10 フェーズC.1.4: 休憩中スライドショー全画面ステージ（data-slideshow="active" 時のみ表示） -->
   <!-- STEP 10 フェーズC.1.4-fix2 Fix 2: hidden 属性を外して CSS opacity フェードインを効かせる。
        非アクティブ時は opacity: 0 + pointer-events: none で完全に操作素通し。 -->
