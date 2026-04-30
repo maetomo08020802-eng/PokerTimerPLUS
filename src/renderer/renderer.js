@@ -6181,5 +6181,11 @@ if (__appRole === 'hall') {
   initialize();
 } else {
   // operator-solo（単画面、デフォルト）: v1.3.0 と完全同等。
+  // v2.0.0 STEP 5: HDMI 抜き差し直後にウィンドウが再生成されるため、
+  //   AudioContext が新しい renderer で suspend 状態になっている可能性。
+  //   C.1.7 修正で _play() 内 resume が走るが、最初の音発火を待たずに
+  //   起動直後の安全側として ensureAudioReady を明示呼出（fire-and-forget）。
+  //   ensureAudioReady は冪等で副作用が小さい（suspend なら resume、それ以外 no-op）。
   initialize();
+  ensureAudioReady();
 }

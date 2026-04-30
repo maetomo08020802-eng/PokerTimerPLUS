@@ -1060,6 +1060,79 @@ async function chooseHallDisplayInteractive(displays) {
   });
 }
 
+// v2.0.0 STEP 5: HDMI 抜き差し追従用ヘルパ。
+//   window.getBounds() の (x, y) が target display.bounds 矩形内に含まれているかで判定。
+//   左上座標で判定するシンプル方式（ウィンドウが完全に display 上にあるかではなく
+//   「主にこの display 上にある」程度の精度で十分）。
+function isWindowOnDisplay(windowBounds, display) {
+  if (!windowBounds || !display || !display.bounds) return false;
+  const wb = windowBounds;
+  const db = display.bounds;
+  return (
+    wb.x >= db.x &&
+    wb.x < db.x + db.width &&
+    wb.y >= db.y &&
+    wb.y < db.y + db.height
+  );
+}
+
+// v2.0.0 STEP 5: HDMI 抜き → 単画面モードに統合。
+//   - hallWindow が抜けた display 上にあった場合に呼ばれる
+//   - operator (mainWindow) を close → operator-solo モードで再生成
+//   - additionalArguments は process.argv に乗るため reload では role 変更不可、再生成必須
+//   - タイマー進行は main プロセスで持続（store の timerState）、新ウィンドウは起動時 subscribe で復元
+async function switchOperatorToSolo() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const display = screen.getPrimaryDisplay();
+  try { mainWindow.close(); } catch (_) { /* ignore */ }
+  mainWindow = null;
+  // 新しい mainWindow を operator-solo（v1.3.0 同等）で再生成
+  createOperatorWindow(display, true);
+}
+
+// v2.0.0 STEP 5: HDMI 再接続 → 2 画面モードに復帰。
+//   - operator (mainWindow) を close → operator モードで再生成 + hallWindow を新規生成
+//   - hall 側は hall 側起動時に initDualSyncForHall で main から state を再同期（既存 STEP 2 経路）
+async function switchSoloToOperator(hallDisplay) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!hallDisplay) return;
+  const operatorDisplay = screen.getPrimaryDisplay();
+  try { mainWindow.close(); } catch (_) { /* ignore */ }
+  mainWindow = null;
+  createOperatorWindow(operatorDisplay, false);
+  createHallWindow(hallDisplay);
+}
+
+// v2.0.0 STEP 5: display-added / display-removed のイベント駆動追従（ポーリング禁止）。
+//   - removed: hallWindow がその display 上にあれば close + operator-solo 切替
+//   - added:   2 画面以上検出 + hallWindow 不在 → モニター選択ダイアログ → 2 画面復帰
+//   v2-dual-screen.md §3.1: 検出から状態切替まで 2 秒以内（ウィンドウ再生成 ~250ms × 2 で達成）
+function setupDisplayChangeListeners() {
+  screen.on('display-removed', async (_event, removedDisplay) => {
+    if (!hallWindow || hallWindow.isDestroyed()) return;
+    let bounds;
+    try { bounds = hallWindow.getBounds(); } catch (_) { bounds = null; }
+    if (!bounds) return;
+    if (isWindowOnDisplay(bounds, removedDisplay)) {
+      try { hallWindow.close(); } catch (_) { /* ignore */ }
+      hallWindow = null;
+      // hall 不在のため _broadcastDualState は STEP 2 で確立した no-op ガードで自動的に止まる
+      await switchOperatorToSolo();
+    }
+  });
+
+  screen.on('display-added', async () => {
+    const displays = screen.getAllDisplays();
+    if (!displays || displays.length < 2) return;
+    if (hallWindow && !hallWindow.isDestroyed()) return;   // 既に 2 画面状態
+    const hallId = await chooseHallDisplayInteractive(displays);
+    if (hallId == null) return;   // キャンセル時は単画面のまま
+    const hallDisplay = displays.find((d) => d.id === hallId);
+    if (!hallDisplay) return;
+    await switchSoloToOperator(hallDisplay);
+  });
+}
+
 // v2.0.0 STEP 1+4: 起動時のウィンドウ生成エントリ。
 //   - 単画面（displays.length < 2）: operator-solo 1 ウィンドウのみ → v1.3.0 と完全同等
 //   - 2 画面以上: モニター選択ダイアログ → 選択結果でホール側決定 → 2 ウィンドウ生成
@@ -2104,6 +2177,8 @@ app.whenReady().then(async () => {
   //   shortcuts 登録より前に await して mainWindow が確実に生成された状態にする。
   await createMainWindow();
   registerShortcuts();
+  // v2.0.0 STEP 5: HDMI 抜き差しイベント駆動追従の購読開始（ポーリング禁止、screen API のみ）
+  setupDisplayChangeListeners();
 
   // STEP 9.fix2: 全権限要求を明示的に拒否（位置情報・カメラ・マイク・通知等は一切使用しない）。
   //   配布版 Windows 側で「位置情報を許可しますか？」ダイアログが出る件を抑止。
