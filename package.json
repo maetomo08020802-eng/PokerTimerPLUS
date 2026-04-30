@@ -46,7 +46,8 @@
       "src/**/*",
       "package.json",
       "!src/renderer/__layout-check.js",
-      "!tests/**/*"
+      "!tests/**/*",
+      "!scripts/**/*"
     ],
     "win": {
       "target": "nsis",

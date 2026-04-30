@@ -1,7 +1,7 @@
 // PokerTimerPLUS+ メインプロセス
 // 制作: Yu Shitamachi (PLUS2運営)
 
-const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain, session, shell, powerMonitor, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain, screen, session, shell, powerMonitor, powerSaveBlocker } = require('electron');
 // STEP 10 フェーズC.1.2 Fix 3: electron-updater で GitHub Releases から自動更新。
 //   開発時（NODE_ENV=development）はスキップしてテスト誤動作を回避。
 let autoUpdater = null;
@@ -852,9 +852,31 @@ function migrateUserPresets_v2(s) {
 }
 
 let mainWindow = null;
+// v2.0.0 STEP 1: ホール側ウィンドウ（HDMI 接続時のみ）。STEP 1 では参照のみ、STEP 3 で表示専用化、STEP 5 で抜き差し追従。
+let hallWindow = null;
 
-function createMainWindow() {
-  mainWindow = new BrowserWindow({
+// v2.0.0 STEP 1: 共通の webPreferences ベース（operator / hall で同一の Electron セキュリティ設定）。
+//   既存 v1.3.0 の値をそのまま踏襲、追加するのは additionalArguments のみ。
+function buildWebPreferences(role) {
+  return {
+    preload: path.join(__dirname, 'preload.js'),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    devTools: true,
+    backgroundThrottling: false,
+    // v2.0.0 STEP 1: preload.js が process.argv から `--role=...` を抽出して
+    //   document.documentElement に data-role 属性を付与する。CSP 不変、inline script 不要。
+    additionalArguments: [`--role=${role}`]
+  };
+}
+
+// v2.0.0 STEP 1: operator ウィンドウ生成。
+//   isSolo=true で role='operator-solo'（単画面モード、v1.3.0 と完全同等の見た目・挙動）。
+//   isSolo=false で role='operator'（2 画面モードの PC 側、STEP 3 でホール側のみの要素を hide 化予定）。
+function createOperatorWindow(targetDisplay, isSolo = false) {
+  const role = isSolo ? 'operator-solo' : 'operator';
+  const opts = {
     title: WINDOW_TITLE,
     width: 1280,
     height: 720,
@@ -862,22 +884,14 @@ function createMainWindow() {
     minHeight: 540,
     backgroundColor: '#0A1F3D',
     autoHideMenuBar: true,
-    // STEP 10 フェーズC.1-A3: 開発実行時もタスクバー / タイトルバーで新アイコン表示。
-    //   配布版は electron-builder の win.icon（package.json）が処理するが、開発時は BrowserWindow.icon が必要。
-    //   .ico は Windows、.png は他 OS で読込可能。Windows では .ico が推奨。
     icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      // STEP 6.21: 配布版でも DevTools を開けるように明示（F12 / Ctrl+Shift+I）
-      devTools: true,
-      // STEP 6.21.4: 非フォーカス時も setInterval/setTimeout/rAF をスロットリングしない
-      // タイマー精度を維持し、レベル境界判定の遅延を防ぐ
-      backgroundThrottling: false
-    }
-  });
+    webPreferences: buildWebPreferences(role)
+  };
+  if (targetDisplay && targetDisplay.bounds) {
+    opts.x = targetDisplay.bounds.x + 40;
+    opts.y = targetDisplay.bounds.y + 40;
+  }
+  mainWindow = new BrowserWindow(opts);
 
   mainWindow.on('page-title-updated', (event) => {
     event.preventDefault();
@@ -917,6 +931,54 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  return mainWindow;
+}
+
+// v2.0.0 STEP 1: hall ウィンドウ生成（最小骨格、STEP 3 で frame: false / fullscreen 等を追加）。
+//   現状は operator と同じ index.html をロード、role='hall' のみ差別化。
+//   状態同期は STEP 2 で実装。
+function createHallWindow(targetDisplay) {
+  const opts = {
+    title: WINDOW_TITLE + ' (Hall)',
+    width: 1280,
+    height: 720,
+    minWidth: 960,
+    minHeight: 540,
+    backgroundColor: '#000000',
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    webPreferences: buildWebPreferences('hall')
+  };
+  if (targetDisplay && targetDisplay.bounds) {
+    opts.x = targetDisplay.bounds.x + 40;
+    opts.y = targetDisplay.bounds.y + 40;
+  }
+  hallWindow = new BrowserWindow(opts);
+  hallWindow.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
+  hallWindow.setTitle(WINDOW_TITLE + ' (Hall)');
+  hallWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  hallWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  hallWindow.on('closed', () => {
+    hallWindow = null;
+  });
+  return hallWindow;
+}
+
+// v2.0.0 STEP 1: 起動時のウィンドウ生成エントリ。
+//   - 単画面（displays.length < 2）: operator-solo 1 ウィンドウのみ → v1.3.0 と完全同等
+//   - 2 画面以上: primary を operator、それ以外の最初を hall（STEP 4 でモニター選択ダイアログに置換）
+function createMainWindow() {
+  const displays = screen.getAllDisplays();
+  if (!displays || displays.length < 2) {
+    return createOperatorWindow(displays && displays[0], true);
+  }
+  const primary = screen.getPrimaryDisplay();
+  const secondary = displays.find((d) => d.id !== primary.id) || displays[1];
+  createOperatorWindow(primary, false);
+  createHallWindow(secondary);
+  return mainWindow;
 }
 
 function toggleFullScreen() {

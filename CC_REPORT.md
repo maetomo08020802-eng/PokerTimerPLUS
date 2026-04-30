@@ -1,211 +1,103 @@
-# CC_REPORT — 2026-04-30 フェーズC.1.8: 重大バグ修正 — トーナメント途中の再起動でランタイムデータ消失
+# CC_REPORT — v2.0.0 STEP 0: 設計調査（コード変更ゼロ、調査文書のみ）
 
 ## 1. サマリー
 
-- **真因特定**: `tournaments` テーブルに **`runtime` フィールドが存在せず**、`tournamentRuntime` は renderer メモリのみに存在 → アプリ終了でメモリ消失 → 再起動で `tournamentRuntime = { 0, 0, 0, 0 }` 初期値に復帰
-- **修正方針採用**: **候補 1（tournaments テーブルに runtime フィールド追加 + 都度永続化）** — 既存 `setTimerState` / `setDisplaySettings` パターンと整合
-- **修正範囲**: main.js（schema + sanitize + IPC + migrate + normalize）/ preload.js（bridge）/ renderer.js（schedulePersistRuntime + applyTournament 復元 + 8 箇所のミューテーション関数にフック）
-- **致命バグ修正への影響**: ✅ なし（C.2.7-A `resetBlindProgressOnly` は runtime 不変のまま、T48 で静的検証）
-- **テスト**: `tests/c18-runtime-persistence.test.js` 新規 6 件追加 → 全 **138 テスト PASS**（既存 132 + 新規 6）
+- ✅ **既存コード（v1.3.0）の影響範囲調査完了** — 変更必要 11 箇所 / 変更不要 8 領域に分類
+- ✅ **Electron 2 ウィンドウ probe 作成 + 動作確認** — `scripts/_probes/v2-probe.js`、単画面環境で起動成功
+- ✅ **`docs/v2-design.md` 作成** — §1〜§7 すべて埋め、致命バグ保護への影響評価まで網羅
+- ✅ **`src/` 配下に変更ゼロ**（git status clean）
+- ✅ **既存 138 テスト全 PASS 維持**
+- スコープ厳守、本体コード一切無変更、`scripts/_probes/` のみ新規追加
 
-## 2. 真因特定経緯
+## 2. 主要発見事項
 
-### 2-1. コード読解で確認した永続化漏れ
+### 2-1. 致命バグ保護への影響箇所（要注意 1 件、その他は影響なし）
 
-`grep` で `playersRemaining / playersInitial / reentryCount / addOnCount` を main.js / renderer.js 双方で確認:
-
-```
-src/main.js:    No matches found    ← 永続化ロジックなし
-src/renderer/renderer.js: 多数（renderer メモリ内のみで管理）
-```
-
-**結論**: `tournamentRuntime` は **renderer メモリ内の単一オブジェクト**で、`store.set('tournaments', list)` の各エントリに含まれていなかった。アプリ終了 → メモリ消失 → 再起動で `tournamentRuntime` の宣言時の初期値（全 0）に戻る → ユーザー視点で「人数が消えた」現象。
-
-### 2-2. C.2.7-A 致命バグ修正との関係
-C.2.7-A の `resetBlindProgressOnly` は「**トーナメント切替時** に runtime を保護する」仕様で、renderer メモリ内の現在値を維持する設計。しかし**永続化は別問題**で、メモリ内に値があっても store に保存されていなければアプリ終了で消失する。
-
-C.2.7-A は今回のバグの予防策ではなく、**別経路の保護**（ブラインド構造変更時の 8-8 致命バグ）。今回のバグはそれとは独立した永続化レイヤーの欠落。
-
-### 2-3. 関連: tournaments:list の戻り値
-`tournaments:list` IPC は `timerState / displaySettings / marqueeSettings` 等を含むが、**`runtime` を含んでいなかった**。よって renderer 側で `applyTournament(t)` 経由で復元しようとしても `t.runtime === undefined` で復元処理がスキップされていた。
-
-## 3. 採用した修正候補とその理由
-
-### 候補 1（採用）: tournaments テーブルに runtime フィールドを追加し、都度永続化
-
-**理由**:
-- 既存の `displaySettings.setDisplaySettings` / `timerState.setTimerState` パターンと完全に整合
-- 都度永続化で「途中保存なし」のリスクなし（候補 2 の弱点を回避）
-- `before-quit` IPC 同期に依存しないため、アプリクラッシュ時の取りこぼしも最小化
-- マイグレーション簡素（runtime フィールド未定義 → 既定値補完）
-
-### 採用しなかった候補
-- **候補 2（before-quit で flush）**: 実装軽量だがクラッシュ時データ消失リスク + IPC 同期取得の複雑性
-- **候補 3（ハイブリッド）**: 候補 1 で十分、二重実装は不要
-
-## 4. 致命バグ修正への影響なき確認
-
-### 4-1. C.2.7-A `resetBlindProgressOnly`（不変条件: ブラインド構造変更で runtime 消えない）
-✅ **無傷**。`resetBlindProgressOnly` は `timerReset()` + `clock--timer-finished` class 削除のみ、`tournamentRuntime` には触らない（T48 で静的検証）。今回追加した `schedulePersistRuntime` 呼出も `resetBlindProgressOnly` には**入れていない**（runtime に触らない設計を維持）。
-
-### 4-2. C.2.7-D `timerState` destructure 除外
-✅ **無傷**。今回の修正は新規 IPC `tournaments:setRuntime` のみ追加で、`tournaments:setDisplaySettings` の payload 構造には触らない。
-
-### 4-3. `ensureEditorEditableState` 4 重防御
-✅ **無傷**。ブラインド編集状態とは別系統。
-
-### 4-4. handlePresetApply の reset 分岐
-✅ T48 で静的検証: `handlePresetApply` 内で `resetBlindProgressOnly()` 呼出が維持されている（致命バグ 8-8 リグレッションなし）。
-
-## 5. 修正ファイル
-
-| ファイル | 変更点 |
-| --- | --- |
-| `src/main.js` | `DEFAULT_TOURNAMENT_EXT.runtime` / `store.defaults.tournaments[0].runtime` 追加 / `sanitizeRuntime()` 新規 / `migrateTournamentSchema` で runtime 補完 / `normalizeTournament` 取込 + 既定補完 / `tournaments:list` 戻り値に runtime / 新 IPC `tournaments:setRuntime` |
-| `src/preload.js` | `tournaments.setRuntime(id, runtime)` bridge 追加 |
-| `src/renderer/renderer.js` | `schedulePersistRuntime()` debounce 500ms / `applyTournament` で `t.runtime` から `tournamentRuntime` 復元 / `addNewEntry` / `cancelNewEntry` / `eliminatePlayer` / `revivePlayer` / `initTournamentRuntime` / `resetTournamentRuntime` / `adjustReentry` / `adjustAddOn` の **計 8 箇所**で `schedulePersistRuntime()` 呼出 |
-| `package.json` | test スクリプトに c18-runtime-persistence 追加 |
-| `tests/c18-runtime-persistence.test.js` | **新規 6 テスト**（T43〜T48）|
-
-## 6. 主要変更点
-
-### 6-1. main.js sanitize + IPC
-
-```js
-const DEFAULT_TOURNAMENT_EXT = Object.freeze({
-  // ...既存
-  runtime: { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 }
-});
-
-function sanitizeRuntime(value, fallback) {
-  const fb = (fallback && typeof fallback === 'object') ? fallback : { playersInitial: 0, ... };
-  if (!value || typeof value !== 'object') return { ...fb };
-  const toNonNegInt = (v, fbV) => {
-    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return Math.max(0, Math.floor(fbV || 0));
-    return Math.floor(v);
-  };
-  return {
-    playersInitial:   toNonNegInt(value.playersInitial,   fb.playersInitial),
-    playersRemaining: toNonNegInt(value.playersRemaining, fb.playersRemaining),
-    reentryCount:     toNonNegInt(value.reentryCount,     fb.reentryCount),
-    addOnCount:       toNonNegInt(value.addOnCount,       fb.addOnCount)
-  };
-}
-
-ipcMain.handle('tournaments:setRuntime', (_event, payload) => {
-  const { id, runtime } = payload;
-  const list = store.get('tournaments') || [];
-  const idx = list.findIndex((t) => t.id === id);
-  if (idx < 0) return { ok: false, error: 'not-found' };
-  const next = sanitizeRuntime(runtime, list[idx].runtime || DEFAULT_TOURNAMENT_EXT.runtime);
-  list[idx] = { ...list[idx], runtime: next };
-  store.set('tournaments', list);
-  return { ok: true, runtime: next };
-});
-```
-
-### 6-2. renderer.js schedulePersistRuntime + 復元
-
-```js
-let runtimePersistTimer = null;
-function schedulePersistRuntime() {
-  if (runtimePersistTimer) clearTimeout(runtimePersistTimer);
-  runtimePersistTimer = setTimeout(() => {
-    runtimePersistTimer = null;
-    const id = tournamentState.id;
-    if (!id || !window.api?.tournaments?.setRuntime) return;
-    const rt = { /* 4 fields */ };
-    window.api.tournaments.setRuntime(id, rt).catch(...);
-  }, 500);
-}
-
-// applyTournament 内で復元
-if (t.runtime && typeof t.runtime === 'object') {
-  const rt = t.runtime;
-  if (typeof rt.playersInitial === 'number')   tournamentRuntime.playersInitial   = Math.max(0, Math.floor(rt.playersInitial));
-  if (typeof rt.playersRemaining === 'number') tournamentRuntime.playersRemaining = Math.max(0, Math.floor(rt.playersRemaining));
-  if (typeof rt.reentryCount === 'number')     tournamentRuntime.reentryCount     = Math.max(0, Math.floor(rt.reentryCount));
-  if (typeof rt.addOnCount === 'number')       tournamentRuntime.addOnCount       = Math.max(0, Math.floor(rt.addOnCount));
-}
-```
-
-### 6-3. ミューテーション関数の永続化フック（計 8 箇所）
-
-| 関数 | トリガ | 永続化 |
+| 致命バグ保護 | 影響 | 対策 |
 | --- | --- | --- |
-| `initTournamentRuntime` | プレスタートダイアログで人数入力 | ✅ |
-| `addNewEntry` | ↑キー: 新規エントリー追加 | ✅ |
-| `cancelNewEntry` | Shift+↑: 新規エントリー取消 | ✅ |
-| `eliminatePlayer` | ↓キー: プレイヤー脱落 | ✅ |
-| `revivePlayer` | Shift+↓: プレイヤー復活 | ✅ |
-| `adjustReentry` | Ctrl+R: リエントリー ± | ✅ |
-| `adjustAddOn` | Ctrl+A: アドオン ± | ✅ |
-| `resetTournamentRuntime` | 明示的「タイマーリセット」ボタン | ✅（0 値も保存）|
+| **AudioContext resume（C.1.7）** | ⚠️ **要追加対策** | HDMI 抜き差しでホール側ウィンドウが close される際、AudioContext が destroy される。再接続時にホール側で再初期化必要。**STEP 5 で明示的にテスト追加推奨** |
+| resetBlindProgressOnly（C.2.7-A）| なし | PC 側 renderer での呼出経路は不変、main 経由 hall に新構造 broadcast のみ追加 |
+| timerState race 除外（C.2.7-D）| なし | 既存 IPC payload に触らず、新規 `dual:state-sync` も別チャンネル経由 |
+| ensureEditorEditableState 4 重防御 | なし | PC 側のみで動作、`role === 'operator'` ガードで完全分離 |
+| runtime 永続化 8 箇所（C.1.8）| なし | 操作は PC 側のみ → schedulePersistRuntime → main 経由 hall に broadcast |
 
-`resetBlindProgressOnly` は **意図的に永続化フックなし**（runtime に触らない設計を維持、致命バグ 8-8 保護）。
+### 2-2. 状態同期に必要な情報の規模感
 
-### 6-4. マイグレーション
+同期項目は **約 9 種類**（timerState / structure / displaySettings / marqueeSettings / runtime / tournament 基本情報 / audio / logo / venueName）。すべて既存 `tournaments` / `display` / `marquee` / `audio` ストアの延長で対応可能、**新規スキーマ追加は不要**。
 
-旧バージョン（v1.3.0 まで）のデータを v1.3.1 で開いた時:
-- `m.runtime === undefined` → 既定値 `{ 0, 0, 0, 0 }` で補完
-- `m.runtime` が壊れている（負値 / NaN 等）→ `sanitizeRuntime` で整数化
-- 既存 displaySettings / timerState / marqueeSettings のマイグレーションパターンと同経路
+通信は IPC 集約、main → hall の単方向 broadcast、ホール側からの送信なし（hall は purely consumer）。
 
-## 7. 構築士への質問
+### 2-3. 上位リスク 3 件
 
-### 7-1. 既存ユーザーの旧データ復旧について
-v1.3.0 で運用していたユーザーが v1.3.1 にアップグレードした場合、**過去のランタイムデータは復旧しない**（旧バージョン時点で永続化されていなかったため、store に存在しない）。マイグレーション時に runtime = { 0, 0, 0, 0 } で初期化されます。
+1. **【高】renderer.js 6106 行の役割分離が機械的に困難** — 1 ファイルを 2 ロールに分離するのではなく、**役割フラグでイベントリスナの登録を skip**する方式（既存ファイル流用）が現実的。各 handler 関数の冒頭で `if (role === 'hall') return;` ガード追加方式を採用推奨
+2. **【中】ホール側 ↔ PC 側の同期遅延** — v2-dual-screen.md §2.1 が「±100ms 以内」要求。対処: ホール側で performance.now ベースのローカル計算、main からは「基準時刻 + 状態フラグ」のみ送信、tick ごとに timer 値を送らない設計
+3. **【中】HDMI 抜き差し時の AudioContext suspend / resume** — ホール側ウィンドウ close で AudioContext が destroy。再接続後に operator-solo モード or 新ホール側で initAudio 再呼出。既存 C.1.7 修正の `_play` 内 resume が走るため、最初の音発火で自動 resume
 
-→ アップグレード後、最初のトーナメント開始時に通常通り人数を入力 → 以降は永続化される、という運用になります。CHANGELOG への記載が必要であれば追記推奨。
-
-### 7-2. specialStack.appliedCount の永続化
-ランタイムに近い性質を持つ `tournamentState.specialStack.appliedCount`（特殊スタック適用人数）は本フェーズでは触っていません。コード読解上、これは `tournaments:save` 経由で都度永続化されている（`tournaments` テーブルの一部として保存される）ため、再起動でも保持されるはず。実機で「特殊スタック人数も消える」フィードバックがあれば次フェーズで対応推奨。
-
-### 7-3. periodicPersistAllRunning との関係
-既存の `periodicPersistAllRunning`（5 秒ごとの全 running トーナメント保存）は `setTimerState` のみを保存しています。runtime は本フェーズで都度永続化（debounce 500ms）するので、5 秒間隔の保証よりも細かい粒度で保存されます。periodic 側に runtime を加える必要はありません。
-
-### 7-4. スコープ越え疑念
-NEXT_CC_PROMPT は「**ランタイムデータ（playersRemaining / playersInitial / reentryCount / addOnCount 等）の永続化漏れの修正**」と指示。本実装は 4 フィールドすべて + `initTournamentRuntime` / `resetTournamentRuntime` / その他のミューテーション関数まで包括的に修正しました。スコープ超過と感じる場合はご指摘ください（致命バグ修正への影響はゼロ）。
-
-## 8. 検証ログ
+### 2-4. probe 動作確認結果（単画面環境）
 
 ```
-$ node --check src/main.js src/preload.js src/renderer/renderer.js
-ALL OK
+[startup] displays: 1
+  - id=2902177282 label="(no label)" primary=true
+    bounds={x:0,y:0,width:1536,height:864} scaleFactor=1.25
+[create] operator window ready in 236ms
+[init] only one display detected, hall window NOT opened
+```
+
+確認:
+- `screen.getAllDisplays()` で id / label / bounds / workArea / scaleFactor 取得可能
+- ウィンドウ生成コスト ~236ms（許容範囲）
+- Windows 環境では `display.label` が空の場合あり → モニター選択ダイアログでは解像度 + 位置で fallback ラベル生成が必要
+- HDMI 抜き差し（`display-added` / `display-removed`）の発火は単画面環境では検証不可、**実機 HDMI 環境での確認は前原さん側で要検証**
+
+### 2-5. STEP 順序の評価
+
+CLAUDE.md「v2.0.0 STEP 順序」現状のままで問題なし。小提案:
+- STEP 1 冒頭で **CSP 緩和なしで data-role 属性を付与する方式の検証**（`additionalArguments` or preload 経由）
+- STEP 2 で **ホール側ローカル時刻計算方式**を確立
+- STEP 5 で **AudioContext 再初期化フローの明示テスト**
+
+## 3. 構築士への質問
+
+### 3-1. probe スクリプトの配布物除外
+`scripts/_probes/v2-probe.js` は調査用で配布不要。現状 `package.json` の `build.files` は `src/**/*` 等のパターンで `scripts/` 配下を含めない設計のはず（電子ビルド時に自動除外）。STEP 1 で `!scripts/**/*` を `build.files` に追加する形で明示するのが安全か、構築士判断をお願いします。
+
+### 3-2. CSP の data-role 注入方式
+リスク 5 で言及した「`<html>` 要素への `data-role` 属性付与」は CSP `script-src 'self'` を緩和すれば inline script で対処可能ですが、**CSP 緩和は禁止事項**。代替候補:
+- (a) `BrowserWindow.webPreferences.additionalArguments: ['--role=hall']` で preload に渡し、preload で `document.documentElement.setAttribute('data-role', ...)` を `DOMContentLoaded` 前に実行
+- (b) querystring を preload で読んで上記同等
+
+(a) が CSP 不変で最もクリーン。STEP 1 でこの方式を採用するかご確認ください。
+
+### 3-3. ホール側 / PC 側の物理的な分離レベル
+現在の設計案では `index.html` を両画面で流用し、CSS `[data-role]` セレクタで表示要素を切替方式。これに対し「ホール側専用の `hall.html` を新規作成」する案もありますが、コード重複が増えるためスコープ非効率と判断。流用方式で進めて問題ないかご確認ください。
+
+## 4. オーナー向け確認（軽量）
+
+本 STEP はコード変更ゼロの調査フェーズです。前原さんに見ていただく内容は以下のみ:
+
+1. **既存 v1.3.0 配布版に一切影響なし** — タイマー / スライドショー / ランタイム永続化すべて以前通り動作
+2. **次フェーズ（STEP 1）で 2 画面対応の最小骨格を実装します** — その後で承認ポイント①（STEP 2 完了時、状態同期確認）に進みます
+
+詳細な設計内容は `docs/v2-design.md` に記載、構築士で読んで承認・修正指示をお願いします。
+
+---
+
+## 5. 検証ログ
+
+```
+$ git status src/
+On branch main
+Your branch is up to date with 'origin/main'.
+nothing to commit, working tree clean
 
 $ npm test
-[data-transfer]      === Summary: 7 passed / 0 failed ===
-[runtime-preservation] === Summary: 6 passed / 0 failed ===
-[audit-fix]          === Summary: 9 passed / 0 failed ===
-[paused-flow]        === Summary: 9 passed / 0 failed ===
-[race-fixes]         === Summary: 5 passed / 0 failed ===
-[light-todos]        === Summary: 4 passed / 0 failed ===
-[editable-state]     === Summary: 7 passed / 0 failed ===
-[audit-residuals]    === Summary: 8 passed / 0 failed ===
-[new-tournament-edit] === Summary: 8 passed / 0 failed ===
-[v130-features]      === Summary: 12 passed / 0 failed ===
-[c13-bg-image]       === Summary: 19 passed / 0 failed ===
-[c14-slideshow]      === Summary: 24 passed / 0 failed ===
-[c16-features]       === Summary: 8 passed / 0 failed ===
-[c17-audio-resume]   === Summary: 6 passed / 0 failed ===
-[c18-runtime-persistence] === Summary: 6 passed / 0 failed ===
+[15 ファイル合計]  Summary: 138 passed / 0 failed
+
+$ ls scripts/_probes/
+v2-probe.js
+
+$ ls docs/v2-design.md
+docs/v2-design.md  (作成済)
 ```
 
-合計 **138 テスト全 PASS**（既存 132 + 新規 6）。
-
-## 9. オーナー向け確認
-
-### 報告症状の修正確認（最重要）
-1. **トーナメント途中（プレイヤー人数 / リエントリー / アドオンが入っている状態）でアプリを ✕ で閉じる**
-2. **再起動**
-3. **同じトーナメントを開く → プレイヤー人数 / リエントリー / アドオン数がすべて閉じる前と同じ値**
-
-### 周辺の動作確認
-4. **複数トーナメントある場合、それぞれが独立してランタイムを保持** — トーナメント A で 50 人、トーナメント B で 30 人と設定し、再起動後それぞれ正しい値が表示される
-5. **「タイマーリセット」ボタン押下 → 0 にリセットされて再起動後も 0 のまま**（リセット動作も永続化）
-6. **ブラインド構造変更（保存して適用 → リセットして開始 / 構造のみ適用）でランタイムが消えない** — C.2.7-A 致命バグ修正が引き続き機能
-
-### 既存機能維持
-7. **タイマー / 警告音（C.1.7 修正）/ スライドショー / PIP / 設定ダイアログ縦リサイズ / TOTAL GAME TIME 切替 / 既存 8 色背景 / カスタム画像 すべて以前通り**
-
-すべて期待通り動作すれば C.1.8 完了。**v1.3.1 の重大バグ修正リリース候補**として配布判断推奨。
+**v2.0.0 STEP 0（設計調査）完了**。次は STEP 1（ホール側ウィンドウ追加、最小骨格）の NEXT_CC_PROMPT.md 待ち。

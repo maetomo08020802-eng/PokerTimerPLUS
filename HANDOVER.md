@@ -1,7 +1,43 @@
-# HANDOVER.md — PokerTimerPLUS+ 作業引継ぎ書（〜v1.3.0 完了時点）
+# HANDOVER.md — PokerTimerPLUS+ 作業引継ぎ書（v1.3.0 配布完了時点）
 
-> 本書は、新しい CC（Claude Code）エージェントが現在の状況を即座に把握できるよう、これまでの作業履歴・確定事項・次のステップを集約したものです。
+> 本書は、新しい CC（Claude Code）エージェントおよび **CC 構築士（Cowork mode 構築士）** が現在の状況を即座に把握できるよう、これまでの作業履歴・確定事項・次のステップを集約したものです。
 > 関連ファイル: `CLAUDE.md`（運用ルール）、`docs/specs.md`（機能仕様）、`skills/timer-logic.md`（不変条件）、`CHANGELOG.md`（リリース履歴）、`CC_REPORT.md`（直近完了タスクの報告）。
+
+---
+
+## 🎯 構築士向け TL;DR（新セッション開始時にここを最初に読む）
+
+| 項目 | 状態 |
+| --- | --- |
+| **バージョン** | v1.3.0 |
+| **配布状況** | **完了**（GitHub Releases で公開、2026-04-30） |
+| **公開 URL** | https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases |
+| **総テスト数** | **138 件**（15 ファイル、`npm test` で全 PASS） |
+| **最終フェーズ** | C.3-B クリーンアップ完了 → 配布完了 |
+| **CC 作業状態** | 待機中（次の指示待ち） |
+| **前原さんの待ち事項** | なし。次フェーズ選択待ち |
+
+### 次の選択肢
+1. **v2.0.0 大改修** — 2 画面対応（HDMI 拡張ディスプレイで「タイマー = ホール / 設定 = PC」の振り分け）
+2. **配布告知** — PLUS2 ブランドからの発信、配布チャンネル決定
+3. **一旦休む** — 運用しながら気付いた点を後日対応
+
+### 前原さんへの言葉遣い（必須ルール）
+- **専門用語禁止、初心者向け日本語**
+- 言い換え例:「リポジトリ → 保管場所」「コミット → 保存」「PAT → 専用の鍵」「ブランチ → 枝分かれ」「マイグレーション → データ形式の変換」「IPC → アプリ内のデータのやりとり」
+- **役割分担**: 前原さんは目視確認のみ、コード検証・テスト実行は構築士+CC が担当
+- **構築士で代行可能なことは代行**（前原さん作業を最小化）
+- **応答簡潔化**: 採点表・動作確認の再掲は避ける（context 肥大化防止、feedback_response_brevity 参照）
+- 詳細: memory の `feedback_role_and_language.md` / `feedback_response_brevity.md`
+
+### 絶対不変ルール（致命バグ修正の保護、デザイン保護）
+- 致命バグ修正: `resetBlindProgressOnly`（C.2.7-A）/ `timerState` destructure 除外（C.2.7-D）/ `ensureEditorEditableState` 4 重防御（C.1-A2 + C.1.2-bugfix + C.1.4-fix1）/ AudioContext resume in `_play()`（C.1.7）/ runtime 永続化フック 8 箇所（C.1.8）
+- カード幅: 54vw / 46vw（C.2.7-A patch9 確定）
+- 数字フォント: Barlow Condensed 700
+- `<dialog>` に `display: flex` 禁止（feedback_dialog_no_flex 参照）
+- 既存 138 テスト全 PASS 維持
+
+---
 
 ---
 

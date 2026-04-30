@@ -1,197 +1,249 @@
-# フェーズC.3-A: 配布準備（GitHub リポジトリ初回プッシュ + ビルド検証）
+# v2.0.0 STEP 1: ホール側ウィンドウ追加（最小骨格、ブランチ運用導入）
 
 ## 状況
-v1.3.0 配布準備フェーズ。GitHub リポジトリが作成された:
-- URL: https://github.com/maetomo08020802-eng/PokerTimerPLUS
-- owner: `maetomo08020802-eng`
-- repo: `PokerTimerPLUS`
-- 公開設定: Public（ユーザーが手動作成、初期ファイルなし）
+v2.0.0 STEP 0 完了済（`docs/v2-design.md` 作成、`scripts/_probes/v2-probe.js` 配置、影響範囲 11/8 分類、致命バグ保護への影響 1 件 = AudioContext を STEP 5 警告事項として記録）。
+本 STEP 1 から **`feature/v2.0.0` ブランチで作業** に切り替え、`main` は v1.3.0 配布版として常に動作する状態を維持する。
 
-構築士で以下を直接編集済:
-- `package.json`: `build.publish` に owner/repo を追加（autoUpdate 有効化）
-- `README.md`: GitHub URL + Releases ページリンクを追記
-- `CHANGELOG.md`: 自動更新の文言を「v1.3.1 以降で動作」に修正
-- `.gitignore`: OAuth トークン / credentials.json / Python キャッシュを除外
+CC からの STEP 0 質問 3 件への構築士判断は本プロンプトに反映済:
+1. probe スクリプトの配布物除外 → Fix 5 で対応
+2. CSP の data-role 注入方式 → (a) `additionalArguments` 採用（Fix 2-3）
+3. ホール側 / PC 側の物理的分離レベル → 流用方式（CSS `[data-role]` セレクタ）採用（Fix 4）
 
 ---
 
 ## ⚠️ スコープ制限（厳守）
 
-**本フェーズで実装するのは以下のみ:**
-1. 既存 138 テスト全 PASS 再確認
-2. Windows ビルド検証（`npm run build:win`）→ `dist/` に `.exe` 生成確認
-3. git 初期化（`git init`）+ 初回コミット
-4. リモートリポジトリの設定（`git remote add origin ...`）
-5. 前原さん向けの「最終 push 手順書」を `docs/RELEASE_GUIDE.md` として作成
+**本 STEP 1 で実行するのは以下のみ:**
+1. `feature/v2.0.0` ブランチを切って以降の全作業をこのブランチで実施
+2. `src/main.js` の既存ウィンドウ生成を `createOperatorWindow()` / `createHallWindow()` の 2 関数に分離
+3. アプリ起動時に `screen.getAllDisplays()` でモニター数を判定（最小限の分岐、ダイアログ生成は STEP 4）
+4. `BrowserWindow.webPreferences.additionalArguments` で `--role=operator` / `--role=hall` / `--role=operator-solo` を渡す
+5. `src/preload.js` で `process.argv` から role を抽出 → `document.documentElement.setAttribute('data-role', role)` を DOMContentLoaded 前に実行
+6. `src/renderer/style.css` に `[data-role]` セレクタの最小サンプル追加（役割が機能しているか視認用、本格的分離は STEP 3）
+7. `package.json` の `build.files` に `!scripts/**/*` を追加（probe を配布物から除外）
+8. STEP 1 完了でコミット & push、ただし **PR はまだ作らない**（承認①は STEP 2 完了時）
+9. CC_REPORT.md に STEP 1 完了報告
 
 **禁止事項:**
-- コードの追加修正一切（致命バグ修正・既存機能・C.1.7 / C.1.8 系すべて維持）
-- 既存 138 テストの動作改変
-- `git push` の実行は禁止（push は前原さんが手動で行うため、最終ガイドとして手順書に記載のみ）
-- OAuth トークン・credentials の git 追跡（.gitignore で除外済、念のため CC で確認）
+- 状態同期の実装（STEP 2 で行う）
+- モニター選択ダイアログの実装（STEP 4 で行う）
+- HDMI 抜き差し追従（STEP 5 で行う）
+- ホール側 / PC 側の UI 完全分離（STEP 3 で行う）
+- 単画面モード時の挙動変更（v1.3.0 と完全同等を維持）
+- 既存 138 テストへの影響変更
+- AudioContext 関連の変更（STEP 5 で扱う、v2-design.md §7 警告事項）
+- 致命バグ保護 5 件への影響変更
+- 「ついでに既存リファクタ」一切禁止
+- skills/v2-dual-screen.md「§5 禁止事項」を本 STEP でも遵守
+- CSP `script-src 'self'` 不変
 
 ---
 
-## Fix 1: 既存テスト再確認 + ビルド前検証
-
-```bash
-# 全テスト実行（138 件 PASS が完了条件）
-npm test
-
-# 構文確認
-node --check src/main.js
-node --check src/preload.js
-node --check src/renderer/renderer.js
-```
-
-すべて OK でなければ次に進まない。
-
----
-
-## Fix 2: Windows ビルド検証
-
-```bash
-# 旧ビルド成果物クリーン
-rm -rf dist
-# Windows 用 .exe 生成
-npm run build:win
-```
-
-確認項目:
-- `dist/` 配下に `.exe` インストーラ（例: `PokerTimerPLUS+ Setup 1.3.0.exe`）が生成されている
-- ビルドログに重大エラーなし（warning は許容）
-- 配布版起動でクラッシュなし（実行確認は前原さん側）
-
----
-
-## Fix 3: git 初期化 + 初回コミット
+## Fix 1: ブランチ作成と切替
 
 ```bash
 cd poker-clock
-git init
-git add .
-git status   # 確認: token.json / credentials.json / node_modules / dist が含まれていないこと
-git commit -m "Initial commit: PokerTimerPLUS+ v1.3.0"
-git branch -M main
-git remote add origin https://github.com/maetomo08020802-eng/PokerTimerPLUS.git
+git checkout -b feature/v2.0.0
+git branch     # * feature/v2.0.0 を確認
 ```
 
-**重要**: `git status` で以下が **追跡されていない** ことを必ず確認:
-- `node_modules/`
-- `dist/`
-- `*.token.json` / `*credentials.json`
-- `__pycache__/`
-
-含まれていたら `.gitignore` を再点検 + `git rm --cached <ファイル>` で除外する。
-
-`git push` は実行しない（前原さんに任せる、後述）。
+以降の全作業はこのブランチ上で実施。`main` には触らない。
 
 ---
 
-## Fix 4: 前原さん向けリリース手順書作成
+## Fix 2: `src/main.js` のウィンドウ生成関数分離
 
-`poker-clock/docs/RELEASE_GUIDE.md` を新規作成。内容:
+既存のウィンドウ生成処理を以下の 2 関数に分離。
 
-### docs/RELEASE_GUIDE.md の中身（CC が書く）
+```js
+function createOperatorWindow(targetDisplay, isSolo = false) {
+  const role = isSolo ? 'operator-solo' : 'operator';
+  const win = new BrowserWindow({
+    width: ...,
+    height: ...,
+    x: targetDisplay.bounds.x + 40,
+    y: targetDisplay.bounds.y + 40,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      additionalArguments: [`--role=${role}`],   // ★ 追加
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  win.loadFile('src/renderer/index.html');
+  return win;
+}
 
-```markdown
-# PokerTimerPLUS+ リリース手順
-
-このドキュメントは、新しいバージョンを GitHub に公開するための手順です。
-
-## 初回リリース（v1.3.0）
-
-### 手順 1: コードを GitHub にアップロード（git push）
-
-「Git Bash」を起動して、以下のコマンドを 1 行ずつ実行してください:
-
-\`\`\`bash
-cd C:/Users/user/Documents/Claude/Projects/個人アシスタント/poker-clock
-git push -u origin main
-\`\`\`
-
-- 初回は GitHub のユーザー名 + パスワード（または Personal Access Token）の入力を求められます
-- パスワード認証は 2021 年に廃止されているため、**Personal Access Token (PAT)** を使う必要があります
-- PAT 発行手順は次セクション参照
-
-### Personal Access Token (PAT) の発行（初回のみ）
-
-1. GitHub にログイン → 右上のプロフィール → Settings
-2. 左メニュー一番下「Developer settings」をクリック
-3. 「Personal access tokens」→「Tokens (classic)」
-4. 「Generate new token」→「Generate new token (classic)」
-5. 入力:
-   - Note: `PokerTimerPLUS push` など
-   - Expiration: 90 days（任意）
-   - Scope: **`repo`** にだけチェック
-6. 一番下の「Generate token」ボタン
-7. 表示された token（`ghp_xxxxxxxxxxxx` 形式）をコピー
-
-git push 時にパスワード入力欄でこの token を貼り付ければ OK。
-
-### 手順 2: GitHub Releases ページで .exe を公開
-
-1. https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases にアクセス
-2. 「Create a new release」または「Draft a new release」をクリック
-3. 入力:
-   - **Choose a tag**: `v1.3.0` を入力 → 「Create new tag: v1.3.0 on publish」を選択
-   - **Release title**: `v1.3.0 - 初回リリース`
-   - **Description**: 配布対象向けに、CHANGELOG.md からコピペ
-   - **Attach binaries**: `dist/PokerTimerPLUS+ Setup 1.3.0.exe` をドラッグ&ドロップでアップロード
-4. 「Publish release」ボタン
-
-これで配布完了。誰でも Releases ページから `.exe` をダウンロードできます。
-
-## 次回以降のリリース（v1.3.1 / v1.4.0 など）
-
-### 手順 1: バージョン変更
-- `package.json` の `version` を新値に変更
-- `CHANGELOG.md` に新セクション追加
-
-### 手順 2: ビルド + コミット + push
-
-\`\`\`bash
-npm run build:win
-git add .
-git commit -m "Release v1.3.1"
-git tag v1.3.1
-git push
-git push --tags
-\`\`\`
-
-### 手順 3: GitHub Releases で公開
-初回と同じ手順で、新しい `.exe` をアップロード → Publish release。
-
-公開した瞬間から、既存ユーザーが次回起動時に自動更新通知を受け取ります（electron-updater 動作）。
+function createHallWindow(targetDisplay) {
+  // 同様の構造、additionalArguments: ['--role=hall']
+  // ホール側は frame: false / fullscreen: true 等の差分は STEP 3 で扱う、本 STEP は最小限
+}
 ```
 
+起動時の分岐（`app.whenReady()` 内）:
+
+```js
+const displays = screen.getAllDisplays();
+if (displays.length < 2) {
+  // 単画面モード: v1.3.0 と完全同等
+  createOperatorWindow(displays[0], true);  // isSolo=true → role=operator-solo
+} else {
+  // 2 画面モード: 暫定で primary を operator、それ以外の最初を hall
+  // モニター選択ダイアログは STEP 4 で実装
+  const primary = displays.find(d => d.isPrimary) || displays[0];
+  const secondary = displays.find(d => d.id !== primary.id);
+  createOperatorWindow(primary, false);
+  createHallWindow(secondary);
+}
+```
+
+注意:
+- 既存ウィンドウ生成の細部（`webPreferences` その他のオプション）は両関数に**忠実に踏襲**、追加するのは `additionalArguments` のみ
+- 既存の IPC ハンドラ・store 連携は無変更
+- 致命バグ保護 5 件すべて不変
+
 ---
 
-## Fix 5: 最終確認
+## Fix 3: `src/preload.js` での role 抽出と `data-role` 付与
 
-CC が以下を CC_REPORT に列挙:
-1. `npm test` 結果（138/138 PASS）
-2. `npm run build:win` 結果（dist/ に .exe 生成、サイズと正確なファイル名）
-3. `git status` 結果（node_modules / dist / token / credentials が追跡対象外であること）
-4. `git log` 結果（初回コミットが作成されたこと）
-5. `git remote -v` 結果（origin が GitHub URL に紐づいていること）
-6. `docs/RELEASE_GUIDE.md` が作成されたこと
+preload.js は CSP 適用外なので inline 相当の DOM 操作が可能。
+
+```js
+// preload.js の冒頭で実行
+const roleArg = process.argv.find(a => a.startsWith('--role='));
+const role = roleArg ? roleArg.split('=')[1] : 'operator-solo';
+
+// DOM 構築前に attribute 付与
+document.addEventListener('DOMContentLoaded', () => {
+  document.documentElement.setAttribute('data-role', role);
+});
+
+// renderer 側からも参照できるように expose（optional）
+contextBridge.exposeInMainWorld('appRole', role);
+```
+
+DOMContentLoaded を待つので、`<head>` 内の CSS が role 反映前にロードされる可能性あり → ホール側で一瞬「OPERATOR バッジ」が見える等の flicker が起きるなら、DOMContentLoaded ではなく `<html>` 要素直接操作で先取りする（DOM 構築は head から進むため `documentElement` は早期から存在する）。具体実装は CC 判断、ただし CSP 不変 + flicker 防止が条件。
 
 ---
 
-## 完了報告フォーマット
+## Fix 4: `src/renderer/style.css` に最小 `[data-role]` セレクタ追加
 
-CC_REPORT.md を C.3-A 用に書き直し:
-1. サマリ（138 テスト PASS、ビルド成功、git 初期化完了）
-2. 各 Fix の実行結果（ログ抜粋）
-3. 構築士への質問
-4. **オーナー向け最終操作手順**（RELEASE_GUIDE.md の場所 + 概要）
+役割が機能しているかの**視認用バッジ**を追加。STEP 3 で本格的な分離（ホール側で操作 UI hidden / PC 側でタイマー表示 hidden）に発展させる。
+
+```css
+/* v2.0.0 STEP 1: 役割確認用バッジ（STEP 3 で本格分離に置換予定） */
+[data-role="hall"] body::before {
+  content: "🖥 HALL";
+  position: fixed;
+  top: 4px; right: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-family: monospace;
+  z-index: 9999;
+  pointer-events: none;
+  border-radius: 2px;
+}
+[data-role="operator"] body::before {
+  content: "💻 OPERATOR";
+  /* 同上スタイル */
+}
+[data-role="operator-solo"] body::before {
+  content: "";  /* 単画面モードはバッジ非表示、v1.3.0 と完全同じ見た目 */
+}
+```
+
+注意:
+- カード幅 / Barlow Condensed / `<dialog>` flex 禁止 等の不変ルールには一切触れない
+- バッジは右上 4px、z-index 9999 で他 UI と干渉しないよう配置
+- `pointer-events: none` でクリック干渉も防ぐ
+
+---
+
+## Fix 5: `package.json` の `build.files` 修正
+
+`scripts/_probes/v2-probe.js` を配布物から除外。
+
+```json
+"build": {
+  ...
+  "files": [
+    "src/**/*",
+    "node_modules/**/*",
+    "!**/*.test.js",
+    "!scripts/**/*",   // ★ 追加（probe 配布物除外）
+    ...
+  ]
+}
+```
+
+実際の `files` 配列は既存値を確認の上、`!scripts/**/*` のみ追加。他のパターンには手を入れない。
+
+---
+
+## Fix 6: 既存テスト全 PASS 維持
+
+```bash
+npm test
+# Summary: 138 passed / 0 failed を確認
+```
+
+1 件でも FAIL したら**即停止**、CC_REPORT に「何が壊れたか」と「致命バグ保護への影響有無」を明記。
+
+---
+
+## Fix 7: コミット & push（PR はまだ作らない）
+
+```bash
+git add -A
+git status   # 変更ファイル確認
+git -c user.name="Yu Shitamachi" -c user.email="ymng2@icloud.com" commit -m "v2.0.0 STEP 1: ホール側ウィンドウ追加（最小骨格）"
+git push -u origin feature/v2.0.0
+```
+
+PR は **承認①（STEP 2 完了時）でまとめて作成**。本 STEP 1 単独では PR 不要。
+
+---
+
+## Fix 8: CC_REPORT.md（簡潔版）
+
+CC_REPORT.md を STEP 1 完了報告に書き換え:
+
+1. **サマリ**: ブランチ作成、ウィンドウ分離、role 機能、build 除外、138 テスト維持
+2. **主要変更点**: コード抜粋 5 行以内/件、role 抽出ロジック / additionalArguments 渡し方を明示
+3. **構築士への質問**（あれば、なければ省略）
+4. **オーナー向け確認**:
+   - 単画面 PC で起動 → 見た目が v1.3.0 と完全同じか（バッジが出ないこと）
+   - HDMI 接続環境があれば → 2 ウィンドウ起動して片方に「🖥 HALL」、もう片方に「💻 OPERATOR」バッジが見えるか
 
 ---
 
 ## 維持事項
+
 - 既存 138 テスト全 PASS 維持
-- 致命バグ修正（C.2.7-A / C.2.7-D / C.1.4-fix1 / C.1.7 / C.1.8）すべて完全維持
-- C.1.3 / C.1.4 / C.1.6 / C.1.7 / C.1.8 系の挙動完全維持
-- `<dialog>` flex 化禁止
-- カード幅 / Barlow Condensed フォント不変
+- 単画面モード時の挙動を v1.3.0 と**完全同一**に保つ（バッジ非表示、レイアウト・フォント・カード幅すべて同じ）
+- 致命バグ保護 5 件すべて完全維持:
+  - `resetBlindProgressOnly`（C.2.7-A）
+  - `timerState` destructure 除外（C.2.7-D）
+  - `ensureEditorEditableState` 4 重防御（C.1-A2 + C.1.2-bugfix + C.1.4-fix1）
+  - AudioContext resume in `_play()`（C.1.7、本 STEP では触らない）
+  - runtime 永続化 8 箇所（C.1.8）
+- カード幅 54vw / 46vw、Barlow Condensed 700、`<dialog>` flex 禁止
+- skills/v2-dual-screen.md「§5 禁止事項」全項目
+- CSP `script-src 'self'` 不変
+
+---
+
+## 完了条件
+
+- [ ] `feature/v2.0.0` ブランチ作成 + checkout 済
+- [ ] `src/main.js` のウィンドウ分離完了、両関数で v1.3.0 と同等の挙動
+- [ ] `src/preload.js` で role 抽出 + `data-role` 属性付与確認
+- [ ] `src/renderer/style.css` に `[data-role]` セレクタ最小サンプル追加
+- [ ] `package.json` の `build.files` に `!scripts/**/*` 追加
+- [ ] 単画面で起動 → バッジ非表示、v1.3.0 と完全同じ見た目
+- [ ] `npm test` で **138 件全 PASS**
+- [ ] コミット & `feature/v2.0.0` ブランチへ push 完了
+- [ ] CC_REPORT.md 完了報告（オーナー向け確認 2 項目記載）
