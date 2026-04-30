@@ -1,16 +1,15 @@
-# CC_REPORT — 2026-05-01 v2.0.0 STEP 5: HDMI 抜き差し追従【承認②対象】
+# CC_REPORT — 2026-05-01 v2.0.0 STEP 7: ドキュメント更新 + version bump【承認③、v2.0.0 完成判定】
 
 ## 1. サマリー
 
-- `src/main.js` に `screen.on('display-added')` / `screen.on('display-removed')` のイベント駆動追従を実装（ポーリング禁止）
-- `switchOperatorToSolo` / `switchSoloToOperator` でウィンドウ再生成方式の role 切替（`additionalArguments` は process.argv 注入のため reload では変更不可、再生成必須）
-- `isWindowOnDisplay` ヘルパー追加（windowBounds.x/y vs display.bounds 矩形判定）
-- `app.whenReady` 末尾で `setupDisplayChangeListeners()` を呼出して購読開始
-- `src/renderer/renderer.js`: operator-solo 起動時に `ensureAudioReady()` 明示呼出（HDMI 抜き直後の音欠落防止、C.1.7 を踏襲・強化）
-- `tests/v2-display-change.test.js`（新規、8 件）+ `package.json` 更新
-- 既存 138 + STEP 2/3/4/5 新規 32 = **170 件すべて PASS**
-- 致命バグ保護 5 件すべて影響なし、commit `3f584ca` push 済
-- **承認②の PR 作成完了**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/2>（STEP 3+4+5 まとめ）
+- **`src/` 配下の本体実装は完全無変更**（`package.json` の version bump のみ、本体 JS / CSS / HTML すべて無変更）
+- **ドキュメント 4 ファイル更新**: `docs/specs.md` / `skills/timer-logic.md` / `CHANGELOG.md` / `README.md`
+- **package.json**: version `1.3.0` → `2.0.0`
+- **CLAUDE.md**: v2.0.0「STEP 0〜7 すべて完了 → v2.0.0 完成」を明記
+- **テスト追従**: `tests/v130-features.test.js` T11 の version 期待値を `1.3.0` → `2.0.0` に追従更新（バージョン bump に伴う必然的追従、テスト skip / 無効化ではない）
+- **既存 190 テスト全 PASS 維持**（FAIL 0）
+- 致命バグ保護 5 件すべて影響なし、commit `766ad81` push 済
+- **承認③の PR 作成完了**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/3>（STEP 6+7 まとめ、マージで **v2.0.0 完成判定**）
 
 ---
 
@@ -18,75 +17,70 @@
 
 | ファイル | 変更点（短く） |
 | --- | --- |
-| `src/main.js` | `isWindowOnDisplay` / `switchOperatorToSolo` / `switchSoloToOperator` / `setupDisplayChangeListeners` 追加、`app.whenReady` で購読開始 |
-| `src/renderer/renderer.js` | operator-solo 経路に `ensureAudioReady()` 明示呼出追加 |
-| `tests/v2-display-change.test.js`（新規） | 8 件の静的解析テスト |
-| `package.json` | test スクリプトに `v2-display-change.test.js` 追加 |
+| `docs/specs.md` | 末尾「**仕様書終わり**」前に v2.0.0 セクション追記（役割分離 3 モード / モニター選択 / HDMI 追従 / 状態同期精度基準 / AudioContext 再初期化 / 役割ガード / 後方互換）|
+| `skills/timer-logic.md` | v2.0.0 不変条件 G〜L 追加（hall purely consumer / main 真実源 / operator-solo v1.3.0 同等 / 再生成方式 / AudioContext 強化 / ポーリング禁止）|
+| `CHANGELOG.md` | `[2.0.0] - 2026-05-01` セクション追加（v1.3.0 の上、Keep a Changelog 形式、Added / Changed / Compatibility / Migration Notes / Tests / Documentation）|
+| `README.md` | 機能セクションに「2 画面対応（v2.0.0〜）」を 1 項目追記 |
+| `package.json` | version `1.3.0` → `2.0.0`（他フィールドは無変更）|
+| `CLAUDE.md` | v2.0.0 大改修セクション冒頭に「STEP 0〜7 すべて完了 → v2.0.0 完成」状態明記 |
+| `tests/v130-features.test.js` | T11 の version 期待値を `2.0.0` に追従更新（テスト skip / 無効化ではない）|
+
+`src/` 配下は **package.json の version bump のみ**、本体 JS / CSS / HTML / preload / dual-sync すべて無変更（`git diff src/` で確認済）。
 
 ---
 
 ## 3. 主要変更点
 
-**main.js: イベント駆動追従（ポーリング不使用、screen API のみ）**
+**docs/specs.md: v2.0.0 機能追加セクション（要約）**
 
-```js
-function setupDisplayChangeListeners() {
-  screen.on('display-removed', async (_event, removedDisplay) => {
-    if (!hallWindow || hallWindow.isDestroyed()) return;
-    const bounds = hallWindow.getBounds();
-    if (isWindowOnDisplay(bounds, removedDisplay)) {
-      hallWindow.close(); hallWindow = null;
-      await switchOperatorToSolo();
-    }
-  });
-  screen.on('display-added', async () => {
-    const displays = screen.getAllDisplays();
-    if (!displays || displays.length < 2) return;
-    if (hallWindow && !hallWindow.isDestroyed()) return;
-    const hallId = await chooseHallDisplayInteractive(displays);
-    if (hallId == null) return;
-    await switchSoloToOperator(displays.find((d) => d.id === hallId));
-  });
+```markdown
+## v2.0.0 機能追加（2 画面対応大改修、2026-05-01）
+### 役割分離（3 モード）: operator-solo / operator / hall
+### 起動時のモニター選択ダイアログ（毎回手動選択、参考バッジ）
+### HDMI 抜き差し追従（display-added / display-removed イベント駆動）
+### 状態同期（main プロセス = 単一の真実源、9 種類キャッシュ + 差分 broadcast）
+### 状態同期の精度基準（タイマー±100ms / 一時停止 300ms / 構造 500ms / 設定 200ms / HDMI 2 秒）
+### AudioContext 再初期化対応（C.1.7 強化）
+### 役割ガード（renderer.js 主要 handler 14 箇所）
+### CSP / セキュリティ不変条件（script-src 'self' / contextIsolation / sandbox 維持）
+### 後方互換（最重要不変条件、operator-solo は v1.3.0 完全同等）
+```
+
+**skills/timer-logic.md: v2.0.0 不変条件 G〜L（要約）**
+
+- G: ホール側ウィンドウは purely consumer
+- H: main プロセスを単一の真実源とする状態同期
+- I: 単画面モード（operator-solo）は v1.3.0 完全同等
+- J: ウィンドウ役割切替は再生成方式（reload 禁止）
+- K: AudioContext 再初期化対応（C.1.7 強化）
+- L: ポーリング禁止、イベント駆動
+
+**CHANGELOG.md: [2.0.0] セクション**
+
+- Added: 2 画面対応 / モニター選択 / HDMI 追従 / 状態同期インフラ / 役割ガード / operator → main 通知 / v2 専用テスト 52 件
+- Changed: AudioContext resume 強化 / CSS 役割別 UI 分離 / createMainWindow async 化 / バッジ削除
+- Compatibility: 単画面モード v1.3.0 完全同等 / 致命バグ保護 5 件維持 / store スキーマ変更なし / CSP 不変
+- Migration Notes: データ移行不要 / HDMI なしは何も変わらない / 2 画面環境ではダイアログ表示
+
+**package.json**
+
+```json
+{
+  "name": "pokertimerplus",
+  "productName": "PokerTimerPLUS+",
+  "version": "2.0.0"   // 1.3.0 → 2.0.0
 }
 ```
 
-**main.js: ウィンドウ再生成方式（reload では role 変更不可なため）**
+**tests/v130-features.test.js T11（バージョン追従）**
 
 ```js
-async function switchOperatorToSolo() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.close(); mainWindow = null;
-  createOperatorWindow(screen.getPrimaryDisplay(), true);   // operator-solo で再生成
-}
-async function switchSoloToOperator(hallDisplay) {
-  if (!mainWindow || mainWindow.isDestroyed() || !hallDisplay) return;
-  mainWindow.close(); mainWindow = null;
-  createOperatorWindow(screen.getPrimaryDisplay(), false);  // operator で再生成
-  createHallWindow(hallDisplay);
-}
-```
-
-**main.js: isWindowOnDisplay ヘルパー（左上座標で判定）**
-
-```js
-function isWindowOnDisplay(windowBounds, display) {
-  if (!windowBounds || !display || !display.bounds) return false;
-  const wb = windowBounds, db = display.bounds;
-  return wb.x >= db.x && wb.x < db.x + db.width &&
-         wb.y >= db.y && wb.y < db.y + db.height;
-}
-```
-
-**renderer.js: operator-solo 経路で ensureAudioReady() 明示呼出**
-
-```js
-} else {
-  // operator-solo（単画面、デフォルト）: v1.3.0 と完全同等。
-  // v2.0.0 STEP 5: HDMI 抜き直後にウィンドウ再生成 → AudioContext suspend の可能性、
-  //   C.1.7 の _play() 内 resume を待たずに起動直後の安全側として明示呼出（冪等）。
-  initialize();
-  ensureAudioReady();
-}
+test('T11: package.json version === 2.0.0', () => {
+  // v2.0.0 STEP 7 (2026-05-01): version bump 1.3.0 → 2.0.0 に追従。
+  // 本テストは「リリース版を表すバージョン文字列が期待値である」ことを担保するもの。
+  // 今後の minor / patch リリース時はここを追従更新する（テスト skip / 無効化ではない）。
+  assert.equal(PKG.version, '2.0.0', `version が ${PKG.version}（期待 2.0.0）`);
+});
 ```
 
 ---
@@ -95,15 +89,13 @@ function isWindowOnDisplay(windowBounds, display) {
 
 | 致命バグ保護 | 影響評価 | 根拠 |
 | --- | --- | --- |
-| `resetBlindProgressOnly`（C.2.7-A）| **影響なし** | renderer 側のリセット経路は無変更。STEP 5 は main 側のウィンドウ管理のみ |
-| `timerState` destructure 除外（C.2.7-D Fix 3）| **影響なし** | IPC payload 構造に変更なし。`_publishDualState('timerState', ...)` は STEP 2 から維持 |
-| `ensureEditorEditableState` 4 重防御（C.1-A2 系）| **影響なし** | renderer エディタ系経路に変更なし |
-| **AudioContext resume（C.1.7）**| **強化** | operator-solo 起動時に `ensureAudioReady()` 明示呼出を追加。`_play()` 内 resume はそのまま、最初の音発火を待たずに resume を試みる経路を追加（T6 で静的担保）。HDMI 抜き直後のウィンドウ再生成シナリオで音欠落リスクを最小化 |
-| runtime 永続化 8 箇所（C.1.8）| **影響なし** | renderer 側の `schedulePersistRuntime` 経路は無変更。`_dualStateCache` の `tournamentRuntime` 保持も STEP 2 から維持 |
+| `resetBlindProgressOnly`（C.2.7-A）| **影響なし** | src/ 配下無変更（package.json version bump のみ）。テスト追従のみで本体経路は不変 |
+| `timerState` destructure 除外（C.2.7-D Fix 3）| **影響なし** | 本 STEP は src/ 配下を一切触っていない |
+| `ensureEditorEditableState` 4 重防御（C.1-A2 系）| **影響なし** | 同上 |
+| AudioContext resume（C.1.7、STEP 5 強化済）| **影響なし** | 同上、STEP 5 で確立した強化はそのまま維持 |
+| runtime 永続化 8 箇所（C.1.8）| **影響なし** | 同上 |
 
-**結論**: 5 件すべて完全継承、AudioContext は強化方向。STEP 5 で破壊的変更なし。
-
-`_broadcastDualState` の hall 不在 no-op ガード（STEP 2 実装）も T8 で再確認、HDMI 抜きで `hallWindow = null` になった瞬間から自動的に broadcast が止まる設計が機能。
+**結論**: 5 件すべて完全継承。STEP 7 で破壊的変更なし（src/ 本体実装無変更のため）。
 
 ---
 
@@ -115,32 +107,46 @@ function isWindowOnDisplay(windowBounds, display) {
 
 ---
 
-## 6. テスト結果
+## 6. 構築士への質問
 
-```
-=== Summary: 7 + 6 + 9 + 9 + 5 + 4 + 7 + 8 + 8 + 12 + 19 + 24 + 8 + 6 + 6 + 8 + 8 + 8 + 8 = 170 passed / 0 failed ===
-```
+### Q1: 既存テストの version 期待値追従について
 
-- 既存 138 件: すべて PASS
-- STEP 2 新規 8 (v2-dual-sync): すべて PASS
-- STEP 3 新規 8 (v2-role-guard): すべて PASS
-- STEP 4 新規 8 (v2-display-picker): すべて PASS
-- STEP 5 新規 8 (v2-display-change): すべて PASS
-  - T1: `setupDisplayChangeListeners` 関数定義 + `screen.on('display-added' / 'display-removed')` 両方
-  - T2: `display-removed` ハンドラで `hallWindow.close` + `switchOperatorToSolo` 呼出
-  - T3: `display-added` ハンドラで `displays.length < 2` 早期 return + `chooseHallDisplayInteractive` 再呼出
-  - T4: `switchOperatorToSolo` / `switchSoloToOperator` がウィンドウ再生成方式（`webContents.reload` 不使用）
-  - T5: `isWindowOnDisplay` が `windowBounds.x/y` と `display.bounds` で重なり判定
-  - T6: renderer.js の operator-solo 経路で `ensureAudioReady()` 明示呼出（**AudioContext 再初期化対策**）
-  - T7: ポーリング不使用（`setInterval` で displays 監視なし）
-  - T8: `_broadcastDualState` の hall 不在 no-op ガードが維持されている
+NEXT_CC_PROMPT.md「Fix 7: 既存 190 テスト全 PASS 維持」では「`src/` 配下無変更 + テストファイル無変更のため、当然 190 PASS のはず」と記載がありましたが、`tests/v130-features.test.js` T11 が `package.json version === '1.3.0'` を期待値として hard-code していたため、version bump で当該 1 件が FAIL しました。
+
+**CC 判断**: テスト skip / 無効化には該当しないため、期待値を `'2.0.0'` に追従更新（テスト本体のロジックは無変更）。コメントで「バージョン bump に伴う必然的追従、テスト skip / 無効化ではない」と明記。
+
+→ この対応で問題ありませんか？ または別の方法（例: 期待値を `package.json` から動的に取得する形式に変更、`/^\d+\.\d+\.\d+$/` の形式チェックのみに変更）の方が望ましかったでしょうか。
 
 ---
 
-## 7. オーナー向け確認
+## 7. テスト結果
 
-1. **単画面 PC（HDMI なし）で起動**: v1.3.0 配布版と完全同じ動作になるか（変化なし、operator-solo モード）
-2. **2 画面環境（HDMI モニターあり）で起動**: 起動時にモニター選択ダイアログが表示され、選択した側がホール側になり、PC 側 ↔ ホール側で状態が同期するか
-3. **営業中に HDMI を抜く**（**承認②の判定軸**）: ホール側ウィンドウが閉じ、PC 側が単画面モード（operator-solo、v1.3.0 同等の見た目）に自動復帰すること。タイマー進行が中断されない、音が継続する
-4. **抜いた後に HDMI を再接続**（**承認②の判定軸**）: モニター選択ダイアログが自動表示され、選択 → 2 画面モードに復帰、状態が自動復元される
-5. **PR**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/2> をブラウザで開いて中身を確認 → マージ判断（前原さんがマージ操作）。承認①の PR #1 は既に main マージ済み、本 PR が STEP 3+4+5 の集約マージ
+```
+=== Summary: 7+6+9+9+5+4+7+8+8+12+19+24+8+6+6+8+8+8+8+8+6+6 = 190 passed / 0 failed ===
+```
+
+- 既存 138 件: すべて PASS（影響なし）
+- v2.0.0 専用 52 件（v2-dual-sync 8 / v2-role-guard 8 / v2-display-picker 8 / v2-display-change 8 / v2-integration 8 / v2-backward-compat 6 / v2-edge-cases 6）: すべて PASS
+
+---
+
+## 8. オーナー向け確認
+
+1. **単画面 PC（HDMI なし）で起動**: v1.3.0 と完全同等の動作（変化なし）。アプリタイトルバー or About 画面で「PokerTimerPLUS+ 2.0.0」のバージョン表示が確認できれば成功
+2. **2 画面環境（HDMI モニターあり）で起動**: 
+   - 起動時にモニター選択ダイアログ表示
+   - PC 側で操作 → ホール側に同期反映
+   - 営業中の HDMI 抜き差しに自動追従、タイマー進行中断なし
+3. **`npm test`**: **190 件すべて PASS**（FAIL 0）
+4. **PR**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/3> をブラウザで開いて中身を確認 → マージ操作で **v2.0.0 完成判定**
+5. **配布判断は前原さん次第**: マージ完了後、`docs/RELEASE_GUIDE.md` の手順で `.exe` ビルド + GitHub Releases タグ `v2.0.0` 作成 + アップロードで全国のポーカールームに配布開始可能
+
+---
+
+## 9. v2.0.0 累計まとめ
+
+- **PR #1（承認①）**: STEP 0+1+2（設計調査 + ホール側ウィンドウ + 状態同期）— main マージ済み
+- **PR #2（承認②）**: STEP 3+4+5（PC 側 UI 分離 + モニター選択 + HDMI 抜き差し追従）— main マージ済み
+- **PR #3（承認③、本 PR）**: STEP 6+7（テスト拡充 + ドキュメント + version 2.0.0）— **マージで v2.0.0 完成判定**
+
+合計: 既存 v1.3.0 配布物に対し、src/ 配下に v2.0.0 機能追加（ホール側ウィンドウ + 状態同期 + 役割ガード + モニター選択 + HDMI 追従）を加え、致命バグ保護 5 件を完全維持しつつ、テストを 138 → 190 件に拡充。
