@@ -998,18 +998,86 @@ function createHallWindow(targetDisplay) {
   return hallWindow;
 }
 
-// v2.0.0 STEP 1: 起動時のウィンドウ生成エントリ。
+// v2.0.0 STEP 4: 2 画面検出時、ホール側にするモニターを起動時に毎回手動選択させる。
+//   - displays.length < 2: 単画面 → null を返して呼出側で operator-solo 起動
+//   - 選択完了: 該当 display.id を返す（store.preferredHallDisplayId に「次回参考用」として保存）
+//   - キャンセル（ウィンドウを閉じる）: null を返す → 単画面モード（operator-solo）で起動
+//   skills/v2-dual-screen.md §4.2 「起動ごとに毎回選択（記憶しない）」要件を満たす。
+//   保存値は次回ダイアログのデフォルト選択（バッジ表示）にのみ使い、自動選択はしない。
+async function chooseHallDisplayInteractive(displays) {
+  if (!displays || displays.length < 2) return null;
+
+  const lastSelected = store.get('preferredHallDisplayId') || null;
+
+  return new Promise((resolve) => {
+    const pickerWin = new BrowserWindow({
+      width: 480,
+      height: 360,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      autoHideMenuBar: true,
+      title: 'PokerTimerPLUS+ — モニター選択',
+      backgroundColor: '#0A1F3D',
+      icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        additionalArguments: ['--role=picker']
+      }
+    });
+
+    pickerWin.on('page-title-updated', (event) => event.preventDefault());
+    pickerWin.setTitle('PokerTimerPLUS+ — モニター選択');
+    // picker 内の「前回選択」用に lastSelected を渡す（fetchDisplays IPC で再取得）
+    // picker → main の選択結果は ipcMain.on('dual:select-hall-monitor', ...) で受信
+    let resolved = false;
+    const handler = (_event, displayId) => {
+      if (resolved) return;
+      resolved = true;
+      ipcMain.removeListener('dual:select-hall-monitor', handler);
+      if (typeof displayId === 'number' || typeof displayId === 'string') {
+        store.set('preferredHallDisplayId', displayId);
+        resolve(displayId);
+      } else {
+        resolve(null);
+      }
+      if (!pickerWin.isDestroyed()) pickerWin.close();
+    };
+    ipcMain.on('dual:select-hall-monitor', handler);
+
+    pickerWin.on('closed', () => {
+      ipcMain.removeListener('dual:select-hall-monitor', handler);
+      if (!resolved) {
+        resolved = true;
+        resolve(null);   // キャンセル相当
+      }
+    });
+
+    pickerWin.loadFile(path.join(__dirname, 'renderer', 'display-picker.html'));
+  });
+}
+
+// v2.0.0 STEP 1+4: 起動時のウィンドウ生成エントリ。
 //   - 単画面（displays.length < 2）: operator-solo 1 ウィンドウのみ → v1.3.0 と完全同等
-//   - 2 画面以上: primary を operator、それ以外の最初を hall（STEP 4 でモニター選択ダイアログに置換）
-function createMainWindow() {
+//   - 2 画面以上: モニター選択ダイアログ → 選択結果でホール側決定 → 2 ウィンドウ生成
+//   - ダイアログをキャンセル: 単画面モード（operator-solo）で起動
+async function createMainWindow() {
   const displays = screen.getAllDisplays();
   if (!displays || displays.length < 2) {
     return createOperatorWindow(displays && displays[0], true);
   }
-  const primary = screen.getPrimaryDisplay();
-  const secondary = displays.find((d) => d.id !== primary.id) || displays[1];
-  createOperatorWindow(primary, false);
-  createHallWindow(secondary);
+  const hallId = await chooseHallDisplayInteractive(displays);
+  if (hallId == null) {
+    // キャンセル → 単画面モード（primary に operator-solo）
+    return createOperatorWindow(screen.getPrimaryDisplay(), true);
+  }
+  const hallDisplay = displays.find((d) => d.id === hallId);
+  const operatorDisplay = displays.find((d) => d.id !== hallId) || screen.getPrimaryDisplay();
+  createOperatorWindow(operatorDisplay, false);
+  createHallWindow(hallDisplay);
   return mainWindow;
 }
 
@@ -1956,6 +2024,25 @@ function registerIpcHandlers() {
     return { ...updated, title: updated.name };
   });
 
+  // ===== v2.0.0 STEP 4: モニター選択ダイアログ用 IPC =====
+  //   picker.html → preload (window.api.dual.fetchDisplays) → ここで displays + lastSelected を返す。
+  //   ipcMain.on('dual:select-hall-monitor', ...) は chooseHallDisplayInteractive 内で動的登録するため、
+  //   ここで登録するのは fetch のみ（永続ハンドラ）。
+  ipcMain.handle('display-picker:fetch', () => {
+    const all = screen.getAllDisplays();
+    const primaryId = (() => { try { return screen.getPrimaryDisplay().id; } catch (_) { return null; } })();
+    const list = (Array.isArray(all) ? all : []).map((d) => ({
+      id: d.id,
+      label: typeof d.label === 'string' ? d.label : '',
+      bounds: { width: d.bounds?.width || 0, height: d.bounds?.height || 0 },
+      isPrimary: d.id === primaryId
+    }));
+    return {
+      displays: list,
+      lastSelected: store.get('preferredHallDisplayId') || null
+    };
+  });
+
   // ===== v2.0.0 STEP 2: 2 画面間の状態同期 IPC =====
   //   hall 起動時に 1 回だけ呼ばれる初期同期。_dualStateCache の現在値を返す。
   //   未キャッシュ（cache が null）の項目は active トーナメントから補完して返す。
@@ -2007,13 +2094,15 @@ function registerIpcHandlers() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!isDev) {
     Menu.setApplicationMenu(null);
   }
 
   registerIpcHandlers();
-  createMainWindow();
+  // v2.0.0 STEP 4: createMainWindow が async（モニター選択ダイアログを await）になったため、
+  //   shortcuts 登録より前に await して mainWindow が確実に生成された状態にする。
+  await createMainWindow();
   registerShortcuts();
 
   // STEP 9.fix2: 全権限要求を明示的に拒否（位置情報・カメラ・マイク・通知等は一切使用しない）。
@@ -2090,9 +2179,10 @@ app.whenReady().then(() => {
     }
   });
 
-  app.on('activate', () => {
+  app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
+      // v2.0.0 STEP 4: dock click 等での再起動時もモニター選択をやり直す（毎回手動の要件）
+      await createMainWindow();
     }
   });
 });

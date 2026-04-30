@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja" data-role="picker">
+<head>
+  <meta charset="UTF-8">
+  <!-- v2.0.0 STEP 4: モニター選択ダイアログ。CSP は既存 index.html と同等の厳格設定を維持。
+       inline script 禁止（script-src 'self'）、独立した小規模 UI のため独自スタイルは <style> で
+       inline 記述（style-src 'unsafe-inline' 既存設定で許可）。 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; connect-src 'self' file:">
+  <title>PokerTimerPLUS+ — モニター選択</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; padding: 0; }
+    body {
+      background: #0A1F3D;
+      color: #fff;
+      font-family: 'Barlow Condensed', system-ui, -apple-system, sans-serif;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      padding: 24px;
+      overflow: hidden;
+    }
+    .display-picker {
+      max-width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .display-picker__title {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: 0.04em;
+    }
+    .display-picker__lead {
+      margin: 0;
+      font-size: 14px;
+      opacity: 0.85;
+      line-height: 1.5;
+    }
+    .display-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .display-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .display-card.is-last-selected {
+      border-color: #ffc857;
+      background: rgba(255, 200, 87, 0.08);
+    }
+    .display-card__info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .display-card__name {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .display-card__detail {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    .display-card__badge {
+      font-size: 10px;
+      font-weight: 700;
+      background: #ffc857;
+      color: #0A1F3D;
+      padding: 2px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.06em;
+    }
+    .btn-select, .btn-cancel {
+      font-family: inherit;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .btn-select {
+      background: #4cc2ff;
+      color: #0A1F3D;
+    }
+    .btn-select:hover { background: #6fd0ff; }
+    .btn-cancel {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      align-self: flex-end;
+      margin-top: 4px;
+    }
+    .btn-cancel:hover { background: rgba(255, 255, 255, 0.2); }
+  </style>
+</head>
+<body>
+  <main class="display-picker">
+    <h1 class="display-picker__title">ホール側のモニターを選択</h1>
+    <p class="display-picker__lead">お客様に見せる側（タイマー表示）のモニターを選んでください。<br>もう一方が PC 側（操作用）になります。</p>
+    <div class="display-list" id="displayList"></div>
+    <button id="cancelBtn" class="btn-cancel" type="button">キャンセル（単画面モードで起動）</button>
+  </main>
+  <script src="display-picker.js"></script>
+</body>
+</html>
