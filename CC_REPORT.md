@@ -1,15 +1,15 @@
-# CC_REPORT — 2026-05-01 v2.0.0 STEP 6: テスト拡充（統合 + 後方互換 + エッジケース）
+# CC_REPORT — 2026-05-01 v2.0.0 STEP 7: ドキュメント更新 + version bump【承認③、v2.0.0 完成判定】
 
 ## 1. サマリー
 
-- **実装変更ゼロ**、テストファイル 3 つを新規追加してカバレッジを強化（`src/` 配下は一切触らない、`git diff src/` で確認済）
-- `tests/v2-integration.test.js`（新規、8 件）: STEP 0〜5 の cross-step 統合検証
-- `tests/v2-backward-compat.test.js`（新規、6 件）: operator-solo モード = v1.3.0 完全同等の担保強化
-- `tests/v2-edge-cases.test.js`（新規、6 件）: モニター 3 枚以上 / 空ラベル / 二重 resolve / `_dualStateCache` キー固定など
-- `package.json` test スクリプトに 3 ファイル追加
-- 既存 138 + STEP 2/3/4/5 (32) + STEP 6 新規 20 = **190 件すべて PASS**
-- 致命バグ保護 5 件すべて影響なし（実装変更ゼロのため当然）
-- commit `c21eb2b` push 済（**PR は未作成**、承認③で STEP 6+7 まとめて作成方針）
+- **`src/` 配下の本体実装は完全無変更**（`package.json` の version bump のみ、本体 JS / CSS / HTML すべて無変更）
+- **ドキュメント 4 ファイル更新**: `docs/specs.md` / `skills/timer-logic.md` / `CHANGELOG.md` / `README.md`
+- **package.json**: version `1.3.0` → `2.0.0`
+- **CLAUDE.md**: v2.0.0「STEP 0〜7 すべて完了 → v2.0.0 完成」を明記
+- **テスト追従**: `tests/v130-features.test.js` T11 の version 期待値を `1.3.0` → `2.0.0` に追従更新（バージョン bump に伴う必然的追従、テスト skip / 無効化ではない）
+- **既存 190 テスト全 PASS 維持**（FAIL 0）
+- 致命バグ保護 5 件すべて影響なし、commit `766ad81` push 済
+- **承認③の PR 作成完了**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/3>（STEP 6+7 まとめ、マージで **v2.0.0 完成判定**）
 
 ---
 
@@ -17,45 +17,71 @@
 
 | ファイル | 変更点（短く） |
 | --- | --- |
-| `tests/v2-integration.test.js`（新規） | 8 件: cross-step 統合検証 |
-| `tests/v2-backward-compat.test.js`（新規） | 6 件: operator-solo の v1.3.0 同等担保 |
-| `tests/v2-edge-cases.test.js`（新規） | 6 件: エッジケース・異常系 |
-| `package.json` | test スクリプトに 3 ファイル追加 |
+| `docs/specs.md` | 末尾「**仕様書終わり**」前に v2.0.0 セクション追記（役割分離 3 モード / モニター選択 / HDMI 追従 / 状態同期精度基準 / AudioContext 再初期化 / 役割ガード / 後方互換）|
+| `skills/timer-logic.md` | v2.0.0 不変条件 G〜L 追加（hall purely consumer / main 真実源 / operator-solo v1.3.0 同等 / 再生成方式 / AudioContext 強化 / ポーリング禁止）|
+| `CHANGELOG.md` | `[2.0.0] - 2026-05-01` セクション追加（v1.3.0 の上、Keep a Changelog 形式、Added / Changed / Compatibility / Migration Notes / Tests / Documentation）|
+| `README.md` | 機能セクションに「2 画面対応（v2.0.0〜）」を 1 項目追記 |
+| `package.json` | version `1.3.0` → `2.0.0`（他フィールドは無変更）|
+| `CLAUDE.md` | v2.0.0 大改修セクション冒頭に「STEP 0〜7 すべて完了 → v2.0.0 完成」状態明記 |
+| `tests/v130-features.test.js` | T11 の version 期待値を `2.0.0` に追従更新（テスト skip / 無効化ではない）|
 
-`src/` 配下は変更ゼロ（`git diff src/` で確認済）。
+`src/` 配下は **package.json の version bump のみ**、本体 JS / CSS / HTML / preload / dual-sync すべて無変更（`git diff src/` で確認済）。
 
 ---
 
-## 3. 主要変更点（テスト T1〜TN）
+## 3. 主要変更点
 
-**v2-integration.test.js（8 件、cross-step 統合検証）**
+**docs/specs.md: v2.0.0 機能追加セクション（要約）**
 
-- T1: 起動シーケンス全要素が main.js に揃う（whenReady → getAllDisplays → chooseHallDisplayInteractive → createOperatorWindow / createHallWindow → setupDisplayChangeListeners）
-- T2: STEP 2/4/5 の IPC ハンドラ群が共存（`dual:state-sync-init` / `dual:operator-action` / `display-picker:fetch` / `dual:select-hall-monitor` / `display-removed` / `display-added`）
-- T3: `additionalArguments` で role 4 種類すべて（operator / hall / operator-solo / picker）の設定パス
-- T4: renderer.js に `dual-sync` import + `notifyOperatorActionIfNeeded` + `ensureAudioReady`（operator-solo 経路）
-- T5: `_broadcastDualState` の hall 不在 / destroyed no-op + `_publishDualState` がそれを経由する安全性
-- T6: `createMainWindow` が `hallId == null` で `createOperatorWindow(_, true)` 単画面起動（キャンセル経路）
-- T7: `switchOperatorToSolo` → `createOperatorWindow(_, true)` → operator-solo renderer で `ensureAudioReady`（HDMI 抜き → 音継続経路）
-- T8: 致命バグ保護 5 件すべての関数本体・呼出経路が renderer.js / main.js / audio.js に維持（cross-step 静的検査）
+```markdown
+## v2.0.0 機能追加（2 画面対応大改修、2026-05-01）
+### 役割分離（3 モード）: operator-solo / operator / hall
+### 起動時のモニター選択ダイアログ（毎回手動選択、参考バッジ）
+### HDMI 抜き差し追従（display-added / display-removed イベント駆動）
+### 状態同期（main プロセス = 単一の真実源、9 種類キャッシュ + 差分 broadcast）
+### 状態同期の精度基準（タイマー±100ms / 一時停止 300ms / 構造 500ms / 設定 200ms / HDMI 2 秒）
+### AudioContext 再初期化対応（C.1.7 強化）
+### 役割ガード（renderer.js 主要 handler 14 箇所）
+### CSP / セキュリティ不変条件（script-src 'self' / contextIsolation / sandbox 維持）
+### 後方互換（最重要不変条件、operator-solo は v1.3.0 完全同等）
+```
 
-**v2-backward-compat.test.js（6 件、operator-solo モード = v1.3.0 完全同等）**
+**skills/timer-logic.md: v2.0.0 不変条件 G〜L（要約）**
 
-- T1: operator-solo は `initialize()` を経由（`initDualSyncForHall` は呼ばれない）
-- T2: `[data-role="operator-solo"]` で重要 UI 要素（.clock / .bottom-bar / .marquee 等）に `display:none` を当てていない
-- T3: `notifyOperatorActionIfNeeded` が `role !== "operator"` で早期 return（operator-solo で main 経由 broadcast 起こさない）
-- T4: `initDualSyncForHall` が `window.appRole !== "hall"` で早期 return
-- T5: 致命バグ修正 5 件すべて関数本体・経路が維持
-- T6: v1.3.0 既存の主要関数（handleReset / handleTournamentNew / handlePresetApply / 等）が renderer.js / main.js に保持
+- G: ホール側ウィンドウは purely consumer
+- H: main プロセスを単一の真実源とする状態同期
+- I: 単画面モード（operator-solo）は v1.3.0 完全同等
+- J: ウィンドウ役割切替は再生成方式（reload 禁止）
+- K: AudioContext 再初期化対応（C.1.7 強化）
+- L: ポーリング禁止、イベント駆動
 
-**v2-edge-cases.test.js（6 件、エッジケース）**
+**CHANGELOG.md: [2.0.0] セクション**
 
-- T1: モニター 3 枚以上検出時、`chooseHallDisplayInteractive` は `< 2` のみ early return、`>= 2` は同経路（`displays.map` 全件返却 + `forEach` 全件カード化）
-- T2: `display.label` 空文字列のフォールバック（`モニター ${i + 1}`）+ main.js の文字列正規化
-- T3: `display-removed` で `hallWindow` 不在 / `isWindowOnDisplay` 非該当（operator 側 display）→ 何もしない
-- T4: `display-added` で `hallWindow && !hallWindow.isDestroyed()` 早期 return（既に 2 画面で 3 枚目追加されたケース）
-- T5: `chooseHallDisplayInteractive` の `let resolved = false` フラグ + `if (resolved) return` で二重 resolve 防止
-- T6: `_dualStateCache` のキーが期待の 9 種類のみ（timerState / structure / displaySettings / marqueeSettings / tournamentRuntime / tournamentBasics / audioSettings / logoUrl / venueName）、想定外キー追加なし
+- Added: 2 画面対応 / モニター選択 / HDMI 追従 / 状態同期インフラ / 役割ガード / operator → main 通知 / v2 専用テスト 52 件
+- Changed: AudioContext resume 強化 / CSS 役割別 UI 分離 / createMainWindow async 化 / バッジ削除
+- Compatibility: 単画面モード v1.3.0 完全同等 / 致命バグ保護 5 件維持 / store スキーマ変更なし / CSP 不変
+- Migration Notes: データ移行不要 / HDMI なしは何も変わらない / 2 画面環境ではダイアログ表示
+
+**package.json**
+
+```json
+{
+  "name": "pokertimerplus",
+  "productName": "PokerTimerPLUS+",
+  "version": "2.0.0"   // 1.3.0 → 2.0.0
+}
+```
+
+**tests/v130-features.test.js T11（バージョン追従）**
+
+```js
+test('T11: package.json version === 2.0.0', () => {
+  // v2.0.0 STEP 7 (2026-05-01): version bump 1.3.0 → 2.0.0 に追従。
+  // 本テストは「リリース版を表すバージョン文字列が期待値である」ことを担保するもの。
+  // 今後の minor / patch リリース時はここを追従更新する（テスト skip / 無効化ではない）。
+  assert.equal(PKG.version, '2.0.0', `version が ${PKG.version}（期待 2.0.0）`);
+});
+```
 
 ---
 
@@ -63,13 +89,13 @@
 
 | 致命バグ保護 | 影響評価 | 根拠 |
 | --- | --- | --- |
-| `resetBlindProgressOnly`（C.2.7-A）| **影響なし** | 本 STEP は src/ 配下無変更、テスト追加のみ。v2-integration T8 + v2-backward-compat T5 で関数本体・「runtime に触らない」を再確認 |
-| `timerState` destructure 除外（C.2.7-D Fix 3）| **影響なし** | src/ 無変更。v2-integration T8 + v2-backward-compat T5 で setDisplaySettings の destructure に timerState が混入していないことを再確認 |
-| `ensureEditorEditableState` 4 重防御（C.1-A2 系）| **影響なし** | src/ 無変更。v2-backward-compat T5 で関数定義と handleTournamentNew からの呼出経路を再確認 |
-| AudioContext resume（C.1.7）| **影響なし** | src/ 無変更。v2-integration T7 + v2-backward-compat T5 で `_play()` 内 suspend resume の維持を再確認 |
-| runtime 永続化 8 箇所（C.1.8）| **影響なし** | src/ 無変更。v2-integration T8 で `schedulePersistRuntime` 関数定義 + 呼出 6 箇所以上を再確認、v2-backward-compat T5 で `tournaments:setRuntime` IPC + `sanitizeRuntime` の維持を再確認 |
+| `resetBlindProgressOnly`（C.2.7-A）| **影響なし** | src/ 配下無変更（package.json version bump のみ）。テスト追従のみで本体経路は不変 |
+| `timerState` destructure 除外（C.2.7-D Fix 3）| **影響なし** | 本 STEP は src/ 配下を一切触っていない |
+| `ensureEditorEditableState` 4 重防御（C.1-A2 系）| **影響なし** | 同上 |
+| AudioContext resume（C.1.7、STEP 5 強化済）| **影響なし** | 同上、STEP 5 で確立した強化はそのまま維持 |
+| runtime 永続化 8 箇所（C.1.8）| **影響なし** | 同上 |
 
-**結論**: 5 件すべて完全継承。STEP 6 で破壊的変更なし（実装変更ゼロのため）。
+**結論**: 5 件すべて完全継承。STEP 7 で破壊的変更なし（src/ 本体実装無変更のため）。
 
 ---
 
@@ -81,28 +107,46 @@
 
 ---
 
-## 6. テスト結果
+## 6. 構築士への質問
+
+### Q1: 既存テストの version 期待値追従について
+
+NEXT_CC_PROMPT.md「Fix 7: 既存 190 テスト全 PASS 維持」では「`src/` 配下無変更 + テストファイル無変更のため、当然 190 PASS のはず」と記載がありましたが、`tests/v130-features.test.js` T11 が `package.json version === '1.3.0'` を期待値として hard-code していたため、version bump で当該 1 件が FAIL しました。
+
+**CC 判断**: テスト skip / 無効化には該当しないため、期待値を `'2.0.0'` に追従更新（テスト本体のロジックは無変更）。コメントで「バージョン bump に伴う必然的追従、テスト skip / 無効化ではない」と明記。
+
+→ この対応で問題ありませんか？ または別の方法（例: 期待値を `package.json` から動的に取得する形式に変更、`/^\d+\.\d+\.\d+$/` の形式チェックのみに変更）の方が望ましかったでしょうか。
+
+---
+
+## 7. テスト結果
 
 ```
 === Summary: 7+6+9+9+5+4+7+8+8+12+19+24+8+6+6+8+8+8+8+8+6+6 = 190 passed / 0 failed ===
 ```
 
 - 既存 138 件: すべて PASS（影響なし）
-- STEP 2 新規 8 (v2-dual-sync): すべて PASS
-- STEP 3 新規 8 (v2-role-guard): すべて PASS
-- STEP 4 新規 8 (v2-display-picker): すべて PASS
-- STEP 5 新規 8 (v2-display-change): すべて PASS
-- STEP 6 新規 20 件: すべて PASS
-  - v2-integration: 8 件
-  - v2-backward-compat: 6 件
-  - v2-edge-cases: 6 件
-
-実装中に T6 の 2 件で正規表現マッチングの誤りで一時 FAIL（`createOperatorWindow(screen.getPrimaryDisplay(), true)` の内側括弧、`_dualStateCache` 宣言内のコメント `// { ... }`）→ 共に正規表現を `[\s\S]*?` lazy / コメント除去で修正、最終 PASS。実装本体への影響なし。
+- v2.0.0 専用 52 件（v2-dual-sync 8 / v2-role-guard 8 / v2-display-picker 8 / v2-display-change 8 / v2-integration 8 / v2-backward-compat 6 / v2-edge-cases 6）: すべて PASS
 
 ---
 
-## 7. オーナー向け確認
+## 8. オーナー向け確認
 
-1. **単画面 PC（HDMI なし）で起動**: v1.3.0 と完全同等（変化なし）。本 STEP は src/ 配下を一切触っていないため、当然変化なし
-2. **全テストが緑色で PASS**: `npm test` 実行で 190 件すべて PASS、FAIL 0 件
-3. **本フェーズで PR は未作成**（承認③で STEP 6+7 を 1 PR にまとめる方針）。承認②の PR #2 は前原さんのマージを引き続き待ち中
+1. **単画面 PC（HDMI なし）で起動**: v1.3.0 と完全同等の動作（変化なし）。アプリタイトルバー or About 画面で「PokerTimerPLUS+ 2.0.0」のバージョン表示が確認できれば成功
+2. **2 画面環境（HDMI モニターあり）で起動**: 
+   - 起動時にモニター選択ダイアログ表示
+   - PC 側で操作 → ホール側に同期反映
+   - 営業中の HDMI 抜き差しに自動追従、タイマー進行中断なし
+3. **`npm test`**: **190 件すべて PASS**（FAIL 0）
+4. **PR**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/3> をブラウザで開いて中身を確認 → マージ操作で **v2.0.0 完成判定**
+5. **配布判断は前原さん次第**: マージ完了後、`docs/RELEASE_GUIDE.md` の手順で `.exe` ビルド + GitHub Releases タグ `v2.0.0` 作成 + アップロードで全国のポーカールームに配布開始可能
+
+---
+
+## 9. v2.0.0 累計まとめ
+
+- **PR #1（承認①）**: STEP 0+1+2（設計調査 + ホール側ウィンドウ + 状態同期）— main マージ済み
+- **PR #2（承認②）**: STEP 3+4+5（PC 側 UI 分離 + モニター選択 + HDMI 抜き差し追従）— main マージ済み
+- **PR #3（承認③、本 PR）**: STEP 6+7（テスト拡充 + ドキュメント + version 2.0.0）— **マージで v2.0.0 完成判定**
+
+合計: 既存 v1.3.0 配布物に対し、src/ 配下に v2.0.0 機能追加（ホール側ウィンドウ + 状態同期 + 役割ガード + モニター選択 + HDMI 追従）を加え、致命バグ保護 5 件を完全維持しつつ、テストを 138 → 190 件に拡充。
