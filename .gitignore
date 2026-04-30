@@ -23,3 +23,9 @@ docs/slides_artifacts/credentials.json
 # Python キャッシュ
 __pycache__/
 *.pyc
+
+# Slide build artifacts (PLUS2 月次レポート関係、配布リポには不要)
+docs/slides_artifacts/
+
+# Claude Code ローカル設定
+.claude/settings.local.json
