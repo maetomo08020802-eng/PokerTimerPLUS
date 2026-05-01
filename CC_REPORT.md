@@ -73,7 +73,7 @@ operator → hall の状態伝播は既存 IPC（`tournaments:setTimerState` 等
 
 ## 8. PR
 
-- **PR URL**: （`gh pr create` 後に追記）
+- **PR URL**: https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/5
 - **base**: `main`
 - **head**: `feature/v2.0.2-followup`
 - **commit 数**: 1（dead code removal + test updates 一括）
