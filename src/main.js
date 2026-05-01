@@ -976,6 +976,9 @@ function createOperatorWindow(targetDisplay, isSolo = false) {
 // v2.0.0 STEP 1: hall ウィンドウ生成（最小骨格、STEP 3 で frame: false / fullscreen 等を追加）。
 //   現状は operator と同じ index.html をロード、role='hall' のみ差別化。
 //   状態同期は STEP 2 で実装。
+// v2.0.4-rc2: ホール側は起動時に自動全画面化（rc1 試験で「普通のウィンドウサイズで開く + レイアウトはみ出し」
+//   問題を確認。仮説: x/y で対象モニターに配置した上で fullscreen:true により当該モニター全画面化。
+//   レイアウトは vw/vh 基準のため、画面いっぱいに広がれば想定通りのサイズに収まる）。
 function createHallWindow(targetDisplay) {
   const opts = {
     title: WINDOW_TITLE + ' (Hall)',
@@ -983,6 +986,7 @@ function createHallWindow(targetDisplay) {
     height: 720,
     minWidth: 960,
     minHeight: 540,
+    fullscreen: true,   // v2.0.4-rc2: 起動時に対象モニターで全画面化
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
@@ -1001,6 +1005,14 @@ function createHallWindow(targetDisplay) {
   win.setTitle(WINDOW_TITLE + ' (Hall)');
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // v2.0.4-rc2: 保険として ready-to-show 時にも setFullScreen(true) を再適用。
+  //   一部の Windows 環境では BrowserWindow の opts.fullscreen が
+  //   x/y と協調しないケースがあるため、対象ディスプレイでの全画面化を二重に保証。
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed() && !win.isFullScreen()) {
+      win.setFullScreen(true);
+    }
+  });
   // v2.0.1: race 防止 — このウィンドウが「現在の hallWindow」である場合のみ null クリア
   win.on('closed', () => {
     if (hallWindow === win) {
@@ -1167,8 +1179,14 @@ async function createMainWindow() {
 }
 
 function toggleFullScreen() {
-  if (!mainWindow) return;
-  mainWindow.setFullScreen(!mainWindow.isFullScreen());
+  // v2.0.4-rc2: フォーカス中のウィンドウを対象に F11 toggle。
+  //   - operator focused → 従来通り operator の全画面切替（既存挙動維持）
+  //   - hall focused → hall の全画面切替（rc1 で「F11 無反応」だった問題を解消）
+  //   - フォーカスなしの fallback として mainWindow を対象（従来挙動）
+  const focused = BrowserWindow.getFocusedWindow();
+  const target = (focused && !focused.isDestroyed()) ? focused : mainWindow;
+  if (!target || target.isDestroyed()) return;
+  target.setFullScreen(!target.isFullScreen());
 }
 
 async function confirmQuit() {

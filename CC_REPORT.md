@@ -1,96 +1,137 @@
-# CC_REPORT — 2026-05-01 v2.0.4 残検証 D/E/I/J/K カバレッジ
+# CC_REPORT — 2026-05-01 v2.0.4-rc2 試験版ビルド（ホール側自動全画面化修正）
 
 ## 1. サマリー
 
-並列 sub-agent 3 体で D/E/I/J/K の 5 項目を網羅調査。3 件のバグ（D-1 連打ガード / E-1 finished overlay 解除漏れ / B-1 ダイアログ open 中ショートカット誤発火）を発見・修正。残検証 I/J には不具合なし。新規テスト 9 件追加で **229 → 238 テスト全 PASS**。
+rc1 試験で発覚したホール側ウィンドウの「自動全画面化されない / レイアウトはみ出し / F11 無反応」問題を修正。`createHallWindow` に `fullscreen: true` を追加 + `ready-to-show` で再適用、`toggleFullScreen` を `getFocusedWindow` ベースに改修して F11 を hall でも有効化。新規テスト 6 件追加で **244 テスト全 PASS**。`.exe` 再ビルド成功。
 
-## 2. 修正ファイル
+## 2. ビルド成果物
 
-| ファイル | 変更点 |
-| --- | --- |
-| `src/renderer/renderer.js` | D-1: `handleTournamentDuplicate._inFlight` 連打ガード / E-1: `applyTimerStateToTimer` idle / 不正値経路 + `doApplyTournament` apply-only 経路で finished overlay 解除 / B-1: keydown ハンドラを `document.querySelector('dialog[open]')` で汎化 |
-| `tests/v2-coverage.test.js` | 新規 9 件（D-1 / E-1 / E-1b / B-1 + 致命バグ保護 cross-check）|
-| `package.json` | test スクリプトに v2-coverage 追加 |
+| 項目 | 値 |
+|---|---|
+| **絶対パス** | `C:\Users\user\Documents\Claude\Projects\個人アシスタント\poker-clock\dist\PokerTimerPLUS+ (Test) Setup 2.0.4-rc2.exe` |
+| **ファイルサイズ** | 82,964,430 bytes（約 80 MB）|
+| **version** | `2.0.4-rc2`（latest.yml で確認済）|
+| **productName** | `PokerTimerPLUS+ (Test)`（rc1 と同じ）|
+| **appId** | `com.shitamachi.pokertimerplus.test`（rc1 と同じ）|
+| **推定 userData path** | `%APPDATA%\PokerTimerPLUS+ (Test)\`（rc1 と共通）|
+| **win-unpacked exe 名** | `PokerTimerPLUS+ (Test).exe` |
+| **生成日時** | 2026-05-01T06:14:37.420Z |
 
-## 3. 主要変更点
+rc1 と同 productName / appId のため、rc1 をアンインストール後に rc2 を上書きインストール、または別フォルダに並列インストール可能。
 
-### D-1: handleTournamentDuplicate の連打ガード（renderer.js）
+## 3. 修正対象ファイルと変更箇所
 
-`handleTournamentNew` と同じ `_inFlight` パターンを `handleTournamentDuplicate` に適用。連打で 2 件複製が作られる軽微 race を解消。
-
-### E-1: FINISHED オーバーレイ解除漏れ（renderer.js）
-
-旧実装では `applyTimerStateToTimer` の `running/paused/break` 経路でのみ `clock--timer-finished` クラスを解除していたため、**終了済みトーナメント → 別 t に切替（idle 復元経路）** で overlay が残るバグがあった。修正:
-1. `applyTimerStateToTimer` の `idle` 分岐 + 不正値（`!ts`）分岐の両方で `classList.remove`
-2. `doApplyTournament` の `apply-only` 経路でも `classList.remove`
-
-### B-1: ダイアログ open 中のショートカット誤発火（renderer.js）
-
-旧実装は `marqueeDialog` / `settingsDialog` のみ列挙していたため、**apply-mode / blinds-apply-mode / tournament-delete / import-strategy / prestart** の 5 ダイアログ open 中はショートカットが誤発火していた。`document.querySelector('dialog[open]')` への汎化で全 `<dialog open>` を一括で抑制。
-
-## 4. 残検証 D/E/I/J/K の結果
-
-| 項目 | 結果 | 修正 |
+| ファイル | 変更箇所 | 内容 |
 |---|---|---|
-| **D. トーナメント新規/編集/削除** | D-1 軽微あり | 修正済 |
-| **E. ブラインド構造編集/適用** | E-1 軽微あり（FINISHED overlay）| 修正済 |
-| **I. スライドショー画像** | 不具合なし | — |
-| **J. 設定タブ各項目** | 不具合なし | — |
-| **K. ショートカットキー** | B-1 中程度あり（ダイアログ open 誤発火）| 修正済 |
+| `src/main.js` | `createHallWindow` (~L979) | `opts.fullscreen = true` + `win.once('ready-to-show', () => win.setFullScreen(true))` の二重保証 |
+| `src/main.js` | `toggleFullScreen` (~L1175) | `BrowserWindow.getFocusedWindow()` ベースに改修、operator / hall 両対応 + mainWindow fallback |
+| `package.json` | `version` | `2.0.4-rc1` → `2.0.4-rc2` |
+| `package.json` | `scripts.test` | `tests/v204-hall-fullscreen.test.js` 追加 |
+| `tests/v130-features.test.js` | T11 行 137 | version 期待値 `2.0.4-rc1` → `2.0.4-rc2`（rc1 で構築士追認済の継続適用）|
+| `tests/v204-hall-fullscreen.test.js` | 新規 | 6 件の静的解析（fullscreen / setFullScreen / getFocusedWindow / F11 globalShortcut / operator-solo 互換 / race 防止 cross-check）|
 
-### 5 項目の調査詳細
+## 4. 修正コード抜粋（要点のみ）
 
-**Agent 1 (D + E)** 発見:
-- D-1: handleTournamentDuplicate に `_inFlight` ガードなし、連打で 2 件複製される（実害最小）
-- E-1: 終了済みからの切替で finished overlay が残る（UX 違和感）
+### createHallWindow（main.js）
+```js
+const opts = {
+  // ... 既存 ...
+  fullscreen: true,   // v2.0.4-rc2: 起動時に対象モニターで全画面化
+  // ... 既存 ...
+};
+if (targetDisplay && targetDisplay.bounds) {
+  opts.x = targetDisplay.bounds.x + 40;
+  opts.y = targetDisplay.bounds.y + 40;
+}
+const win = new BrowserWindow(opts);
+// ... 既存 ...
+win.once('ready-to-show', () => {
+  if (!win.isDestroyed() && !win.isFullScreen()) {
+    win.setFullScreen(true);
+  }
+});
+```
 
-**Agent 2 (I + J)** 結果: 全項目「不具合なし」確認
-- I: 5MB / 20 枚 / 150MB 警告 / 30 秒遅延 / 60 秒前復帰、全て正常
-- J: venueName / 通貨 / フォント / 背景 9 種、全て正常
+### toggleFullScreen（main.js）
+```js
+function toggleFullScreen() {
+  const focused = BrowserWindow.getFocusedWindow();
+  const target = (focused && !focused.isDestroyed()) ? focused : mainWindow;
+  if (!target || target.isDestroyed()) return;
+  target.setFullScreen(!target.isFullScreen());
+}
+```
 
-**Agent 3 (K)** 発見:
-- B-1: 5 つのダイアログ open 中にショートカット誤発火（中程度、削除確認中の Space で誤動作等）
-- B-2/B-3/B-4: 軽微（実用パスでは到達不能、fix 不要）
+## 5. レイアウトはみ出し真因の特定結果
 
-## 5. 致命バグ保護 5 件への影響評価
+**仮説（fullscreen 化で解消）が妥当**と判断:
 
-全 Fix を通じて**影響なし**:
-- C.2.7-A `resetBlindProgressOnly` は触れていない（cross-check テストで確認）
-- C.2.7-D `setDisplaySettings` destructure は変更箇所と独立
-- C.1-A2 `ensureEditorEditableState` は触れていない
-- C.1.7 AudioContext resume は触れていない
-- C.1.8 runtime 永続化 8 箇所は触れていない
+- レンダラ側 CSS は `.clock` / `.bottom-bar` / `.marquee` 等が `vw` / `vh` 基準で寸法定義されている（v1.x 〜 v2.0.0 すべて同じ）
+- rc1 ではホール側ウィンドウが `width: 1280, height: 720` のまま起動 → `100vw = 1280px` で固定計算され、4K モニター（3840×2160）等で表示すると 1280px の枠内に「拡大」されてはみ出す（ドアップ症状）
+- 全画面化 → `vw` / `vh` がモニター実寸に再計算され、`<dialog>` を含む全コンポーネントが想定サイズで配置される
 
-cross-check テスト 2 件（v2-coverage.test.js）で C.2.7-A + C.1.2 Fix 2（finished add 経路）の不変条件を継続担保。
+CSS 側に追加修正は不要（仮説通り、fullscreen 化で解消する見込み）。
+万一 4K でも特殊な抜け（例: タスクバーが残ってしまう）が出た場合は、`kiosk: true` への切替等の追加対応を構築士判断で行う。
 
 ## 6. テスト結果
 
-| 対象 | 件数 | 結果 |
-| --- | --- | --- |
-| 既存 138 件（v1.x〜v2.0.0）| 138 | 全 PASS |
-| v2 専用 7 ファイル | 52 | 全 PASS |
-| v2-window-race | 4 | 全 PASS |
-| v2-stabilization | 27 | 全 PASS |
-| v2-cleanup | 8 | 全 PASS |
-| **v2-coverage（新規）** | **9** | **全 PASS** |
-| **合計** | **238** | **0 失敗** |
+| 件数 | 結果 |
+|---|---|
+| **244** | **全 PASS（0 件 FAIL）** |
 
-## 7. 並列 sub-agent 数
+内訳:
+- 既存 138 件（v1.x〜v2.0.0）→ 全 PASS
+- v2 専用 7 ファイル 52 件 → 全 PASS
+- v2-window-race 4 件 / v2-stabilization 27 件 / v2-cleanup 8 件 / v2-coverage 9 件 → 全 PASS
+- **v204-hall-fullscreen 6 件（新規）→ 全 PASS**
 
-Phase 1（網羅調査）: 3 体並列（公式 Agent Teams 推奨 ≤ 3 体準拠）
-- Agent 1: D + E → 2 件発見
-- Agent 2: I + J → 不具合なし
-- Agent 3: K → 1 件発見（中程度）+ 軽微 3 件
+## 7. 致命バグ保護 5 件への影響評価
 
-## 8. PR
+すべて影響なし:
 
-- **PR URL**: https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/7
-- **base**: `main`
-- **head**: `feature/v2.0.4-coverage`
+- C.2.7-A `resetBlindProgressOnly`: 影響なし（`createHallWindow` / `toggleFullScreen` のみ変更）
+- C.2.7-D `setDisplaySettings` destructure: 影響なし
+- C.1-A2 `ensureEditorEditableState`: 影響なし
+- C.1.7 AudioContext resume: 影響なし
+- C.1.8 runtime 永続化: 影響なし
 
-## 9. オーナー向け確認
+cross-check テスト（v204-hall-fullscreen.test.js 内）で `createHallWindow` の race 防止パターン（v2.0.1 で確立）も維持確認。
 
-1. **B-1 修正が最も体感差あり**: 削除確認ダイアログで Space キーを押すと、これまでダイアログ反応なしで裏でタイマーが動く違和感があったのが解消されます
-2. **E-1 修正は終了後 UX**: 営業時間内終了 → 別トーナメント開始時に「終了オーバーレイが消える」自然な挙動に
-3. **D-1 連打ガード**: 複製ボタンを連打してしまっても 1 件のみ作成
-4. **配布判断**: v2.0.0/v2.0.1/v2.0.3/v2.0.4 を経て致命級バグ含めて全フェーズ修正済、238 テスト全 PASS。配布可否のご判断をお願いします
+## 8. v1.3.0 互換モード（operator-solo）への影響評価
+
+**影響なし**:
+
+- `createOperatorWindow` には `fullscreen: true` を**追加していない**（v204-hall-fullscreen.test.js T5 で静的検証）
+- `operator-solo` モード（HDMI なし PC、role=`operator-solo`）は引き続き従来通りウィンドウサイズで起動
+- `toggleFullScreen` は `mainWindow` を fallback として保持、operator focused 時は従来挙動（mainWindow 全画面切替）を維持
+- `globalShortcut.register('F11', toggleFullScreen)` は維持（v204-hall-fullscreen.test.js T4 で確認）
+
+## 9. 並列 sub-agent 数
+
+0 体（プロンプト指示通り、修正範囲が小さいため並列不要）
+
+## 10. ブランチ状態
+
+- 現在ブランチ: `feature/v2.0.4-rc1-test-build`（rc1 → rc2 連続使用、プロンプト指示）
+- main マージ: しない（プロンプト指示）
+- リモート push: しない（プロンプト指示）
+- ローカルコミット: 未実施（必要なら追加実施可能、構築士判断）
+
+## 11. オーナー向け確認
+
+1. **試験版 rc2 インストーラ生成完了**:
+   `C:\Users\user\Documents\Claude\Projects\個人アシスタント\poker-clock\dist\PokerTimerPLUS+ (Test) Setup 2.0.4-rc2.exe`（約 80MB）
+
+2. **前原さん再試験手順**:
+   - rc1 がインストール済の場合: コントロールパネル → プログラムと機能 → `PokerTimerPLUS+ (Test)` をアンインストール
+   - rc2 .exe をダブルクリック → SmartScreen → 「詳細情報」→「実行」→ インストール先選択
+   - 起動して 2 画面モードでホール側選択 → ホール側ウィンドウが**自動全画面化**されることを確認
+   - レイアウト（カード / 帯）が**画面いっぱいに正常表示**されることを確認
+   - F11 押下で**フォーカス中のウィンドウ**（hall または operator）が全画面切替できることを確認
+
+3. **想定改善ポイント**:
+   - ホール側自動全画面化（ウィザードレス）
+   - レイアウトはみ出し解消（vw/vh 基準のため自動的に正常化）
+   - F11 でホール側全画面 toggle 可能
+
+4. **設定タブのホール側非表示**は今フェーズのスコープ外（プロンプト指示）。次フェーズで対応予定。
