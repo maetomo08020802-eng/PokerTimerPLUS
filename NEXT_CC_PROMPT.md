@@ -1,236 +1,210 @@
-# v2.0.4-rc4 実装: キーフォワード IPC 化 + AC ウィンドウ中身刷新 + ビルド
+# v2.0.4-rc5 実装: M/H/F2/F12 整理 + テロップ表記 + 操作一覧再構成 + ミュート視覚フィードバック（全 role 適用）
 
 ## 構築士判断（前原さん追認 2026-05-01）
 
-| 項目 | 採用 |
+| 項目 | 判断 |
 |---|---|
-| キーフォワード修正方針 | **オプション A（IPC 化）** |
-| AC フォーカス案内文言 | **C-1**（行動 + 理由補足）|
-| AC 追加表示項目 | **D-1 の 7 件** |
-| 操作一覧表の内容 | **実コード優先**（specs.md §7 とは別） |
-| F1 キーガイド | **仕様削除**（AC 操作一覧で代替）|
+| M キーフォワード | **追加**（KeyM）|
+| H キーフォワード | **追加**（KeyH、前回判断撤回）|
+| F2 | **削除**（operator-pane 操作一覧 + docs/specs.md §7 から、実装無し）|
+| F12 | operator-pane 操作一覧から **削除**（既存コードは維持、specs §7 表記も維持）|
+| 「マーキー」表記 | **「テロップ」に変更**（UI 表記のみ、コード内部の `marquee*` 変数名は維持）|
+| 操作一覧 | **5 カテゴリに再構成**（タイマー/プレイヤー/エントリー/ダイアログ表示/アプリ）|
+| ミュート視覚フィードバック | **全 role に適用**（operator / hall / operator-solo すべて、v1.3.0 互換例外）|
 
 ---
 
-## 重要前提（厳守）
+## 重要な方針変更: v1.3.0 互換からの「便利機能例外」
 
-- **operator-solo モード（v1.3.0 互換）の見た目は完全同等を維持**（3 重防御で実装）
-- AC ウィンドウ中身刷新は **operator role 限定**、operator-solo / hall には適用しない
-- 既存 138 + 244 = 既に通っている全テスト維持
-- 致命バグ保護 5 件への変更禁止
+**ミュート視覚フィードバックは operator-solo モードにも適用** = v1.3.0 配布版にはない機能を v2.0.4 で追加する。
+
+前原さん指示「便利機能はどっちのモードにも適用したい」に従い、戦略的に:
+- v2.0.4 の `.exe` を全国配布する将来構想に向け、単画面ユーザーにも便利機能改善を提供
+- 既存挙動の破壊ではなく純粋な追加（UX 改善）
+- 致命バグ保護 5 件には影響なし
 
 ---
 
-## 修正項目（合計 5 つ）
+## STEP A: 修正実装
 
-### 修正 1: キーフォワード IPC 化（オプション A）
+### A-1. キーフォワード追加（main.js）
 
-#### 1-1. `src/main.js` 改修
+`FORWARD_KEYS_FROM_HALL` に `'KeyM'`, `'KeyH'` 追加:
 
-- 既存 `FORWARD_KEYS_FROM_HALL` Set を `input.code` ベースに置換:
-  ```js
-  const FORWARD_KEYS_FROM_HALL = new Set([
-    'Space', 'Enter', 'Escape',
-    'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-    'KeyR', 'KeyA', 'KeyE', 'KeyS', 'KeyM', 'KeyT'
-    // KeyH は前原さん判断で forward 対象外維持
-  ]);
-  ```
-- `before-input-event` 内を IPC 送信に置換:
-  ```js
-  win.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown') return;
-    if (!FORWARD_KEYS_FROM_HALL.has(input.code)) return;
-    event.preventDefault();
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send('hall:forwarded-key', {
-      code: input.code,
-      key: input.key,
-      shift: input.shift,
-      control: input.control,
-      alt: input.alt,
-      meta: input.meta,
-    });
-  });
-  ```
-- 既存 `_toAcceleratorKey` ヘルパは削除（不要）
-
-#### 1-2. `src/preload.js` 改修
-
-- 新 IPC 経路 `onHallForwardedKey(callback)` を contextBridge で公開
-- 既存の他 API は触らない
-
-#### 1-3. `src/renderer/renderer.js` 改修
-
-- 既存 document keydown ハンドラの switch 本体を関数化（`dispatchClockShortcut(eventLike)`）
-- 既存 keydown ハンドラはこの関数を呼出すだけに refactor（**挙動完全維持**）
-- IPC 受信で同じ関数を呼出:
-  ```js
-  window.electronAPI?.onHallForwardedKey?.((data) => {
-    dispatchClockShortcut({
-      code: data.code,
-      key: data.key,
-      ctrlKey: data.control,
-      shiftKey: data.shift,
-      altKey: data.alt,
-      metaKey: data.meta,
-      preventDefault: () => {},
-      stopPropagation: () => {},
-    });
-  });
-  ```
-
-### 修正 2: 写真消去（CSS only）
-
-`src/renderer/style.css` 末尾に追加:
-
-```css
-/* v2.0.4-rc4: operator role でのみ body 背景画像を打ち消す */
-[data-role="operator"][data-bg="image"] body {
-  background-image: none !important;
-  background-color: #0A1F3D !important;
-}
+```js
+const FORWARD_KEYS_FROM_HALL = new Set([
+  'Space', 'Enter', 'Escape',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'KeyR', 'KeyA', 'KeyE', 'KeyS', 'KeyM', 'KeyT', 'KeyH'
+]);
 ```
 
-operator-solo / hall には影響なし（attribute selector で `operator` のみマッチ）。
+### A-2. F2 削除
 
-### 修正 3: AC ウィンドウ中身刷新（operator-pane 追加）
+- operator-pane 操作一覧から F2 行を削除
+- `docs/specs.md §7` から F2 行を削除（rc4 で F1 削除した要領）
+- F2 に対応する renderer.js / main.js のハンドラがあれば削除（無ければ no-op）
 
-#### 3-1. `src/renderer/index.html`
+### A-3. F12 削除（操作一覧のみ）
 
-`.operator-status-bar` 閉じタグ直後（行 32 付近）に新規 section 追加:
+- operator-pane 操作一覧から F12 行を削除
+- 既存の F12 ショートカット（DevTools 開閉）コード自体は **維持**
+- `docs/specs.md §7` の F12 表記は **維持**（開発者向け）
+
+### A-4. 「マーキー」→「テロップ」表記変更
+
+UI に出てくる「マーキー」をすべて「テロップ」に置換:
+
+- operator-pane 操作一覧「Ctrl+T マーキー編集」→「Ctrl+T テロップ編集」
+- マーキーダイアログのタイトル / ボタン / ラベル等の UI 文字列
+- 設定タブ内の「マーキー」タブ名 / 説明文
+- `docs/specs.md §7` の関連記述
+
+**コード内部の変数名（`marqueeDialog` / `el.marqueeTitle` 等）は維持**（リスク回避、変数名変更は別フェーズ）。
+
+### A-5. 操作一覧をカテゴリ別 5 セクションに再構成
+
+`src/renderer/index.html` の operator-pane 操作一覧 ul を以下に置換:
 
 ```html
-<section class="operator-pane" id="js-operator-pane" hidden>
-  <div class="operator-pane__notice">
-    このウィンドウをクリックすると、会場モニターを操作できます。<br>
-    （キーボードのショートカットがすべて反応する状態になります）
-  </div>
-  <div class="operator-pane__body">
-    <div class="operator-pane__col operator-pane__col--info">
-      <h2 class="operator-pane__heading">運用情報</h2>
-      <dl class="operator-pane__info-list">
-        <dt>イベント名</dt><dd id="op-pane-event-name">-</dd>
-        <dt>状態</dt><dd id="op-pane-status">-</dd>
-        <dt>現ブラインド</dt><dd id="op-pane-current-blind">-</dd>
-        <dt>次ブラインド</dt><dd id="op-pane-next-blind">-</dd>
-        <dt>プレイヤー</dt><dd id="op-pane-players">-</dd>
-        <dt>平均スタック</dt><dd id="op-pane-avg-stack">-</dd>
-        <dt>リエントリー / アドオン</dt><dd id="op-pane-reentry-addon">-</dd>
-      </dl>
-    </div>
-    <div class="operator-pane__col operator-pane__col--shortcuts">
-      <h2 class="operator-pane__heading">操作一覧</h2>
-      <ul class="operator-pane__shortcut-list">
-        <!-- ★★★ よく使う -->
-        <li><kbd>Space</kbd> 一時停止 / 再開</li>
-        <li><kbd>Enter</kbd> スタート（開始前）</li>
-        <li><kbd>→</kbd> 残り時間 -30 秒（早送り）</li>
-        <li><kbd>←</kbd> 残り時間 +30 秒（巻き戻し）</li>
-        <li><kbd>↑</kbd> 新規エントリー追加</li>
-        <li><kbd>↓</kbd> プレイヤー脱落</li>
-        <li><kbd>Ctrl</kbd>+<kbd>R</kbd> リエントリー +1</li>
-        <li><kbd>Ctrl</kbd>+<kbd>A</kbd> アドオン +1</li>
-        <li><kbd>S</kbd> 設定ダイアログ</li>
-        <!-- ★★ -->
-        <li><kbd>Shift</kbd>+<kbd>↑</kbd> 新規エントリー取消</li>
-        <li><kbd>Shift</kbd>+<kbd>↓</kbd> 脱落取消（復活）</li>
-        <li><kbd>R</kbd> リセットダイアログ</li>
-        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> リエントリー -1</li>
-        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> アドオン -1</li>
-        <li><kbd>Ctrl</kbd>+<kbd>E</kbd> 特別スタック +1</li>
-        <li><kbd>Ctrl</kbd>+<kbd>T</kbd> マーキー編集</li>
-        <!-- ★ -->
-        <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 特別スタック -1</li>
-        <li><kbd>M</kbd> ミュート切替</li>
-        <li><kbd>H</kbd> ボトムバー非表示</li>
-        <li><kbd>F2</kbd> メイン⇄設定切替</li>
-        <li><kbd>F11</kbd> フルスクリーン切替</li>
-        <li><kbd>Ctrl</kbd>+<kbd>Q</kbd> アプリ終了</li>
-        <li><kbd>F12</kbd> 開発者ツール</li>
-        <li><kbd>Esc</kbd> ダイアログを閉じる</li>
-      </ul>
-    </div>
-  </div>
-</section>
+<div class="shortcut-section">
+  <h3>タイマー操作</h3>
+  <ul>
+    <li><kbd>Space</kbd> 一時停止 / 再開</li>
+    <li><kbd>Enter</kbd> スタート（開始前）</li>
+    <li><kbd>→</kbd> 残り時間 -30 秒（早送り）</li>
+    <li><kbd>←</kbd> 残り時間 +30 秒（巻き戻し）</li>
+    <li><kbd>R</kbd> リセットダイアログ</li>
+  </ul>
+</div>
+
+<div class="shortcut-section">
+  <h3>プレイヤー操作</h3>
+  <ul>
+    <li><kbd>↑</kbd> 新規エントリー追加</li>
+    <li><kbd>Shift</kbd>+<kbd>↑</kbd> 新規エントリー取消</li>
+    <li><kbd>↓</kbd> プレイヤー脱落</li>
+    <li><kbd>Shift</kbd>+<kbd>↓</kbd> 脱落取消（復活）</li>
+  </ul>
+</div>
+
+<div class="shortcut-section">
+  <h3>エントリー操作</h3>
+  <ul>
+    <li><kbd>Ctrl</kbd>+<kbd>R</kbd> リエントリー +1</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> リエントリー -1</li>
+    <li><kbd>Ctrl</kbd>+<kbd>A</kbd> アドオン +1</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> アドオン -1</li>
+    <li><kbd>Ctrl</kbd>+<kbd>E</kbd> 特別スタック +1</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 特別スタック -1</li>
+  </ul>
+</div>
+
+<div class="shortcut-section">
+  <h3>ダイアログ / 表示</h3>
+  <ul>
+    <li><kbd>S</kbd> 設定ダイアログ</li>
+    <li><kbd>Ctrl</kbd>+<kbd>T</kbd> テロップ編集</li>
+    <li><kbd>M</kbd> ミュート切替</li>
+    <li><kbd>H</kbd> ボトムバー非表示</li>
+  </ul>
+</div>
+
+<div class="shortcut-section">
+  <h3>アプリ</h3>
+  <ul>
+    <li><kbd>F11</kbd> フルスクリーン切替</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Q</kbd> アプリ終了</li>
+    <li><kbd>Esc</kbd> ダイアログを閉じる</li>
+  </ul>
+</div>
 ```
 
-#### 3-2. `src/renderer/style.css`
+CSS でセクション見出し（`<h3>`）とリストの装飾を追加（既存 dark テーマと整合）。
 
-operator-pane 用 CSS を追加（雛形は CC 判断で実装、要件:）:
-- `[data-role="operator"] .operator-pane { display: flex !important; ... }` で operator のみ表示
-- `position: fixed; top: 36px; bottom: 0; left: 0; right: 0; z-index: 90`（既存 status bar 36px の下）
-- 2 カラムレイアウト（左 = 運用情報 35%、右 = 操作一覧 65%、レスポンシブ調整可）
-- ★★★ / ★★ / ★ の優先度を視覚的に区別（CSS color や背景色で軽く差別化、操作一覧の見やすさ重視）
-- `<kbd>` タグはモノスペースっぽい見た目（既存フォント `JetBrains Mono` を流用可）
-- 配色は既存の dark 系（`#0A1F3D` 系）と整合
+### A-6. ミュート視覚フィードバック実装（全 role 適用）
 
-#### 3-3. `src/renderer/renderer.js`
+#### A-6-1. mute-indicator 要素追加
 
-- 新規 `updateOperatorPane(state)` 関数を `updateOperatorStatusBar` の隣に追加
-- 関数冒頭で `if (window.appRole !== 'operator') return;` の early return（3 重防御の JS 層）
-- state から 7 項目の値を抽出して各 `<dd>` に textContent 設定
-- 状態の日本語化マップ:
-  - `idle` → 「開始前」
-  - `pre-start` → 「カウントダウン中」
-  - `running` → 「進行中」
-  - `paused` → 「一時停止」
-  - `break` → 「ブレイク中」
-  - `finished` → 「終了」
-- subscribe 末尾で `updateOperatorPane(state)` を呼出（既存 `updateOperatorStatusBar` の隣に追加）
-- 「次ブラインド」は現 level の次レベルを `tournament.blinds[currentLevelIndex + 1]` で取得（無ければ「-」）
-- 「リエントリー / アドオン」は `tournamentRuntime` から `reentryCount` / `addOnCount` を読む
+`src/renderer/index.html` に共通要素:
+```html
+<div class="mute-indicator" id="js-mute-indicator" hidden>🔇 ミュート中</div>
+```
 
-### 修正 4: docs/specs.md §7 から F1 削除
+#### A-6-2. CSS
 
-- §7 にある「F1: キーガイド表示」の記述を削除
-- 代わりに「AC ウィンドウ（operator）に常時操作一覧が表示される」の旨追記
-- specs.md の他の箇所（実装と乖離している ←→ や ↑↓ の記述）は今回触らない（別フェーズ）
+`src/renderer/style.css`:
+```css
+.mute-indicator {
+  position: fixed;
+  bottom: 16px; right: 16px;
+  background: rgba(180, 30, 30, 0.85);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.2em;
+  padding: 8px 14px;
+  border-radius: 8px;
+  z-index: 95;
+  pointer-events: none;
+}
 
-### 修正 5: バージョン rc3 → rc4
+/* operator role (AC) には表示しない、運用情報で代替 */
+[data-role="operator"] .mute-indicator { display: none !important; }
+/* hall / operator-solo は通常通り（hidden 属性削除時に表示）*/
+```
 
-- `package.json`: `2.0.4-rc3` → `2.0.4-rc4`
-- `tests/v130-features.test.js` T11 同期更新（rc1 で追認済の継続適用）
+#### A-6-3. JS（renderer.js）
 
----
+- ミュート状態が変わったら `js-mute-indicator` の `hidden` 属性を toggle
+- 既存のミュート切替ロジック（M キー / 設定タブ等）に hook 追加
+- 起動時にも初期反映
 
-## 手順
+#### A-6-4. operator role の AC 側「音」項目追加
 
-### STEP A: 修正実装（修正 1〜5 を順次）
+operator-pane の運用情報 dl に追加（既存 7 項目 → 8 項目に）:
+```html
+<dt>音</dt><dd id="op-pane-mute-status">通常</dd>
+```
 
-### STEP B: テスト追加
+`updateOperatorPane()` でミュート状態を読み取って「通常」or「ミュート中」をセット（赤系の色で強調）。
 
-新規 `tests/v204-rc4-keyforward.test.js`:
-- IPC 経路 `hall:forwarded-key` の登録確認
-- FORWARD_KEYS_FROM_HALL に KeyR / KeyE / KeyS / KeyM / KeyT が含まれる
-- KeyH が含まれない（前原さん判断維持）
-- F11 / F12 が含まれない（rc2 改修との整合）
+#### A-6-5. 3 role での表示制御まとめ
 
-新規 `tests/v204-rc4-operator-pane.test.js`:
-- index.html に `.operator-pane` セクションが存在
-- 7 項目の `<dd>` が存在（id 確認）
-- CSS で `[data-role="operator"]` のみ display 有効化
-- `updateOperatorPane` 関数の role guard 確認
-- operator-solo モードへの不影響確認（attribute selector の特定性検証）
+| role | mute-indicator (画面右下) | operator-pane の「音」項目 |
+|---|---|---|
+| operator (AC) | 非表示（CSS で打ち消し） | **「ミュート中」表示**（運用情報で代替）|
+| hall (B) | **表示** | なし（pane 自体が hall に存在しない）|
+| operator-solo (単画面) | **表示** | なし（pane 自体が operator-solo に存在しない）|
 
-致命バグ保護 5 件の cross-check も含める。
+### A-7. 網羅再点検
 
-### STEP C: テスト全 PASS 確認
+operator-pane の操作一覧に載っている全キーが以下の動作をするか CC が実コード根拠で確認:
 
-- `npm test`
-- 既存 255 件 + 新規 N 件すべて PASS
-- 1 件でも FAIL → 停止して CC_REPORT に詳細
+1. AC（operator）でキーを押した時に正しく動作する
+2. B（hall）でキーを押した時に AC に forward されて正しく動作する（M / H 含む）
+3. 単画面モード（operator-solo）でキーを押した時に正しく動作する
 
-### STEP D: ビルド実行
+不具合があれば修正、または操作一覧から削除（修正不可なものは CC_REPORT で構築士判断仰ぐ）。
+
+### A-8. テスト追加 / 更新
+
+- rc4 で追加した「操作一覧 25 件」テストを **22 件 + カテゴリ構造**に更新
+- 「マーキー」表記の検索テストを「テロップ」に更新（UI 表記のみ、コード内部 `marquee` は変更なし）
+- M / H forward の追加テスト
+- ミュート視覚フィードバックの 3 role 動作テスト（operator では非表示、hall / operator-solo では表示）
+- 致命バグ保護 5 件 cross-check
+
+### A-9. バージョン rc4 → rc5
+
+- `package.json`: `2.0.4-rc4` → `2.0.4-rc5`
+- `tests/v130-features.test.js` T11 同期更新
+
+### A-10. ビルド + 静的検証
 
 - `npm run build:win`
-- 生成 `.exe` の絶対パス + サイズ + ファイル名記録
+- `dist/latest.yml` に `version: 2.0.4-rc5` 確認
 
-### STEP E: 静的検証
-
-- `dist/latest.yml` に `version: 2.0.4-rc4` 確認
-
-### STEP F: CC_REPORT.md を完成版で上書き
+### A-11. CC_REPORT.md を完成版で上書き
 
 ---
 
@@ -238,39 +212,43 @@ operator-pane 用 CSS を追加（雛形は CC 判断で実装、要件:）:
 
 - 並列 sub-agent 数（0 体予定）
 - 致命バグ保護 5 件への影響評価
-- 修正対象ファイル一覧と各ファイルの変更箇所
-- 修正コード抜粋（IPC 経路 / dispatchClockShortcut / updateOperatorPane）
+- 修正対象ファイル一覧と各変更箇所
+- 修正コード抜粋（FORWARD_KEYS / mute-indicator / operator-pane 「音」項目）
+- 網羅再点検結果（22 キーの動作確認結果）
+- ミュート視覚フィードバックの 3 role 動作確認
+- v1.3.0 互換からの「ミュート視覚」例外の妥当性評価
 - ビルド成果物 path / size / version
-- operator-solo モード（v1.3.0 互換）への影響評価（3 重防御の確認）
-- specs.md §7 F1 削除の差分
 
 ---
 
 ## 禁止事項
 
 - 致命バグ保護 5 件への変更
-- スコープ外の追加実装（specs.md の他の差分修正含む、F1 削除のみ許可）
+- スコープ外の追加実装（specs §7 の F2 削除のみ許可、他差分は touch しない）
 - main マージ / push
-- ボタン UI の追加（B 側にスタート/一時停止を復活させない）
-- operator-solo モード（v1.3.0 互換）の見た目変更
-- 並列 sub-agent 起動（修正範囲が明確で並列不要）
+- 並列 sub-agent 起動
+- コード内部の `marquee*` 変数名変更（UI 表記のみ）
+- ミュート視覚フィードバック以外の v1.3.0 互換例外追加
 
 ---
 
 ## ブランチ
 
-- 現在ブランチ: `feature/v2.0.4-rc1-test-build` 継続使用
-- ローカルコミット可（rc3 → rc4 の差分追跡）
+- `feature/v2.0.4-rc1-test-build` 継続使用
+- ローカルコミット可（rc4 → rc5 差分追跡）
 - main マージ・push なし
 
 ---
 
 ## 完了後の流れ
 
-1. 構築士: CC_REPORT 採点 → 前原さんに rc4 の `.exe` 場所と再試験依頼
-2. 前原さん: rc3 アンインストール → rc4 インストール → 再試験
-   - AC ウィンドウから写真が消えているか
-   - 案内文言と操作一覧が表示されているか
-   - 7 項目の運用情報が出ているか
-   - B フォーカス時に R / Ctrl+E / S / M / Ctrl+T などが反応するか
-   - 既存挙動（HDMI 抜き差し / × 確認 / Space / 矢印など）が崩れていないか
+1. 構築士: CC_REPORT 採点 → 前原さんに rc5 の `.exe` 場所と再試験依頼
+2. 前原さん: rc4 アンインストール → rc5 インストール → 再試験
+   - 操作一覧が 5 カテゴリに分かれているか
+   - 「マーキー」が「テロップ」になっているか
+   - F2 / F12 が操作一覧から消えているか
+   - B フォーカス時に M / H が反応するか
+   - ミュート時に B の右下に「🔇 ミュート中」が出るか
+   - AC の運用情報に「音」項目が出るか
+   - 単画面モードでも（手元 PC のみで起動した時に）右下に「🔇 ミュート中」が出るか
+   - 既存挙動が崩れていないか

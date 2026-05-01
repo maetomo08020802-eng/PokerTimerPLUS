@@ -1,7 +1,7 @@
 {
   "name": "pokertimerplus",
   "productName": "PokerTimerPLUS+",
-  "version": "2.0.4-rc4",
+  "version": "2.0.4-rc5",
   "description": "Free poker tournament clock — presented by Yu Shitamachi / PLUS2",
   "author": "Yu Shitamachi (PLUS2)",
   "license": "UNLICENSED",
@@ -14,7 +14,7 @@
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:icon": "node build/generate-icon.js",
-    "test": "node tests/data-transfer.test.js && node tests/runtime-preservation.test.js && node tests/audit-fix.test.js && node tests/paused-flow.test.js && node tests/race-fixes.test.js && node tests/light-todos.test.js && node tests/editable-state.test.js && node tests/audit-residuals.test.js && node tests/new-tournament-edit.test.js && node tests/v130-features.test.js && node tests/c13-bg-image.test.js && node tests/c14-slideshow.test.js && node tests/c16-features.test.js && node tests/c17-audio-resume.test.js && node tests/c18-runtime-persistence.test.js && node tests/v2-dual-sync.test.js && node tests/v2-role-guard.test.js && node tests/v2-display-picker.test.js && node tests/v2-display-change.test.js && node tests/v2-integration.test.js && node tests/v2-backward-compat.test.js && node tests/v2-edge-cases.test.js && node tests/v2-window-race.test.js && node tests/v2-stabilization.test.js && node tests/v2-cleanup.test.js && node tests/v2-coverage.test.js && node tests/v204-hall-fullscreen.test.js && node tests/v204-window-protection.test.js && node tests/v204-rc4-keyforward.test.js && node tests/v204-rc4-operator-pane.test.js"
+    "test": "node tests/data-transfer.test.js && node tests/runtime-preservation.test.js && node tests/audit-fix.test.js && node tests/paused-flow.test.js && node tests/race-fixes.test.js && node tests/light-todos.test.js && node tests/editable-state.test.js && node tests/audit-residuals.test.js && node tests/new-tournament-edit.test.js && node tests/v130-features.test.js && node tests/c13-bg-image.test.js && node tests/c14-slideshow.test.js && node tests/c16-features.test.js && node tests/c17-audio-resume.test.js && node tests/c18-runtime-persistence.test.js && node tests/v2-dual-sync.test.js && node tests/v2-role-guard.test.js && node tests/v2-display-picker.test.js && node tests/v2-display-change.test.js && node tests/v2-integration.test.js && node tests/v2-backward-compat.test.js && node tests/v2-edge-cases.test.js && node tests/v2-window-race.test.js && node tests/v2-stabilization.test.js && node tests/v2-cleanup.test.js && node tests/v2-coverage.test.js && node tests/v204-hall-fullscreen.test.js && node tests/v204-window-protection.test.js && node tests/v204-rc4-keyforward.test.js && node tests/v204-rc4-operator-pane.test.js && node tests/v204-rc5-mute-indicator.test.js"
   },
   "dependencies": {
     "electron-store": "^8.2.0",

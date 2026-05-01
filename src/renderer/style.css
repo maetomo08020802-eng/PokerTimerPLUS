@@ -3915,7 +3915,8 @@ tr.level-row--just-inserted {
   border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
   color: #E8E5DA;
 }
-[data-role="operator"] .operator-pane__shortcut-list kbd {
+[data-role="operator"] .operator-pane__shortcut-list kbd,
+[data-role="operator"] .shortcut-section kbd {
   display: inline-block;
   min-width: 24px;
   padding: 2px 6px;
@@ -3928,3 +3929,64 @@ tr.level-row--just-inserted {
   border-radius: 4px;
   text-align: center;
 }
+
+/* v2.0.4-rc5: 操作一覧の 5 カテゴリセクション（タイマー / プレイヤー / エントリー / ダイアログ表示 / アプリ） */
+[data-role="operator"] .shortcut-section {
+  margin-bottom: 12px;
+}
+[data-role="operator"] .shortcut-section:last-child {
+  margin-bottom: 0;
+}
+[data-role="operator"] .shortcut-section h3 {
+  margin: 0 0 6px 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(212, 175, 55, 0.85);
+  border-bottom: 1px dotted rgba(212, 175, 55, 0.3);
+  padding-bottom: 3px;
+}
+[data-role="operator"] .shortcut-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 14px;
+  font-size: 13px;
+}
+[data-role="operator"] .shortcut-section li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  color: #E8E5DA;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+}
+
+/* v2.0.4-rc5: operator-pane の「音」項目 (op-pane-mute-status) — ミュート時に赤系で強調 */
+[data-role="operator"] #op-pane-mute-status[data-muted="true"] {
+  color: #FF6B6B;
+}
+
+/* v2.0.4-rc5: ミュート視覚フィードバック（全 role 共通、operator は CSS で非表示打ち消し） */
+.mute-indicator {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  background: rgba(180, 30, 30, 0.85);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.2em;
+  padding: 8px 14px;
+  border-radius: 8px;
+  z-index: 95;
+  pointer-events: none;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+/* operator role (AC) には表示しない、運用情報「音」で代替 */
+[data-role="operator"] .mute-indicator { display: none !important; }
+/* hall / operator-solo / 未指定 role では HTML 側 hidden 属性が外れた時に通常表示。
+   前原さん指示「便利機能はどっちのモードにも適用」により operator-solo にも適用 (v1.3.0 互換例外) */

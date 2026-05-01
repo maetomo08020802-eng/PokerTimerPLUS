@@ -51,24 +51,49 @@ test('HTML-2: フォーカス案内文言（C-1）が表示されている', () 
     'フォーカス案内文言（C-1 採用）なし');
 });
 
-test('HTML-3: 運用情報 7 項目の dd 要素が存在', () => {
+test('HTML-3: 運用情報 8 項目の dd 要素が存在（rc5 で「音」追加）', () => {
   for (const id of ['op-pane-event-name', 'op-pane-status', 'op-pane-current-blind',
                     'op-pane-next-blind', 'op-pane-players', 'op-pane-avg-stack',
-                    'op-pane-reentry-addon']) {
+                    'op-pane-reentry-addon', 'op-pane-mute-status']) {
     assert.match(HTML, new RegExp(`id="${id}"`),
       `運用情報 dd id="${id}" なし（表示項目欠落）`);
   }
 });
 
-test('HTML-4: 操作一覧 ul に主要キー（Space / Ctrl+R / Ctrl+E）が含まれる', () => {
-  // operator-pane 配下の <ul class="operator-pane__shortcut-list"> ブロック抽出
-  const m = HTML.match(/<ul[^>]*operator-pane__shortcut-list[\s\S]*?<\/ul>/);
-  assert.ok(m, '操作一覧 ul なし');
-  const list = m[0];
-  assert.match(list, /<kbd>Space<\/kbd>/, '操作一覧に Space なし');
-  assert.match(list, /<kbd>Ctrl<\/kbd>\+<kbd>R<\/kbd>/, '操作一覧に Ctrl+R なし');
-  assert.match(list, /<kbd>Ctrl<\/kbd>\+<kbd>E<\/kbd>/, '操作一覧に Ctrl+E なし（rc3 で無反応だったキー）');
-  assert.match(list, /<kbd>Ctrl<\/kbd>\+<kbd>T<\/kbd>/, '操作一覧に Ctrl+T なし');
+test('HTML-4: 操作一覧が 5 カテゴリに再構成（rc5）', () => {
+  // 5 つの shortcut-section h3 見出し
+  for (const heading of ['タイマー操作', 'プレイヤー操作', 'エントリー操作', 'ダイアログ / 表示', 'アプリ']) {
+    assert.match(HTML, new RegExp(`<h3>${heading}</h3>`),
+      `操作一覧に <h3>${heading}</h3> なし（5 カテゴリ構成違反）`);
+  }
+  // 主要キー配列
+  assert.match(HTML, /<kbd>Space<\/kbd>/,                       '操作一覧に Space なし');
+  assert.match(HTML, /<kbd>Ctrl<\/kbd>\+<kbd>R<\/kbd>/,        '操作一覧に Ctrl+R なし');
+  assert.match(HTML, /<kbd>Ctrl<\/kbd>\+<kbd>E<\/kbd>/,        '操作一覧に Ctrl+E なし');
+  assert.match(HTML, /<kbd>Ctrl<\/kbd>\+<kbd>T<\/kbd>\s*テロップ編集/,
+    '操作一覧に「Ctrl+T テロップ編集」なし（rc5 でマーキー→テロップ表記）');
+  assert.match(HTML, /<kbd>M<\/kbd>\s*ミュート切替/,           '操作一覧に M ミュート切替なし');
+  assert.match(HTML, /<kbd>H<\/kbd>\s*ボトムバー非表示/,       '操作一覧に H ボトムバー非表示なし');
+  // F2 / F12 が削除されている
+  assert.doesNotMatch(HTML, /<kbd>F2<\/kbd>/,
+    '操作一覧に F2 が残存（rc5 で削除予定）');
+  // operator-pane 配下の操作一覧から F12 が消えている（HTML 全体には別箇所で残る可能性なし）
+  const paneMatch = HTML.match(/<section[^>]*operator-pane[\s\S]*?<\/section>/);
+  assert.ok(paneMatch, 'operator-pane セクションなし');
+  assert.doesNotMatch(paneMatch[0], /<kbd>F12<\/kbd>/,
+    'operator-pane の操作一覧に F12 が残存（rc5 で削除予定、specs §7 のみ維持）');
+});
+
+test('HTML-5: 「マーキー」UI 表記が operator-pane に残っていない（rc5 でテロップに統一）', () => {
+  const paneMatch = HTML.match(/<section[^>]*operator-pane[\s\S]*?<\/section>/);
+  assert.ok(paneMatch, 'operator-pane セクションなし');
+  assert.doesNotMatch(paneMatch[0], /マーキー/,
+    'operator-pane に「マーキー」表記残存（rc5 でテロップに統一）');
+});
+
+test('HTML-6: ミュートインジケータ <div class="mute-indicator" hidden> が存在', () => {
+  assert.match(HTML, /<div[^>]*class="mute-indicator"[^>]*id="js-mute-indicator"[^>]*hidden/,
+    'ミュートインジケータ要素なし（rc5 で全 role 適用）');
 });
 
 // ============================================================

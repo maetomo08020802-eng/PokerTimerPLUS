@@ -49,39 +49,67 @@
           <dt>プレイヤー</dt><dd id="op-pane-players">-</dd>
           <dt>平均スタック</dt><dd id="op-pane-avg-stack">-</dd>
           <dt>リエントリー / アドオン</dt><dd id="op-pane-reentry-addon">-</dd>
+          <dt>音</dt><dd id="op-pane-mute-status">通常</dd>
         </dl>
       </div>
       <div class="operator-pane__col operator-pane__col--shortcuts">
         <h2 class="operator-pane__heading">操作一覧</h2>
-        <ul class="operator-pane__shortcut-list">
-          <li><kbd>Space</kbd> 一時停止 / 再開</li>
-          <li><kbd>Enter</kbd> スタート（開始前）</li>
-          <li><kbd>→</kbd> 残り時間 -30 秒（早送り）</li>
-          <li><kbd>←</kbd> 残り時間 +30 秒（巻き戻し）</li>
-          <li><kbd>↑</kbd> 新規エントリー追加</li>
-          <li><kbd>↓</kbd> プレイヤー脱落</li>
-          <li><kbd>Ctrl</kbd>+<kbd>R</kbd> リエントリー +1</li>
-          <li><kbd>Ctrl</kbd>+<kbd>A</kbd> アドオン +1</li>
-          <li><kbd>S</kbd> 設定ダイアログ</li>
-          <li><kbd>Shift</kbd>+<kbd>↑</kbd> 新規エントリー取消</li>
-          <li><kbd>Shift</kbd>+<kbd>↓</kbd> 脱落取消（復活）</li>
-          <li><kbd>R</kbd> リセットダイアログ</li>
-          <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> リエントリー -1</li>
-          <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> アドオン -1</li>
-          <li><kbd>Ctrl</kbd>+<kbd>E</kbd> 特別スタック +1</li>
-          <li><kbd>Ctrl</kbd>+<kbd>T</kbd> マーキー編集</li>
-          <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 特別スタック -1</li>
-          <li><kbd>M</kbd> ミュート切替</li>
-          <li><kbd>H</kbd> ボトムバー非表示</li>
-          <li><kbd>F2</kbd> メイン⇄設定切替</li>
-          <li><kbd>F11</kbd> フルスクリーン切替</li>
-          <li><kbd>Ctrl</kbd>+<kbd>Q</kbd> アプリ終了</li>
-          <li><kbd>F12</kbd> 開発者ツール</li>
-          <li><kbd>Esc</kbd> ダイアログを閉じる</li>
-        </ul>
+        <!-- v2.0.4-rc5: 5 カテゴリに再構成（F2 / F12 削除、Ctrl+T はテロップ表記、M / H は前原さん判断で全 role 反応）-->
+        <div class="shortcut-section">
+          <h3>タイマー操作</h3>
+          <ul>
+            <li><kbd>Space</kbd> 一時停止 / 再開</li>
+            <li><kbd>Enter</kbd> スタート（開始前）</li>
+            <li><kbd>→</kbd> 残り時間 -30 秒（早送り）</li>
+            <li><kbd>←</kbd> 残り時間 +30 秒（巻き戻し）</li>
+            <li><kbd>R</kbd> リセットダイアログ</li>
+          </ul>
+        </div>
+        <div class="shortcut-section">
+          <h3>プレイヤー操作</h3>
+          <ul>
+            <li><kbd>↑</kbd> 新規エントリー追加</li>
+            <li><kbd>Shift</kbd>+<kbd>↑</kbd> 新規エントリー取消</li>
+            <li><kbd>↓</kbd> プレイヤー脱落</li>
+            <li><kbd>Shift</kbd>+<kbd>↓</kbd> 脱落取消（復活）</li>
+          </ul>
+        </div>
+        <div class="shortcut-section">
+          <h3>エントリー操作</h3>
+          <ul>
+            <li><kbd>Ctrl</kbd>+<kbd>R</kbd> リエントリー +1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> リエントリー -1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>A</kbd> アドオン +1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> アドオン -1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>E</kbd> 特別スタック +1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 特別スタック -1</li>
+          </ul>
+        </div>
+        <div class="shortcut-section">
+          <h3>ダイアログ / 表示</h3>
+          <ul>
+            <li><kbd>S</kbd> 設定ダイアログ</li>
+            <li><kbd>Ctrl</kbd>+<kbd>T</kbd> テロップ編集</li>
+            <li><kbd>M</kbd> ミュート切替</li>
+            <li><kbd>H</kbd> ボトムバー非表示</li>
+          </ul>
+        </div>
+        <div class="shortcut-section">
+          <h3>アプリ</h3>
+          <ul>
+            <li><kbd>F11</kbd> フルスクリーン切替</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Q</kbd> アプリ終了</li>
+            <li><kbd>Esc</kbd> ダイアログを閉じる</li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>
+  <!-- v2.0.4-rc5: ミュート視覚フィードバック。
+       全 role 共通で hidden 属性を JS でトグル。CSS で operator role のみ非表示打ち消し
+       （AC は operator-pane の「音」項目で代替表示）。hall / operator-solo は通常通り右下に表示。
+       前原さん判断「便利機能はどっちのモードにも適用」に従い、operator-solo（v1.3.0 互換）にも適用する例外。 -->
+  <div class="mute-indicator" id="js-mute-indicator" hidden>🔇 ミュート中</div>
   <!-- STEP 10 フェーズC.1.4: 休憩中スライドショー全画面ステージ（data-slideshow="active" 時のみ表示） -->
   <!-- STEP 10 フェーズC.1.4-fix2 Fix 2: hidden 属性を外して CSS opacity フェードインを効かせる。
        非アクティブ時は opacity: 0 + pointer-events: none で完全に操作素通し。 -->

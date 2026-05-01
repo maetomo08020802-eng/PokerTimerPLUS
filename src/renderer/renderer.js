@@ -1647,6 +1647,7 @@ function updateOperatorPane(state) {
   const playersEl = document.getElementById('op-pane-players');
   const avgEl     = document.getElementById('op-pane-avg-stack');
   const reentryEl = document.getElementById('op-pane-reentry-addon');
+  const muteEl    = document.getElementById('op-pane-mute-status');
   if (!eventEl || !statusEl) return;
 
   // イベント名 (tournamentState.name)
@@ -1682,6 +1683,35 @@ function updateOperatorPane(state) {
   const addon = (tournamentRuntime && typeof tournamentRuntime.addOnCount === 'number')
     ? tournamentRuntime.addOnCount : 0;
   if (reentryEl) reentryEl.textContent = `リエントリー ${reentry} / アドオン ${addon}`;
+
+  // v2.0.4-rc5: 音（ミュート状態）— 通常 / ミュート中、data-muted 属性で CSS の赤色強調を切替
+  if (muteEl) {
+    const muted = (typeof audioIsMuted === 'function') ? audioIsMuted() : false;
+    muteEl.textContent = muted ? 'ミュート中' : '通常';
+    muteEl.setAttribute('data-muted', muted ? 'true' : 'false');
+  }
+}
+
+// v2.0.4-rc5: ミュート視覚フィードバックの全 role 共通更新関数。
+//   right-bottom の .mute-indicator を hidden/visible で切替。operator role では CSS で打ち消し済のため
+//   実質的に hall / operator-solo のみ画面上に表示される。AC（operator）は operator-pane の「音」項目で代替。
+//   M キー押下時 + 起動時 + 設定タブからのミュート操作 hook で呼ぶ。
+function updateMuteIndicator() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const indicator = document.getElementById('js-mute-indicator');
+  if (!indicator) return;
+  const muted = (typeof audioIsMuted === 'function') ? audioIsMuted() : false;
+  if (muted) {
+    indicator.removeAttribute('hidden');
+  } else {
+    indicator.setAttribute('hidden', '');
+  }
+  // operator role（AC）の運用情報「音」項目も同期更新（updateOperatorPane 経由のみだと subscribe 待ち、即時反映用）
+  const muteEl = document.getElementById('op-pane-mute-status');
+  if (muteEl) {
+    muteEl.textContent = muted ? 'ミュート中' : '通常';
+    muteEl.setAttribute('data-muted', muted ? 'true' : 'false');
+  }
 }
 
 // 通知音発火: 同じ秒で複数フレーム検出されても1回だけ鳴らすためのガード
@@ -5905,6 +5935,8 @@ function dispatchClockShortcut(event) {
         ensureAudioReady().then(() => {
           const nowMuted = audioToggleMute();
           console.log(nowMuted ? 'ミュート: ON' : 'ミュート: OFF');
+          // v2.0.4-rc5: ミュート視覚フィードバック更新（全 role に hook、operator では mute-indicator は CSS で非表示）
+          updateMuteIndicator();
         });
       }
       break;
@@ -6310,6 +6342,8 @@ async function initialize() {
       }
     });
   }
+  // v2.0.4-rc5: 起動時にミュートインジケータの初期反映（初期状態は通常 OFF だが将来の永続化対応も視野に統一）
+  updateMuteIndicator();
 }
 
 // v2.0.0 STEP 2: 起動時の役割分岐。

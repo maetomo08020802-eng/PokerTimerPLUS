@@ -907,13 +907,14 @@ function buildWebPreferences(role) {
 //   rc3 で sendInputEvent(keyCode: 'r') の合成イベントが Electron 31 系の構造的制約により
 //   event.code を空文字にして届く問題（letter キー全件無反応）が判明したため、
 //   IPC で論理キーオブジェクトを直接送る方式に切替。input.code は KeyboardEvent.code 互換。
-//   - 操作系（タイマー / プレイヤー / 編集系 / 設定 / ミュート / マーキー）は forward
+//   - 操作系（タイマー / プレイヤー / 編集系 / 設定 / ミュート / テロップ / ボトムバー）は forward
 //   - F11（rc2 で getFocusedWindow ベース、hall focused 時は hall 自身の全画面切替）/
-//     F12（DevTools、ウィンドウごとに独立）/ KeyH（前原さん判断、ボトムバー非表示は PC 側のみ）は forward しない
+//     F12（DevTools、ウィンドウごとに独立）は forward しない
+//   v2.0.4-rc5: KeyM / KeyH を追加（前原さん判断、便利機能の対称性）
 const FORWARD_KEYS_FROM_HALL = new Set([
   'Space', 'Enter', 'Escape',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'KeyR', 'KeyA', 'KeyE', 'KeyS', 'KeyM', 'KeyT'
+  'KeyR', 'KeyA', 'KeyE', 'KeyS', 'KeyM', 'KeyT', 'KeyH'
 ]);
 
 // v2.0.0 STEP 1: operator ウィンドウ生成。
