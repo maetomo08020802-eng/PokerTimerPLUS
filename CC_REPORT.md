@@ -1,69 +1,67 @@
-# CC_REPORT — 2026-05-01 v2.0.3 P2〜P4 + 残検証 L/M/N
+# CC_REPORT — 2026-05-01 v2.0.4 残検証 D/E/I/J/K カバレッジ
 
 ## 1. サマリー
 
-P2/P3/P4 を予定通り修正。残検証 L/M/N の並列調査で **致命バグ M（PC 間データ移行が完全に壊れていた）** + 軽微 L（PRE_START 中のスリープ race） を発見・修正。N は不具合なし。新規 v2-cleanup.test.js（8 件）追加で 229 テスト全 PASS。
+並列 sub-agent 3 体で D/E/I/J/K の 5 項目を網羅調査。3 件のバグ（D-1 連打ガード / E-1 finished overlay 解除漏れ / B-1 ダイアログ open 中ショートカット誤発火）を発見・修正。残検証 I/J には不具合なし。新規テスト 9 件追加で **229 → 238 テスト全 PASS**。
 
 ## 2. 修正ファイル
 
 | ファイル | 変更点 |
 | --- | --- |
-| `src/main.js` | P3: sanitizeBreakImages else 分岐を `cur.breakImages \|\| []` 直接代入 / P4: will-quit を 1 ハンドラに統合 |
-| `src/renderer/renderer.js` | P2: refreshPresetList の meta 不在時に value クリア / L: captureCurrentTimerState 冒頭で PRE_START → idle 相当 / M: EXPORT_VERSION_RENDERER を 1 → 2 に同期 |
-| `tests/v2-cleanup.test.js` | 新規 8 件（P2/P3/P4/L/M + 致命バグ保護 cross-check） |
-| `package.json` | test スクリプトに v2-cleanup 追加 |
+| `src/renderer/renderer.js` | D-1: `handleTournamentDuplicate._inFlight` 連打ガード / E-1: `applyTimerStateToTimer` idle / 不正値経路 + `doApplyTournament` apply-only 経路で finished overlay 解除 / B-1: keydown ハンドラを `document.querySelector('dialog[open]')` で汎化 |
+| `tests/v2-coverage.test.js` | 新規 9 件（D-1 / E-1 / E-1b / B-1 + 致命バグ保護 cross-check）|
+| `package.json` | test スクリプトに v2-coverage 追加 |
 
 ## 3. 主要変更点
 
-### P2: refreshPresetList の meta 不在時 value クリア（renderer.js）
-```js
-if (blindsEditor.meta && [...filteredBuiltin, ...filteredUser].some((p) => p.id === blindsEditor.meta.id)) {
-  el.presetSelect.value = blindsEditor.meta.id;
-} else {
-  el.presetSelect.value = '';   // P2 fix: フィルタ後 option 不在時のクリア
-}
-```
+### D-1: handleTournamentDuplicate の連打ガード（renderer.js）
 
-### P3: sanitizeBreakImages else 分岐の直接代入（main.js）
-旧: `: sanitizeBreakImages(cur.breakImages, [])`（既存値再 sanitize、5MB 上限導入前データの silent drop リスク）
-新: `: (cur.breakImages || [])`（既存値を信頼してそのまま維持）
+`handleTournamentNew` と同じ `_inFlight` パターンを `handleTournamentDuplicate` に適用。連打で 2 件複製が作られる軽微 race を解消。
 
-### P4: will-quit 二重登録解消（main.js）
-2 つの `app.on('will-quit', ...)` を 1 つに統合（`powerSaveBlocker.stop` + `globalShortcut.unregisterAll`）。
+### E-1: FINISHED オーバーレイ解除漏れ（renderer.js）
 
-### L: PRE_START スリープ race 防止（renderer.js）★Agent 1 が発見
-`captureCurrentTimerState` 冒頭に追加:
-```js
-if (s.status === States.PRE_START) {
-  return { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
-}
-```
-旧実装では PRE_START の totalMs（5 分等）が「Level 1 経過秒」として保存され、スリープ復帰時 `computeLiveTimerState` が Level 1 長で判定 → レベル繰上げが起きる race があった。idle 相当保存により安全側（再起動時はユーザーが再度プレスタートを開始する経路）。
+旧実装では `applyTimerStateToTimer` の `running/paused/break` 経路でのみ `clock--timer-finished` クラスを解除していたため、**終了済みトーナメント → 別 t に切替（idle 復元経路）** で overlay が残るバグがあった。修正:
+1. `applyTimerStateToTimer` の `idle` 分岐 + 不正値（`!ts`）分岐の両方で `classList.remove`
+2. `doApplyTournament` の `apply-only` 経路でも `classList.remove`
 
-### M: EXPORT_VERSION_RENDERER 同期（renderer.js）★Agent 2 が発見、**致命バグ**
-旧: `const EXPORT_VERSION_RENDERER = 1;`（main.js は `EXPORT_VERSION = 2`）
-新: `const EXPORT_VERSION_RENDERER = 2;`
+### B-1: ダイアログ open 中のショートカット誤発火（renderer.js）
 
-旧実装では「自分自身がエクスポートした v2 ファイル」を取り込もうとすると `quickValidateImport` が `payload.version (2) > 1` で reject → "このアプリより新しい形式です" エラーで全パターン失敗していた。**PC 間移行 UI が完全に動かない致命バグ**。
+旧実装は `marqueeDialog` / `settingsDialog` のみ列挙していたため、**apply-mode / blinds-apply-mode / tournament-delete / import-strategy / prestart** の 5 ダイアログ open 中はショートカットが誤発火していた。`document.querySelector('dialog[open]')` への汎化で全 `<dialog open>` を一括で抑制。
 
-## 4. 残検証 L/M/N 結果
+## 4. 残検証 D/E/I/J/K の結果
 
-| 項目 | 結果 | 詳細 |
-| --- | --- | --- |
-| **L. PC スリープ復帰** | 軽微あり → **修正済** | PRE_START 中のみ race（RUNNING/BREAK/PAUSED/IDLE は OK）|
-| **M. PC 間データ移行** | **致命あり → 修正済** | EXPORT_VERSION_RENDERER 不整合で UI 完全停止 |
-| **N. アプリ再起動** | **不具合なし** | C.1.8 致命バグ保護完全機能、migration + sanitize + 8 箇所フック全て生存 |
+| 項目 | 結果 | 修正 |
+|---|---|---|
+| **D. トーナメント新規/編集/削除** | D-1 軽微あり | 修正済 |
+| **E. ブラインド構造編集/適用** | E-1 軽微あり（FINISHED overlay）| 修正済 |
+| **I. スライドショー画像** | 不具合なし | — |
+| **J. 設定タブ各項目** | 不具合なし | — |
+| **K. ショートカットキー** | B-1 中程度あり（ダイアログ open 誤発火）| 修正済 |
+
+### 5 項目の調査詳細
+
+**Agent 1 (D + E)** 発見:
+- D-1: handleTournamentDuplicate に `_inFlight` ガードなし、連打で 2 件複製される（実害最小）
+- E-1: 終了済みからの切替で finished overlay が残る（UX 違和感）
+
+**Agent 2 (I + J)** 結果: 全項目「不具合なし」確認
+- I: 5MB / 20 枚 / 150MB 警告 / 30 秒遅延 / 60 秒前復帰、全て正常
+- J: venueName / 通貨 / フォント / 背景 9 種、全て正常
+
+**Agent 3 (K)** 発見:
+- B-1: 5 つのダイアログ open 中にショートカット誤発火（中程度、削除確認中の Space で誤動作等）
+- B-2/B-3/B-4: 軽微（実用パスでは到達不能、fix 不要）
 
 ## 5. 致命バグ保護 5 件への影響評価
 
 全 Fix を通じて**影響なし**:
-- C.2.7-A `resetBlindProgressOnly` は触れていない
-- C.2.7-D `setDisplaySettings` destructure に timerState 混入なし（変更箇所は breakImages のみ、timerState とは独立）
+- C.2.7-A `resetBlindProgressOnly` は触れていない（cross-check テストで確認）
+- C.2.7-D `setDisplaySettings` destructure は変更箇所と独立
 - C.1-A2 `ensureEditorEditableState` は触れていない
 - C.1.7 AudioContext resume は触れていない
-- C.1.8 runtime 永続化 8 箇所は触れていない（L/M は timerState / export 経路のみ）
+- C.1.8 runtime 永続化 8 箇所は触れていない
 
-cross-check テスト 2 件（v2-cleanup.test.js）で C.1.8 + C.2.7-A の不変条件を継続担保。
+cross-check テスト 2 件（v2-coverage.test.js）で C.2.7-A + C.1.2 Fix 2（finished add 経路）の不変条件を継続担保。
 
 ## 6. テスト結果
 
@@ -73,25 +71,26 @@ cross-check テスト 2 件（v2-cleanup.test.js）で C.1.8 + C.2.7-A の不変
 | v2 専用 7 ファイル | 52 | 全 PASS |
 | v2-window-race | 4 | 全 PASS |
 | v2-stabilization | 27 | 全 PASS |
-| **v2-cleanup（新規）** | **8** | **全 PASS** |
-| **合計** | **229** | **0 失敗** |
+| v2-cleanup | 8 | 全 PASS |
+| **v2-coverage（新規）** | **9** | **全 PASS** |
+| **合計** | **238** | **0 失敗** |
 
 ## 7. 並列 sub-agent 数
 
-Phase 2（残検証）: 3 体並列（公式 Agent Teams 推奨 ≤ 3 体準拠）
-- Agent 1: L. PC スリープ復帰 → 軽微バグ発見
-- Agent 2: M. PC 間データ移行 → **致命バグ発見**
-- Agent 3: N. アプリ再起動 → 不具合なし
+Phase 1（網羅調査）: 3 体並列（公式 Agent Teams 推奨 ≤ 3 体準拠）
+- Agent 1: D + E → 2 件発見
+- Agent 2: I + J → 不具合なし
+- Agent 3: K → 1 件発見（中程度）+ 軽微 3 件
 
 ## 8. PR
 
-- **PR URL**: https://github.com/maetomo08020802-eng/PokerTimerPLUS/pull/6
+- **PR URL**: （`gh pr create` 後に追記）
 - **base**: `main`
-- **head**: `feature/v2.0.3-cleanup`
+- **head**: `feature/v2.0.4-coverage`
 
 ## 9. オーナー向け確認
 
-1. **致命バグ M の修正が最大の成果**: 「PC 間でデータ移行できない」は v2.0.0 リリース時から潜んでいた致命バグ。配布前に発見・修正できて良かった。実機でエクスポート → 別 PC でインポートが正常動作するか確認をお願いします
-2. **PRE_START スリープ復帰の挙動変更**: スリープから復帰すると PRE_START は IDLE に戻り、再度プレスタートからの開始が必要。これまで黙ってブラインドが進んでいた挙動より明らかに安全な動作です
-3. **その他 P2/P3/P4** はマイナーな保守性向上で、目に見える挙動変更なし
-4. **配布判断**: v2.0.0 致命バグ + v2.0.1 致命 2 件 + v2.0.3 致命 M、すべて修正済。229 テスト全 PASS。配布可否のご判断をお願いします
+1. **B-1 修正が最も体感差あり**: 削除確認ダイアログで Space キーを押すと、これまでダイアログ反応なしで裏でタイマーが動く違和感があったのが解消されます
+2. **E-1 修正は終了後 UX**: 営業時間内終了 → 別トーナメント開始時に「終了オーバーレイが消える」自然な挙動に
+3. **D-1 連打ガード**: 複製ボタンを連打してしまっても 1 件のみ作成
+4. **配布判断**: v2.0.0/v2.0.1/v2.0.3/v2.0.4 を経て致命級バグ含めて全フェーズ修正済、238 テスト全 PASS。配布可否のご判断をお願いします

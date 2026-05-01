@@ -1334,8 +1334,19 @@ async function getCachedLevels(presetId) {
 //              第二引数 levels が undefined の場合は現在ロード済の structure（getLevelCount）を用いる
 //              opts.silent: true なら復元直後の音再生（5,4,3,2,1 等）をスキップ
 function applyTimerStateToTimer(ts, levels, opts = {}) {
-  if (!ts || typeof ts !== 'object') { timerReset(); return; }
-  if (ts.status === 'idle') { timerReset(); return; }
+  // v2.0.4 E-1 fix: idle / 不正値復元時も clock--timer-finished オーバーレイを解除する。
+  //   旧実装では running/paused/break への遷移時のみ class を消していたため、
+  //   終了済みトーナメントから別 t に切替（idle 復元）すると overlay が残るバグがあった。
+  if (!ts || typeof ts !== 'object') {
+    el.clock?.classList.remove('clock--timer-finished');
+    timerReset();
+    return;
+  }
+  if (ts.status === 'idle') {
+    el.clock?.classList.remove('clock--timer-finished');
+    timerReset();
+    return;
+  }
   // STEP 10 フェーズC.1.2 Fix 2: 'finished' 状態は idle 同様タイマー再開しない（完走表示のみ）。
   //   ユーザーが「タイマーリセット」を押すと idle に戻り、新規エントリーで再開可能。
   //   メイン画面に「トーナメント終了」オーバーレイを表示（緑系、playersRemaining=0 とは別経路）。
@@ -3568,11 +3579,16 @@ async function _handleTournamentNewImpl() {
 async function handleTournamentDuplicate() {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は複製不可
   if (!window.api?.tournaments) return;
+  // v2.0.4 D-1 fix: 連打ガード（async 中の重複実行で複数の複製が作られないよう、
+  //   handleTournamentNew と同じ _inFlight パターンを適用）
+  if (handleTournamentDuplicate._inFlight) return;
+  handleTournamentDuplicate._inFlight = true;
   // STEP 10 フェーズC.1.1 Fix 2: 複製も active 切替を伴うため periodic skip（finally で確実解除）
   _tournamentSwitching = true;
   try {
     return await _handleTournamentDuplicateImpl();
   } finally {
+    handleTournamentDuplicate._inFlight = false;
     _tournamentSwitching = false;
   }
 }
@@ -4048,6 +4064,9 @@ async function doApplyTournament({ form, newPreset }, mode) {
         //   - handleReset()/timerStart() は呼ばない（タイマー暴発防止）
         //   - PAUSED 時は pausedRemainingMs / currentLevelIndex / status をすべて維持
         //   - メイン画面 BLINDS / NEXT カードを新構造で再描画
+        // v2.0.4 E-1 fix: 終了済み（clock--timer-finished）からの apply-only 経路でも
+        //   overlay を解除する（新ブラインド構造を適用したのに finished 表示が残る違和感を防止）。
+        el.clock?.classList.remove('clock--timer-finished');
         const { status: curStatus, currentLevelIndex } = getState();
         renderCurrentLevel(currentLevelIndex);
         renderNextLevel(currentLevelIndex);
@@ -5743,8 +5762,11 @@ window.addEventListener('keydown', (event) => {
     target.isContentEditable
   )) return;
 
-  // ダイアログが開いている間も念のためクロック側を抑制（フォーカスが背景等にある場合）
-  if (el.marqueeDialog?.open || el.settingsDialog?.open) return;
+  // v2.0.4 B-1 fix: 任意の <dialog open> でショートカットを抑制（汎化）。
+  //   旧実装では marqueeDialog / settingsDialog のみ列挙していたため、
+  //   apply-mode / blinds-apply-mode / tournament-delete / import-strategy / prestart 等の
+  //   他ダイアログ open 中にショートカットが誤発火する問題があった。
+  if (document.querySelector('dialog[open]')) return;
 
   switch (event.code) {
     case 'Space':
