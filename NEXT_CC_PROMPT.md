@@ -1,129 +1,189 @@
-# v2.0.4-rc2: ホール側ウィンドウ自動全画面化バグ修正 + 再ビルド
+# v2.0.4-rc3 実装: AC × ボタン保護 + 操作キーのフォーカス無依存化
 
 ## 背景
 
-v2.0.4-rc1 試験版を前原さんが実機検証 → 2 画面の基本動作は OK（HDMI 抜き差し含む 4 項目クリア）。
-ただし以下の問題発覚:
+v2.0.4-rc2 試験 + 状況再整理（2026-05-01）で以下が確定:
 
-| 症状 | 詳細 |
-|---|---|
-| 自動全画面化されない | ホール側ウィンドウが「普通のウィンドウサイズ」で開く |
-| レイアウトはみ出し | カード・帯を含むレイアウト全体がモニター画面からはみ出る（ドアップ状態） |
-| F11 無反応 | F11 を押しても fullscreen 化されない |
-| 結果 | ホール側で設定タブも開けない状態（ただし設定タブはホール側に表示されるべきではないので別問題） |
+| 項目 | 状態 | 評価 |
+|---|---|---|
+| 全画面化 | OK | 維持（rc2 で実装済）|
+| レイアウトはみ出し解消 | OK | 維持 |
+| AC（operator window）= 全操作可能 | **設計通り** | 維持 |
+| B（hall window）= 操作キー無反応 | **設計通り** | 維持 |
+| B にボタン非表示 | **設計通り** | 維持 |
+| **AC を × で閉じると操作不能** | **致命的 UX バグ** | 修正必要 |
+| **B にフォーカス時 Space 等が効かない** | UX 不便 | 修正必要 |
 
-**前原さん回答（2026-05-01）**: ドアップは B（レイアウト全体はみ出し）/ 全画面化操作は F11 押下したが無反応
+前原さん判断（2026-05-01）:
+- **問題 1（AC × ボタン）: 案 A 採用** = 確認ダイアログ「閉じるとアプリ全体が終了します」+ OK で全体終了
+- **問題 2（フォーカス時のキー不能）: 案 D 採用** = Space / R / Enter 等の操作系ショートカットは hall にフォーカスがあっても operator に届く
+
+---
 
 ## 目的
 
-ホール側ウィンドウを起動時に自動全画面化し、レイアウトが正常表示される状態にして、試験版 v2.0.4-rc2 を再ビルドする。
+上記 2 件を最小実装で修正し、v2.0.4-rc3 として再ビルドする。
+
+---
 
 ## スコープ厳守
 
-修正範囲は以下 3 点に限定:
+### 修正範囲（厳格に 2 点に限定）
 
-1. **ホール側 BrowserWindow の起動時 `fullscreen: true` 化**（または起動後 `setFullScreen(true)` 呼出）
-2. **F11 ショートカットでホール側 fullscreen toggle 対応**（保険として）
-3. **レイアウトはみ出しの追加修正**（仮説: 上記 1 で解消する。解消しない場合は STEP B-4 で停止し構築士判断）
+1. **operator window の close 保護**: 閉じる操作時に確認ダイアログ → OK で `app.quit()` 全体終了 / キャンセルで閉じない
+2. **hall window のキーフォワード**: hall 内のキーボード入力のうち **操作系キー**（Space / R / Enter / Esc / その他既存ショートカット）を operator window にフォワード、hall 自身では消化しない
+
+### operator-solo モード（v1.3.0 互換）の扱い
+
+**operator-solo モードでも close 確認ダイアログを適用する**。理由:
+- 操作ミス防止は普遍的価値（v1.3.0 ユーザーにも有益な UX 改善）
+- 軽微な挙動追加であり、既存機能の破壊ではない
+- 致命バグ保護 5 件には影響なし
 
 ### 禁止事項
 
-- 致命バグ保護 5 件への変更（cross-check 必須）
-- 操作画面（PC 側ウィンドウ）の動作変更
-- v1.3.0 互換モード（`operator-solo` 役割）の挙動変更
-- ホール側 UI 構成の追加変更（設定タブ非表示化等は別フェーズで対応、今回は触らない）
+- 致命バグ保護 5 件への変更
 - スコープ外の追加実装
+- main へのマージ / push
+- ボタン UI の追加・削除（B にスタート/一時停止ボタンを復活させない、設計通り）
+- F11 ショートカットの挙動変更（rc2 で getFocusedWindow ベースに改修済、不変）
+- 並列 sub-agent 4 体以上
 
 ---
 
 ## 手順
 
-### STEP A: 現状調査（コード変更なし）
+### STEP A: 現状調査
 
-- `src/main.js` の `createHallWindow` 関連コードを Read
-- 現在の BrowserWindow 起動オプション確認（特に `fullscreen` / `width` / `height` / `kiosk` など）
-- F11 ショートカット登録状況確認（`globalShortcut.register` または BrowserWindow の menu 設定）
-- ホール側 CSS scope（`[data-role="hall"]` のセレクタ）確認
+- `src/main.js` の `createOperatorWindow` / `createHallWindow` / `app.on('before-quit'|'will-quit')` 関連コード Read
+- 現状の close ハンドラ登録状況を把握（rc2 までで何が登録されているか）
+- `src/renderer/renderer.js` の document.keydown / window.keydown ハンドラから **既存ショートカットキー一覧を抽出**
+  - 操作系キー（タイマー操作 / 編集系）と表示系キー（F11 等）を分類
+  - フォワード対象キーリスト（`FORWARD_KEYS`）を確定
+- `src/preload.js` のキーイベント関連処理確認
 
-### STEP B: 修正実装
+### STEP B: 実装
 
-1. **ホール側 BrowserWindow に fullscreen 化追加**:
-   - `fullscreen: true` を BrowserWindow オプションに追加、または `win.setFullScreen(true)` を `ready-to-show` イベントで呼出
-   - PC 側ウィンドウは現状維持（fullscreen 化しない）
-   - `operator-solo` モード（HDMI なし PC、role が `operator-solo`）は現状維持
+#### B-1: operator window の close 保護
 
-2. **F11 ショートカット対応**（ホール側のみ）:
-   - ホール側ウィンドウのメニューに F11 = fullscreen toggle を割り当てる
-   - または globalShortcut でホール側 BrowserWindow に対し F11 で `setFullScreen(!isFullScreen())` toggle
-   - PC 側で F11 押しても何もしない（既存挙動維持）
+`createOperatorWindow` で win に close ハンドラ追加:
 
-3. **レイアウトはみ出し検証**:
-   - 上記 1 が効けば自動的に画面いっぱいに収まる仮説で進める
-   - CSS は vw/vh 基準なので、ウィンドウが画面いっぱいに広がれば正常表示になるはず
+```js
+let _confirmedQuit = false;
+win.on('close', (event) => {
+  if (_confirmedQuit) return;
+  event.preventDefault();
+  const choice = dialog.showMessageBoxSync(win, {
+    type: 'question',
+    buttons: ['アプリを終了', 'キャンセル'],
+    defaultId: 1,
+    cancelId: 1,
+    title: '操作画面を閉じますか？',
+    message: '操作画面を閉じるとアプリ全体が終了します。よろしいですか？',
+  });
+  if (choice === 0) {
+    _confirmedQuit = true;
+    app.quit();
+  }
+});
+```
 
-4. **追加修正の判断**:
-   - 上記 1+2 で解消する可能性が高いと CC が判断 → そのまま STEP C へ
-   - 解消しない可能性が高い・追加 CSS 修正が必要 → CC_REPORT.md に「追加修正案」として記載 + STEP C 以降は実施せず停止して構築士判断を仰ぐ
+備考:
+- `app.quit()` で hall window も自動で閉じる
+- `_confirmedQuit` フラグで `app.quit()` 経由の close は無限ループしない
+- メッセージは平易な日本語（前原さん向け）
+
+#### B-2: hall window のキーフォワード
+
+`createHallWindow` で hallWin の `webContents.on('before-input-event', ...)` で実装:
+
+```js
+hallWin.webContents.on('before-input-event', (event, input) => {
+  if (input.type !== 'keyDown') return;
+  if (!FORWARD_KEYS.has(input.key)) return;
+  event.preventDefault();
+  if (operatorWindow && !operatorWindow.isDestroyed()) {
+    operatorWindow.webContents.sendInputEvent({
+      type: 'keyDown',
+      keyCode: input.key,
+      modifiers: buildModifiers(input),  // shift / control / alt / meta
+    });
+  }
+});
+```
+
+実装方式の判断: **案 i（sendInputEvent）採用**。
+理由:
+- 既存の operator 側 keydown handler を変更せず最小変更で済む
+- IPC チャネル新設不要
+- 案 ii（forward-shortcut IPC）は変更範囲が広いため不採用
+
+`FORWARD_KEYS` は STEP A の調査結果から確定（既存ショートカットの操作系のみ、F11 は除外）。
+
+#### B-3: テスト追加
+
+`tests/v204-window-protection.test.js` 新規 で以下を静的検証:
+- operator window の close ハンドラが showMessageBoxSync を使う（dialog 確認ダイアログを呼び出している）
+- hall window の before-input-event ハンドラが登録されている
+- FORWARD_KEYS にタイマー基本操作キーが含まれる
+- F11 が FORWARD_KEYS に含まれていない（rc2 改修との整合）
+- 致命バグ保護 5 件への影響なし（cross-check）
 
 ### STEP C: テスト全 PASS 確認
 
-- `npm test` 実行
-- 既存 238 件全 PASS 維持
-- ホール側 fullscreen オプション設定の静的検証テストを追加（例: `tests/v204-hall-fullscreen.test.js` 新規 1〜3 件、main.js から `fullscreen: true` 設定をパースできるか等の最小検証）
-- 1 件でも FAIL → STEP D に進まず CC_REPORT に詳細記載
+- `npm test`
+- 既存 244 件全 PASS 維持
+- 新規 N 件追加（B-3 テスト群）
 
-### STEP D: バージョン rc1 → rc2 にバンプ
+### STEP D: バージョン rc2 → rc3 にバンプ
 
-- `package.json` の `version`: `2.0.4-rc1` → `2.0.4-rc2`
-- `tests/v130-features.test.js` の T11 version 比較も `2.0.4-rc2` に同期更新（前回 rc1 で追認済の範囲を継続適用、追加スコープ承認は不要）
+- `package.json`: `2.0.4-rc2` → `2.0.4-rc3`
+- `tests/v130-features.test.js` T11 同期更新（rc1 で追認した範囲を継続適用）
 
 ### STEP E: ビルド実行
 
 - `npm run build:win`
-- 生成された `.exe` の絶対パス、サイズ、ファイル名を記録
+- 生成 `.exe` の絶対パス・サイズ・ファイル名を記録
 
 ### STEP F: 静的検証
 
-- `dist/latest.yml` に `version: 2.0.4-rc2` 記載確認
-- `dist/win-unpacked/PokerTimerPLUS+ (Test).exe` 生成確認
+- `dist/latest.yml` に `version: 2.0.4-rc3` 記載確認
 
 ### STEP G: CC_REPORT.md を完成版で上書き
-
-- 修正対象ファイルと変更箇所一覧
-- 修正コード抜粋（fullscreen 化部分、F11 ハンドラ部分）
-- テスト結果（238 + 新規 N 件）
-- ビルド成果物の絶対パス / サイズ / version
-- 致命バグ保護 5 件への影響評価
-- v1.3.0 互換モード (operator-solo) への影響評価
-- 並列 sub-agent 数報告
 
 ---
 
 ## 報告必須項目（CC_REPORT.md）
 
-- 並列 sub-agent 数（0 体予定）
+- 並列 sub-agent 数（STEP A 調査のみ最大 3 体可、STEP B 以降は 0 体）
 - 致命バグ保護 5 件への影響評価
 - 修正対象ファイルと変更箇所
-- 修正コード抜粋
+- 修正コード抜粋（B-1 close 保護 / B-2 キーフォワード）
+- **FORWARD_KEYS の確定リスト**（採用したキーと、フォワード対象外にしたキーの理由）
 - ビルド成果物の path / size / version
-- v1.3.0 互換モード (operator-solo) への影響評価
-- レイアウトはみ出し真因の特定結果（仮説 fullscreen 化で解消の妥当性）
+- operator-solo モードへの影響評価（close 確認ダイアログの適用方針）
+
+---
 
 ## ブランチ
 
-- 現在ブランチ: `feature/v2.0.4-rc1-test-build` 継続使用（rc1→rc2 連続なので新ブランチ不要）
+- 現在ブランチ: `feature/v2.0.4-rc1-test-build` 継続使用
 - main マージなし、リモート push なし
-- ローカルコミット可（rc1 と rc2 の差分を git log で追えるように）
+- ローカルコミット可（rc1/rc2/rc3 の差分追跡可能に）
 
 ## 並列 sub-agent
 
-- 0 体（並列不要、修正範囲が小さい）
+- STEP A 調査: 最大 3 体まで可（公式 Agent Teams 推奨上限準拠）、不要なら 0 体
+- STEP B 以降: 0 体（修正範囲が小さく並列不要）
 
 ---
 
 ## 完了後の流れ（CC は関与しない）
 
-1. 構築士: CC_REPORT 採点 → 前原さんに rc2 の `.exe` 場所と再試験依頼
-2. 前原さん: rc1 をアンインストール（または rc1 と並列共存させたまま rc2 を別フォルダにインストール）→ 再試験
-3. 全画面化 + レイアウト OK → 次の問題へ進む or 配布判断
+1. 構築士: CC_REPORT 採点 → 前原さんに rc3 の `.exe` 場所と再試験依頼
+2. 前原さん: rc2 アンインストール → rc3 インストール → 再試験
+   - AC を × で閉じようとした時、確認ダイアログが出るか
+   - キャンセルで閉じない / OK で全体終了するか
+   - B にフォーカスがある状態で Space を押した時、operator のタイマーがスタートするか
+3. OK → 次の問題へ進む or 配布判断
 4. NG → 追加修正

@@ -903,6 +903,34 @@ function buildWebPreferences(role) {
   };
 }
 
+// v2.0.4-rc3: hall → operator にフォワードする操作系キー一覧。
+//   - 操作系（タイマー / プレイヤー数 / リエントリー / アドオン / 特殊スタック / 設定 / ミュート / ボトム / マーキー）は
+//     全て operator 側で処理されるべき → forward
+//   - 表示系 F11（rc2 で getFocusedWindow ベース、hall focused 時は hall 自身の全画面切替）と
+//     F12（DevTools、ウィンドウごとに独立）は forward しない
+const FORWARD_KEYS_FROM_HALL = new Set([
+  ' ',                                                  // Space (start/pause toggle)
+  'Enter', 'Escape',                                    // ダイアログ確定 / キャンセル
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',    // 30 秒進む/戻す、プレイヤー追加/脱落
+  'r', 'R',                                             // reset / Ctrl+R reentry
+  'a', 'A',                                             // Ctrl+A addon
+  'e', 'E',                                             // Ctrl+E special stack
+  's', 'S',                                             // settings dialog
+  'm', 'M',                                             // mute toggle
+  'h', 'H',                                             // bottom bar toggle
+  't', 'T'                                              // Ctrl+T marquee
+]);
+// hall input.key → Electron Accelerator keyCode のマッピング（sendInputEvent 用）
+function _toAcceleratorKey(key) {
+  if (key === ' ') return 'Space';
+  if (key === 'ArrowUp') return 'Up';
+  if (key === 'ArrowDown') return 'Down';
+  if (key === 'ArrowLeft') return 'Left';
+  if (key === 'ArrowRight') return 'Right';
+  if (key === 'Escape') return 'Esc';
+  return key;   // letters / 'Enter' はそのまま
+}
+
 // v2.0.0 STEP 1: operator ウィンドウ生成。
 //   isSolo=true で role='operator-solo'（単画面モード、v1.3.0 と完全同等の見た目・挙動）。
 //   isSolo=false で role='operator'（2 画面モードの PC 側、STEP 3 でホール側のみの要素を hide 化予定）。
@@ -964,6 +992,28 @@ function createOperatorWindow(targetDisplay, isSolo = false) {
     }
   });
 
+  // v2.0.4-rc3: × ボタンで操作画面を閉じようとした時に確認ダイアログを表示。
+  //   rc2 試験で「× で閉じると hall window だけ残って操作不能になる」致命的 UX バグを発見。
+  //   モード切替（switchOperatorToSolo / switchSoloToOperator）と confirmQuit / app.quit 経由は
+  //   `win._suppressCloseConfirm = true` をセットしてから close を呼ぶことで無音で通過する。
+  //   operator-solo（v1.3.0 互換モード）でも適用 — 操作ミス防止は普遍的価値（仕様書記載）。
+  win._suppressCloseConfirm = false;
+  win.on('close', (event) => {
+    if (win._suppressCloseConfirm) return;
+    event.preventDefault();
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'question',
+      buttons: ['アプリを終了', 'キャンセル'],
+      defaultId: 1,
+      cancelId: 1,
+      title: '操作画面を閉じますか？',
+      message: '操作画面を閉じるとアプリ全体が終了します。よろしいですか？'
+    });
+    if (choice === 0) {
+      win._suppressCloseConfirm = true;
+      app.quit();
+    }
+  });
   // v2.0.1: race 防止 — このウィンドウが「現在の mainWindow」である場合のみ null クリア
   win.on('closed', () => {
     if (mainWindow === win) {
@@ -1004,6 +1054,28 @@ function createHallWindow(targetDisplay) {
   });
   win.setTitle(WINDOW_TITLE + ' (Hall)');
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // v2.0.4-rc3: hall にフォーカスがある状態で押された操作系キーを mainWindow に sendInputEvent で転送。
+  //   rc2 試験で「hall focused 時に Space 等が無反応」を確認。設計上 hall は purely consumer のため、
+  //   操作キーは常に operator が処理すべき。preventDefault で hall 自身は消化しない（二重発火防止）。
+  //   F11 / F12 / 入力 / 通常文字は forward 対象外（FORWARD_KEYS_FROM_HALL の集合外で素通り）。
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    if (!FORWARD_KEYS_FROM_HALL.has(input.key)) return;
+    event.preventDefault();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const modifiers = [];
+    if (input.shift)   modifiers.push('shift');
+    if (input.control) modifiers.push('control');
+    if (input.alt)     modifiers.push('alt');
+    if (input.meta)    modifiers.push('meta');
+    try {
+      mainWindow.webContents.sendInputEvent({
+        type: 'keyDown',
+        keyCode: _toAcceleratorKey(input.key),
+        modifiers
+      });
+    } catch (_) { /* mainWindow transition 中は黙って無視 */ }
+  });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   // v2.0.4-rc2: 保険として ready-to-show 時にも setFullScreen(true) を再適用。
   //   一部の Windows 環境では BrowserWindow の opts.fullscreen が
@@ -1108,6 +1180,8 @@ function isWindowOnDisplay(windowBounds, display) {
 async function switchOperatorToSolo() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const display = screen.getPrimaryDisplay();
+  // v2.0.4-rc3: モード切替時の close は確認ダイアログを抑制（rc3 で導入した × 保護の bypass）
+  mainWindow._suppressCloseConfirm = true;
   try { mainWindow.close(); } catch (_) { /* ignore */ }
   mainWindow = null;
   // 新しい mainWindow を operator-solo（v1.3.0 同等）で再生成
@@ -1121,6 +1195,8 @@ async function switchSoloToOperator(hallDisplay) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (!hallDisplay) return;
   const operatorDisplay = screen.getPrimaryDisplay();
+  // v2.0.4-rc3: モード切替時の close は確認ダイアログを抑制
+  mainWindow._suppressCloseConfirm = true;
   try { mainWindow.close(); } catch (_) { /* ignore */ }
   mainWindow = null;
   createOperatorWindow(operatorDisplay, false);
@@ -1214,6 +1290,9 @@ async function confirmQuit() {
     message
   });
   if (result.response === 1) {
+    // v2.0.4-rc3: confirmQuit 経由は専用ダイアログで既に確認済のため、
+    //   close ハンドラの二重ダイアログを抑制してから app.quit へ。
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow._suppressCloseConfirm = true;
     app.quit();
   }
 }
