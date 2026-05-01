@@ -30,6 +30,58 @@
       <span id="js-operator-status-state">IDLE</span>
     </span>
   </div>
+  <!-- v2.0.4-rc4: AC（operator role 限定）専用の支援パネル。
+       ホール側 / operator-solo（v1.3.0 互換）モードでは hidden 属性 + CSS [data-role] で 3 重防御非表示。
+       「ウィンドウをクリックでフォーカス → 会場モニター操作可能」案内 + 7 件の運用情報 + 25 件の操作一覧。 -->
+  <section class="operator-pane" id="js-operator-pane" hidden>
+    <div class="operator-pane__notice">
+      このウィンドウをクリックすると、会場モニターを操作できます。<br>
+      （キーボードのショートカットがすべて反応する状態になります）
+    </div>
+    <div class="operator-pane__body">
+      <div class="operator-pane__col operator-pane__col--info">
+        <h2 class="operator-pane__heading">運用情報</h2>
+        <dl class="operator-pane__info-list">
+          <dt>イベント名</dt><dd id="op-pane-event-name">-</dd>
+          <dt>状態</dt><dd id="op-pane-status">-</dd>
+          <dt>現ブラインド</dt><dd id="op-pane-current-blind">-</dd>
+          <dt>次ブラインド</dt><dd id="op-pane-next-blind">-</dd>
+          <dt>プレイヤー</dt><dd id="op-pane-players">-</dd>
+          <dt>平均スタック</dt><dd id="op-pane-avg-stack">-</dd>
+          <dt>リエントリー / アドオン</dt><dd id="op-pane-reentry-addon">-</dd>
+        </dl>
+      </div>
+      <div class="operator-pane__col operator-pane__col--shortcuts">
+        <h2 class="operator-pane__heading">操作一覧</h2>
+        <ul class="operator-pane__shortcut-list">
+          <li><kbd>Space</kbd> 一時停止 / 再開</li>
+          <li><kbd>Enter</kbd> スタート（開始前）</li>
+          <li><kbd>→</kbd> 残り時間 -30 秒（早送り）</li>
+          <li><kbd>←</kbd> 残り時間 +30 秒（巻き戻し）</li>
+          <li><kbd>↑</kbd> 新規エントリー追加</li>
+          <li><kbd>↓</kbd> プレイヤー脱落</li>
+          <li><kbd>Ctrl</kbd>+<kbd>R</kbd> リエントリー +1</li>
+          <li><kbd>Ctrl</kbd>+<kbd>A</kbd> アドオン +1</li>
+          <li><kbd>S</kbd> 設定ダイアログ</li>
+          <li><kbd>Shift</kbd>+<kbd>↑</kbd> 新規エントリー取消</li>
+          <li><kbd>Shift</kbd>+<kbd>↓</kbd> 脱落取消（復活）</li>
+          <li><kbd>R</kbd> リセットダイアログ</li>
+          <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> リエントリー -1</li>
+          <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> アドオン -1</li>
+          <li><kbd>Ctrl</kbd>+<kbd>E</kbd> 特別スタック +1</li>
+          <li><kbd>Ctrl</kbd>+<kbd>T</kbd> マーキー編集</li>
+          <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 特別スタック -1</li>
+          <li><kbd>M</kbd> ミュート切替</li>
+          <li><kbd>H</kbd> ボトムバー非表示</li>
+          <li><kbd>F2</kbd> メイン⇄設定切替</li>
+          <li><kbd>F11</kbd> フルスクリーン切替</li>
+          <li><kbd>Ctrl</kbd>+<kbd>Q</kbd> アプリ終了</li>
+          <li><kbd>F12</kbd> 開発者ツール</li>
+          <li><kbd>Esc</kbd> ダイアログを閉じる</li>
+        </ul>
+      </div>
+    </div>
+  </section>
   <!-- STEP 10 フェーズC.1.4: 休憩中スライドショー全画面ステージ（data-slideshow="active" 時のみ表示） -->
   <!-- STEP 10 フェーズC.1.4-fix2 Fix 2: hidden 属性を外して CSS opacity フェードインを効かせる。
        非アクティブ時は opacity: 0 + pointer-events: none で完全に操作素通し。 -->

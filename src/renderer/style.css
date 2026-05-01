@@ -3811,3 +3811,120 @@ tr.level-row--just-inserted {
 
 /* === role=operator-solo: v1.3.0 と完全同等。何も変えない（hidden ルールも一切当てない） === */
 /* operator-solo / data-role 未指定では .operator-status-bar は HTML 側 hidden 属性で非表示のまま */
+
+/* === v2.0.4-rc4 修正 2: operator role で body 背景画像を打ち消す === */
+/* operator は「フォーカスさせるためだけのウィンドウ」のため、お客様向け演出（背景画像）は非表示。
+   data-bg="image" のときだけ適用、attribute selector の特定性で operator-solo / hall には絶対マッチしない。
+   hall は元々 fullscreen + 既存 .bg-image 系で背景画像を表示する設計のため touch しない。 */
+[data-role="operator"][data-bg="image"] body {
+  background-image: none !important;
+  background-color: #0A1F3D !important;
+}
+
+/* === v2.0.4-rc4 修正 3: AC（operator）専用の支援パネル === */
+/* 既存 .operator-status-bar（top:0, height:36px）の直下 (top:36px) から画面下まで配置。
+   hall / operator-solo には HTML hidden + CSS [data-role] で 3 重防御で非表示維持。 */
+.operator-pane {
+  display: none;   /* デフォルト非表示、operator のみで表示打ち消し */
+}
+[data-role="operator"] .operator-pane {
+  display: flex !important;
+  flex-direction: column;
+  position: fixed;
+  top: 36px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 24px 32px;
+  gap: 18px;
+  background: #0A1F3D;
+  color: #E8E5DA;
+  font-family: 'Noto Sans JP', sans-serif;
+  overflow: auto;
+  z-index: 90;
+}
+[data-role="operator"] .operator-pane__notice {
+  padding: 14px 20px;
+  border: 2px solid #D4AF37;
+  border-radius: 8px;
+  background: rgba(212, 175, 55, 0.08);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  color: #E8E5DA;
+}
+[data-role="operator"] .operator-pane__body {
+  display: grid;
+  grid-template-columns: 35% 65%;
+  gap: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+[data-role="operator"] .operator-pane__col {
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 8px;
+  overflow: auto;
+}
+[data-role="operator"] .operator-pane__heading {
+  margin: 0 0 12px 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #D4AF37;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+  padding-bottom: 6px;
+}
+[data-role="operator"] .operator-pane__info-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+[data-role="operator"] .operator-pane__info-list dt {
+  color: rgba(232, 229, 218, 0.7);
+  letter-spacing: 0.06em;
+}
+[data-role="operator"] .operator-pane__info-list dd {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #E8E5DA;
+}
+[data-role="operator"] .operator-pane__shortcut-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  font-size: 13px;
+}
+[data-role="operator"] .operator-pane__shortcut-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  color: #E8E5DA;
+}
+[data-role="operator"] .operator-pane__shortcut-list kbd {
+  display: inline-block;
+  min-width: 24px;
+  padding: 2px 6px;
+  font-family: 'JetBrains Mono', 'Barlow Condensed', monospace;
+  font-weight: 700;
+  font-size: 12px;
+  color: #D4AF37;
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  border-radius: 4px;
+  text-align: center;
+}

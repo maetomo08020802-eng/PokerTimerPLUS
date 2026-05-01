@@ -106,6 +106,14 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
     },
     fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
+    // v2.0.4-rc4: hall 側 before-input-event で捕捉した操作系キーを operator 側に IPC 転送する受信口。
+    //   旧実装（rc3）の sendInputEvent 方式は letter キーで event.code が空文字になる Electron 31 系の
+    //   構造的制約により、R / Ctrl+E / S 等 13 キーが無反応だった。論理キーオブジェクトを直接送る
+    //   IPC 化で確実に operator の dispatchClockShortcut に届く。
+    onHallForwardedKey: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('hall:forwarded-key', (_event, payload) => callback(payload));
+    },
     // v2.0.0 STEP 4: モニター選択ダイアログ（display-picker.html 専用）。
     //   fetchDisplays: 検出済の displays + 前回選択 id を取得（invoke、結果を返す）
     //   selectHallMonitor: ユーザーが選んだモニター id を main に通知（send、結果不要）

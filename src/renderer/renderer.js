@@ -1588,6 +1588,8 @@ subscribe((state, prev) => {
   syncSlideshowFromState(state.remainingMs);
   // v2.0.0 STEP 3: operator モードのみミニ状態バーを更新（hall / operator-solo は no-op）
   updateOperatorStatusBar(state);
+  // v2.0.4-rc4: operator モードのみ支援パネル（運用情報）を更新（hall / operator-solo は no-op）
+  updateOperatorPane(state);
 });
 
 // v2.0.0 STEP 3: operator モード（PC 側）専用のミニ状態バー更新。
@@ -1608,6 +1610,78 @@ function updateOperatorStatusBar(state) {
   const ss = String(totalSec % 60).padStart(2, '0');
   timeEl.textContent = `${mm}:${ss}`;
   stateEl.textContent = state.status || 'IDLE';
+}
+
+// v2.0.4-rc4: operator モード（PC 側）専用の支援パネル更新（運用情報 7 項目）。
+//   hall / operator-solo では JS guard で early return（3 重防御の JS 層）。
+//   状態は日本語化、ブラインドは現/次の SB/BB 表示、未取得は '-'。
+const _STATUS_JP_MAP = {
+  idle:        '開始前',
+  'pre-start': 'カウントダウン中',
+  prestart:    'カウントダウン中',
+  running:     '進行中',
+  paused:      '一時停止',
+  break:       'ブレイク中',
+  finished:    '終了'
+};
+function _formatBlindForPane(level) {
+  if (!level) return '-';
+  if (level.isBreak) return 'ブレイク';
+  const sb = (typeof level.sb === 'number') ? level.sb : null;
+  const bb = (typeof level.bb === 'number') ? level.bb : null;
+  if (sb === null || bb === null) return '-';
+  const ante = (typeof level.bbAnte === 'number' && level.bbAnte > 0) ? `（BB ANTE ${level.bbAnte}）` : '';
+  return `${sb} / ${bb}${ante}`;
+}
+function updateOperatorPane(state) {
+  if (typeof window === 'undefined' || window.appRole !== 'operator') return;
+  const pane = document.getElementById('js-operator-pane');
+  if (!pane) return;
+  // 初回のみ hidden 解除（pane 自体は HTML hidden、CSS で display 上書き、JS で hidden 属性を外す）
+  if (pane.hasAttribute('hidden')) pane.removeAttribute('hidden');
+
+  const eventEl   = document.getElementById('op-pane-event-name');
+  const statusEl  = document.getElementById('op-pane-status');
+  const curBlindEl = document.getElementById('op-pane-current-blind');
+  const nextBlindEl = document.getElementById('op-pane-next-blind');
+  const playersEl = document.getElementById('op-pane-players');
+  const avgEl     = document.getElementById('op-pane-avg-stack');
+  const reentryEl = document.getElementById('op-pane-reentry-addon');
+  if (!eventEl || !statusEl) return;
+
+  // イベント名 (tournamentState.name)
+  eventEl.textContent = (tournamentState && tournamentState.name) ? tournamentState.name : '-';
+
+  // 状態（日本語化）
+  const rawStatus = String(state?.status || 'idle').toLowerCase();
+  statusEl.textContent = _STATUS_JP_MAP[rawStatus] || (state?.status || '-');
+
+  // 現ブラインド / 次ブラインド
+  const struct = (typeof getStructure === 'function') ? getStructure() : null;
+  const levels = (struct && Array.isArray(struct.levels)) ? struct.levels : [];
+  const idx = state?.currentLevelIndex || 0;
+  if (curBlindEl)  curBlindEl.textContent  = _formatBlindForPane(levels[idx]);
+  if (nextBlindEl) nextBlindEl.textContent = _formatBlindForPane(levels[idx + 1]);
+
+  // プレイヤー（残 / 初期）
+  const remaining = (tournamentRuntime && typeof tournamentRuntime.playersRemaining === 'number')
+    ? tournamentRuntime.playersRemaining : 0;
+  const initial = (tournamentRuntime && typeof tournamentRuntime.playersInitial === 'number')
+    ? tournamentRuntime.playersInitial : 0;
+  if (playersEl) playersEl.textContent = `${remaining} / ${initial}`;
+
+  // 平均スタック（既存 el.avgStack の textContent を流用）
+  if (avgEl) {
+    const avgText = el.avgStack ? (el.avgStack.textContent || '').trim() : '';
+    avgEl.textContent = avgText || '-';
+  }
+
+  // リエントリー / アドオン
+  const reentry = (tournamentRuntime && typeof tournamentRuntime.reentryCount === 'number')
+    ? tournamentRuntime.reentryCount : 0;
+  const addon = (tournamentRuntime && typeof tournamentRuntime.addOnCount === 'number')
+    ? tournamentRuntime.addOnCount : 0;
+  if (reentryEl) reentryEl.textContent = `リエントリー ${reentry} / アドオン ${addon}`;
 }
 
 // 通知音発火: 同じ秒で複数フレーム検出されても1回だけ鳴らすためのガード
@@ -5740,32 +5814,23 @@ el.marqueeDialog?.addEventListener('close', () => {
   restoreMarqueeIfPreviewing();
 });
 
-window.addEventListener('keydown', (event) => {
-  if (el.resetDialog.open) return;
+// v2.0.4-rc4: 操作系ショートカットの分岐本体を関数化。
+//   ローカル keydown とホール側 IPC 転送（hall:forwarded-key）の双方から呼ばれる共通 dispatcher。
+//   IPC 経由で渡される eventLike は preventDefault / stopPropagation を no-op として持つ最小オブジェクト。
+//   ガード（resetDialog / dialog[open]）は両経路に等しく適用、入力フィールドガードは
+//   ローカル keydown 専用（IPC は target を持たない）。
+function dispatchClockShortcut(event) {
+  // resetDialog 中は全ショートカットを抑制（既存挙動維持、Ctrl+T も含む）
+  if (el.resetDialog?.open) return;
 
-  // Ctrl+T: マーキー編集ダイアログを直接開く（input フォーカス中でも有効）
+  // Ctrl+T: マーキー編集ダイアログを直接開く（input フォーカス中でも有効、他 dialog 開でも有効）
   if ((event.ctrlKey || event.metaKey) && event.code === 'KeyT') {
     event.preventDefault();
     openMarqueeDialog();
     return;
   }
 
-  // 【最重要バグ修正】編集可能要素にフォーカスがある時は
-  // クロックショートカット（Space/←/→/R/S）を一切発火させない。
-  // dialog.open 判定ではエッジケース（フォーカスがダイアログ外要素に飛ぶ等）で
-  // 抜けることがあるため、target ベースで確実にガードする。
-  const target = event.target;
-  if (target && (
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT' ||
-    target.isContentEditable
-  )) return;
-
-  // v2.0.4 B-1 fix: 任意の <dialog open> でショートカットを抑制（汎化）。
-  //   旧実装では marqueeDialog / settingsDialog のみ列挙していたため、
-  //   apply-mode / blinds-apply-mode / tournament-delete / import-strategy / prestart 等の
-  //   他ダイアログ open 中にショートカットが誤発火する問題があった。
+  // v2.0.4 B-1 fix: 任意の <dialog open> でショートカットを抑制（Ctrl+T を除く）
   if (document.querySelector('dialog[open]')) return;
 
   switch (event.code) {
@@ -5853,7 +5918,42 @@ window.addEventListener('keydown', (event) => {
     default:
       break;
   }
+}
+
+// v2.0.4-rc4: ローカル keydown ハンドラ。input フィールドガードはここでのみ適用。
+window.addEventListener('keydown', (event) => {
+  // 【最重要バグ修正】編集可能要素にフォーカスがある時はクロックショートカットを一切発火させない。
+  // この入力フィールドガードはローカル keydown 専用（IPC 経由の hall 転送には target が無い）。
+  const target = event.target;
+  if (target && (
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT' ||
+    target.isContentEditable
+  )) return;
+  dispatchClockShortcut(event);
 });
+
+// v2.0.4-rc4: hall 側 before-input-event で捕捉した操作系キーを IPC 経由で受信し、
+//   同じ dispatcher にディスパッチ。main 側は mainWindow.webContents.send で operator 限定送信のため、
+//   hall 側 renderer は受信しないが、念のため appRole === 'operator' で限定。
+//   rc3 sendInputEvent 方式では letter キーで event.code が空文字になる Electron 31 系の構造的制約により
+//   R / Ctrl+E / S 等 13 キーが無反応だった問題を、IPC 化で根本解消。
+if (typeof window !== 'undefined' && window.appRole === 'operator') {
+  window.api?.dual?.onHallForwardedKey?.((data) => {
+    if (!data || typeof data.code !== 'string') return;
+    dispatchClockShortcut({
+      code: data.code,
+      key: data.key,
+      ctrlKey: !!data.control,
+      shiftKey: !!data.shift,
+      altKey: !!data.alt,
+      metaKey: !!data.meta,
+      preventDefault: () => {},
+      stopPropagation: () => {}
+    });
+  });
+}
 
 // STEP 6.6: ランタイム値調整（キーボードショートカットから呼ばれる）
 //

@@ -106,20 +106,12 @@ test('E-1b: doApplyTournament の apply-only 経路で clock--timer-finished が
 // ============================================================
 // B-1: グローバル keydown ガードが任意の dialog[open] に対応
 // ============================================================
-test('B-1: keydown ハンドラが document.querySelector(\'dialog[open]\') で抑制', () => {
-  // window.addEventListener('keydown', ...) のコールバック本体を抽出
-  const m = RENDERER.match(/window\.addEventListener\(\s*['"]keydown['"][\s\S]*?\(event\)\s*=>\s*\{/);
-  assert.ok(m, 'window.addEventListener("keydown") が見つからない');
-  let depth = 1, i = m.index + m[0].length;
-  while (i < RENDERER.length && depth > 0) {
-    if (RENDERER[i] === '{') depth++;
-    else if (RENDERER[i] === '}') depth--;
-    i++;
-  }
-  const handlerBody = RENDERER.slice(m.index, i);
-  // 任意の dialog[open] を検出する汎化ガードがある
-  assert.match(handlerBody, /document\.querySelector\(\s*['"]dialog\[open\]['"]/,
-    'keydown ハンドラに document.querySelector("dialog[open]") の汎化ガードなし');
+test('B-1: ショートカット dispatcher に document.querySelector(\'dialog[open]\') 汎化ガード', () => {
+  // v2.0.4-rc4 refactor: ガードは dispatchClockShortcut 内に移動（ローカル keydown / hall IPC 両経路で適用）
+  const body = extractFunctionBody(RENDERER, /function dispatchClockShortcut\s*\([^)]*\)\s*\{/);
+  assert.ok(body, 'dispatchClockShortcut が見つからない（rc4 refactor で導入された共通 dispatcher）');
+  assert.match(body, /document\.querySelector\(\s*['"]dialog\[open\]['"]/,
+    'dispatchClockShortcut に document.querySelector("dialog[open]") の汎化ガードなし');
 });
 
 // ============================================================

@@ -903,33 +903,18 @@ function buildWebPreferences(role) {
   };
 }
 
-// v2.0.4-rc3: hall → operator にフォワードする操作系キー一覧。
-//   - 操作系（タイマー / プレイヤー数 / リエントリー / アドオン / 特殊スタック / 設定 / ミュート / ボトム / マーキー）は
-//     全て operator 側で処理されるべき → forward
-//   - 表示系 F11（rc2 で getFocusedWindow ベース、hall focused 時は hall 自身の全画面切替）と
-//     F12（DevTools、ウィンドウごとに独立）は forward しない
+// v2.0.4-rc4: hall → operator に IPC で転送する操作系キー一覧（input.code ベース）。
+//   rc3 で sendInputEvent(keyCode: 'r') の合成イベントが Electron 31 系の構造的制約により
+//   event.code を空文字にして届く問題（letter キー全件無反応）が判明したため、
+//   IPC で論理キーオブジェクトを直接送る方式に切替。input.code は KeyboardEvent.code 互換。
+//   - 操作系（タイマー / プレイヤー / 編集系 / 設定 / ミュート / マーキー）は forward
+//   - F11（rc2 で getFocusedWindow ベース、hall focused 時は hall 自身の全画面切替）/
+//     F12（DevTools、ウィンドウごとに独立）/ KeyH（前原さん判断、ボトムバー非表示は PC 側のみ）は forward しない
 const FORWARD_KEYS_FROM_HALL = new Set([
-  ' ',                                                  // Space (start/pause toggle)
-  'Enter', 'Escape',                                    // ダイアログ確定 / キャンセル
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',    // 30 秒進む/戻す、プレイヤー追加/脱落
-  'r', 'R',                                             // reset / Ctrl+R reentry
-  'a', 'A',                                             // Ctrl+A addon
-  'e', 'E',                                             // Ctrl+E special stack
-  's', 'S',                                             // settings dialog
-  'm', 'M',                                             // mute toggle
-  'h', 'H',                                             // bottom bar toggle
-  't', 'T'                                              // Ctrl+T marquee
+  'Space', 'Enter', 'Escape',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'KeyR', 'KeyA', 'KeyE', 'KeyS', 'KeyM', 'KeyT'
 ]);
-// hall input.key → Electron Accelerator keyCode のマッピング（sendInputEvent 用）
-function _toAcceleratorKey(key) {
-  if (key === ' ') return 'Space';
-  if (key === 'ArrowUp') return 'Up';
-  if (key === 'ArrowDown') return 'Down';
-  if (key === 'ArrowLeft') return 'Left';
-  if (key === 'ArrowRight') return 'Right';
-  if (key === 'Escape') return 'Esc';
-  return key;   // letters / 'Enter' はそのまま
-}
 
 // v2.0.0 STEP 1: operator ウィンドウ生成。
 //   isSolo=true で role='operator-solo'（単画面モード、v1.3.0 と完全同等の見た目・挙動）。
@@ -1054,25 +1039,24 @@ function createHallWindow(targetDisplay) {
   });
   win.setTitle(WINDOW_TITLE + ' (Hall)');
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  // v2.0.4-rc3: hall にフォーカスがある状態で押された操作系キーを mainWindow に sendInputEvent で転送。
-  //   rc2 試験で「hall focused 時に Space 等が無反応」を確認。設計上 hall は purely consumer のため、
-  //   操作キーは常に operator が処理すべき。preventDefault で hall 自身は消化しない（二重発火防止）。
-  //   F11 / F12 / 入力 / 通常文字は forward 対象外（FORWARD_KEYS_FROM_HALL の集合外で素通り）。
+  // v2.0.4-rc4: hall にフォーカスがある状態で押された操作系キーを IPC 経由で operator に転送。
+  //   rc3 sendInputEvent 方式の構造的制約（letter キーで event.code が空文字）を解消するため、
+  //   論理キーオブジェクトを `hall:forwarded-key` チャネルで直接送る IPC 化を採用。
+  //   operator 側 renderer は dispatchClockShortcut(eventLike) で同じ分岐を流用する。
+  //   preventDefault で hall 自身は消化しない（二重発火防止）。
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
-    if (!FORWARD_KEYS_FROM_HALL.has(input.key)) return;
+    if (!FORWARD_KEYS_FROM_HALL.has(input.code)) return;
     event.preventDefault();
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    const modifiers = [];
-    if (input.shift)   modifiers.push('shift');
-    if (input.control) modifiers.push('control');
-    if (input.alt)     modifiers.push('alt');
-    if (input.meta)    modifiers.push('meta');
     try {
-      mainWindow.webContents.sendInputEvent({
-        type: 'keyDown',
-        keyCode: _toAcceleratorKey(input.key),
-        modifiers
+      mainWindow.webContents.send('hall:forwarded-key', {
+        code: input.code,
+        key: input.key,
+        shift: input.shift,
+        control: input.control,
+        alt: input.alt,
+        meta: input.meta
       });
     } catch (_) { /* mainWindow transition 中は黙って無視 */ }
   });
