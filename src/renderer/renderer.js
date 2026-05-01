@@ -54,7 +54,8 @@ import {
   getMasterVolume as audioGetMasterVolume
 } from './audio.js';
 // v2.0.0 STEP 2: hall 側のみで起動する状態同期レイヤ。operator / operator-solo では no-op。
-import { initDualSyncForHall } from './dual-sync.js';
+// v2.0.1 #A1: registerDualDiffHandler で受信した差分を実 DOM 更新に反映する経路を追加。
+import { initDualSyncForHall, registerDualDiffHandler } from './dual-sync.js';
 
 console.log('PokerTimerPLUS+ 起動');
 
@@ -1384,6 +1385,7 @@ async function fetchTimerState(id) {
 // STEP 6.21.1: pending タイマーをキャンセルする外部 API も追加（active 切替前にクリア）
 let timerStatePersistTimer = null;
 function schedulePersistTimerState() {
+  if (window.appRole === 'hall') return;  // v2.0.1: hall は purely consumer、逆書込禁止
   if (timerStatePersistTimer) clearTimeout(timerStatePersistTimer);
   timerStatePersistTimer = setTimeout(() => {
     timerStatePersistTimer = null;
@@ -1407,9 +1409,11 @@ function cancelPendingTimerStatePersist() {
 //   アプリ終了 → 再起動でプレイヤー人数 / リエントリー / アドオン数が消失する重大バグの修正。
 let runtimePersistTimer = null;
 function schedulePersistRuntime() {
+  if (window.appRole === 'hall') return;  // v2.0.1: hall は purely consumer、逆書込禁止
   if (runtimePersistTimer) clearTimeout(runtimePersistTimer);
   runtimePersistTimer = setTimeout(() => {
     runtimePersistTimer = null;
+    if (_tournamentSwitching) return;  // v2.0.1 Fix B3: 切替中は古い id に書き込まない
     const id = tournamentState.id;
     if (!id || !window.api?.tournaments?.setRuntime) return;
     const rt = {
@@ -1435,6 +1439,7 @@ let _tournamentSwitching = false;
 // 強制終了時の最大誤差は5秒、復元時は store 値 + (now - startedAt) で進める方向のみ
 let timerStatePeriodicInterval = null;
 function startPeriodicTimerStatePersist() {
+  if (window.appRole === 'hall') return;  // v2.0.1: hall は purely consumer、逆書込禁止
   if (timerStatePeriodicInterval) return;
   timerStatePeriodicInterval = setInterval(periodicPersistAllRunning, 5000);
 }
@@ -2770,6 +2775,7 @@ if (el.logoSelectFileBtn) {
 //                 フォーマットを自動ロードして editor の出発点とする（雛形提示）。
 //   ここではエディタ内の draft / フォーム値までを更新。永続化はトーナメント「保存」ボタン押下時に既存ロジック経由
 async function handleTournamentGameTypeChange(newGameType) {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B5: hall はゲームタイプ変更不可
   const oldGameType = tournamentState.gameType || 'nlh';
   if (newGameType === oldGameType) return;
   // STEP 10 フェーズC.2.3: 「その他」選択時はカスタム名入力欄を表示
@@ -3311,6 +3317,7 @@ function buildTournamentListItem(t, ts, isActive, listLength = 99) {
 // 非アクティブは並行進行モデルで rebase してトグル（startedAt / elapsedSecondsInLevel を正しく更新）
 // STEP 6.21.2: 「裏で再開」が実際に時間を進める仕様（問題3対応）
 async function handleTournamentListToggle(id, currentStatus) {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B5: hall はリスト操作不可
   const isActive = (id === tournamentState.id);
   if (isActive) {
     if (currentStatus === 'running') timerPause();
@@ -3341,6 +3348,7 @@ async function handleTournamentListToggle(id, currentStatus) {
 
 // 一覧の「リセット」ボタン: 確認 → idle 状態に戻す。アクティブなら timer.js も reset()
 async function handleTournamentListReset(id, name) {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B5: hall はリスト操作不可
   if (!window.confirm(`「${name || '(無題)'}」のタイマーをリセットします。よろしいですか？`)) return;
   const idleState = { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
   await window.api.tournaments.setTimerState(id, idleState);
@@ -3350,6 +3358,7 @@ async function handleTournamentListReset(id, name) {
 
 // 一覧の「選択」ボタン: handleTournamentSelectChange と同じ流れ
 async function handleTournamentListSelect(id) {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B5: hall はリスト操作不可
   if (!el.tournamentSelect) return;
   el.tournamentSelect.value = id;
   await handleTournamentSelectChange();
@@ -3388,6 +3397,7 @@ async function loadTournamentIntoForm(id) {
 // STEP 6.21.2: 仕様b（並行進行） — 旧 active は running のまま継続、自動一時停止は撤廃。
 //              旧 active の最新 live state を rebase で保存（startedAt = now）してから切替。
 async function handleTournamentSelectChange() {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B5: hall はリスト操作不可
   if (!el.tournamentSelect || !window.api?.tournaments) return;
   const newId = el.tournamentSelect.value;
   if (!newId || newId === tournamentState.id) return;
@@ -3919,6 +3929,7 @@ async function handleTournamentSave() {
 //   新構造のレベル数が現在のレベル番号より少ない場合は「継続」を非活性。
 // - キャンセル: 何もしない。
 async function handleTournamentSaveApply() {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B5: hall は保存操作不可
   if (!el.tournamentTitle) return;
   if (!window.api?.tournaments?.save) {
     setTournamentHint('保存 API が利用できません', 'error');
@@ -4894,6 +4905,7 @@ async function _checkUserPresetLimit() {
 
 // 新規プリセット作成（ユーザー側）— 複製と同じく名前欄に focus + select
 el.presetNew?.addEventListener('click', async () => {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B6: hall はプリセット操作不可
   if (!(await _checkUserPresetLimit())) return;
   // STEP 10 フェーズB: 新規プリセットは現在の structureType を継承（既存 draft 由来）し、
   //   無ければ 'BLIND' で開始。levels は新フィールド名（sb/bb/bbAnte）を初期値 0 で 1 行。
@@ -4929,6 +4941,7 @@ el.presetNew?.addEventListener('click', async () => {
 // プリセット複製（同梱でも複製先はユーザー扱い）
 // 複製直後にユーザーがすぐ名前を変えられるよう、name 入力欄に focus + 全選択する
 el.presetDuplicate?.addEventListener('click', async () => {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B6: hall はプリセット操作不可
   if (!blindsEditor.draft) return;
   if (!(await _checkUserPresetLimit())) return;
   const cloned = cloneStructure(blindsEditor.draft);
@@ -4959,6 +4972,7 @@ el.presetDuplicate?.addEventListener('click', async () => {
 
 // プリセット削除（ユーザー作成のみ）
 el.presetDelete?.addEventListener('click', async () => {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B6: hall はプリセット操作不可
   if (!blindsEditor.meta || blindsEditor.meta.builtin) return;
   const deletedId = blindsEditor.meta.id;
   const deletedName = blindsEditor.meta.name;
@@ -5567,6 +5581,7 @@ function readMarqueeTabForm() {
 // STEP 6.8: プレビューは表示のみ（IPC 保存しない）。再起動で消える一時テスト用途。
 // STEP 6.22.1.fix: プレビュー中フラグを立て、ダイアログ閉じ時に復元される
 function handleMarqueeTabPreview() {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B6: hall はマーキー操作不可
   const next = readMarqueeTabForm();
   _marqueePreviewing = true;
   applyMarquee(next);
@@ -5576,6 +5591,7 @@ function handleMarqueeTabPreview() {
 
 // STEP 6.8: 保存は永続化＋メイン画面反映。lastMarqueeSettings を更新して Ctrl+T 側にも同期。
 async function handleMarqueeTabSave() {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B6: hall はマーキー操作不可
   const next = readMarqueeTabForm();
   lastMarqueeSettings = next;
   _marqueePreviewing = false;   // STEP 6.22.1.fix: 保存したのでプレビュー解除
@@ -5833,6 +5849,7 @@ function addNewEntry() {
 //   - playersInitial-- AND playersRemaining--（両方を同期で戻す）
 //   - 0 未満にはしない（保険）
 function cancelNewEntry() {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B1: hall はランタイム操作不可
   if (tournamentRuntime.playersInitial <= 0) return;
   tournamentRuntime.playersInitial -= 1;
   // playersRemaining も合わせて戻す（addNewEntry の対称操作）
@@ -5857,6 +5874,7 @@ function eliminatePlayer() {
 //   - playersRemaining++ ただし playersInitial を超えない（保険）
 //   - 既に最大なら何もしない（無音）
 function revivePlayer() {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B1: hall はランタイム操作不可
   if (tournamentRuntime.playersRemaining >= tournamentRuntime.playersInitial) return;
   tournamentRuntime.playersRemaining += 1;
   renderStaticInfo();
@@ -5906,6 +5924,7 @@ function resetBlindProgressOnly() {
 
 // STEP 6.9: rebuy → reentry リネーム。0未満は無音ガード（取消ショートカットでも同様）
 function adjustReentry(delta) {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B1: hall はランタイム操作不可
   const next = Math.max(0, tournamentRuntime.reentryCount + delta);
   if (next === tournamentRuntime.reentryCount) return;
   tournamentRuntime.reentryCount = next;
@@ -5914,6 +5933,7 @@ function adjustReentry(delta) {
 }
 
 function adjustAddOn(delta) {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B1: hall はランタイム操作不可
   const next = Math.max(0, tournamentRuntime.addOnCount + delta);
   if (next === tournamentRuntime.addOnCount) return;
   tournamentRuntime.addOnCount = next;
@@ -5925,6 +5945,7 @@ function adjustAddOn(delta) {
 //   - 0未満ガード、999 上限、無効時（!enabled）は何もしない
 //   - 状態変更は tournamentState 側に直接反映 → 永続化は fire-and-forget で保存
 function adjustSpecialStack(delta) {
+  if (window.appRole === 'hall') return;  // v2.0.1 Fix B1: hall はランタイム操作不可
   const ss = tournamentState.specialStack;
   if (!ss || !ss.enabled) return;
   const cur = Number(ss.appliedCount) || 0;
@@ -6172,6 +6193,69 @@ async function initialize() {
 //   role 不明時は 'operator-solo' 扱い（preload.js の既定値と一致）。
 const __appRole = (typeof window !== 'undefined' && window.appRole) || 'operator-solo';
 if (__appRole === 'hall') {
+  // v2.0.1 #A1: hall 側 dual-sync 差分ハンドラを登録。
+  //   main からの broadcast を受信したとき、kind 別に該当する apply* 関数を呼ぶ。
+  //   tournamentBasics 受信時は active トーナメント全体を再取得して applyTournament（最も安全）。
+  //   timerState は applyTimerStateToTimer で同期、ただし silent: true で音を鳴らさない（ホール側で同期音が二重発火しないため）。
+  //   ※ schedulePersistTimerState / schedulePersistRuntime は #A2 で hall ガード追加し、broadcast 経由で逆書込しない。
+  registerDualDiffHandler((diff) => {
+    if (!diff || typeof diff.kind !== 'string') return;
+    const { kind, value } = diff;
+    try {
+      if (kind === 'marqueeSettings' && value) {
+        applyMarquee(value);
+      } else if (kind === 'displaySettings' && value) {
+        // 背景プリセット / フォント / 背景画像 / overlay / breakImages / interval / pipSize の反映
+        if (typeof value.background === 'string') applyBackground(value.background);
+        if (typeof value.timerFont === 'string') applyTimerFont(value.timerFont);
+        if (typeof value.backgroundImage === 'string') {
+          bgImageState.dataUrl = value.backgroundImage;
+        }
+        if (typeof value.backgroundOverlay === 'string' && BG_OVERLAY_ALPHA[value.backgroundOverlay]) {
+          bgImageState.overlay = value.backgroundOverlay;
+        }
+        // 画像更新後は applyBackground を再呼出して CSS 変数を更新
+        if (typeof value.background === 'string') applyBackground(value.background);
+        if (Array.isArray(value.breakImages)) breakImagesState.images = value.breakImages;
+        if (typeof value.breakImageInterval === 'number') breakImagesState.intervalSec = value.breakImageInterval;
+        if (typeof value.pipSize === 'string' && VALID_PIP_SIZES.includes(value.pipSize)) {
+          breakImagesState.pipSize = value.pipSize;
+          applyPipSize(value.pipSize);
+        }
+      } else if (kind === 'logoUrl' && value) {
+        applyLogo(value);
+      } else if (kind === 'venueName') {
+        applyVenueName(typeof value === 'string' ? value : '');
+      } else if (kind === 'audioSettings' && value) {
+        applyAudioSettings(value);
+      } else if (kind === 'tournamentRuntime' && value) {
+        // tournamentRuntime に反映 + 静的情報を再描画
+        if (typeof value.playersInitial === 'number') tournamentRuntime.playersInitial = value.playersInitial;
+        if (typeof value.playersRemaining === 'number') tournamentRuntime.playersRemaining = value.playersRemaining;
+        if (typeof value.reentryCount === 'number') tournamentRuntime.reentryCount = value.reentryCount;
+        if (typeof value.addOnCount === 'number') tournamentRuntime.addOnCount = value.addOnCount;
+        renderStaticInfo();
+      } else if (kind === 'tournamentBasics' && value) {
+        // basics（id / name / subtitle / titleColor / blindPresetId）変更時は active 全体を再取得
+        // applyTournament が tournamentState 更新 + 表示反映を網羅、最も安全な経路。
+        if (window.api?.tournaments?.getActive) {
+          window.api.tournaments.getActive().then((t) => {
+            if (t) applyTournament(t);
+          }).catch(() => { /* ignore */ });
+        }
+      } else if (kind === 'timerState' && value) {
+        // timerState 同期は applyTimerStateToTimer に委譲（既存経路、silent で音二重発火防止）
+        // levels は現在の構造から取得（getStructure or active トーナメントの blindPresetId 経由）
+        try {
+          const levels = (typeof getStructure === 'function') ? getStructure() : null;
+          applyTimerStateToTimer(value, levels, { silent: true });
+        } catch (err) { console.warn('[dual-sync] timerState 適用失敗:', err); }
+      }
+      // structure / その他は initialize() 経由で active から取得済、broadcast での個別同期は B4 の構造変更時に対応
+    } catch (err) {
+      console.warn(`[dual-sync] kind=${kind} の適用に失敗:`, err);
+    }
+  });
   // hall: 初期同期 → 既存 initialize（DOM/タイマー描画ロジック）を起動。
   //   await の失敗で initialize が止まらないよう finally でフォールバック。
   initDualSyncForHall().finally(() => initialize());
