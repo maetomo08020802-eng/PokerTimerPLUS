@@ -1877,9 +1877,12 @@ function registerIpcHandlers() {
         ? sanitizeBackgroundOverlay(ds.backgroundOverlay, cur.backgroundOverlay || 'mid')
         : (VALID_BG_OVERLAYS.includes(cur.backgroundOverlay) ? cur.backgroundOverlay : 'mid'),
       // STEP 10 フェーズC.1.4: 休憩中スライドショー
+      // v2.0.3 P3 fix: partial update に含まれない場合は既存値を直接維持
+      //   （以前は cur.breakImages を再 sanitize していたが、5MB 上限導入前の古い大きい
+      //   画像が silent drop される可能性があった。partial update では既存値を信頼する）。
       breakImages: ('breakImages' in ds)
         ? sanitizeBreakImages(ds.breakImages, cur.breakImages || [])
-        : sanitizeBreakImages(cur.breakImages, []),
+        : (cur.breakImages || []),
       breakImageInterval: ('breakImageInterval' in ds)
         ? sanitizeBreakImageInterval(ds.breakImageInterval, cur.breakImageInterval ?? 10)
         : sanitizeBreakImageInterval(cur.breakImageInterval, 10),
@@ -2115,7 +2118,9 @@ function registerIpcHandlers() {
       return { ok: false, error: String(err && err.message || err) };
     }
   });
-  // アプリ終了時の確実な解放
+  // v2.0.3 P4 fix: アプリ終了時のクリーンアップを 1 ハンドラに統合
+  //   旧構造: powerSaveBlocker 解放（ここ）+ globalShortcut.unregisterAll（whenReady の外）の 2 個別登録。
+  //   保守性のため 1 つにまとめ、漏れ・重複登録のリスクを排除。
   app.on('will-quit', () => {
     try {
       if (_powerSaveBlockerId !== null && powerSaveBlocker.isStarted(_powerSaveBlockerId)) {
@@ -2123,6 +2128,8 @@ function registerIpcHandlers() {
       }
     } catch (_) { /* ignore */ }
     _powerSaveBlockerId = null;
+    // 2 つ目の will-quit ハンドラから統合
+    try { globalShortcut.unregisterAll(); } catch (_) { /* ignore */ }
   });
 
   ipcMain.handle('tournament:set', (_event, partial) => {
@@ -2287,9 +2294,8 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
-});
+// v2.0.3 P4 fix: 旧 will-quit ハンドラ（globalShortcut.unregisterAll）は
+//   registerIpcHandlers 内の powerSaveBlocker 解放ハンドラに統合済（重複登録を解消）。
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

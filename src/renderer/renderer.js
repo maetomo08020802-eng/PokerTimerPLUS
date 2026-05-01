@@ -1239,6 +1239,13 @@ function mapStateToStorageStatus(status) {
 //              これで store の値だけで future の live elapsed = elapsed + (future_now - startedAt) で計算可能
 function captureCurrentTimerState() {
   const s = getState();
+  // v2.0.3 Fix L: PRE_START 中はスリープ復帰で誤進行する race を防ぐため、idle 相当として保存。
+  //   旧実装では PRE_START の totalMs（例 5 分）が「Level 1 の経過秒」として保存され、
+  //   スリープ復帰時の computeLiveTimerState が Level 1 の長さで判定してレベル繰上げを起こしていた。
+  //   PRE_START → idle 化により、スリープ復帰時はユーザーが再度プレスタートを開始する経路に戻る（安全側）。
+  if (s.status === States.PRE_START) {
+    return { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
+  }
   const status = mapStateToStorageStatus(s.status);
   const totalSec = Math.max(0, Math.round((s.totalMs || 0) / 1000));
   const remainSec = Math.max(0, Math.round((s.remainingMs || 0) / 1000));
@@ -1873,7 +1880,9 @@ el.venueSaveBtn?.addEventListener('click', handleVenueSave);
 // ===== STEP 6.23: PC間データ移行（エクスポート / インポート） =====
 
 const EXPORT_FORMAT_RENDERER = 'PokerTimerPLUS+ Tournament Export';
-const EXPORT_VERSION_RENDERER = 1;
+// v2.0.3 Fix M: main.js EXPORT_VERSION = 2 と同期（旧 1 のままだと自分自身がエクスポートした
+//   v2 ペイロードを取り込めず、PC 間移行 UI が完全に壊れる致命バグがあった）。
+const EXPORT_VERSION_RENDERER = 2;
 
 function setDataTransferHint(message, kind = '') {
   if (!el.dataTransferHint) return;
@@ -4267,6 +4276,10 @@ async function refreshPresetList() {
   // 現在の draft.meta があれば選択状態を復元（フィルタ後に存在する場合のみ）
   if (blindsEditor.meta && [...filteredBuiltin, ...filteredUser].some((p) => p.id === blindsEditor.meta.id)) {
     el.presetSelect.value = blindsEditor.meta.id;
+  } else {
+    // v2.0.3 P2 fix: フィルタ後に option が無ければ value を空文字でクリアし、
+    //   ドロップダウン表示と内部 selection の不整合を防止する。
+    el.presetSelect.value = '';
   }
   // STEP 6.7: ユーザープリセット数表示（同梱4種は対象外、フィルタ前の全件カウント）
   if (el.presetCount) {
