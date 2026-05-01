@@ -59,19 +59,11 @@ import { initDualSyncForHall, registerDualDiffHandler } from './dual-sync.js';
 
 console.log('PokerTimerPLUS+ 起動');
 
-// v2.0.0 STEP 3: operator モード（2 画面の PC 側）でのみ main に operator-action を通知する薄い wrapper。
-//   - operator-solo（単画面）では既存ロジックが直接 timer.js を動かすので通知不要 → no-op
-//   - hall では呼び出し元側で role ガード済 + ここでも安全側に no-op
-//   - operator は main 経由で hall に状態を伝播する経路を活性化（実 IPC は STEP 2 で確立済）
-function notifyOperatorActionIfNeeded(action, payload) {
-  if (typeof window === 'undefined') return;
-  if (window.appRole !== 'operator') return;
-  const dual = window.api && window.api.dual;
-  if (!dual || typeof dual.notifyOperatorAction !== 'function') return;
-  try {
-    dual.notifyOperatorAction(action, payload || {});
-  } catch (_) { /* 通知失敗は致命ではないので握り潰す（STEP 5 で HDMI 抜き差しの過渡状態に対応） */ }
-}
+// v2.0.2: notifyOperatorActionIfNeeded ヘルパー撤去。
+//   元々 main 側 dual:operator-action へ通知する薄い wrapper だったが、main 側ハンドラが
+//   validate して payloadShape を返すだけの no-op だったため、preload + main と同時撤去。
+//   operator → hall の状態伝播は既存 IPC（tournaments:setTimerState 等）→ main 側
+//   _publishDualState 経路で正常動作している。
 
 const WARN_THRESHOLD_MS = 60 * 1000;
 const DANGER_THRESHOLD_MS = 10 * 1000;
@@ -1760,9 +1752,9 @@ el.btnStart.addEventListener('click', () => {
   if (window.appRole === 'hall') return;
   // 初回スタート時に AudioContext を resume（ブラウザ自動再生ポリシー対策）
   ensureAudioReady();
-  // v2.0.0 STEP 3: operator モード（2 画面の PC 側）では main に通知して hall に伝播経路を活性化。
-  //   既存の openPreStartDialog → timerStart 経路は通常通り動かす（main 経由で hall に同期）。
-  notifyOperatorActionIfNeeded('timer:start', {});
+  // v2.0.0 STEP 3 → v2.0.2 cleanup: operator → hall の状態伝播は既存 IPC
+  //   （tournaments:setTimerState 等）→ main 側 _publishDualState 経路で実施。
+  //   notifyOperatorActionIfNeeded ヘルパー呼出は撤去（dual:operator-action がデッドコード）。
   if (getState().status === States.IDLE) openPreStartDialog();
 });
 
@@ -1788,8 +1780,7 @@ el.prestartCustomMin?.addEventListener('focus', () => {
 el.btnPause.addEventListener('click', () => {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: 多重防御
   ensureAudioReady();
-  // v2.0.0 STEP 3: operator のみ main に通知（同期経路活性化）
-  notifyOperatorActionIfNeeded('timer:pause', {});
+  // v2.0.2 cleanup: notifyOperatorActionIfNeeded 呼出撤去（dual:operator-action がデッドコード）。
   handleStartPauseToggle();
 });
 el.btnReset.addEventListener('click', () => {

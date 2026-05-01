@@ -98,7 +98,7 @@ contextBridge.exposeInMainWorld('api', {
   // v2.0.0 STEP 2: 2 画面間の状態同期ブリッジ。
   //   - subscribeStateSync: hall 側で main からの差分を受信（イベント駆動、ポーリング禁止）
   //   - fetchInitialState:  hall 起動時に 1 回だけ呼ぶ初期同期（_dualStateCache 全体）
-  //   - notifyOperatorAction: operator → main → hall の操作リクエスト中継（STEP 3 で本格利用）
+  //   v2.0.2: notifyOperatorAction は撤去（main 側 dual:operator-action ハンドラがデッドコードのため）。
   //   operator-solo モードでは hall が存在しないので、これらは呼ばれない（renderer 側 role ガード）。
   dual: {
     subscribeStateSync: (callback) => {
@@ -106,7 +106,6 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
     },
     fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
-    notifyOperatorAction: (action, payload) => ipcRenderer.invoke('dual:operator-action', { action, payload }),
     // v2.0.0 STEP 4: モニター選択ダイアログ（display-picker.html 専用）。
     //   fetchDisplays: 検出済の displays + 前回選択 id を取得（invoke、結果を返す）
     //   selectHallMonitor: ユーザーが選んだモニター id を main に通知（send、結果不要）

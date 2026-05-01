@@ -5,7 +5,7 @@
  *   - 起動シーケンス全体（whenReady → displays 取得 → picker → window 生成 → display-change 購読）
  *   - IPC ハンドラ群の共存（STEP 2/4/5 すべて）
  *   - additionalArguments で role 4 種類すべての設定パスが存在
- *   - renderer.js 起動部に dual-sync import + notifyOperatorActionIfNeeded + ensureAudioReady
+ *   - renderer.js 起動部に dual-sync import + ensureAudioReady（notifyOperatorActionIfNeeded は v2.0.2 で削除）
  *   - hallWindow 不在時の broadcast 安全性
  *   - chooseHallDisplayInteractive キャンセル → operator-solo 単画面起動
  *   - HDMI 抜き → operator-solo 切替時に ensureAudioReady 経路
@@ -49,9 +49,8 @@ test('T1: 起動シーケンスの全要素が main.js に揃う', () => {
 // T2: 全 IPC ハンドラ共存（STEP 2/4/5）
 // ============================================================
 test('T2: STEP 2/4/5 の IPC ハンドラ群がすべて main.js に共存', () => {
-  // STEP 2
+  // STEP 2（dual:operator-action は v2.0.2 でデッドコード削除）
   assert.match(MAIN, /ipcMain\.handle\(\s*['"]dual:state-sync-init['"]/, 'dual:state-sync-init なし');
-  assert.match(MAIN, /ipcMain\.handle\(\s*['"]dual:operator-action['"]/, 'dual:operator-action なし');
   // STEP 4
   assert.match(MAIN, /ipcMain\.handle\(\s*['"]display-picker:fetch['"]/, 'display-picker:fetch なし');
   assert.match(MAIN, /ipcMain\.on\(\s*['"]dual:select-hall-monitor['"]/, 'dual:select-hall-monitor なし');
@@ -77,14 +76,15 @@ test('T3: additionalArguments で role 4 種類（operator / hall / operator-sol
 // ============================================================
 // T4: renderer.js 起動部の統合（STEP 2/3/5）
 // ============================================================
-test('T4: renderer.js に dual-sync import + notifyOperatorActionIfNeeded + ensureAudioReady', () => {
+test('T4: renderer.js に dual-sync import + ensureAudioReady（notifyOperatorActionIfNeeded は v2.0.2 で撤去）', () => {
   // STEP 2: dual-sync import — v2.0.1 stabilization: registerDualDiffHandler 等の追加 import に対応するため正規表現を緩和
   //   旧: /\{\s*initDualSyncForHall\s*\}/  （完全一致のみマッチ）
   //   新: /\{[^}]*initDualSyncForHall[^}]*\}/ （複数 import 可）
   assert.match(RENDERER, /import\s+\{[^}]*initDualSyncForHall[^}]*\}\s+from\s+['"]\.\/dual-sync\.js['"]/,
     'initDualSyncForHall import なし');
-  // STEP 3: notifyOperatorActionIfNeeded ヘルパー
-  assert.match(RENDERER, /function\s+notifyOperatorActionIfNeeded\s*\(/, 'notifyOperatorActionIfNeeded なし');
+  // v2.0.2 cleanup: notifyOperatorActionIfNeeded は撤去済（dual:operator-action がデッドコード）
+  assert.doesNotMatch(RENDERER, /function\s+notifyOperatorActionIfNeeded\s*\(/,
+    'notifyOperatorActionIfNeeded が残存（v2.0.2 で撤去予定）');
   // STEP 5: operator-solo 経路で ensureAudioReady（C.1.7 の明示呼出強化）
   // __appRole 分岐の else ブロック（operator-solo）に initialize() + ensureAudioReady()
   const elseMatch = RENDERER.match(/__appRole\s*===\s*['"]operator['"][\s\S]*?\}\s*else\s*\{([\s\S]*?)\}\s*$/m);
