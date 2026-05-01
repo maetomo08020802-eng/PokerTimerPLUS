@@ -4,7 +4,7 @@
  * 検証対象:
  *   - operator-solo で起動した renderer.js が v1.3.0 と同じ初期化パスを経由
  *   - [data-role="operator-solo"] が「すべての要素を hidden にしない」
- *   - operator-solo モードでの notifyOperatorActionIfNeeded の no-op
+ *   - notifyOperatorActionIfNeeded ヘルパーが削除されている（v2.0.2 cleanup）
  *   - dual-sync の hall 限定ガード（operator-solo で誤作動しない）
  *   - 致命バグ修正 5 件すべて operator-solo で機能
  *   - v1.3.0 配布物の挙動を一切壊していない（既存関数の存在確認）
@@ -69,15 +69,16 @@ test('T2: [data-role="operator-solo"] が UI 要素を hidden にしない', () 
 });
 
 // ============================================================
-// T3: operator-solo モードで notifyOperatorActionIfNeeded が no-op（main 経由 broadcast を起こさない）
+// T3: v2.0.2 cleanup — notifyOperatorActionIfNeeded ヘルパーが完全削除されている
+//     （元々 dual:operator-action へ通知する wrapper、main 側ハンドラがデッドコードのため撤去）
 // ============================================================
-test('T3: notifyOperatorActionIfNeeded は role !== "operator" で早期 return', () => {
-  // ヘルパー関数の中で window.appRole !== 'operator' で return
-  const helperMatch = RENDERER.match(/function\s+notifyOperatorActionIfNeeded\s*\([^)]*\)\s*\{([\s\S]*?)^\}/m);
-  assert.ok(helperMatch, 'notifyOperatorActionIfNeeded 関数本体抽出失敗');
-  const body = helperMatch[1];
-  assert.match(body, /window\.appRole\s*!==\s*['"]operator['"]/, 'role !== "operator" の早期 return ガードなし');
-  assert.match(body, /return/, 'return 文なし');
+test('T3: notifyOperatorActionIfNeeded ヘルパーが削除されている（v2.0.2 cleanup）', () => {
+  // 関数定義が消えている
+  assert.doesNotMatch(RENDERER, /function\s+notifyOperatorActionIfNeeded\s*\(/,
+    'notifyOperatorActionIfNeeded 関数定義が残存（v2.0.2 で撤去予定）');
+  // 呼出も消えている
+  assert.doesNotMatch(RENDERER, /notifyOperatorActionIfNeeded\s*\(\s*['"]/,
+    'notifyOperatorActionIfNeeded 呼出が残存（v2.0.2 で撤去予定）');
 });
 
 // ============================================================

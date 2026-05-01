@@ -3,9 +3,9 @@
  *
  * 検証対象:
  *   - main.js の _dualStateCache / _broadcastDualState / _publishDualState 定義
- *   - main.js の dual:state-sync-init / dual:operator-action ハンドラ登録
+ *   - main.js の dual:state-sync-init ハンドラ登録（dual:operator-action は v2.0.2 で削除）
  *   - main.js の主要 IPC ハンドラ末尾に _publishDualState 呼出が追加されている
- *   - preload.js の window.api.dual.* （subscribeStateSync / fetchInitialState / notifyOperatorAction）
+ *   - preload.js の window.api.dual.* （subscribeStateSync / fetchInitialState、v2.0.2 で notifyOperatorAction 削除）
  *   - dual-sync.js の initDualSyncForHall エクスポート + role ガード + イベント駆動購読
  *   - renderer.js の role 3 分岐（hall / operator / operator-solo）
  *   - 致命バグ保護 C.2.7-D（timerState destructure 除外）の payload 構造に変更がない
@@ -54,12 +54,14 @@ test('T2: main.js に dual:state-sync-init ハンドラ登録', () => {
 });
 
 // ============================================================
-// T3: main.js に dual:operator-action ハンドラが登録されている
+// T3: v2.0.2 cleanup — dual:operator-action ハンドラ + _DUAL_ACTION_ROUTE が削除されている
+//     （元々 validate して payloadShape を返すだけのデッドコード）
 // ============================================================
-test('T3: main.js に dual:operator-action ハンドラ登録', () => {
-  assert.match(MAIN, /ipcMain\.handle\(\s*['"]dual:operator-action['"]/, 'dual:operator-action ハンドラ登録なし');
-  // ホワイトリスト方式（任意 action 受理を防ぐ）
-  assert.match(MAIN, /_DUAL_ACTION_ROUTE/, '_DUAL_ACTION_ROUTE ホワイトリストなし');
+test('T3: dual:operator-action ハンドラ + _DUAL_ACTION_ROUTE が削除されている（v2.0.2 cleanup）', () => {
+  assert.doesNotMatch(MAIN, /ipcMain\.handle\(\s*['"]dual:operator-action['"]/,
+    'dual:operator-action ハンドラが残存（v2.0.2 で撤去予定）');
+  assert.doesNotMatch(MAIN, /const\s+_DUAL_ACTION_ROUTE\s*=/,
+    '_DUAL_ACTION_ROUTE 定義が残存（v2.0.2 で撤去予定）');
 });
 
 // ============================================================
@@ -81,13 +83,15 @@ test('T4: tournaments:setTimerState / setRuntime / setDisplaySettings / setMarqu
 });
 
 // ============================================================
-// T5: preload.js に window.api.dual.* が公開されている
+// T5: preload.js に window.api.dual.* が公開されている（notifyOperatorAction は v2.0.2 で削除）
 // ============================================================
-test('T5: preload.js に dual.subscribeStateSync / fetchInitialState / notifyOperatorAction', () => {
+test('T5: preload.js に dual.subscribeStateSync / fetchInitialState（notifyOperatorAction は撤去）', () => {
   assert.match(PRELOAD, /dual:\s*\{/, 'preload.js に dual: { ... } グループなし');
   assert.match(PRELOAD, /subscribeStateSync:\s*\(/, 'subscribeStateSync 公開なし');
   assert.match(PRELOAD, /fetchInitialState:\s*\(/, 'fetchInitialState 公開なし');
-  assert.match(PRELOAD, /notifyOperatorAction:\s*\(/, 'notifyOperatorAction 公開なし');
+  // v2.0.2 cleanup: notifyOperatorAction は撤去済（dual:operator-action がデッドコード）
+  assert.doesNotMatch(PRELOAD, /notifyOperatorAction:\s*\(/,
+    'notifyOperatorAction が残存（v2.0.2 で撤去予定）');
   // ipcRenderer.on で dual:state-sync を listen（イベント駆動、ポーリング禁止）
   assert.match(PRELOAD, /ipcRenderer\.on\(\s*['"]dual:state-sync['"]/, 'dual:state-sync を ipcRenderer.on で listen していない');
   assert.match(PRELOAD, /ipcRenderer\.invoke\(\s*['"]dual:state-sync-init['"]/, 'dual:state-sync-init invoke なし');

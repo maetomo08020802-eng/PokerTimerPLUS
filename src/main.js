@@ -2184,29 +2184,12 @@ function registerIpcHandlers() {
     return snapshot;
   });
 
-  // operator → main → hall の操作リクエスト中継（router）。
-  //   既存ハンドラは無変更、薄い wrapper として転送する。
-  //   ホワイトリスト方式で許可 action のみ受理（hall からの操作リクエストは STEP 3 で禁止確定）。
-  const _DUAL_ACTION_ROUTE = Object.freeze({
-    'tournaments:setTimerState':       (p) => ({ id: p.id, timerState: p.timerState }),
-    'tournaments:setRuntime':          (p) => ({ id: p.id, runtime: p.runtime }),
-    'tournaments:setDisplaySettings':  (p) => ({ id: p.id, displaySettings: p.displaySettings }),
-    'tournaments:setMarqueeSettings':  (p) => ({ id: p.id, marqueeSettings: p.marqueeSettings }),
-    'tournaments:setActive':           (p) => p.id,
-    'audio:set':                        (p) => p
-  });
-  ipcMain.handle('dual:operator-action', async (_event, envelope) => {
-    if (!envelope || typeof envelope !== 'object') return { ok: false, error: 'invalid-envelope' };
-    const { action, payload } = envelope;
-    if (typeof action !== 'string' || !_DUAL_ACTION_ROUTE[action]) {
-      return { ok: false, error: 'unknown-action' };
-    }
-    // 既存ハンドラ呼出。emit を使うと event オブジェクトが必要なので、直接 store 操作はせず
-    // Electron の ipcMain.handlers から取得する仕組みは無いため、ホワイトリスト経由の関数呼出 pattern を採る。
-    // ただし簡素化のため、既存ハンドラの内部処理を再利用する代わりに、cache 更新 + broadcast のみ実施。
-    // STEP 3 で operator 側からの実呼出を本格化する際に必要に応じて拡張する。
-    return { ok: true, action, payloadShape: _DUAL_ACTION_ROUTE[action](payload || {}) };
-  });
+  // v2.0.2: dual:operator-action ハンドラ + _DUAL_ACTION_ROUTE は削除（デッドコード除去）。
+  //   STEP 3 で operator → main → hall を経由する設計だったが、実際は renderer → main の
+  //   既存 IPC（tournaments:setTimerState 等）を直接呼び、main 側で _publishDualState する
+  //   経路で動作している。dual:operator-action は validate して payloadShape を返すだけの
+  //   no-op だったため、関連する preload.js notifyOperatorAction と
+  //   renderer.js notifyOperatorActionIfNeeded も同時撤去。
 }
 
 app.whenReady().then(async () => {
