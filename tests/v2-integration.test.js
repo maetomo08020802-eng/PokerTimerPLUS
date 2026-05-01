@@ -78,8 +78,10 @@ test('T3: additionalArguments で role 4 種類（operator / hall / operator-sol
 // T4: renderer.js 起動部の統合（STEP 2/3/5）
 // ============================================================
 test('T4: renderer.js に dual-sync import + notifyOperatorActionIfNeeded + ensureAudioReady', () => {
-  // STEP 2: dual-sync import
-  assert.match(RENDERER, /import\s+\{\s*initDualSyncForHall\s*\}\s+from\s+['"]\.\/dual-sync\.js['"]/,
+  // STEP 2: dual-sync import — v2.0.1 stabilization: registerDualDiffHandler 等の追加 import に対応するため正規表現を緩和
+  //   旧: /\{\s*initDualSyncForHall\s*\}/  （完全一致のみマッチ）
+  //   新: /\{[^}]*initDualSyncForHall[^}]*\}/ （複数 import 可）
+  assert.match(RENDERER, /import\s+\{[^}]*initDualSyncForHall[^}]*\}\s+from\s+['"]\.\/dual-sync\.js['"]/,
     'initDualSyncForHall import なし');
   // STEP 3: notifyOperatorActionIfNeeded ヘルパー
   assert.match(RENDERER, /function\s+notifyOperatorActionIfNeeded\s*\(/, 'notifyOperatorActionIfNeeded なし');

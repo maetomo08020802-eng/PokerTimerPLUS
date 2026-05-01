@@ -12,16 +12,33 @@
 
 import { setState } from './state.js';
 
-// 受信した差分を state.js に反映する分岐（kind ごとに setState のキーを決める）。
+// v2.0.1 Stabilization #A1: hall 側 renderer がこのハンドラを登録することで、
+//   main からの差分配信を実際の DOM 更新（applyMarquee / applyBackground 等）に
+//   反映できるようにする。dual-sync.js から renderer.js 内の関数を直接 import すると
+//   循環依存になるため、callback 登録方式で疎結合に保つ。
+//   登録なしの場合（旧互換 + operator-solo）は state.js への記録のみで実害なし。
+let _diffHandler = null;
+export function registerDualDiffHandler(handler) {
+  _diffHandler = (typeof handler === 'function') ? handler : null;
+}
+
+// 受信した差分を state.js に反映 + 登録済 handler に転送する。
 //   既存 state.js の appState は { status, currentLevelIndex, remainingMs, totalMs } の 4 フィールドを
 //   想定しているが、Object.assign で拡張フィールドも追加可能（既存購読者は影響なし）。
+//   v2.0.1 #A1: 加えて _diffHandler に diff を渡し、hall 側 renderer で
+//   applyMarquee / applyBackground / applyLogo / applyVenueName / applyTournament 等を
+//   発火する経路を確立。
 function _applyDiffToState(diff) {
   if (!diff || typeof diff !== 'object' || typeof diff.kind !== 'string') return;
   const { kind, value } = diff;
   if (value === undefined) return;
-  // 各 kind を state.js の同名キーで保持（既存 status 等とは別領域）。
-  // STEP 3 で hall 側 renderer の表示更新ロジックがこれらを参照する。
+  // 1. state.js への記録（後方互換、debug 用）
   setState({ [`dual_${kind}`]: value });
+  // 2. hall 側 renderer の動的反映（registerDualDiffHandler で登録済の場合のみ）
+  if (_diffHandler) {
+    try { _diffHandler(diff); }
+    catch (err) { console.warn('[dual-sync] diff handler error:', err); }
+  }
 }
 
 // hall 起動時の初期同期 + 差分購読を立ち上げる。

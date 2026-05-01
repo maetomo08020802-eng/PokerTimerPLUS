@@ -923,31 +923,35 @@ function createOperatorWindow(targetDisplay, isSolo = false) {
     opts.x = targetDisplay.bounds.x + 40;
     opts.y = targetDisplay.bounds.y + 40;
   }
-  mainWindow = new BrowserWindow(opts);
+  // v2.0.1: ウィンドウ参照 race 防止 — closed ハンドラで「自分自身がクローズした時だけ」mainWindow をクリア。
+  //   旧実装では switchOperatorToSolo で window1 close → 新 window2 生成後に window1 の closed が遅延発火し、
+  //   新 window2 への参照が誤って null 上書きされる race があった（v2.0.1 stabilization で発見）。
+  const win = new BrowserWindow(opts);
+  mainWindow = win;
 
-  mainWindow.on('page-title-updated', (event) => {
+  win.on('page-title-updated', (event) => {
     event.preventDefault();
   });
-  mainWindow.setTitle(WINDOW_TITLE);
+  win.setTitle(WINDOW_TITLE);
 
   // 外部リンク（target="_blank"）はデフォルトブラウザで開く（ハウス情報タブの効果音ラボリンク等）
   // Electron 22+ ではデフォルトで window.open は deny されるため、明示的に shell.openExternal を呼ぶ
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
     }
     return { action: 'deny' };
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   if (isDev) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    win.webContents.openDevTools({ mode: 'detach' });
   }
 
   // STEP 6.21: F12 / Ctrl+Shift+I のフォールバック登録
   // globalShortcut.register('F12') がフォーカス都合で効かない環境向けの保険
-  mainWindow.webContents.on('before-input-event', (event, input) => {
+  win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
     if (input.key === 'F12') {
       toggleDevTools();
@@ -960,10 +964,13 @@ function createOperatorWindow(targetDisplay, isSolo = false) {
     }
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  // v2.0.1: race 防止 — このウィンドウが「現在の mainWindow」である場合のみ null クリア
+  win.on('closed', () => {
+    if (mainWindow === win) {
+      mainWindow = null;
+    }
   });
-  return mainWindow;
+  return win;
 }
 
 // v2.0.0 STEP 1: hall ウィンドウ生成（最小骨格、STEP 3 で frame: false / fullscreen 等を追加）。
@@ -985,17 +992,22 @@ function createHallWindow(targetDisplay) {
     opts.x = targetDisplay.bounds.x + 40;
     opts.y = targetDisplay.bounds.y + 40;
   }
-  hallWindow = new BrowserWindow(opts);
-  hallWindow.on('page-title-updated', (event) => {
+  // v2.0.1: ウィンドウ参照 race 防止（createOperatorWindow と同パターン）
+  const win = new BrowserWindow(opts);
+  hallWindow = win;
+  win.on('page-title-updated', (event) => {
     event.preventDefault();
   });
-  hallWindow.setTitle(WINDOW_TITLE + ' (Hall)');
-  hallWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  hallWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  hallWindow.on('closed', () => {
-    hallWindow = null;
+  win.setTitle(WINDOW_TITLE + ' (Hall)');
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // v2.0.1: race 防止 — このウィンドウが「現在の hallWindow」である場合のみ null クリア
+  win.on('closed', () => {
+    if (hallWindow === win) {
+      hallWindow = null;
+    }
   });
-  return hallWindow;
+  return win;
 }
 
 // v2.0.0 STEP 4: 2 画面検出時、ホール側にするモニターを起動時に毎回手動選択させる。
@@ -1301,7 +1313,9 @@ function registerIpcHandlers() {
       return { ok: false, error: 'copy-failed', message: 'ファイルのコピーに失敗しました' };
     }
 
-    store.set('logo', { kind: 'custom', customPath: destPath });
+    const logoState = { kind: 'custom', customPath: destPath };
+    store.set('logo', logoState);
+    _publishDualState('logoUrl', logoState);  // v2.0.1 Fix B4: ロゴ変更を hall に broadcast
     return { ok: true, kind: 'custom', customPath: destPath };
   });
 
@@ -1309,7 +1323,9 @@ function registerIpcHandlers() {
   ipcMain.handle('logo:setMode', (_event, kind) => {
     if (!VALID_LOGO_KINDS.includes(kind)) return { ok: false, error: 'invalid-kind' };
     if (kind === 'custom') return { ok: false, error: 'use-selectFile-for-custom' };
-    store.set('logo', { kind, customPath: null });
+    const logoState = { kind, customPath: null };
+    store.set('logo', logoState);
+    _publishDualState('logoUrl', logoState);  // v2.0.1 Fix B4: ロゴ変更を hall に broadcast
     return { ok: true, kind };
   });
 
@@ -1997,6 +2013,19 @@ function registerIpcHandlers() {
 
     store.set('tournaments', tournaments);
     store.set('userPresets', userPresets);
+    // v2.0.1 Fix B2: インポート後に active トーナメントの最新状態を hall に broadcast
+    const activeIdAfterImport = store.get('activeTournamentId');
+    const activeAfterImport = tournaments.find((t) => t.id === activeIdAfterImport);
+    if (activeAfterImport) {
+      _publishDualState('tournamentBasics', {
+        id: activeAfterImport.id, name: activeAfterImport.name, subtitle: activeAfterImport.subtitle,
+        titleColor: activeAfterImport.titleColor, blindPresetId: activeAfterImport.blindPresetId
+      });
+      if (activeAfterImport.timerState)      _publishDualState('timerState',        normalizeTimerState(activeAfterImport.timerState));
+      if (activeAfterImport.displaySettings) _publishDualState('displaySettings',   activeAfterImport.displaySettings);
+      if (activeAfterImport.marqueeSettings) _publishDualState('marqueeSettings',   activeAfterImport.marqueeSettings);
+      if (activeAfterImport.runtime)         _publishDualState('tournamentRuntime', activeAfterImport.runtime);
+    }
     return { ok: true, importedTournaments: importedT, importedPresets: importedP, skippedByLimit };
   });
 
@@ -2010,7 +2039,20 @@ function registerIpcHandlers() {
     if (store.get('activeTournamentId') === id) {
       store.set('activeTournamentId', list[0].id);
     }
-    return { ok: true, activeId: store.get('activeTournamentId') };
+    // v2.0.1 Fix B2: active が変わった（または active が削除された）場合、hall に新 active を broadcast
+    const newActiveId = store.get('activeTournamentId');
+    const newActive = list.find((t) => t.id === newActiveId);
+    if (newActive) {
+      _publishDualState('tournamentBasics', {
+        id: newActive.id, name: newActive.name, subtitle: newActive.subtitle,
+        titleColor: newActive.titleColor, blindPresetId: newActive.blindPresetId
+      });
+      if (newActive.timerState)      _publishDualState('timerState',        normalizeTimerState(newActive.timerState));
+      if (newActive.displaySettings) _publishDualState('displaySettings',   newActive.displaySettings);
+      if (newActive.marqueeSettings) _publishDualState('marqueeSettings',   newActive.marqueeSettings);
+      if (newActive.runtime)         _publishDualState('tournamentRuntime', newActive.runtime);
+    }
+    return { ok: true, activeId: newActiveId };
   });
 
   // ===== 旧 API 互換: tournament:get / tournament:set は active を読み書き =====
