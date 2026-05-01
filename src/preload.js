@@ -114,6 +114,22 @@ contextBridge.exposeInMainWorld('api', {
       if (typeof callback !== 'function') return;
       ipcRenderer.on('hall:forwarded-key', (_event, payload) => callback(payload));
     },
+    // v2.0.4-rc6 Fix 4-B: ESC で hall 全画面解除を main に通知（dispatcher 経由）
+    requestExitFullScreen: () => ipcRenderer.send('dual:request-exit-fullscreen'),
+    // v2.0.4-rc6 Fix 5-M: operator 側ミュート状態を hall に同期する送信口
+    broadcastMuteState: (muted) => ipcRenderer.send('dual:broadcast-mute-state', !!muted),
+    // v2.0.4-rc6 Fix 5-M: hall 側で operator のミュート状態を受信（subscribe）
+    onMuteStateChanged: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('dual:mute-state-changed', (_event, muted) => callback(!!muted));
+    },
+    // v2.0.4-rc6 Fix 5-H: operator 側ボトムバー状態を hall に同期する送信口
+    broadcastBottomBarState: (hidden) => ipcRenderer.send('dual:broadcast-bottombar-state', !!hidden),
+    // v2.0.4-rc6 Fix 5-H: hall 側で operator のボトムバー状態を受信
+    onBottomBarStateChanged: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('dual:bottombar-state-changed', (_event, hidden) => callback(!!hidden));
+    },
     // v2.0.0 STEP 4: モニター選択ダイアログ（display-picker.html 専用）。
     //   fetchDisplays: 検出済の displays + 前回選択 id を取得（invoke、結果を返す）
     //   selectHallMonitor: ユーザーが選んだモニター id を main に通知（send、結果不要）

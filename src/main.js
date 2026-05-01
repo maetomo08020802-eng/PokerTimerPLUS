@@ -921,6 +921,11 @@ const FORWARD_KEYS_FROM_HALL = new Set([
 //   isSolo=true で role='operator-solo'（単画面モード、v1.3.0 と完全同等の見た目・挙動）。
 //   isSolo=false で role='operator'（2 画面モードの PC 側、STEP 3 でホール側のみの要素を hide 化予定）。
 function createOperatorWindow(targetDisplay, isSolo = false) {
+  // v2.0.4-rc6 Fix 1-C: 既存 mainWindow が残存していれば防御的に close（多重発火経路の保険）
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow._suppressCloseConfirm = true; mainWindow.close(); } catch (_) { /* ignore */ }
+  }
+  mainWindow = null;
   const role = isSolo ? 'operator-solo' : 'operator';
   const opts = {
     title: WINDOW_TITLE,
@@ -983,6 +988,26 @@ function createOperatorWindow(targetDisplay, isSolo = false) {
   //   モード切替（switchOperatorToSolo / switchSoloToOperator）と confirmQuit / app.quit 経由は
   //   `win._suppressCloseConfirm = true` をセットしてから close を呼ぶことで無音で通過する。
   //   operator-solo（v1.3.0 互換モード）でも適用 — 操作ミス防止は普遍的価値（仕様書記載）。
+  // v2.0.4-rc6 Fix 2-B: minimize 解除時のポップアップ案内（一回限り）。
+  //   switchOperatorToSolo で _showRestoreNoticeOnce = true がセットされた場合、
+  //   ユーザーがウィンドウを大きくした（restore）時に AC の役割を案内するダイアログを 1 回だけ表示。
+  win._showRestoreNoticeOnce = false;
+  win.on('restore', () => {
+    if (!win._showRestoreNoticeOnce) return;
+    win._showRestoreNoticeOnce = false;
+    dialog.showMessageBox(win, {
+      type: 'info',
+      buttons: ['OK'],
+      defaultId: 0,
+      title: 'AC ウィンドウについて',
+      message:
+        'この画面は 2 画面表示用のフォーカス用ウィンドウです。\n' +
+        '一度 2 画面用として立ち上げているため、この画面を閉じるとアプリも閉じます。\n' +
+        'ご注意ください。\n\n' +
+        '邪魔でしたら、アプリを閉じるまで、このウィンドウは最小化しておいてください。'
+    }).catch(() => { /* ignore */ });
+  });
+
   win._suppressCloseConfirm = false;
   win.on('close', (event) => {
     if (win._suppressCloseConfirm) return;
@@ -1016,6 +1041,11 @@ function createOperatorWindow(targetDisplay, isSolo = false) {
 //   問題を確認。仮説: x/y で対象モニターに配置した上で fullscreen:true により当該モニター全画面化。
 //   レイアウトは vw/vh 基準のため、画面いっぱいに広がれば想定通りのサイズに収まる）。
 function createHallWindow(targetDisplay) {
+  // v2.0.4-rc6 Fix 1-C: 既存 hallWindow が残存していれば防御的に close（orphan H2/H3 並行存在を防御）
+  if (hallWindow && !hallWindow.isDestroyed()) {
+    try { hallWindow.close(); } catch (_) { /* ignore */ }
+  }
+  hallWindow = null;
   const opts = {
     title: WINDOW_TITLE + ' (Hall)',
     width: 1280,
@@ -1162,59 +1192,109 @@ function isWindowOnDisplay(windowBounds, display) {
 //   - operator (mainWindow) を close → operator-solo モードで再生成
 //   - additionalArguments は process.argv に乗るため reload では role 変更不可、再生成必須
 //   - タイマー進行は main プロセスで持続（store の timerState）、新ウィンドウは起動時 subscribe で復元
+// v2.0.4-rc6 Fix 1-A: モード切替の再入ガード（display-added / -removed の同時多発に対応）
+let _isSwitchingMode = false;
+
+// v2.0.4-rc6 Fix 2-A: HDMI 切断時は operator を close せず minimize に変更（前原さん要望）。
+//   旧実装は close → createOperatorWindow(_, true) で operator-solo 役割に動的切替していたが、
+//   close 完了が非同期で「AC が裏に残って見える」race の元だった。Fix 2 で:
+//     - operator は close せず minimize → race が原理的に消滅
+//     - role='operator' のままだが、operator-status-bar / operator-pane で操作支援は維持
+//     - 復元時は _showRestoreNoticeOnce で一回だけポップアップ案内を表示
+//   これにより operator-solo 動的切替は廃止。最初から HDMI なし起動の v1.3.0 互換 operator-solo は
+//   従来通り createOperatorWindow(_, true) で起動するため影響なし。
 async function switchOperatorToSolo() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const display = screen.getPrimaryDisplay();
-  // v2.0.4-rc3: モード切替時の close は確認ダイアログを抑制（rc3 で導入した × 保護の bypass）
-  mainWindow._suppressCloseConfirm = true;
-  try { mainWindow.close(); } catch (_) { /* ignore */ }
-  mainWindow = null;
-  // 新しい mainWindow を operator-solo（v1.3.0 同等）で再生成
-  createOperatorWindow(display, true);
+  if (_isSwitchingMode) return;
+  _isSwitchingMode = true;
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    // hall 側だけ閉じる（operator は minimize、close しない）
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.close(); } catch (_) { /* ignore */ }
+      hallWindow = null;
+    }
+    try { mainWindow.minimize(); } catch (_) { /* ignore */ }
+    // 復元時のポップアップ案内（一回限り）
+    mainWindow._showRestoreNoticeOnce = true;
+  } finally {
+    _isSwitchingMode = false;
+  }
 }
 
 // v2.0.0 STEP 5: HDMI 再接続 → 2 画面モードに復帰。
 //   - operator (mainWindow) を close → operator モードで再生成 + hallWindow を新規生成
 //   - hall 側は hall 側起動時に initDualSyncForHall で main から state を再同期（既存 STEP 2 経路）
+// v2.0.4-rc6 Fix 1-A: 再入ガード + orphan hallWindow 防御
 async function switchSoloToOperator(hallDisplay) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (!hallDisplay) return;
-  const operatorDisplay = screen.getPrimaryDisplay();
-  // v2.0.4-rc3: モード切替時の close は確認ダイアログを抑制
-  mainWindow._suppressCloseConfirm = true;
-  try { mainWindow.close(); } catch (_) { /* ignore */ }
-  mainWindow = null;
-  createOperatorWindow(operatorDisplay, false);
-  createHallWindow(hallDisplay);
+  if (_isSwitchingMode) return;
+  _isSwitchingMode = true;
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (!hallDisplay) return;
+    // orphan hallWindow 検出 + close（display-added 多重発火による H2/H3 並行存在を防御）
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.close(); } catch (_) { /* ignore */ }
+      hallWindow = null;
+    }
+    const operatorDisplay = screen.getPrimaryDisplay();
+    // v2.0.4-rc3: モード切替時の close は確認ダイアログを抑制
+    mainWindow._suppressCloseConfirm = true;
+    try { mainWindow.close(); } catch (_) { /* ignore */ }
+    mainWindow = null;
+    createOperatorWindow(operatorDisplay, false);
+    createHallWindow(hallDisplay);
+  } finally {
+    _isSwitchingMode = false;
+  }
 }
 
 // v2.0.0 STEP 5: display-added / display-removed のイベント駆動追従（ポーリング禁止）。
 //   - removed: hallWindow がその display 上にあれば close + operator-solo 切替
 //   - added:   2 画面以上検出 + hallWindow 不在 → モニター選択ダイアログ → 2 画面復帰
 //   v2-dual-screen.md §3.1: 検出から状態切替まで 2 秒以内（ウィンドウ再生成 ~250ms × 2 で達成）
+// v2.0.4-rc6 Fix 1-B: display イベント多重発火の debounce ガード。
+//   Windows は HDMI 接続/切断時に display-added/-removed を複数回発火することがあり、
+//   旧実装ではガードが「hallWindow 存在チェック」だけだったため picker 並行起動 → orphan window が発生。
+let _displayAddedPending = false;
+let _displayRemovedPending = false;
+
 function setupDisplayChangeListeners() {
   screen.on('display-removed', async (_event, removedDisplay) => {
+    if (_displayRemovedPending) return;
     if (!hallWindow || hallWindow.isDestroyed()) return;
-    let bounds;
-    try { bounds = hallWindow.getBounds(); } catch (_) { bounds = null; }
-    if (!bounds) return;
-    if (isWindowOnDisplay(bounds, removedDisplay)) {
-      try { hallWindow.close(); } catch (_) { /* ignore */ }
-      hallWindow = null;
-      // hall 不在のため _broadcastDualState は STEP 2 で確立した no-op ガードで自動的に止まる
-      await switchOperatorToSolo();
+    _displayRemovedPending = true;
+    try {
+      let bounds;
+      try { bounds = hallWindow.getBounds(); } catch (_) { bounds = null; }
+      if (!bounds) return;
+      if (isWindowOnDisplay(bounds, removedDisplay)) {
+        try { hallWindow.close(); } catch (_) { /* ignore */ }
+        hallWindow = null;
+        // hall 不在のため _broadcastDualState は STEP 2 で確立した no-op ガードで自動的に止まる
+        await switchOperatorToSolo();
+      }
+    } finally {
+      _displayRemovedPending = false;
     }
   });
 
   screen.on('display-added', async () => {
-    const displays = screen.getAllDisplays();
-    if (!displays || displays.length < 2) return;
+    if (_displayAddedPending) return;
     if (hallWindow && !hallWindow.isDestroyed()) return;   // 既に 2 画面状態
-    const hallId = await chooseHallDisplayInteractive(displays);
-    if (hallId == null) return;   // キャンセル時は単画面のまま
-    const hallDisplay = displays.find((d) => d.id === hallId);
-    if (!hallDisplay) return;
-    await switchSoloToOperator(hallDisplay);
+    _displayAddedPending = true;
+    try {
+      const displays = screen.getAllDisplays();
+      if (!displays || displays.length < 2) return;
+      // picker 起動前に再チェック（前回 await 中に状態が変わった race を救う）
+      if (hallWindow && !hallWindow.isDestroyed()) return;
+      const hallId = await chooseHallDisplayInteractive(displays);
+      if (hallId == null) return;   // キャンセル時は単画面のまま
+      const hallDisplay = displays.find((d) => d.id === hallId);
+      if (!hallDisplay) return;
+      await switchSoloToOperator(hallDisplay);
+    } finally {
+      _displayAddedPending = false;
+    }
   });
 }
 
@@ -1240,12 +1320,11 @@ async function createMainWindow() {
 }
 
 function toggleFullScreen() {
-  // v2.0.4-rc2: フォーカス中のウィンドウを対象に F11 toggle。
-  //   - operator focused → 従来通り operator の全画面切替（既存挙動維持）
-  //   - hall focused → hall の全画面切替（rc1 で「F11 無反応」だった問題を解消）
-  //   - フォーカスなしの fallback として mainWindow を対象（従来挙動）
-  const focused = BrowserWindow.getFocusedWindow();
-  const target = (focused && !focused.isDestroyed()) ? focused : mainWindow;
+  // v2.0.4-rc6 Fix 3: 2 画面モード時は常に hall を toggle（hall 側全画面解除等の操作者ニーズ）。
+  //   rc2 改修の「focused window を toggle」は実運用で前提崩れ（操作者は PC 側で操作するため
+  //   hall focused は発生しない → 常に operator が全画面化される問題があった）。
+  //   単画面モード（hallWindow 不在）では mainWindow を toggle（v1.3.0 完全互換維持）。
+  const target = (hallWindow && !hallWindow.isDestroyed()) ? hallWindow : mainWindow;
   if (!target || target.isDestroyed()) return;
   target.setFullScreen(!target.isFullScreen());
 }
@@ -2279,6 +2358,34 @@ function registerIpcHandlers() {
   //   経路で動作している。dual:operator-action は validate して payloadShape を返すだけの
   //   no-op だったため、関連する preload.js notifyOperatorAction と
   //   renderer.js notifyOperatorActionIfNeeded も同時撤去。
+
+  // v2.0.4-rc6 Fix 4-C: ESC キーで hall 全画面解除（renderer から ipcRenderer.send で通知）。
+  //   案 i 採用: dispatcher 到達時 dialog 無し前提（dialog[open] ガードを通過したケース）。
+  //   hall が fullscreen の時のみ解除する。operator-solo / hall 不在 / 既に窓化済の場合は no-op。
+  ipcMain.on('dual:request-exit-fullscreen', () => {
+    if (hallWindow && !hallWindow.isDestroyed() && hallWindow.isFullScreen()) {
+      try { hallWindow.setFullScreen(false); } catch (_) { /* ignore */ }
+    }
+  });
+
+  // v2.0.4-rc6 Fix 5-M: operator 側でミュート切替された時、hall 側 audio もミュート同期。
+  //   operator (PC) で M キー → audioToggleMute は operator の AudioContext のみミュート、
+  //   hall 側は別 renderer の AudioContext で音を出すため、本来別途同期が必要。
+  //   renderer → main → hall の 3 段で論理ステートを通す（preload で broadcastMuteState 公開）。
+  ipcMain.on('dual:broadcast-mute-state', (_event, muted) => {
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.webContents.send('dual:mute-state-changed', !!muted); } catch (_) { /* ignore */ }
+    }
+  });
+
+  // v2.0.4-rc6 Fix 5-H: operator 側でボトムバートグルされた時、hall 側にも同期。
+  //   既存の settings:setDisplay 経路は永続化のみで hall への runtime broadcast がないため、
+  //   M と同じ追加チャネルで明示的に通知する（永続化は既存経路に任せる）。
+  ipcMain.on('dual:broadcast-bottombar-state', (_event, hidden) => {
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.webContents.send('dual:bottombar-state-changed', !!hidden); } catch (_) { /* ignore */ }
+    }
+  });
 }
 
 app.whenReady().then(async () => {

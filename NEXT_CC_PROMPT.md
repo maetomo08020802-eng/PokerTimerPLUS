@@ -1,254 +1,302 @@
-# v2.0.4-rc5 実装: M/H/F2/F12 整理 + テロップ表記 + 操作一覧再構成 + ミュート視覚フィードバック（全 role 適用）
+# v2.0.4-rc6 実装: HDMI 切替バグ 5 件統合修正 + 再ビルド
 
 ## 構築士判断（前原さん追認 2026-05-01）
 
-| 項目 | 判断 |
-|---|---|
-| M キーフォワード | **追加**（KeyM）|
-| H キーフォワード | **追加**（KeyH、前回判断撤回）|
-| F2 | **削除**（operator-pane 操作一覧 + docs/specs.md §7 から、実装無し）|
-| F12 | operator-pane 操作一覧から **削除**（既存コードは維持、specs §7 表記も維持）|
-| 「マーキー」表記 | **「テロップ」に変更**（UI 表記のみ、コード内部の `marquee*` 変数名は維持）|
-| 操作一覧 | **5 カテゴリに再構成**（タイマー/プレイヤー/エントリー/ダイアログ表示/アプリ）|
-| ミュート視覚フィードバック | **全 role に適用**（operator / hall / operator-solo すべて、v1.3.0 互換例外）|
+| Fix | 採用 | 備考 |
+|---|---|---|
+| Fix 1 (A): HDMI 切替時の状態管理（再入ガード + debounce + 防御的 close）| **採用** | AC 残存 + 多重発火を同時解消 |
+| Fix 2 (B): AC を minimize 化 + 復元時ポップアップ案内 | **採用** | 前原さん要望文言を尊重、operator-solo 動的切替を廃止 |
+| Fix 3 (C): F11 を常に hall を toggle 化（hallWindow 不在時は mainWindow fallback）| **採用** | |
+| Fix 4 (D): ESC ハンドラ追加（**案 i: hall 全画面解除**）+ 既存 dialog default 維持 | **採用** | 案 i 採用 |
+| Fix 5 (E): M / H 双方向同期 | **採用** | H 部分は既存 `displaySettings.bottomBarHidden` で動いてる可能性、CC が事前確認 → 動いていれば H 部分は Fix 不要 |
 
 ---
 
-## 重要な方針変更: v1.3.0 互換からの「便利機能例外」
+## 重要前提
 
-**ミュート視覚フィードバックは operator-solo モードにも適用** = v1.3.0 配布版にはない機能を v2.0.4 で追加する。
-
-前原さん指示「便利機能はどっちのモードにも適用したい」に従い、戦略的に:
-- v2.0.4 の `.exe` を全国配布する将来構想に向け、単画面ユーザーにも便利機能改善を提供
-- 既存挙動の破壊ではなく純粋な追加（UX 改善）
-- 致命バグ保護 5 件には影響なし
+- **致命バグ保護 5 件への変更禁止**（特に C.1.7 AudioContext resume 系は Fix 5 で audio 経路に触れるため `ensureAudioReady().then(...)` 維持必須）
+- **operator-solo モード（最初から HDMI なし起動）への影響なし維持**（v1.3.0 互換）
+- Fix 2 で「2 画面起動 → HDMI 抜き → minimize」の挙動変更は許容（前原さん要望、operator role のまま、最初から単画面の操作には影響なし）
+- スコープ厳守
 
 ---
 
-## STEP A: 修正実装
+## STEP A: 事前確認（コード変更なし）
 
-### A-1. キーフォワード追加（main.js）
+### A-1. Fix 5 H 部分の既存実装確認
 
-`FORWARD_KEYS_FROM_HALL` に `'KeyM'`, `'KeyH'` 追加:
+`toggleBottomBar()` の実装を Read tool で確認:
+- `displaySettings.bottomBarHidden` の永続化 + main → renderer broadcast の経路があるか
+- 既に hall 側にも反映されているなら **Fix 5 から H 部分のみ除外**
+- 動いていない場合のみ Fix 5 で同期実装
+
+### A-2. Fix 2 採用時の operator-solo / operator 表示分離確認
+
+`src/renderer/style.css` の `[data-role="operator"]` セレクタで hall 専用要素が hidden 化されているものをリストアップ:
+- minimize 復元時に operator role のまま単画面表示すると、これら hidden 要素が見えない
+- 重大な見えない要素（タイマー本体や bottom-bar 等）があれば Fix 2 採用前に CC_REPORT で構築士判断仰ぐ
+- 軽微な要素（hall 専用の装飾等）のみなら Fix 2 そのまま採用、最小化解除時にユーザーへの注意で対応可
+
+---
+
+## STEP B: 実装
+
+### Fix 1: HDMI 切替時の状態管理（src/main.js）
+
+#### Fix 1-A: switch 系再入ガード
 
 ```js
-const FORWARD_KEYS_FROM_HALL = new Set([
-  'Space', 'Enter', 'Escape',
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'KeyR', 'KeyA', 'KeyE', 'KeyS', 'KeyM', 'KeyT', 'KeyH'
-]);
-```
+let _isSwitchingMode = false;
 
-### A-2. F2 削除
-
-- operator-pane 操作一覧から F2 行を削除
-- `docs/specs.md §7` から F2 行を削除（rc4 で F1 削除した要領）
-- F2 に対応する renderer.js / main.js のハンドラがあれば削除（無ければ no-op）
-
-### A-3. F12 削除（操作一覧のみ）
-
-- operator-pane 操作一覧から F12 行を削除
-- 既存の F12 ショートカット（DevTools 開閉）コード自体は **維持**
-- `docs/specs.md §7` の F12 表記は **維持**（開発者向け）
-
-### A-4. 「マーキー」→「テロップ」表記変更
-
-UI に出てくる「マーキー」をすべて「テロップ」に置換:
-
-- operator-pane 操作一覧「Ctrl+T マーキー編集」→「Ctrl+T テロップ編集」
-- マーキーダイアログのタイトル / ボタン / ラベル等の UI 文字列
-- 設定タブ内の「マーキー」タブ名 / 説明文
-- `docs/specs.md §7` の関連記述
-
-**コード内部の変数名（`marqueeDialog` / `el.marqueeTitle` 等）は維持**（リスク回避、変数名変更は別フェーズ）。
-
-### A-5. 操作一覧をカテゴリ別 5 セクションに再構成
-
-`src/renderer/index.html` の operator-pane 操作一覧 ul を以下に置換:
-
-```html
-<div class="shortcut-section">
-  <h3>タイマー操作</h3>
-  <ul>
-    <li><kbd>Space</kbd> 一時停止 / 再開</li>
-    <li><kbd>Enter</kbd> スタート（開始前）</li>
-    <li><kbd>→</kbd> 残り時間 -30 秒（早送り）</li>
-    <li><kbd>←</kbd> 残り時間 +30 秒（巻き戻し）</li>
-    <li><kbd>R</kbd> リセットダイアログ</li>
-  </ul>
-</div>
-
-<div class="shortcut-section">
-  <h3>プレイヤー操作</h3>
-  <ul>
-    <li><kbd>↑</kbd> 新規エントリー追加</li>
-    <li><kbd>Shift</kbd>+<kbd>↑</kbd> 新規エントリー取消</li>
-    <li><kbd>↓</kbd> プレイヤー脱落</li>
-    <li><kbd>Shift</kbd>+<kbd>↓</kbd> 脱落取消（復活）</li>
-  </ul>
-</div>
-
-<div class="shortcut-section">
-  <h3>エントリー操作</h3>
-  <ul>
-    <li><kbd>Ctrl</kbd>+<kbd>R</kbd> リエントリー +1</li>
-    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> リエントリー -1</li>
-    <li><kbd>Ctrl</kbd>+<kbd>A</kbd> アドオン +1</li>
-    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> アドオン -1</li>
-    <li><kbd>Ctrl</kbd>+<kbd>E</kbd> 特別スタック +1</li>
-    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 特別スタック -1</li>
-  </ul>
-</div>
-
-<div class="shortcut-section">
-  <h3>ダイアログ / 表示</h3>
-  <ul>
-    <li><kbd>S</kbd> 設定ダイアログ</li>
-    <li><kbd>Ctrl</kbd>+<kbd>T</kbd> テロップ編集</li>
-    <li><kbd>M</kbd> ミュート切替</li>
-    <li><kbd>H</kbd> ボトムバー非表示</li>
-  </ul>
-</div>
-
-<div class="shortcut-section">
-  <h3>アプリ</h3>
-  <ul>
-    <li><kbd>F11</kbd> フルスクリーン切替</li>
-    <li><kbd>Ctrl</kbd>+<kbd>Q</kbd> アプリ終了</li>
-    <li><kbd>Esc</kbd> ダイアログを閉じる</li>
-  </ul>
-</div>
-```
-
-CSS でセクション見出し（`<h3>`）とリストの装飾を追加（既存 dark テーマと整合）。
-
-### A-6. ミュート視覚フィードバック実装（全 role 適用）
-
-#### A-6-1. mute-indicator 要素追加
-
-`src/renderer/index.html` に共通要素:
-```html
-<div class="mute-indicator" id="js-mute-indicator" hidden>🔇 ミュート中</div>
-```
-
-#### A-6-2. CSS
-
-`src/renderer/style.css`:
-```css
-.mute-indicator {
-  position: fixed;
-  bottom: 16px; right: 16px;
-  background: rgba(180, 30, 30, 0.85);
-  color: #fff;
-  font-weight: 700;
-  font-size: 1.2em;
-  padding: 8px 14px;
-  border-radius: 8px;
-  z-index: 95;
-  pointer-events: none;
+async function switchSoloToOperator(hallDisplay) {
+  if (_isSwitchingMode) return;
+  _isSwitchingMode = true;
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (!hallDisplay) return;
+    // orphan hallWindow 検出 + close
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.close(); } catch (_) {}
+      hallWindow = null;
+    }
+    const operatorDisplay = screen.getPrimaryDisplay();
+    mainWindow._suppressCloseConfirm = true;
+    try { mainWindow.close(); } catch (_) {}
+    mainWindow = null;
+    createOperatorWindow(operatorDisplay, false);
+    createHallWindow(hallDisplay);
+  } finally {
+    _isSwitchingMode = false;
+  }
 }
-
-/* operator role (AC) には表示しない、運用情報で代替 */
-[data-role="operator"] .mute-indicator { display: none !important; }
-/* hall / operator-solo は通常通り（hidden 属性削除時に表示）*/
 ```
 
-#### A-6-3. JS（renderer.js）
+`switchOperatorToSolo` も同パターン適用（Fix 2 と統合実装）。
 
-- ミュート状態が変わったら `js-mute-indicator` の `hidden` 属性を toggle
-- 既存のミュート切替ロジック（M キー / 設定タブ等）に hook 追加
-- 起動時にも初期反映
+#### Fix 1-B: display-added / display-removed の debounce ガード
 
-#### A-6-4. operator role の AC 側「音」項目追加
+```js
+let _displayAddedPending = false;
 
-operator-pane の運用情報 dl に追加（既存 7 項目 → 8 項目に）:
-```html
-<dt>音</dt><dd id="op-pane-mute-status">通常</dd>
+screen.on('display-added', async () => {
+  if (_displayAddedPending) return;
+  if (hallWindow && !hallWindow.isDestroyed()) return;
+  _displayAddedPending = true;
+  try {
+    /* 既存ロジック */
+  } finally {
+    _displayAddedPending = false;
+  }
+});
 ```
 
-`updateOperatorPane()` でミュート状態を読み取って「通常」or「ミュート中」をセット（赤系の色で強調）。
+`display-removed` も同パターン。
 
-#### A-6-5. 3 role での表示制御まとめ
+#### Fix 1-C: createHallWindow / createOperatorWindow の防御的 close
 
-| role | mute-indicator (画面右下) | operator-pane の「音」項目 |
-|---|---|---|
-| operator (AC) | 非表示（CSS で打ち消し） | **「ミュート中」表示**（運用情報で代替）|
-| hall (B) | **表示** | なし（pane 自体が hall に存在しない）|
-| operator-solo (単画面) | **表示** | なし（pane 自体が operator-solo に存在しない）|
+```js
+function createHallWindow(targetDisplay) {
+  if (hallWindow && !hallWindow.isDestroyed()) {
+    try { hallWindow.close(); } catch (_) {}
+  }
+  hallWindow = null;
+  /* 既存コード */
+}
+```
 
-### A-7. 網羅再点検
+`createOperatorWindow` も同パターン。
 
-operator-pane の操作一覧に載っている全キーが以下の動作をするか CC が実コード根拠で確認:
+### Fix 2: AC ウィンドウの minimize 化 + 復元時ポップアップ案内
 
-1. AC（operator）でキーを押した時に正しく動作する
-2. B（hall）でキーを押した時に AC に forward されて正しく動作する（M / H 含む）
-3. 単画面モード（operator-solo）でキーを押した時に正しく動作する
+#### Fix 2-A: switchOperatorToSolo の minimize 化
 
-不具合があれば修正、または操作一覧から削除（修正不可なものは CC_REPORT で構築士判断仰ぐ）。
+```js
+async function switchOperatorToSolo() {
+  if (_isSwitchingMode) return;
+  _isSwitchingMode = true;
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    // hall 側だけ閉じる（operator は minimize、close しない）
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.close(); } catch (_) {}
+      hallWindow = null;
+    }
+    try { mainWindow.minimize(); } catch (_) {}
+    mainWindow._showRestoreNoticeOnce = true;
+  } finally {
+    _isSwitchingMode = false;
+  }
+}
+```
 
-### A-8. テスト追加 / 更新
+#### Fix 2-B: 復元時のポップアップ案内（一回限り）
 
-- rc4 で追加した「操作一覧 25 件」テストを **22 件 + カテゴリ構造**に更新
-- 「マーキー」表記の検索テストを「テロップ」に更新（UI 表記のみ、コード内部 `marquee` は変更なし）
-- M / H forward の追加テスト
-- ミュート視覚フィードバックの 3 role 動作テスト（operator では非表示、hall / operator-solo では表示）
-- 致命バグ保護 5 件 cross-check
+`createOperatorWindow` 内に追加:
 
-### A-9. バージョン rc4 → rc5
+```js
+win.on('restore', () => {
+  if (win._showRestoreNoticeOnce) {
+    win._showRestoreNoticeOnce = false;
+    dialog.showMessageBox(win, {
+      type: 'info',
+      buttons: ['OK'],
+      title: 'AC ウィンドウについて',
+      message:
+        'この画面は 2 画面表示用のフォーカス用ウィンドウです。\n' +
+        '一度 2 画面用として立ち上げているため、この画面を閉じるとアプリも閉じます。\n' +
+        'ご注意ください。\n\n' +
+        '邪魔でしたら、アプリを閉じるまで、このウィンドウは最小化しておいてください。'
+    });
+  }
+});
+```
 
-- `package.json`: `2.0.4-rc4` → `2.0.4-rc5`
+### Fix 3: F11 を常に hall を toggle 化（src/main.js）
+
+```js
+function toggleFullScreen() {
+  // v2.0.4-rc6: 2 画面モードでは常に hall を toggle
+  // 単画面モード（hallWindow 不在）では mainWindow を toggle（v1.3.0 互換）
+  const target = (hallWindow && !hallWindow.isDestroyed()) ? hallWindow : mainWindow;
+  if (!target || target.isDestroyed()) return;
+  target.setFullScreen(!target.isFullScreen());
+}
+```
+
+### Fix 4: ESC ハンドラ追加（renderer.js + preload + main.js）
+
+#### Fix 4-A: dispatchClockShortcut に ESC case 追加
+
+```js
+case 'Escape':
+  // dispatcher 到達時 dialog なし前提（dialog[open] ガードで弾かれる）
+  // hall 全画面解除を IPC で main に通知
+  event.preventDefault();
+  if (window.appRole === 'operator' || window.appRole === 'operator-solo') {
+    window.api?.dual?.requestExitFullScreen?.();
+  }
+  break;
+```
+
+既存の `<dialog>` の ESC default close 動作はそのまま維持（変更不要）。
+
+#### Fix 4-B: preload.js に新 IPC 経路
+
+```js
+dual: {
+  // ... 既存 ...
+  requestExitFullScreen: () => ipcRenderer.send('dual:request-exit-fullscreen'),
+}
+```
+
+#### Fix 4-C: main.js に ESC handler
+
+```js
+ipcMain.on('dual:request-exit-fullscreen', () => {
+  if (hallWindow && !hallWindow.isDestroyed() && hallWindow.isFullScreen()) {
+    hallWindow.setFullScreen(false);
+  }
+});
+```
+
+### Fix 5: M / H 双方向同期
+
+#### Fix 5-M: ミュート状態を hall に同期
+
+`src/renderer/renderer.js` の `case 'KeyM'`:
+
+```js
+case 'KeyM':
+  if (!event.ctrlKey && !event.metaKey) {
+    event.preventDefault();
+    ensureAudioReady().then(() => {
+      const nowMuted = audioToggleMute();
+      if (window.appRole === 'operator') {
+        window.api?.dual?.broadcastMuteState?.(nowMuted);
+      }
+      updateMuteIndicator();
+    });
+  }
+  break;
+```
+
+`preload.js` に `broadcastMuteState`, `onMuteStateChanged` 追加。
+`main.js` に `ipcMain.on('dual:broadcast-mute-state', (e, muted) => { hallWindow?.webContents.send('dual:mute-state-changed', muted); })`。
+`renderer.js` で hall role 時に IPC 受信 → audio API でミュート状態を反映 + updateMuteIndicator 呼出。
+
+**致命バグ保護 C.1.7 維持**: `ensureAudioReady().then(...)` の包みは絶対変更しない。
+
+#### Fix 5-H: 既存実装確認後に判断
+
+STEP A-1 で確認 → 既存で動いていれば Fix 5-H は実装しない。動いていなければ Fix 5-M と同パターンで実装。
+
+### STEP C: テスト追加
+
+新規 `tests/v204-rc6-hdmi-state.test.js`:
+- `_isSwitchingMode` 再入ガード確認
+- `_displayAddedPending` debounce 確認
+- `createHallWindow` / `createOperatorWindow` 防御的 close 確認
+- `switchOperatorToSolo` の minimize 動作確認
+- `_showRestoreNoticeOnce` フラグ + restore イベント案内確認
+- `toggleFullScreen` の hall 優先確認
+- `dispatchClockShortcut` の `case 'Escape'` 存在確認
+- `dual:request-exit-fullscreen` IPC 経路確認
+- M 双方向同期 IPC 確認
+- 致命バグ保護 5 件 cross-check（特に C.1.7 AudioContext resume）
+- operator-solo モードへの不影響確認
+
+### STEP D: バージョン rc5 → rc6
+
+- `package.json`: `2.0.4-rc5` → `2.0.4-rc6`
 - `tests/v130-features.test.js` T11 同期更新
 
-### A-10. ビルド + 静的検証
+### STEP E: ビルド + 静的検証
 
 - `npm run build:win`
-- `dist/latest.yml` に `version: 2.0.4-rc5` 確認
+- `dist/latest.yml` に `version: 2.0.4-rc6` 確認
 
-### A-11. CC_REPORT.md を完成版で上書き
+### STEP F: CC_REPORT.md を完成版で上書き
 
 ---
 
 ## 報告必須項目
 
 - 並列 sub-agent 数（0 体予定）
-- 致命バグ保護 5 件への影響評価
+- 致命バグ保護 5 件への影響評価（特に C.1.7）
 - 修正対象ファイル一覧と各変更箇所
-- 修正コード抜粋（FORWARD_KEYS / mute-indicator / operator-pane 「音」項目）
-- 網羅再点検結果（22 キーの動作確認結果）
-- ミュート視覚フィードバックの 3 role 動作確認
-- v1.3.0 互換からの「ミュート視覚」例外の妥当性評価
+- 修正コード抜粋（Fix 1〜5 すべて）
+- STEP A-1 (H 既存実装確認) の結果
+- STEP A-2 (operator-solo / operator 表示分離) の結果 + 重大要素の有無
 - ビルド成果物 path / size / version
+- operator-solo モードへの影響評価（minimize 化挙動の妥当性、最初から単画面の場合は影響なし確認）
 
 ---
 
 ## 禁止事項
 
-- 致命バグ保護 5 件への変更
-- スコープ外の追加実装（specs §7 の F2 削除のみ許可、他差分は touch しない）
+- 致命バグ保護 5 件への変更（特に C.1.7 ensureAudioReady ラップ維持必須）
+- スコープ外の追加実装
 - main マージ / push
-- 並列 sub-agent 起動
-- コード内部の `marquee*` 変数名変更（UI 表記のみ）
-- ミュート視覚フィードバック以外の v1.3.0 互換例外追加
+- 並列 sub-agent 起動（修正範囲明確で並列不要）
+- ESC 案 ii / iii の動作変更（案 i のみ採用）
+- operator-solo（最初から単画面起動）の挙動変更
 
 ---
 
 ## ブランチ
 
-- `feature/v2.0.4-rc1-test-build` 継続使用
-- ローカルコミット可（rc4 → rc5 差分追跡）
+- 現在ブランチ: `feature/v2.0.4-rc1-test-build` 継続使用
+- ローカルコミット可（rc5 → rc6 差分追跡）
 - main マージ・push なし
 
 ---
 
 ## 完了後の流れ
 
-1. 構築士: CC_REPORT 採点 → 前原さんに rc5 の `.exe` 場所と再試験依頼
-2. 前原さん: rc4 アンインストール → rc5 インストール → 再試験
-   - 操作一覧が 5 カテゴリに分かれているか
-   - 「マーキー」が「テロップ」になっているか
-   - F2 / F12 が操作一覧から消えているか
-   - B フォーカス時に M / H が反応するか
-   - ミュート時に B の右下に「🔇 ミュート中」が出るか
-   - AC の運用情報に「音」項目が出るか
-   - 単画面モードでも（手元 PC のみで起動した時に）右下に「🔇 ミュート中」が出るか
-   - 既存挙動が崩れていないか
+1. 構築士: CC_REPORT 採点 → 前原さんに rc6 の `.exe` 場所と再試験依頼
+2. 前原さん: rc5 アンインストール → rc6 インストール → 再試験
+   - 単一モニターで起動して全操作確認
+   - HDMI 接続 → ホールに映る → F11 / ESC / H / M すべて反応するか
+   - HDMI 抜き → AC が自動で最小化されるか + 大きくしたらポップアップが出るか
+   - 再 HDMI 接続 → 多重発火が起きないか
+   - 既存挙動（× 確認 / Space / 矢印 / R / Ctrl+E など）が崩れていないか

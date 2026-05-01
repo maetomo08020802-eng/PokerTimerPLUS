@@ -88,13 +88,16 @@ test('T3: display-added: displays.length < 2 で return, chooseHallDisplayIntera
 // ============================================================
 // T4: switchOperatorToSolo / switchSoloToOperator がウィンドウ再生成方式（reload 不使用）
 // ============================================================
-test('T4: switchOperatorToSolo / switchSoloToOperator: close → 再生成（webContents.reload なし）', () => {
+test('T4: switchOperatorToSolo は minimize / switchSoloToOperator は close→再生成（rc6 改修）', () => {
+  // v2.0.4-rc6 Fix 2: switchOperatorToSolo は operator を close せず minimize に変更（前原さん要望）
+  //   close→新生成 race の根本解消、operator-solo 動的切替廃止。
   const solo = extractFunctionBody(MAIN, 'switchOperatorToSolo', true);
   assert.ok(solo, 'switchOperatorToSolo 関数本体抽出失敗');
-  assert.match(solo, /mainWindow\.close\s*\(\s*\)/, 'switchOperatorToSolo で mainWindow.close なし');
-  assert.match(solo, /createOperatorWindow\([^)]*,\s*true\s*\)/, 'createOperatorWindow(_, true) 再生成なし');
+  assert.match(solo, /mainWindow\.minimize\s*\(\s*\)/, 'switchOperatorToSolo で mainWindow.minimize なし（rc6 で minimize 化必須）');
+  assert.match(solo, /_showRestoreNoticeOnce\s*=\s*true/, 'switchOperatorToSolo で _showRestoreNoticeOnce フラグ立てなし');
   assert.doesNotMatch(solo, /webContents\.reload\s*\(/, 'switchOperatorToSolo に reload 使用（再生成方式違反）');
 
+  // switchSoloToOperator は依然 close→再生成（role='operator-solo' → 'operator' 変更が必要）
   const dual = extractFunctionBody(MAIN, 'switchSoloToOperator', true);
   assert.ok(dual, 'switchSoloToOperator 関数本体抽出失敗');
   assert.match(dual, /mainWindow\.close\s*\(\s*\)/, 'switchSoloToOperator で mainWindow.close なし');

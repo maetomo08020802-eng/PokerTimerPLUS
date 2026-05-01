@@ -5937,6 +5937,10 @@ function dispatchClockShortcut(event) {
           console.log(nowMuted ? 'ミュート: ON' : 'ミュート: OFF');
           // v2.0.4-rc5: ミュート視覚フィードバック更新（全 role に hook、operator では mute-indicator は CSS で非表示）
           updateMuteIndicator();
+          // v2.0.4-rc6 Fix 5-M: operator 役割なら hall 側にもミュート状態を同期（PC 側 M 押下 → hall 側 audio もミュート）
+          if (window.appRole === 'operator') {
+            window.api?.dual?.broadcastMuteState?.(nowMuted);
+          }
         });
       }
       break;
@@ -5945,7 +5949,20 @@ function dispatchClockShortcut(event) {
       if (!event.ctrlKey && !event.metaKey) {
         event.preventDefault();
         toggleBottomBar();
+        // v2.0.4-rc6 Fix 5-H: operator 役割なら hall 側にもボトムバー状態を同期。
+        //   既存 settings.setDisplay は永続化のみで runtime broadcast がないため、明示的に通知。
+        if (window.appRole === 'operator') {
+          // bottomBarHidden は applyBottomBarHidden が toggle 後に true/false 反映済（モジュール変数）
+          window.api?.dual?.broadcastBottomBarState?.(bottomBarHidden);
+        }
       }
+      break;
+    case 'Escape':
+      // v2.0.4-rc6 Fix 4-A: dispatcher 到達時は dialog 無し前提（dialog[open] ガードで弾かれる）。
+      //   hall が fullscreen の時、操作者が緊急で hall を窓化したいケース用に IPC 通知。
+      //   <dialog> の Esc default close は別経路で消費される（dispatcher に届かない）。
+      event.preventDefault();
+      window.api?.dual?.requestExitFullScreen?.();
       break;
     default:
       break;
@@ -6415,6 +6432,24 @@ if (__appRole === 'hall') {
     } catch (err) {
       console.warn(`[dual-sync] kind=${kind} の適用に失敗:`, err);
     }
+  });
+  // v2.0.4-rc6 Fix 5: hall 側で operator のミュート / ボトムバー状態変更を受信して反映。
+  //   M / H キーは operator (PC) 側で押されるが、音響 / ボトムバー表示は hall 側にあるため、
+  //   IPC で論理ステートを通知し hall 側 audio API / DOM クラスに反映する。
+  //   致命バグ保護 C.1.7: ensureAudioReady().then(...) ラップを維持し audio resume 経路は触らない。
+  window.api?.dual?.onMuteStateChanged?.((muted) => {
+    ensureAudioReady().then(() => {
+      // audio.js には setMute API が無いため、現状値と差があるなら toggle で揃える
+      try {
+        if (typeof audioIsMuted === 'function' && audioIsMuted() !== !!muted) {
+          audioToggleMute();
+        }
+        updateMuteIndicator();
+      } catch (err) { console.warn('[dual-sync] mute apply 失敗:', err); }
+    });
+  });
+  window.api?.dual?.onBottomBarStateChanged?.((hidden) => {
+    try { applyBottomBarHidden(!!hidden); } catch (err) { console.warn('[dual-sync] bottombar apply 失敗:', err); }
   });
   // hall: 初期同期 → 既存 initialize（DOM/タイマー描画ロジック）を起動。
   //   await の失敗で initialize が止まらないよう finally でフォールバック。
