@@ -130,11 +130,32 @@ contextBridge.exposeInMainWorld('api', {
       if (typeof callback !== 'function') return;
       ipcRenderer.on('dual:bottombar-state-changed', (_event, hidden) => callback(!!hidden));
     },
+    // v2.0.4-rc7 Fix 1-B: HDMI 切替時に main から renderer に role 変更を通知。
+    //   renderer 側で window.appRole + documentElement[data-role] を更新し、CSS が
+    //   2 画面用 / 単画面用レイアウトに自動追従する（表示踏襲問題の解消）。
+    //   ウィンドウ生成を伴わない動的切替のため race ゼロ。
+    onRoleChanged: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('dual:role-changed', (_event, newRole) => {
+        try { callback(newRole); } catch (_) { /* ignore */ }
+      });
+    },
     // v2.0.0 STEP 4: モニター選択ダイアログ（display-picker.html 専用）。
     //   fetchDisplays: 検出済の displays + 前回選択 id を取得（invoke、結果を返す）
     //   selectHallMonitor: ユーザーが選んだモニター id を main に通知（send、結果不要）
     //   ※ ipcRenderer.send は通知系（main 側 ipcMain.on で受信）。invoke と区別。
     fetchDisplays: () => ipcRenderer.invoke('display-picker:fetch'),
     selectHallMonitor: (displayId) => ipcRenderer.send('dual:select-hall-monitor', displayId)
+  },
+  // v2.0.4-rc15 タスク 2: 5 分 rolling ログ機構の renderer ブリッジ。
+  //   write: send（一方向、結果不要、低 overhead）→ main の ipcMain.on('rolling-log:write') で集約。
+  //   openFolder: invoke（結果を Promise で返す）→ shell.openPath で OS のファイルマネージャを開く。
+  //   renderer 側は直接 fs アクセス禁止、main プロセス集約でロックフリー化（CC_REPORT rc14 §3.7）。
+  log: {
+    write: (label, data) => {
+      try { ipcRenderer.send('rolling-log:write', { label: String(label || ''), data: data || null }); }
+      catch (_) { /* never throw from logging */ }
+    },
+    openFolder: () => ipcRenderer.invoke('logs:openFolder')
   }
 });

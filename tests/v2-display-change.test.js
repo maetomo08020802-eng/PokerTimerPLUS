@@ -88,13 +88,14 @@ test('T3: display-added: displays.length < 2 で return, chooseHallDisplayIntera
 // ============================================================
 // T4: switchOperatorToSolo / switchSoloToOperator がウィンドウ再生成方式（reload 不使用）
 // ============================================================
-test('T4: switchOperatorToSolo は minimize / switchSoloToOperator は close→再生成（rc6 改修）', () => {
-  // v2.0.4-rc6 Fix 2: switchOperatorToSolo は operator を close せず minimize に変更（前原さん要望）
-  //   close→新生成 race の根本解消、operator-solo 動的切替廃止。
+test('T4: switchOperatorToSolo は show + focus / switchSoloToOperator は close→再生成（rc9 改修）', () => {
+  // v2.0.4-rc9 Fix 2-A: switchOperatorToSolo は minimize → show + focus に変更（自動前面表示、IPC 遅延起因の表示消失を根治）
+  //   close せず保持する設計は rc6 から維持（race ゼロ）。_showRestoreNoticeOnce は rc9 Fix 2-C で撤去。
   const solo = extractFunctionBody(MAIN, 'switchOperatorToSolo', true);
   assert.ok(solo, 'switchOperatorToSolo 関数本体抽出失敗');
-  assert.match(solo, /mainWindow\.minimize\s*\(\s*\)/, 'switchOperatorToSolo で mainWindow.minimize なし（rc6 で minimize 化必須）');
-  assert.match(solo, /_showRestoreNoticeOnce\s*=\s*true/, 'switchOperatorToSolo で _showRestoreNoticeOnce フラグ立てなし');
+  assert.match(solo, /mainWindow\.show\s*\(\s*\)/, 'switchOperatorToSolo で mainWindow.show なし（rc9 で show 化必須）');
+  assert.doesNotMatch(solo, /mainWindow\.minimize\s*\(\s*\)/, 'switchOperatorToSolo に mainWindow.minimize 残存（rc9 で撤去必須）');
+  assert.doesNotMatch(solo, /_showRestoreNoticeOnce\s*=\s*true/, 'switchOperatorToSolo に _showRestoreNoticeOnce フラグ残存（rc9 で撤去必須）');
   assert.doesNotMatch(solo, /webContents\.reload\s*\(/, 'switchOperatorToSolo に reload 使用（再生成方式違反）');
 
   // switchSoloToOperator は依然 close→再生成（role='operator-solo' → 'operator' 変更が必要）

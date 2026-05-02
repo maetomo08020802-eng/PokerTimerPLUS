@@ -1,302 +1,245 @@
-# v2.0.4-rc6 実装: HDMI 切替バグ 5 件統合修正 + 再ビルド
+# v2.0.4-rc15 実装フェーズ（break-end 修正 + 5 分 rolling ログ + H 行削除 + バージョンバンプ + ビルド）
 
-## 構築士判断（前原さん追認 2026-05-01）
+## 【最重要】このプロンプト実行前のお願い
 
-| Fix | 採用 | 備考 |
+**Claude Code で `/clear` コマンドを必ず実行してから本プロンプトを読み込むこと**。rc14 事前調査フェーズからの context 引きずり防止。
+
+`/clear` 後は以下を順に Read してから本プロンプトに従うこと:
+1. `poker-clock/HANDOVER.md`
+2. `poker-clock/CC_REPORT.md`（rc14 事前調査報告、本実装の根拠資料）
+3. `poker-clock/CLAUDE.md`
+4. `poker-clock/skills/cc-operation-pitfalls.md`（特に §1 / §6 / §7）
+5. `poker-clock/skills/audio-system.md`（音響系の既存仕様、タスク 1 で必須）
+6. `poker-clock/skills/timer-logic.md`（不変条件、タスク 1 の onLevelEnd 拡張で参照）
+
+## 推奨モデル
+
+**Sonnet 4.6**
+
+---
+
+## ■ 構築士の判断（rc14 事前調査の 4 質問への回答）
+
+CC からの 4 質問はすべて **CC 推奨案を採用**:
+
+1. **修正案 2 直行**（onLevelEnd へ移動、構造的に race 解消、5〜6 行）→ 採用
+2. **rc15 で 3 件同時実装**（音修正 + rolling ログ + H 削除を一括）→ 採用
+3. **テスト書き換えは「H 行が存在しないこと」検証に統一**（`assert.doesNotMatch` 等）→ 採用
+4. **rc11 ログファイル `logs/rc11-display-event-2026-05-01T16-44-24-808.log` はそのまま残置**（歴史的証拠、容量小）→ 採用
+
+---
+
+## ■ 今回 やる範囲（ホワイトリスト）
+
+本フェーズは **実装 + テスト追加 + ビルドあり**。rc14 事前調査の結果を rc15 として完成させ、前原さん試験へ繋ぐ。
+
+- **タスク 1**: break-end 修正案 2（`playSound('break-end')` を `onLevelEnd` ハンドラの `lv.isBreak === true` 経路に移動、5〜6 行）
+- **タスク 2**: 5 分 rolling ログ機構 案 A（単一ファイル + 30 秒定期切捨、約 100〜130 行）
+- **タスク 3**: H ショートカット行削除（index.html + specs.md 各 1 行 + 関連テスト 6 ファイル追従）
+- **タスク 4**: バージョン `2.0.4-rc15` バンプ + CHANGELOG 更新 + ビルド（`npm run build:win`）+ 全テスト PASS 確認
+
+## ■ 今回 触ってはいけない範囲（ブラックリスト）
+
+- **致命バグ保護 5 件**（cc-operation-pitfalls.md §1.5）には絶対触らない
+  - C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化
+- rc10 確定 Fix（specialStack / 二重送信 / app.focus / 単一インスタンス / H 文言短縮）/ rc12 確定 Fix（onRoleChanged setAttribute 最優先 + appRole try-catch）/ rc13 確定 Fix（複製 readonly + BREAK 中 10 秒前 / 5 秒カウント音）すべて維持
+- **スコープ管理**: 4 タスク以外の修正・リファクタ・追加実装は禁止
+- 「念のため」修正・hard-coded 値・特定入力 workaround は厳禁
+- 発見した別問題は CC_REPORT「構築士への質問」に提案として記載のみ
+- カード幅 54vw / 46vw / Barlow Condensed 700 / `<dialog>` flex 化禁止 等の不変ルールも維持
+
+## 致命級バグ発見時の例外
+
+実装中に致命級バグを発見した場合のみ、CC_REPORT 冒頭に **🚨警告** セクションを追加。実装はせず、構築士判断を仰ぐ。
+
+---
+
+## 1. タスク 1: break-end 修正案 2（onLevelEnd へ移動）
+
+### 1.1 修正方針
+
+`src/renderer/renderer.js` の以下 2 箇所を修正:
+
+**(A) `handleAudioOnTick` の BREAK ブロック（CC_REPORT §2.4 修正案 2 のコード参照）**:
+- `if (remainingSec === 0) playSound('break-end');` の **行を削除**（瞬間判定の race 排除）
+- `warning-10sec` / `countdown-tick` の 2 行は維持
+
+**(B) `onLevelEnd` ハンドラの拡張**:
+- 現在: `if (lv && !lv.isBreak) playSound('level-end');`
+- 修正後:
+  ```javascript
+  if (lv) {
+    if (lv.isBreak) {
+      playSound('break-end');   // BREAK レベル終了時に確実に発火（race 回避）
+    } else {
+      playSound('level-end');
+    }
+  }
+  ```
+
+### 1.2 制約
+
+- 修正規模は **5〜6 行のみ**、それ以上の変更は禁止
+- `playSound()` / `_play()` / AudioContext 周りには一切触らない（C.1.7 致命バグ保護維持）
+- onLevelEnd の他処理（state 遷移 / display 更新等）は無変更
+
+### 1.3 テスト追加
+
+`tests/v204-rc15-break-end-and-rolling-log.test.js` を新規作成し、以下を検証:
+- T1: BREAK レベル終了時に `playSound('break-end')` が呼ばれる（onLevelEnd 経由）
+- T2: 通常レベル終了時に `playSound('level-end')` が呼ばれる（onLevelEnd 経由）
+- T3: BREAK 中の `remainingSec === 0` で `playSound('break-end')` が **呼ばれない**（onTick から削除されたことを確認）
+- T4: BREAK 中の `remainingSec === 10` で `playSound('warning-10sec')` が呼ばれる（rc13 維持）
+- T5: BREAK 中の `remainingSec === 5` で `playSound('countdown-tick')` が呼ばれる（rc13 維持）
+
+---
+
+## 2. タスク 2: 5 分 rolling ログ機構 案 A（単一ファイル + 30 秒切捨）
+
+### 2.1 仕様（CC_REPORT §3.3 / §3.4 準拠）
+
+- **保存先**: `<userData>/logs/rolling-current.log`
+- **形式**: JSON Lines（rc11 計測ビルド準拠、`{"ts": ISO8601, "label": string, "data": object}`）
+- **保持期間**: 直近 5 分間のみ
+- **切捨処理**: 30 秒定期タイマーで 5 分超の行を削除（**`fs.promises.readFile` / `fs.promises.writeFile` の非同期 IO 必須**、同期 IO はメイン処理ブロックリスクで禁止）
+- **append**: `fs.promises.appendFile`（fire-and-forget）
+- **renderer 側は直接 fs アクセス禁止**（IPC 経由のみ、main プロセスに集約してロックフリー化）
+
+### 2.2 実装範囲（CC_REPORT §3.4 行数見積）
+
+| ファイル | 変更点 | 概算行数 |
 |---|---|---|
-| Fix 1 (A): HDMI 切替時の状態管理（再入ガード + debounce + 防御的 close）| **採用** | AC 残存 + 多重発火を同時解消 |
-| Fix 2 (B): AC を minimize 化 + 復元時ポップアップ案内 | **採用** | 前原さん要望文言を尊重、operator-solo 動的切替を廃止 |
-| Fix 3 (C): F11 を常に hall を toggle 化（hallWindow 不在時は mainWindow fallback）| **採用** | |
-| Fix 4 (D): ESC ハンドラ追加（**案 i: hall 全画面解除**）+ 既存 dialog default 維持 | **採用** | 案 i 採用 |
-| Fix 5 (E): M / H 双方向同期 | **採用** | H 部分は既存 `displaySettings.bottomBarHidden` で動いてる可能性、CC が事前確認 → 動いていれば H 部分は Fix 不要 |
+| `src/main.js` | `rollingLog(label, data)` 関数 + 30s 切捨タイマー + IPC `'rolling-log:write'` + `'logs:openFolder'` | +70〜90 行 |
+| `src/preload.js` | `window.api.log = { write(label, data), openFolder() }` ブリッジ | +8 行 |
+| `src/renderer/renderer.js` | 主要イベント箇所に `window.api.log.write(...)` 挿入（10〜15 callsite） | +20〜30 行 |
+| `src/renderer/index.html` | About タブに「ログフォルダを開く」ボタン 1 つ | +3 行 |
+| `src/renderer/style.css` | 既存ボタンスタイル流用、追加なし | 0 行 |
+| **合計** | | **約 100〜130 行** |
+
+### 2.3 ログ対象イベント（CC_REPORT §3.5 確定版）
+
+#### 含む:
+- `app:ready` / `app:before-quit`
+- `display-added` / `display-removed`
+- `switchOperatorToSolo:enter/exit` / `switchSoloToOperator:enter/exit`（フェーズ別）
+- `requestSingleInstanceLock` 失敗パス
+- IPC 失敗（main の try/catch で `error.message` 記録）
+- `error` / `unhandledrejection`（main の `process.on('uncaughtException')` 含む）
+- window state 変化（`show` / `hide` / `minimize` / `maximize` / `focus` / `blur` / `resize`、**debounce 200ms 推奨**）
+- **音再生（タスク 1 検証に必須）**:
+  - `audio:play:enter`（label, mode）
+  - `audio:play:resumed`（AudioContext.state）
+  - `audio:play:exit:ok` / `audio:play:exit:error`（errorMessage）
+
+#### 含まない:
+- ✗ タイマー 1 秒 tick
+- ✗ 通常ボタン click
+- ✗ requestAnimationFrame 内の描画ループ
+
+### 2.4 「ログフォルダを開く」ボタン UI（CC_REPORT §3.6 準拠）
+
+- **配置場所**: 設定ダイアログ「ハウス情報」タブ内の `.about-content` 領域、`<p class="about-devtools-note">` 直下
+- **HTML**: `<button id="js-open-logs-folder" class="btn btn-secondary">ログフォルダを開く</button>`
+- **main**: `ipcMain.handle('logs:openFolder', () => shell.openPath(path.join(app.getPath('userData'), 'logs')))`
+- **preload**: `openLogsFolder: () => ipcRenderer.invoke('logs:openFolder')`
+- **renderer**: click ハンドラで `window.api.log.openFolder()` 呼出
+
+### 2.5 致命バグ保護 5 件への影響
+
+すべて **影響なし**（CC_REPORT §3.7 で検証済）。特に C.1.7（AudioContext resume）は audio.js `_play()` 内で `window.api.log.write('audio:play:enter', ...)` の **観測のみ追加**、resume 経路には介入しない。
+
+### 2.6 テスト追加
+
+`tests/v204-rc15-break-end-and-rolling-log.test.js` に以下も追加:
+- T6: rolling ログファイルに append される（mock fs で確認）
+- T7: 30 秒切捨処理で 5 分超の行が削除される
+- T8: IPC `logs:openFolder` ハンドラが登録されている
+- T9: window state 変化が debounce 200ms で記録される
+- T10: タイマー 1 秒 tick / 通常ボタン click は **記録されない**
 
 ---
 
-## 重要前提
+## 3. タスク 3: H ショートカット行削除（CC_REPORT §4 準拠）
 
-- **致命バグ保護 5 件への変更禁止**（特に C.1.7 AudioContext resume 系は Fix 5 で audio 経路に触れるため `ensureAudioReady().then(...)` 維持必須）
-- **operator-solo モード（最初から HDMI なし起動）への影響なし維持**（v1.3.0 互換）
-- Fix 2 で「2 画面起動 → HDMI 抜き → minimize」の挙動変更は許容（前原さん要望、operator role のまま、最初から単画面の操作には影響なし）
-- スコープ厳守
+### 3.1 主削除対象（2 ファイル、各 1 行）
 
----
+| ファイル | 行 | 削除前のコード |
+|---|---|---|
+| `src/renderer/index.html` | 102 | `<li><kbd>H</kbd> 手元 PC 側のボトムバー切替</li>` |
+| `docs/specs.md` | 430 | `\| H \| 手元 PC（操作画面）側のボトムバー表示切替 \|` |
 
-## STEP A: 事前確認（コード変更なし）
+**H キー機能本体（renderer.js の keydown ハンドラ KeyH）は完全無変更**。
 
-### A-1. Fix 5 H 部分の既存実装確認
+### 3.2 テスト追従更新（6 ファイル）
 
-`toggleBottomBar()` の実装を Read tool で確認:
-- `displaySettings.bottomBarHidden` の永続化 + main → renderer broadcast の経路があるか
-- 既に hall 側にも反映されているなら **Fix 5 から H 部分のみ除外**
-- 動いていない場合のみ Fix 5 で同期実装
+| ファイル | 修正対象 | 修正内容 |
+|---|---|---|
+| `tests/v204-rc4-operator-pane.test.js` | 行 78 周辺 HTML-4 | `assert.doesNotMatch(HTML, /<kbd>H<\/kbd>/)` で H 行不在検証に書き換え |
+| `tests/v204-rc7-role-switch.test.js` | 行 165〜183 Fix 3-A / Fix 3-B | 同上 |
+| `tests/v204-rc8-focus-and-css.test.js` | 行 143〜160 Fix 5-A / 5-B | 同上 |
+| `tests/v204-rc9-restore-and-css.test.js` | 行 217〜237 Fix 4-A | 同上 |
+| `tests/v204-rc10-special-stack-and-instance.test.js` | 行 178〜193 Fix 4 | 同上 |
+| `tests/v204-rc12-role-change-completion.test.js` | 行 244〜246 rc10 維持テスト | 同上 |
 
-### A-2. Fix 2 採用時の operator-solo / operator 表示分離確認
+### 3.3 修正規模
 
-`src/renderer/style.css` の `[data-role="operator"]` セレクタで hall 専用要素が hidden 化されているものをリストアップ:
-- minimize 復元時に operator role のまま単画面表示すると、これら hidden 要素が見えない
-- 重大な見えない要素（タイマー本体や bottom-bar 等）があれば Fix 2 採用前に CC_REPORT で構築士判断仰ぐ
-- 軽微な要素（hall 専用の装飾等）のみなら Fix 2 そのまま採用、最小化解除時にユーザーへの注意で対応可
-
----
-
-## STEP B: 実装
-
-### Fix 1: HDMI 切替時の状態管理（src/main.js）
-
-#### Fix 1-A: switch 系再入ガード
-
-```js
-let _isSwitchingMode = false;
-
-async function switchSoloToOperator(hallDisplay) {
-  if (_isSwitchingMode) return;
-  _isSwitchingMode = true;
-  try {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (!hallDisplay) return;
-    // orphan hallWindow 検出 + close
-    if (hallWindow && !hallWindow.isDestroyed()) {
-      try { hallWindow.close(); } catch (_) {}
-      hallWindow = null;
-    }
-    const operatorDisplay = screen.getPrimaryDisplay();
-    mainWindow._suppressCloseConfirm = true;
-    try { mainWindow.close(); } catch (_) {}
-    mainWindow = null;
-    createOperatorWindow(operatorDisplay, false);
-    createHallWindow(hallDisplay);
-  } finally {
-    _isSwitchingMode = false;
-  }
-}
-```
-
-`switchOperatorToSolo` も同パターン適用（Fix 2 と統合実装）。
-
-#### Fix 1-B: display-added / display-removed の debounce ガード
-
-```js
-let _displayAddedPending = false;
-
-screen.on('display-added', async () => {
-  if (_displayAddedPending) return;
-  if (hallWindow && !hallWindow.isDestroyed()) return;
-  _displayAddedPending = true;
-  try {
-    /* 既存ロジック */
-  } finally {
-    _displayAddedPending = false;
-  }
-});
-```
-
-`display-removed` も同パターン。
-
-#### Fix 1-C: createHallWindow / createOperatorWindow の防御的 close
-
-```js
-function createHallWindow(targetDisplay) {
-  if (hallWindow && !hallWindow.isDestroyed()) {
-    try { hallWindow.close(); } catch (_) {}
-  }
-  hallWindow = null;
-  /* 既存コード */
-}
-```
-
-`createOperatorWindow` も同パターン。
-
-### Fix 2: AC ウィンドウの minimize 化 + 復元時ポップアップ案内
-
-#### Fix 2-A: switchOperatorToSolo の minimize 化
-
-```js
-async function switchOperatorToSolo() {
-  if (_isSwitchingMode) return;
-  _isSwitchingMode = true;
-  try {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    // hall 側だけ閉じる（operator は minimize、close しない）
-    if (hallWindow && !hallWindow.isDestroyed()) {
-      try { hallWindow.close(); } catch (_) {}
-      hallWindow = null;
-    }
-    try { mainWindow.minimize(); } catch (_) {}
-    mainWindow._showRestoreNoticeOnce = true;
-  } finally {
-    _isSwitchingMode = false;
-  }
-}
-```
-
-#### Fix 2-B: 復元時のポップアップ案内（一回限り）
-
-`createOperatorWindow` 内に追加:
-
-```js
-win.on('restore', () => {
-  if (win._showRestoreNoticeOnce) {
-    win._showRestoreNoticeOnce = false;
-    dialog.showMessageBox(win, {
-      type: 'info',
-      buttons: ['OK'],
-      title: 'AC ウィンドウについて',
-      message:
-        'この画面は 2 画面表示用のフォーカス用ウィンドウです。\n' +
-        '一度 2 画面用として立ち上げているため、この画面を閉じるとアプリも閉じます。\n' +
-        'ご注意ください。\n\n' +
-        '邪魔でしたら、アプリを閉じるまで、このウィンドウは最小化しておいてください。'
-    });
-  }
-});
-```
-
-### Fix 3: F11 を常に hall を toggle 化（src/main.js）
-
-```js
-function toggleFullScreen() {
-  // v2.0.4-rc6: 2 画面モードでは常に hall を toggle
-  // 単画面モード（hallWindow 不在）では mainWindow を toggle（v1.3.0 互換）
-  const target = (hallWindow && !hallWindow.isDestroyed()) ? hallWindow : mainWindow;
-  if (!target || target.isDestroyed()) return;
-  target.setFullScreen(!target.isFullScreen());
-}
-```
-
-### Fix 4: ESC ハンドラ追加（renderer.js + preload + main.js）
-
-#### Fix 4-A: dispatchClockShortcut に ESC case 追加
-
-```js
-case 'Escape':
-  // dispatcher 到達時 dialog なし前提（dialog[open] ガードで弾かれる）
-  // hall 全画面解除を IPC で main に通知
-  event.preventDefault();
-  if (window.appRole === 'operator' || window.appRole === 'operator-solo') {
-    window.api?.dual?.requestExitFullScreen?.();
-  }
-  break;
-```
-
-既存の `<dialog>` の ESC default close 動作はそのまま維持（変更不要）。
-
-#### Fix 4-B: preload.js に新 IPC 経路
-
-```js
-dual: {
-  // ... 既存 ...
-  requestExitFullScreen: () => ipcRenderer.send('dual:request-exit-fullscreen'),
-}
-```
-
-#### Fix 4-C: main.js に ESC handler
-
-```js
-ipcMain.on('dual:request-exit-fullscreen', () => {
-  if (hallWindow && !hallWindow.isDestroyed() && hallWindow.isFullScreen()) {
-    hallWindow.setFullScreen(false);
-  }
-});
-```
-
-### Fix 5: M / H 双方向同期
-
-#### Fix 5-M: ミュート状態を hall に同期
-
-`src/renderer/renderer.js` の `case 'KeyM'`:
-
-```js
-case 'KeyM':
-  if (!event.ctrlKey && !event.metaKey) {
-    event.preventDefault();
-    ensureAudioReady().then(() => {
-      const nowMuted = audioToggleMute();
-      if (window.appRole === 'operator') {
-        window.api?.dual?.broadcastMuteState?.(nowMuted);
-      }
-      updateMuteIndicator();
-    });
-  }
-  break;
-```
-
-`preload.js` に `broadcastMuteState`, `onMuteStateChanged` 追加。
-`main.js` に `ipcMain.on('dual:broadcast-mute-state', (e, muted) => { hallWindow?.webContents.send('dual:mute-state-changed', muted); })`。
-`renderer.js` で hall role 時に IPC 受信 → audio API でミュート状態を反映 + updateMuteIndicator 呼出。
-
-**致命バグ保護 C.1.7 維持**: `ensureAudioReady().then(...)` の包みは絶対変更しない。
-
-#### Fix 5-H: 既存実装確認後に判断
-
-STEP A-1 で確認 → 既存で動いていれば Fix 5-H は実装しない。動いていなければ Fix 5-M と同パターンで実装。
-
-### STEP C: テスト追加
-
-新規 `tests/v204-rc6-hdmi-state.test.js`:
-- `_isSwitchingMode` 再入ガード確認
-- `_displayAddedPending` debounce 確認
-- `createHallWindow` / `createOperatorWindow` 防御的 close 確認
-- `switchOperatorToSolo` の minimize 動作確認
-- `_showRestoreNoticeOnce` フラグ + restore イベント案内確認
-- `toggleFullScreen` の hall 優先確認
-- `dispatchClockShortcut` の `case 'Escape'` 存在確認
-- `dual:request-exit-fullscreen` IPC 経路確認
-- M 双方向同期 IPC 確認
-- 致命バグ保護 5 件 cross-check（特に C.1.7 AudioContext resume）
-- operator-solo モードへの不影響確認
-
-### STEP D: バージョン rc5 → rc6
-
-- `package.json`: `2.0.4-rc5` → `2.0.4-rc6`
-- `tests/v130-features.test.js` T11 同期更新
-
-### STEP E: ビルド + 静的検証
-
-- `npm run build:win`
-- `dist/latest.yml` に `version: 2.0.4-rc6` 確認
-
-### STEP F: CC_REPORT.md を完成版で上書き
+- index.html: -1 行 / specs.md: -1 行 / テスト 6 ファイル: 各 1〜3 行修正
+- **合計: -2 行 + テスト書換 10〜15 行**
 
 ---
 
-## 報告必須項目
+## 4. タスク 4: バージョンバンプ + CHANGELOG + ビルド
 
-- 並列 sub-agent 数（0 体予定）
-- 致命バグ保護 5 件への影響評価（特に C.1.7）
-- 修正対象ファイル一覧と各変更箇所
-- 修正コード抜粋（Fix 1〜5 すべて）
-- STEP A-1 (H 既存実装確認) の結果
-- STEP A-2 (operator-solo / operator 表示分離) の結果 + 重大要素の有無
-- ビルド成果物 path / size / version
-- operator-solo モードへの影響評価（minimize 化挙動の妥当性、最初から単画面の場合は影響なし確認）
+### 4.1 バージョン更新
 
----
+- `package.json` の version を `2.0.4-rc14`（または現在値）→ `2.0.4-rc15` に更新
+- `CHANGELOG.md` に rc15 セクション追加:
+  - break-end 修正（onLevelEnd へ移動、race 解消）
+  - 5 分 rolling ログ機構（バグ調査支援、約 1 MB 上限）
+  - H ショートカット説明削除
+  - 関連テスト追加
 
-## 禁止事項
+### 4.2 ビルド検証
 
-- 致命バグ保護 5 件への変更（特に C.1.7 ensureAudioReady ラップ維持必須）
-- スコープ外の追加実装
-- main マージ / push
-- 並列 sub-agent 起動（修正範囲明確で並列不要）
-- ESC 案 ii / iii の動作変更（案 i のみ採用）
-- operator-solo（最初から単画面起動）の挙動変更
+- `npm test` で全テスト PASS 確認（rc13 時点 491 件 + 本フェーズで T1〜T10 追加 → 約 501 件）
+- `npm run build:win` で `dist/PokerTimerPLUS+ (Test) Setup 2.0.4-rc15.exe` 生成
+- ビルド成功確認 + ファイルサイズ報告（CC_REPORT §1 サマリに記載）
 
----
+### 4.3 git コミット
 
-## ブランチ
-
-- 現在ブランチ: `feature/v2.0.4-rc1-test-build` 継続使用
-- ローカルコミット可（rc5 → rc6 差分追跡）
-- main マージ・push なし
+- `feature/v2.0.4-rc1-test-build` ブランチに rc15 コミットを作成（push なし）
+- コミットメッセージ例: `chore(v2.0.4): rc15 - break-end fix + rolling log + H line removal`
 
 ---
 
-## 完了後の流れ
+## 5. 並列 sub-agent
 
-1. 構築士: CC_REPORT 採点 → 前原さんに rc6 の `.exe` 場所と再試験依頼
-2. 前原さん: rc5 アンインストール → rc6 インストール → 再試験
-   - 単一モニターで起動して全操作確認
-   - HDMI 接続 → ホールに映る → F11 / ESC / H / M すべて反応するか
-   - HDMI 抜き → AC が自動で最小化されるか + 大きくしたらポップアップが出るか
-   - 再 HDMI 接続 → 多重発火が起きないか
-   - 既存挙動（× 確認 / Space / 矢印 / R / Ctrl+E など）が崩れていないか
+- **2 体並列推奨**（公式 Agent Teams 上限 3 体準拠）
+  - Sub-agent 1: タスク 1（break-end 修正 + テスト T1〜T5）
+  - Sub-agent 2: タスク 2（rolling ログ機構実装 + テスト T6〜T10）
+- タスク 3（H 行削除）+ タスク 4（バージョン / ビルド）: CC 直接対応
+- cc-operation-pitfalls.md §1.1（最大 3 体）/ §2.2（context isolation 目的のみ）準拠
+
+---
+
+## 6. CC_REPORT.md 必須セクション
+
+- §1 サマリ（実装結果 + テスト数 + ビルド成功可否 + .exe サイズ + コミットハッシュ）
+- §2 タスク 1（break-end 修正）変更箇所 + 差分要約 + テスト T1〜T5 結果
+- §3 タスク 2（rolling ログ）変更箇所 + 差分要約 + テスト T6〜T10 結果 + 実装規模実測
+- §4 タスク 3（H 行削除）変更箇所一覧 + テスト追従結果
+- §5 タスク 4（バージョン / CHANGELOG / ビルド）成果物
+- §6 致命バグ保護 5 件への影響評価（個別検証）
+- §7 並列 sub-agent / Task 起動数の報告
+- §8 構築士への質問（必要に応じて）
+- §9 一時計測ログ挿入の確認（本フェーズで挿入なしなら「該当なし」）
+- §10 スコープ管理: NEXT_CC_PROMPT 指示外の修正を一切行っていないことの自己申告
+
+---
+
+## 7. 完了報告
+
+CC は実装 + テスト + ビルド完了後、構築士に「**rc15 実装完了**」と返す。
+構築士は CC_REPORT を採点 → 前原さんに翻訳説明 → 前原さん rc15 試験（実機確認）→ OK なら **v2.0.4 final 本配布**（main マージ + GitHub Release タグ + .exe 公開）へ。
+
+**v2.0.4 final 配布の最終実装フェーズ**。rc15 実装 → 試験 OK で本配布、の流れで進む。

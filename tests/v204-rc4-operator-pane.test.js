@@ -73,7 +73,9 @@ test('HTML-4: 操作一覧が 5 カテゴリに再構成（rc5）', () => {
   assert.match(HTML, /<kbd>Ctrl<\/kbd>\+<kbd>T<\/kbd>\s*テロップ編集/,
     '操作一覧に「Ctrl+T テロップ編集」なし（rc5 でマーキー→テロップ表記）');
   assert.match(HTML, /<kbd>M<\/kbd>\s*ミュート切替/,           '操作一覧に M ミュート切替なし');
-  assert.match(HTML, /<kbd>H<\/kbd>\s*ボトムバー非表示/,       '操作一覧に H ボトムバー非表示なし');
+  // v2.0.4-rc15: H 行を完全削除（前原さん要望、機能本体は維持）
+  assert.doesNotMatch(HTML, /<kbd>H<\/kbd>/,
+    '操作一覧から H 行が削除されていない（rc15 で削除予定）');
   // F2 / F12 が削除されている
   assert.doesNotMatch(HTML, /<kbd>F2<\/kbd>/,
     '操作一覧に F2 が残存（rc5 で削除予定）');

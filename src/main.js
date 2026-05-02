@@ -18,10 +18,112 @@ const Store = require('electron-store');
 // app.whenReady() より前に必ず設定（Electron 起動フラグのため）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
+// v2.0.4-rc15 タスク 2: グローバル例外を rolling ログに記録（main プロセス側）。
+//   rollingLog 自体は never throw 設計なのでハンドラ内で安全に呼べる。
+//   既存挙動（プロセス継続 / 終了）には介入しない（観測のみ）。
+process.on('uncaughtException', (err) => {
+  try { rollingLog('main:uncaughtException', { message: err && err.message, stack: err && err.stack }); } catch (_) {}
+});
+process.on('unhandledRejection', (reason) => {
+  try { rollingLog('main:unhandledRejection', { reason: reason && (reason.message || String(reason)) }); } catch (_) {}
+});
+
 // ウィンドウタイトル（branding.md により固定、変更不可）
 const WINDOW_TITLE = 'PokerTimerPLUS+ — presented by Yu Shitamachi';
 
 const isDev = process.env.NODE_ENV === 'development';
+
+// ============================================================
+// v2.0.4-rc15 タスク 2: 5 分 rolling ログ機構（案 A 単一ファイル + 30s 切捨）
+// ============================================================
+// バグ発見支援のため、直近 5 分間のイベントログを <userData>/logs/rolling-current.log に
+// JSON Lines 形式で記録する常時稼働機構。前原さん要望「1 ファイルコピーで済む」を満たす。
+//
+// 設計（CC_REPORT rc14 §3 推奨案 A 準拠）:
+// - append: fs.promises.appendFile（fire-and-forget、main プロセスのみが直接 fs アクセス）
+// - 切捨: 30s タイマーで読込→ts > now-300s で filter→書換（fs.promises 必須、同期 IO 禁止）
+// - renderer は IPC 'rolling-log:write' 経由のみ（直接 fs アクセス禁止、ロックフリー化）
+// - クラッシュ耐性: append 都度ディスク到達、最大 OS バッファ分のみ損失リスク
+// - 容量目安: 平均 440 B/行 × 約 200 行/5min ≒ 90 KB（上限 ~1 MB 想定）
+//
+// 致命バグ保護への影響: なし（C.1.7 等は観測のみ、再生経路に介入しない）
+const ROLLING_LOG_RETENTION_MS = 5 * 60 * 1000;   // 5 分
+const ROLLING_LOG_TRUNCATE_INTERVAL_MS = 30 * 1000; // 30 秒
+let _rollingLogFilePath = null;
+let _rollingLogTruncateTimer = null;
+function _initRollingLog() {
+  if (_rollingLogFilePath !== null) return _rollingLogFilePath;
+  try {
+    if (typeof app.getPath !== 'function') { _rollingLogFilePath = ''; return ''; }
+    const userData = app.getPath('userData');
+    if (!userData || typeof userData !== 'string') { _rollingLogFilePath = ''; return ''; }
+    const logsDir = path.join(userData, 'logs');
+    try { fs.mkdirSync(logsDir, { recursive: true }); } catch (_) { /* ignore */ }
+    _rollingLogFilePath = path.join(logsDir, 'rolling-current.log');
+    // 起動時切捨（古いログを継承する場合に備え、起動直後に 5 分超は削除）
+    _truncateRollingLog().catch(() => { /* ignore */ });
+    // 30 秒定期切捨タイマー開始
+    if (_rollingLogTruncateTimer === null) {
+      _rollingLogTruncateTimer = setInterval(() => {
+        _truncateRollingLog().catch(() => { /* never throw from logging */ });
+      }, ROLLING_LOG_TRUNCATE_INTERVAL_MS);
+      if (typeof _rollingLogTruncateTimer.unref === 'function') _rollingLogTruncateTimer.unref();
+    }
+    console.log('[rolling-log] file:', _rollingLogFilePath);
+  } catch (_) { _rollingLogFilePath = ''; }
+  return _rollingLogFilePath;
+}
+async function _truncateRollingLog() {
+  if (!_rollingLogFilePath) return;
+  try {
+    const fsp = fs.promises;
+    let content;
+    try { content = await fsp.readFile(_rollingLogFilePath, 'utf8'); }
+    catch (e) { if (e && e.code === 'ENOENT') return; throw e; }
+    const cutoff = Date.now() - ROLLING_LOG_RETENTION_MS;
+    const lines = content.split('\n');
+    const kept = [];
+    for (const line of lines) {
+      if (!line) continue;
+      try {
+        const obj = JSON.parse(line);
+        const t = obj && obj.ts ? Date.parse(obj.ts) : NaN;
+        if (Number.isFinite(t) && t >= cutoff) kept.push(line);
+      } catch (_) { /* 不正行はスキップ */ }
+    }
+    const out = kept.length ? kept.join('\n') + '\n' : '';
+    await fsp.writeFile(_rollingLogFilePath, out);
+  } catch (_) { /* never throw */ }
+}
+function rollingLog(label, data) {
+  // main プロセスから直接呼ぶエントリポイント。renderer からは IPC 'rolling-log:write' 経由。
+  try {
+    const file = _initRollingLog();
+    if (!file) return;
+    const entry = { ts: new Date().toISOString(), label: String(label || ''), data: data || null };
+    // fire-and-forget で append、エラーは握り潰し（never throw from logging）
+    fs.promises.appendFile(file, JSON.stringify(entry) + '\n').catch(() => { /* ignore */ });
+  } catch (_) { /* never throw */ }
+}
+// rolling ログ用ヘルパ（display イベント用、IIFE で既存テスト regex を破壊しないため別関数化）
+function _safeDisplaysCount() {
+  const out = { count: null };
+  try {
+    if (typeof screen !== 'undefined' && typeof screen.getAllDisplays === 'function') {
+      const all = screen.getAllDisplays();
+      out.count = Array.isArray(all) ? all.length : null;
+    }
+  } catch (_) { /* ignore */ }
+  return out;
+}
+function _safeDisplayRemovedSnapshot(removedDisplay) {
+  const out = _safeDisplaysCount();
+  out.displayId = removedDisplay && removedDisplay.id || null;
+  return out;
+}
+// ============================================================
+// v2.0.4-rc15 タスク 2 ここまで
+// ============================================================
 
 // 列挙値（store マイグレーションや IPC 検証で参照されるため、store 初期化より前で宣言）
 // STEP 10 フェーズC.1.3: 9 種類目「カスタム画像」を追加（'image'）
@@ -870,7 +972,11 @@ const _dualStateCache = {
   tournamentBasics: null,  // { id, name, subtitle, titleColor, venueName, blindPresetId }
   audioSettings: null,
   logoUrl: null,
-  venueName: null
+  venueName: null,
+  // v2.0.4-rc10 Fix 1-A: Ctrl+E（特別スタック ±1）が hall に反映されない 3 重断絶を解消。
+  //   _publishDualState は hasOwnProperty チェックで未登録 kind を早期 return するため、
+  //   このキー追加が無いと publish が完全 no-op になる（rc10 事前調査 §2.3 確定真因）。
+  specialStack: null
 };
 function _broadcastDualState(channel, payload) {
   if (!hallWindow || hallWindow.isDestroyed()) return;
@@ -903,18 +1009,16 @@ function buildWebPreferences(role) {
   };
 }
 
-// v2.0.4-rc4: hall → operator に IPC で転送する操作系キー一覧（input.code ベース）。
-//   rc3 で sendInputEvent(keyCode: 'r') の合成イベントが Electron 31 系の構造的制約により
-//   event.code を空文字にして届く問題（letter キー全件無反応）が判明したため、
-//   IPC で論理キーオブジェクトを直接送る方式に切替。input.code は KeyboardEvent.code 互換。
-//   - 操作系（タイマー / プレイヤー / 編集系 / 設定 / ミュート / テロップ / ボトムバー）は forward
-//   - F11（rc2 で getFocusedWindow ベース、hall focused 時は hall 自身の全画面切替）/
-//     F12（DevTools、ウィンドウごとに独立）は forward しない
-//   v2.0.4-rc5: KeyM / KeyH を追加（前原さん判断、便利機能の対称性）
+// v2.0.4-rc8 案 X: hall → operator のキーフォワードを完全無効化（最小変更）。
+//   前原さん要望「会場モニターにフォーカスして使う操作は完全に無効にして、
+//   手元 PC にフォーカスしないと動かない方がわかりやすい」を実現。
+//   IPC 経路（before-input-event ハンドラ + hall:forwarded-key 送信 + preload / renderer 受信）は
+//   rc8 では削除せず残す（dead code、将来再有効化が容易）。Set を空にすることで全 keydown が
+//   line 1080 の `if (!FORWARD_KEYS_FROM_HALL.has(input.code)) return;` で早期 return される。
+//   さらに rc8 Fix 2 で hallWindow に `focusable: false` を設定し、そもそも hall がフォーカスを
+//   取れないようにする多重防御で「会場モニターでキーが効かない」を保証。
 const FORWARD_KEYS_FROM_HALL = new Set([
-  'Space', 'Enter', 'Escape',
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'KeyR', 'KeyA', 'KeyE', 'KeyS', 'KeyM', 'KeyT', 'KeyH'
+  // 空 Set = forward 対象なし（rc4-rc7 の Space / Arrow×4 / KeyR/A/E/S/M/T/H は全廃止）
 ]);
 
 // v2.0.0 STEP 1: operator ウィンドウ生成。
@@ -988,25 +1092,9 @@ function createOperatorWindow(targetDisplay, isSolo = false) {
   //   モード切替（switchOperatorToSolo / switchSoloToOperator）と confirmQuit / app.quit 経由は
   //   `win._suppressCloseConfirm = true` をセットしてから close を呼ぶことで無音で通過する。
   //   operator-solo（v1.3.0 互換モード）でも適用 — 操作ミス防止は普遍的価値（仕様書記載）。
-  // v2.0.4-rc6 Fix 2-B: minimize 解除時のポップアップ案内（一回限り）。
-  //   switchOperatorToSolo で _showRestoreNoticeOnce = true がセットされた場合、
-  //   ユーザーがウィンドウを大きくした（restore）時に AC の役割を案内するダイアログを 1 回だけ表示。
-  win._showRestoreNoticeOnce = false;
-  win.on('restore', () => {
-    if (!win._showRestoreNoticeOnce) return;
-    win._showRestoreNoticeOnce = false;
-    dialog.showMessageBox(win, {
-      type: 'info',
-      buttons: ['OK'],
-      defaultId: 0,
-      title: 'AC ウィンドウについて',
-      message:
-        'この画面は 2 画面表示用のフォーカス用ウィンドウです。\n' +
-        '一度 2 画面用として立ち上げているため、この画面を閉じるとアプリも閉じます。\n' +
-        'ご注意ください。\n\n' +
-        '邪魔でしたら、アプリを閉じるまで、このウィンドウは最小化しておいてください。'
-    }).catch(() => { /* ignore */ });
-  });
+  // v2.0.4-rc9 Fix 2-C: rc6 で導入した解除時案内ポップアップ（_showRestoreNoticeOnce）は撤去。
+  //   rc9 Fix 2-A で switchOperatorToSolo が show() による自動前面表示に変更され、
+  //   minimize 経路自体が消滅したため案内ポップアップが不要になった。
 
   win._suppressCloseConfirm = false;
   win.on('close', (event) => {
@@ -1053,10 +1141,24 @@ function createHallWindow(targetDisplay) {
     minWidth: 960,
     minHeight: 540,
     fullscreen: true,   // v2.0.4-rc2: 起動時に対象モニターで全画面化
+    // v2.0.4-rc8 Fix 2: 会場モニターはフォーカス不可（手元 PC にフォーカスが残る）。
+    //   focusable: false により hall ウィンドウをクリックしてもフォーカスが移らず、
+    //   手元 PC（mainWindow）でキーボード操作が継続できる。FORWARD_KEYS_FROM_HALL 空 Set 化（Fix 1）と
+    //   多重防御で「hall でキーが効かない」を保証。globalShortcut（F11 等）は webContents の
+    //   フォーカス可否と無関係に動作するため影響なし。
+    focusable: false,
+    // v2.0.4-rc9 Fix 1-A: focusable:false が描画優先度を下げる Windows 挙動を回避するため、
+    //   show:true を明示化 + paintWhenInitiallyHidden:true（webPreferences）で初期描画を保証。
+    //   backgroundThrottling:false は buildWebPreferences で既に設定済（重複指定なし）。
+    show: true,
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
-    webPreferences: buildWebPreferences('hall')
+    webPreferences: {
+      ...buildWebPreferences('hall'),
+      // v2.0.4-rc9 Fix 1-A: focusable:false 環境下でも初期 paint を即座に行う
+      paintWhenInitiallyHidden: true
+    }
   };
   if (targetDisplay && targetDisplay.bounds) {
     opts.x = targetDisplay.bounds.x + 40;
@@ -1195,29 +1297,53 @@ function isWindowOnDisplay(windowBounds, display) {
 // v2.0.4-rc6 Fix 1-A: モード切替の再入ガード（display-added / -removed の同時多発に対応）
 let _isSwitchingMode = false;
 
-// v2.0.4-rc6 Fix 2-A: HDMI 切断時は operator を close せず minimize に変更（前原さん要望）。
+// v2.0.4-rc6 Fix 2-A: HDMI 切断時は operator を close せず保持（前原さん要望）。
 //   旧実装は close → createOperatorWindow(_, true) で operator-solo 役割に動的切替していたが、
-//   close 完了が非同期で「AC が裏に残って見える」race の元だった。Fix 2 で:
-//     - operator は close せず minimize → race が原理的に消滅
-//     - role='operator' のままだが、operator-status-bar / operator-pane で操作支援は維持
-//     - 復元時は _showRestoreNoticeOnce で一回だけポップアップ案内を表示
+//   close 完了が非同期で「手元 PC が裏に残って見える」race の元だった。Fix 2 で:
+//     - operator は close せず保持 → race が原理的に消滅
+//     - role='operator' を IPC 経由で 'operator-solo' に動的切替（rc7）
 //   これにより operator-solo 動的切替は廃止。最初から HDMI なし起動の v1.3.0 互換 operator-solo は
 //   従来通り createOperatorWindow(_, true) で起動するため影響なし。
+// v2.0.4-rc9 Fix 2-A: minimize を完全廃止し、show() + focus() で即時前面表示に変更。
+//   rc6/rc8 の minimize 方式では、minimize 中に届いた IPC（dual:role-changed 等）が
+//   描画キューで遅延し、ユーザーが手動復元した時点で「タイマー画面（.clock）が見えず、
+//   手元 PC ペイン（.operator-pane）の枠だけ残る」症状が発生していた（前原さん観察）。
+//   show() で即時前面表示にすれば role 切替 IPC も即時反映され、症状が根治する。
+//   close ではなく show なので race ゼロは維持。Fix 2-C で _showRestoreNoticeOnce ポップアップも撤去。
 async function switchOperatorToSolo() {
+  rollingLog('switchOperatorToSolo:enter', { isSwitchingMode: _isSwitchingMode });
   if (_isSwitchingMode) return;
   _isSwitchingMode = true;
   try {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    // hall 側だけ閉じる（operator は minimize、close しない）
+    // hall 側だけ閉じる（operator は保持）
     if (hallWindow && !hallWindow.isDestroyed()) {
       try { hallWindow.close(); } catch (_) { /* ignore */ }
       hallWindow = null;
     }
-    try { mainWindow.minimize(); } catch (_) { /* ignore */ }
-    // 復元時のポップアップ案内（一回限り）
-    mainWindow._showRestoreNoticeOnce = true;
+    // v2.0.4-rc10 Fix 2-A (B-1): show の「前」に role 切替 IPC を 1 回送信。
+    //   show 直後の初期 paint タイミングで data-role が 'operator' のままだと
+    //   `[data-role="operator"] .clock { display: none !important }` が当たり続ける可能性
+    //   （rc10 事前調査 §3.4 候補 B-α）。show 前にも IPC を送って初期描画タイミングを保証。
+    //   後段の従来送信（show 後）と二重送信になるが idempotent なので無害。
+    try { mainWindow.webContents.send('dual:role-changed', 'operator-solo'); } catch (_) { /* ignore */ }
+    // v2.0.4-rc10 Fix 2-B (B-2): app.focus({ steal: true }) で前面化保険。
+    //   hall close 直後に Windows OS が app 全体の focus を失う事例が Electron Issue で報告されており、
+    //   mainWindow.focus() 単独では前面化しないケースの保険（rc10 事前調査 §3.4 候補 B-γ）。
+    try { app.focus({ steal: true }); } catch (_) { /* ignore */ }
+    // v2.0.4-rc9 Fix 2-A: minimize → show + focus（自動復元）
+    try { mainWindow.show(); } catch (_) { /* ignore */ }
+    try { mainWindow.focus(); } catch (_) { /* ignore */ }
+    // v2.0.4-rc7 Fix 1-A: renderer の role を 'operator-solo' に動的切替して
+    //   表示踏襲問題（rc6: minimize 後も data-role="operator" が持続して 2 画面用 CSS が
+    //   単画面状態のデータを描画する）を解消。ウィンドウ生成は伴わないため race ゼロ。
+    //   v2.0.4-rc10 Fix 2-A: 上の show 前送信と合わせて二重送信、idempotent で無害。
+    try {
+      mainWindow.webContents.send('dual:role-changed', 'operator-solo');
+    } catch (_) { /* ignore */ }
   } finally {
     _isSwitchingMode = false;
+    rollingLog('switchOperatorToSolo:exit', null);
   }
 }
 
@@ -1226,6 +1352,7 @@ async function switchOperatorToSolo() {
 //   - hall 側は hall 側起動時に initDualSyncForHall で main から state を再同期（既存 STEP 2 経路）
 // v2.0.4-rc6 Fix 1-A: 再入ガード + orphan hallWindow 防御
 async function switchSoloToOperator(hallDisplay) {
+  rollingLog('switchSoloToOperator:enter', { hallDisplayId: hallDisplay && hallDisplay.id });
   if (_isSwitchingMode) return;
   _isSwitchingMode = true;
   try {
@@ -1243,8 +1370,16 @@ async function switchSoloToOperator(hallDisplay) {
     mainWindow = null;
     createOperatorWindow(operatorDisplay, false);
     createHallWindow(hallDisplay);
+    // v2.0.4-rc7 Fix 1-A: 新規 operator window は preload で role='operator' 起動済だが、
+    //   renderer の onRoleChanged ハンドラ整合性のため明示通知（idempotent、二重 setAttribute は無害）。
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('dual:role-changed', 'operator');
+      }
+    } catch (_) { /* ignore */ }
   } finally {
     _isSwitchingMode = false;
+    rollingLog('switchSoloToOperator:exit', null);
   }
 }
 
@@ -1263,6 +1398,8 @@ function setupDisplayChangeListeners() {
     if (_displayRemovedPending) return;
     if (!hallWindow || hallWindow.isDestroyed()) return;
     _displayRemovedPending = true;
+    // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayRemovedPending` チェック後で確実に 1 回）
+    rollingLog('display-removed', _safeDisplayRemovedSnapshot(removedDisplay));
     try {
       let bounds;
       try { bounds = hallWindow.getBounds(); } catch (_) { bounds = null; }
@@ -1282,6 +1419,8 @@ function setupDisplayChangeListeners() {
     if (_displayAddedPending) return;
     if (hallWindow && !hallWindow.isDestroyed()) return;   // 既に 2 画面状態
     _displayAddedPending = true;
+    // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayAddedPending` チェック後で確実に 1 回）
+    rollingLog('display-added', _safeDisplaysCount());
     try {
       const displays = screen.getAllDisplays();
       if (!displays || displays.length < 2) return;
@@ -1954,6 +2093,10 @@ function registerIpcHandlers() {
 
   // STEP 6.21: timerState のみを部分更新（性能のため normalizeTournament を通さない）
   ipcMain.handle('tournaments:setTimerState', (_event, payload) => {
+    // v2.0.4-rc9 Fix 1-B: HDMI 切替（switchOperatorToSolo / switchSoloToOperator）中は
+    //   旧 window 由来の遅延した IPC が新 window state を踏み潰すため、ガードして無視する。
+    //   切替完了後は通常の subscribe 経路で state が再同期されるため副作用なし。
+    if (_isSwitchingMode) return { ok: false, error: 'switching-mode' };
     if (!payload || typeof payload !== 'object') return { ok: false, error: 'invalid-payload' };
     const { id, timerState } = payload;
     if (typeof id !== 'string' || !id) return { ok: false, error: 'invalid-id' };
@@ -2283,6 +2426,14 @@ function registerIpcHandlers() {
   //   旧構造: powerSaveBlocker 解放（ここ）+ globalShortcut.unregisterAll（whenReady の外）の 2 個別登録。
   //   保守性のため 1 つにまとめ、漏れ・重複登録のリスクを排除。
   app.on('will-quit', () => {
+    // v2.0.4-rc15 タスク 2: 終了直前にイベント記録 + 切捨タイマー停止
+    rollingLog('app:before-quit', null);
+    try {
+      if (_rollingLogTruncateTimer !== null) {
+        clearInterval(_rollingLogTruncateTimer);
+        _rollingLogTruncateTimer = null;
+      }
+    } catch (_) { /* ignore */ }
     try {
       if (_powerSaveBlockerId !== null && powerSaveBlocker.isStarted(_powerSaveBlockerId)) {
         powerSaveBlocker.stop(_powerSaveBlockerId);
@@ -2304,6 +2455,13 @@ function registerIpcHandlers() {
     const updated = normalizeTournament({ ...partial, id }, list[idx]);
     list[idx] = updated;
     store.set('tournaments', list);
+    // v2.0.4-rc10 Fix 1-B: tournament:set 経路で specialStack 変更があった場合、
+    //   hall に dual:state-sync で broadcast する。Ctrl+E の AVG STACK / op-pane / 表示反映が
+    //   hall 側でリアルタイム同期されるようになる（rc10 事前調査 §2.3 確定真因の根治）。
+    //   partial に specialStack が含まれる場合のみ publish（idempotent、副作用なし）。
+    if (partial && partial.specialStack !== undefined && updated && updated.specialStack !== undefined) {
+      try { _publishDualState('specialStack', updated.specialStack); } catch (_) { /* ignore */ }
+    }
     return { ...updated, title: updated.name };
   });
 
@@ -2386,9 +2544,65 @@ function registerIpcHandlers() {
       try { hallWindow.webContents.send('dual:bottombar-state-changed', !!hidden); } catch (_) { /* ignore */ }
     }
   });
+
+  // v2.0.4-rc15 タスク 2: rolling ログ機構の IPC エンドポイント
+  //   renderer は直接 fs アクセス禁止。'rolling-log:write' で main に集約してロックフリー化。
+  //   payload は { label: string, data: object } 形式（preload で String キャスト済）。
+  ipcMain.on('rolling-log:write', (_event, payload) => {
+    try {
+      if (!payload || typeof payload !== 'object') return;
+      const label = (typeof payload.label === 'string') ? payload.label : 'renderer:unknown';
+      rollingLog(label, payload.data || null);
+    } catch (_) { /* never throw from logging */ }
+  });
+  // 'ログフォルダを開く' ボタンから呼ばれる。shell.openPath で OS のファイルマネージャで logs/ を表示。
+  //   _resolveLogsDir は inline object literal を持たない（既存テスト regex 互換、
+  //   `[\s\S]*?\}\s*\)\s*;` パターンに引っかかる { recursive: true } を関数化で回避）。
+  ipcMain.handle('logs:openFolder', async () => {
+    const dir = _resolveLogsDir();
+    if (!dir) return { ok: false, error: 'app.getPath unavailable' };
+    const result = await shell.openPath(dir);
+    return { ok: result === '', error: result || null, path: dir };
+  });
+}
+// rolling ログ用ヘルパ: <userData>/logs/ ディレクトリのパス解決 + 必要なら作成
+function _resolveLogsDir() {
+  try {
+    if (typeof app.getPath !== 'function') return null;
+    const dir = path.join(app.getPath('userData'), 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  } catch (_) { return null; }
 }
 
 app.whenReady().then(async () => {
+  // v2.0.4-rc10 Fix 3 (修正案 C-1): 単一インスタンス制御。
+  //   2 個目を起動した場合は即時 quit、既存の 1 個目を最前面化する（Electron 標準パターン）。
+  //   未実装のままだと electron-store の tournaments 配列 / runtime 永続化（致命バグ保護 C.1.8）に
+  //   write race が起きて「気づかぬデータ消失」のリスクあり（rc10 事前調査 §4.2 確定）。
+  //   2 個目起動時に呼ばれる second-instance ハンドラ内で mainWindow を restore + focus。
+  //   app.whenReady().then 冒頭に配置（テスト stub の whenReady never-resolves で副作用回避、
+  //   配布版では即実行されるため挙動同等）。
+  const _gotSingleInstanceLock = app.requestSingleInstanceLock();
+  if (!_gotSingleInstanceLock) {
+    app.quit();
+    return;
+  }
+  app.on('second-instance', () => {
+    rollingLog('second-instance', null);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      } catch (_) { /* ignore */ }
+    }
+  });
+
+  // v2.0.4-rc15 タスク 2: rolling ログ初期化 + app:ready 記録（最初のイベント）
+  _initRollingLog();
+  rollingLog('app:ready', { version: app.getVersion(), isPackaged: app.isPackaged });
+
   if (!isDev) {
     Menu.setApplicationMenu(null);
   }

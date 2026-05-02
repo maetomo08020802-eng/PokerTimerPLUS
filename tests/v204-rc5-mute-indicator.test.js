@@ -43,12 +43,18 @@ function extractFunctionBody(source, signaturePattern) {
 // ============================================================
 // A-1: KeyM / KeyH を FORWARD_KEYS_FROM_HALL に追加
 // ============================================================
-test('A-1: FORWARD_KEYS_FROM_HALL に KeyM / KeyH が追加された', () => {
+test('A-1: FORWARD_KEYS_FROM_HALL は空 Set（rc8 案 X、rc5 で追加した KeyM / KeyH も含めて全廃止）', () => {
+  // rc8 で前原さん要望「会場モニターで操作完全無効」採用 → forward 完全廃止。
+  // rc5 で追加した KeyM / KeyH は AC → hall への状態同期 IPC（dual:broadcast-mute-state /
+  // dual:broadcast-bottombar-state）として別経路で維持されているため、ミュート / ボトムバー
+  // 同期機能自体は引き続き動作する（hall → AC への forward 経路だけが廃止）。
   const m = MAIN.match(/const\s+FORWARD_KEYS_FROM_HALL\s*=\s*new\s+Set\(\s*\[([\s\S]*?)\]\s*\)/);
   assert.ok(m, 'FORWARD_KEYS_FROM_HALL 定義が見つからない');
   const items = m[1];
-  assert.match(items, /['"]KeyM['"]/, 'KeyM が forward 対象になっていない（rc5 で追加すべき）');
-  assert.match(items, /['"]KeyH['"]/, 'KeyH が forward 対象になっていない（rc5 で前回判断撤回、追加すべき）');
+  assert.doesNotMatch(items, /['"]KeyM['"]/,
+    'FORWARD_KEYS_FROM_HALL に KeyM が残存（rc8 で空 Set 化されるべき）');
+  assert.doesNotMatch(items, /['"]KeyH['"]/,
+    'FORWARD_KEYS_FROM_HALL に KeyH が残存（rc8 で空 Set 化されるべき）');
 });
 
 // ============================================================

@@ -3990,3 +3990,68 @@ tr.level-row--just-inserted {
 [data-role="operator"] .mute-indicator { display: none !important; }
 /* hall / operator-solo / 未指定 role では HTML 側 hidden 属性が外れた時に通常表示。
    前原さん指示「便利機能はどっちのモードにも適用」により operator-solo にも適用 (v1.3.0 互換例外) */
+
+/* === v2.0.4-rc8 対策 A: operator-solo モードの明示的 hidden ルール（rc7 案 B 補完）===
+   rc7 で renderer.js の onRoleChanged で documentElement[data-role] を 'operator' → 'operator-solo'
+   に動的切替する経路を実装したが、style.css に [data-role="operator-solo"] のルールが 0 件だった
+   ため（v1.3.0 互換のため意図的に空欄 / コメントは下記 1 行）、role 切替時に operator-pane /
+   operator-status-bar が CSS の specificity / cascade 計算で残存するケースがあった。
+   rc8 で明示的に「operator-solo では operator-pane / operator-status-bar を非表示」と宣言する
+   ことで、HDMI 抜き → AC 復元時の表示踏襲問題（設定タブが AC レイアウトで出る等）を解消。
+   なお最初から HDMI なし起動の operator-solo ユーザーは元々これらが HTML hidden 属性で非表示の
+   ため挙動変化なし（v1.3.0 互換維持）。rc7 までの opacity / display 関連は無加工。 */
+[data-role="operator-solo"] .operator-pane,
+[data-role="operator-solo"] .operator-status-bar {
+  display: none !important;
+}
+
+/* === v2.0.4-rc9 Fix 2-B: 防御保険 — operator-solo モードで .clock 表示保証 ===
+   CSS 仕様上は data-role が "operator-solo" に切替った瞬間に
+   [data-role="operator"] .clock { display: none !important } ルールは適用外になり、
+   .clock のデフォルト display: grid（行 391）に戻るはず。
+   ただし前原さんの実機観察で「HDMI 抜き後 .clock が見えない」症状が報告されたため、
+   万一の race / cascade 計算ミスへの保険として明示的に grid 表示を強制する。
+   v1.3.0 起動時の operator-solo は元々 .clock { display: grid } で表示されているため
+   この明示化で挙動変化なし（v1.3.0 互換維持）。 */
+[data-role="operator-solo"] .clock {
+  display: grid !important;
+}
+
+/* === v2.0.4-rc9 Fix 3-B: 手元 PC のフォーカス可視化バナー ===
+   2 画面（operator）モードのみ表示、operator-solo / hall では非表示。
+   document.hasFocus() による動的状態切替（is-focused / is-blurred）。 */
+.operator-focus-banner { display: none; }
+[data-role="operator"] .operator-focus-banner {
+  display: flex !important;
+  position: fixed;
+  top: 36px;  /* operator-status-bar の下 */
+  left: 0;
+  right: 0;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  font-family: 'BIZ UDPGothic', sans-serif;
+  font-size: 14px;
+  z-index: 9998;
+  gap: 8px;
+  padding: 0 12px;
+  user-select: none;
+  pointer-events: none;
+}
+.operator-focus-banner.is-focused {
+  background: rgba(20, 120, 60, 0.92);
+  color: #fff;
+}
+.operator-focus-banner.is-blurred {
+  background: rgba(180, 60, 50, 0.92);
+  color: #fff;
+}
+.operator-focus-banner__icon {
+  font-weight: 700;
+  font-size: 16px;
+}
+[data-role="operator-solo"] .operator-focus-banner,
+[data-role="hall"] .operator-focus-banner {
+  display: none !important;
+}
+

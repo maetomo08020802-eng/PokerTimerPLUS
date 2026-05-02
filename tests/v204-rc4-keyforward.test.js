@@ -39,26 +39,28 @@ function extractFunctionBody(source, signaturePattern) {
 }
 
 // ============================================================
-// T1: FORWARD_KEYS_FROM_HALL の組成（rc4 改訂）
+// T1: FORWARD_KEYS_FROM_HALL の組成（rc8 案 X で空 Set 化に追従更新）
 // ============================================================
-test('T1: FORWARD_KEYS_FROM_HALL に KeyR / KeyE / KeyS / KeyM / KeyT が含まれる（rc3 で無反応だった letter 系）', () => {
+test('T1: FORWARD_KEYS_FROM_HALL は空 Set（rc8 案 X、前原さん要望「会場モニターで操作完全無効」）', () => {
+  // rc8 で前原さん要望「会場モニターにフォーカスして使う操作は完全に無効に」採用 →
+  // FORWARD_KEYS_FROM_HALL を空 Set に変更（最小変更、IPC 経路は dead code として残す）。
+  // rc4-rc7 で含まれていた KeyR / KeyA / KeyE / KeyS / KeyM / KeyT / KeyH は全廃止。
   const m = MAIN.match(/const\s+FORWARD_KEYS_FROM_HALL\s*=\s*new\s+Set\(\s*\[([\s\S]*?)\]\s*\)/);
   assert.ok(m, 'FORWARD_KEYS_FROM_HALL 定義が見つからない');
   const items = m[1];
-  assert.match(items, /['"]KeyR['"]/, 'KeyR なし');
-  assert.match(items, /['"]KeyA['"]/, 'KeyA なし');
-  assert.match(items, /['"]KeyE['"]/, 'KeyE なし');
-  assert.match(items, /['"]KeyS['"]/, 'KeyS なし');
-  assert.match(items, /['"]KeyM['"]/, 'KeyM なし');
-  assert.match(items, /['"]KeyT['"]/, 'KeyT なし');
+  for (const code of ['KeyR', 'KeyA', 'KeyE', 'KeyS', 'KeyM', 'KeyT', 'KeyH',
+                      'Space', 'Enter', 'Escape',
+                      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+    assert.doesNotMatch(items, new RegExp(`['"]${code}['"]`),
+      `FORWARD_KEYS_FROM_HALL に ${code} が残存（rc8 で空 Set 化されるべき）`);
+  }
 });
 
-test('T2: FORWARD_KEYS_FROM_HALL に KeyH が含まれる（rc5 で前回判断撤回、便利機能の対称性）', () => {
-  // rc4 まで「H は PC 側のみ」だったが rc5 で前原さん判断撤回 → forward 対象に追加
-  const m = MAIN.match(/const\s+FORWARD_KEYS_FROM_HALL\s*=\s*new\s+Set\(\s*\[([\s\S]*?)\]\s*\)/);
-  assert.ok(m, 'FORWARD_KEYS_FROM_HALL 定義が見つからない');
-  assert.match(m[1], /['"]KeyH['"]/,
-    'KeyH が forward 対象になっていない（rc5 で追加すべき、前原さん判断撤回）');
+test('T2: FORWARD_KEYS_FROM_HALL は引き続き new Set 形式で定義（IPC 経路は dead code として維持）', () => {
+  // rc8 では最小変更採用で IPC 経路を残す（before-input-event ハンドラ + send 経路は維持）。
+  // 将来再有効化する場合は Set にキーを追加するだけ。
+  assert.match(MAIN, /const\s+FORWARD_KEYS_FROM_HALL\s*=\s*new\s+Set\(/,
+    'FORWARD_KEYS_FROM_HALL の new Set() 定義が消失（rc8 は最小変更、削除ではない）');
 });
 
 test('T3: FORWARD_KEYS_FROM_HALL に F11 / F12 が含まれない（rc2 改修との整合）', () => {

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4-rc15] - 2026-05-02
+
+### Fixed
+- **break-end 音が鳴らない問題の根治（タスク 1）**: rc13 試験で「BREAK 終了時の `break-end.mp3` だけ鳴らない」現象（パターン B）の真因を確定し構造的に解消。真因は `handleAudioOnTick` の `if (remainingSec === 0) playSound('break-end')` が onTick 1 フレーム（〜16 ms）しか持続せず、`onLevelEnd` の event loop race で見落とされること。修正: `playSound('break-end')` を `onLevelEnd` ハンドラの `lv.isBreak === true` 経路に移動（5〜6 行）、レベル境界で確実に発火。`warning-10sec` / `countdown-tick` は範囲判定のため race 影響なし、現状維持。
+
+### Added
+- **5 分 rolling ログ機構（タスク 2）**: バグ発見支援のため `<userData>/logs/rolling-current.log` に直近 5 分間のイベントを JSON Lines 形式で常時記録。30 秒定期で 5 分超を切り捨て（容量上限 ~1 MB）。記録対象: app:ready / app:before-quit / display-added/-removed / switchOperatorToSolo/SoloToOperator / second-instance / audio:play:enter/resumed/exit / window-state（focus/blur/resize、debounce 200ms）/ uncaughtException / unhandledRejection / renderer:onRoleChanged。タイマー 1 秒 tick / 通常ボタン click は記録しない（負荷主因）。**非同期 IO（`fs.promises`）必須**でメイン処理ブロック回避、main プロセス集約でロックフリー化。
+- **「ログフォルダを開く」ボタン**: 設定ダイアログ「ハウス情報」タブに追加（`shell.openPath` で OS のファイルマネージャを開く）。バグ発生時に前原さんが 1 ファイルコピーで構築士に共有可能。
+
+### Removed
+- **H ショートカット説明の行ごと完全削除（タスク 3）**: `src/renderer/index.html` 行 102 の `<li><kbd>H</kbd> 手元 PC 側のボトムバー切替</li>` および `docs/specs.md` 行 430 の H 行を削除。**H キー機能本体（renderer.js の keydown ハンドラ KeyH）は完全無変更**で維持。前原さん要望「AC 画面が見えている時はそもそもショートカット欄も見えていない」前提で説明文の意義が薄かったため。
+
+### Compatibility (rc15)
+- **致命バグ保護 5 件すべて完全維持**: C.2.7-A / C.2.7-D / C.1-A2 + C.1.2-bugfix / C.1.7（rolling ログは観測のみ介入なし）/ C.1.8
+- **rc7〜rc14 確定 Fix すべて維持**: specialStack / 二重送信 / app.focus / 単一インスタンス / onRoleChanged setAttribute 最優先 / appRole try-catch / 複製 readonly / BREAK 中 10 秒前 / 5 秒カウント音
+- **operator-solo モード（v1.3.0 互換）影響なし**
+
+### Tests (rc15)
+- **新規テスト 1 ファイル + 既存 6 ファイル追従更新**: `tests/v204-rc15-break-end-and-rolling-log.test.js` を T1〜T10（onLevelEnd 移行 + rolling ログ infrastructure + IPC + UI ボタン）で構築、既存テストの H 行検証を「不在確認」に統一書き換え + version 期待値を rc15 に追従。
+
+---
+
 ## [2.0.0] - 2026-05-01
 
 ### Added

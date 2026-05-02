@@ -1542,7 +1542,14 @@ function syncPowerSaveBlocker(status) {
   } catch (_) { /* ignore */ }
 }
 
+// v2.0.4-rc8 Fix 4: HDMI 切替（onRoleChanged）時に直近 timerState で updateOperatorPane を
+//   即時再描画するため、subscribe で受け取る state を保持する。
+//   subscribe 経由でしか timerState は流れてこないため、role 切替時は次の tick を待たずに
+//   この変数を使って operator-pane を更新する（rc7 修正漏れの補完）。
+let _lastTimerStateForRoleSwitch = null;
+
 subscribe((state, prev) => {
+  _lastTimerStateForRoleSwitch = state;
   if (state.status !== prev.status) {
     renderControls(state.status);
     syncPowerSaveBlocker(state.status);
@@ -1684,6 +1691,19 @@ function updateOperatorPane(state) {
     ? tournamentRuntime.addOnCount : 0;
   if (reentryEl) reentryEl.textContent = `リエントリー ${reentry} / アドオン ${addon}`;
 
+  // v2.0.4-rc7 Fix 2-B: 特別スタック（Ctrl+E 操作）の AC 表示。
+  //   rc4 で operator-pane 7 項目を実装した際に漏れていた項目。Ctrl+E は内部状態と
+  //   メイン画面 #js-special-stack-row には反映されているが、AC ペインに項目が無いため
+  //   ユーザーには「効かない」と認知された（表示踏襲問題と独立した補完バグ）。
+  const specialStackEl = document.getElementById('op-pane-special-stack');
+  if (specialStackEl) {
+    const ss = (tournamentState && tournamentState.specialStack) || {};
+    const enabled = !!ss.enabled && (Number(ss.appliedCount) || 0) > 0;
+    specialStackEl.textContent = enabled
+      ? `${ss.label || '特別配布'} × ${ss.appliedCount}`
+      : '-';
+  }
+
   // v2.0.4-rc5: 音（ミュート状態）— 通常 / ミュート中、data-muted 属性で CSS の赤色強調を切替
   if (muteEl) {
     const muted = (typeof audioIsMuted === 'function') ? audioIsMuted() : false;
@@ -1736,8 +1756,17 @@ function handleAudioOnTick(remainingMs, currentLevelIndex) {
 
   const { status } = getState();
   if (status === States.BREAK) {
-    // ブレイク中: 残り0秒でブレイク終了音（次レベルへ自動遷移）
-    if (remainingSec === 0) playSound('break-end');
+    // v2.0.4-rc13 Fix 2: BREAK 中もブレイク終了に向けた予告音を再生（前原さん要望）。
+    //   既存音源（warning-10sec.mp3 / countdown-tick.mp3）を流用、新規音源不要。
+    //   要望 1: 残り 10 秒で警告音、要望 2: 残り 5/4/3/2/1 秒でカウント音（B-2-A、RUNNING 中と同 UX）。
+    //   要望 3: 残り 0 秒の break-end は既存維持（前原さん「現状で十分」確認済）。
+    //   playSound() 経由 → audio.js の _play() 経由で AudioContext resume を継承（C.1.7 完全準拠）。
+    if (remainingSec === 10) playSound('warning-10sec');
+    if (remainingSec >= 1 && remainingSec <= 5) playSound('countdown-tick');
+    // v2.0.4-rc15 タスク 1: BREAK 終了音 break-end は onLevelEnd ハンドラに移動。
+    //   旧実装（onTick の remainingSec === 0 瞬間判定）は 1 フレーム（〜16ms）しか持続せず、
+    //   onLevelEnd の event loop race で見落とされる症状（rc13 試験 NG）の構造的根治。
+    //   warning-10sec / countdown-tick は範囲判定で複数フレーム持続するため race 影響なし、維持。
     return;
   }
 
@@ -1782,7 +1811,16 @@ setHandlers({
   onLevelEnd: (index) => {
     // レベル終了の瞬間に level-end を1回鳴らす（onTick の remainingSec===0 検出より確実）
     const lv = getLevel(index);
-    if (lv && !lv.isBreak) playSound('level-end');
+    // v2.0.4-rc15 タスク 1: lv.isBreak === true 経路に break-end を追加（onTick から移動）。
+    //   onLevelEnd は level 境界で確実に 1 回発火するため、onTick の瞬間判定 race を構造的に解消。
+    //   playSound() 経由 → audio.js _play() 経由で AudioContext resume を継承（C.1.7 完全準拠）。
+    if (lv) {
+      if (lv.isBreak) {
+        playSound('break-end');
+      } else {
+        playSound('level-end');
+      }
+    }
   },
   onPreStartTick: (remainingMs) => {
     // renderTime は subscribe 側で発火するので、ここでは音のみ
@@ -3743,10 +3781,25 @@ async function _handleTournamentDuplicateImpl() {
   await loadTournamentIntoForm(cloned.id);
   setTournamentHint('トーナメントを複製しました', 'success');
   setTimeout(() => setTournamentHint(''), 2000);
+  // v2.0.4-rc13 Fix 1: 複製直後に readonly 残存バグ（前原さん観察「複製したら書き込めない」）を根治。
+  //   `_handleTournamentNewImpl` の line 3686 + 3696（同期 + RAF 内の 2 重呼出パターン）と完全パリティで
+  //   `ensureEditorEditableState()` を追加。rc13 事前調査の修正案 A-1 採用。
+  //   既存の `handlePresetDuplicate`（5108 + 5113）/ `handlePresetNew`（5077 + 5081）/
+  //   `_handleTournamentNewImpl`（3686 + 3696）には 2 重呼出があるのに、本関数のみパリティ違反だった。
+  //   `meta.builtin === true` 時は ensureEditorEditableState 内で no-op、builtin 保護維持。
+  //   致命バグ保護 C.1-A2 / C.1.2-bugfix の強化方向（4 重防御の対象がトーナメント複製にも拡張）。
+  if (typeof ensureEditorEditableState === 'function') {
+    try { ensureEditorEditableState(); } catch (_) { /* ignore */ }
+  }
   if (el.tournamentTitle) {
     requestAnimationFrame(() => {
       el.tournamentTitle.focus();
       el.tournamentTitle.select();
+      // v2.0.4-rc13 Fix 1: RAF 内でも再保証（applyTournament → renderBreakImagesList 等の race で
+      //   readonly が再付与される可能性に備える、_handleTournamentNewImpl:3696 と同パターン）
+      if (typeof ensureEditorEditableState === 'function') {
+        try { ensureEditorEditableState(); } catch (_) { /* ignore */ }
+      }
     });
   }
 }
@@ -6004,6 +6057,103 @@ if (typeof window !== 'undefined' && window.appRole === 'operator') {
   });
 }
 
+// v2.0.4-rc9 Fix 3-C: 手元 PC のフォーカス可視化バナー更新関数。
+//   document.hasFocus() を見て is-focused / is-blurred クラスと文言を切替。
+//   role が operator のときのみ動作（operator-solo / hall は CSS で完全非表示）。
+function updateFocusBanner() {
+  if (typeof window === 'undefined' || window.appRole !== 'operator') return;
+  const el = document.getElementById('js-operator-focus-banner');
+  if (!el) return;
+  if (el.hasAttribute('hidden')) el.removeAttribute('hidden');
+  const iconEl = document.getElementById('js-operator-focus-banner-icon');
+  const textEl = document.getElementById('js-operator-focus-banner-text');
+  const isFocused = (typeof document !== 'undefined' && typeof document.hasFocus === 'function')
+    ? document.hasFocus()
+    : true;
+  el.classList.toggle('is-focused', isFocused);
+  el.classList.toggle('is-blurred', !isFocused);
+  if (iconEl) iconEl.textContent = isFocused ? '○' : '!';
+  if (textEl) {
+    textEl.textContent = isFocused
+      ? '現在操作可能（カーソルをこの画面に合わせると、会場モニターの数値等を操作できます）'
+      : 'この画面をクリックしてください';
+  }
+}
+if (typeof window !== 'undefined' && window.appRole !== 'hall') {
+  try {
+    window.addEventListener('focus', updateFocusBanner);
+    window.addEventListener('blur', updateFocusBanner);
+    // 初期描画
+    if (typeof document !== 'undefined' && document.readyState !== 'loading') {
+      updateFocusBanner();
+    } else if (typeof document !== 'undefined') {
+      document.addEventListener('DOMContentLoaded', updateFocusBanner, { once: true });
+    }
+  } catch (_) { /* ignore */ }
+}
+
+// v2.0.4-rc7 Fix 1-C: HDMI 切替時の role 動的切替ハンドラ。
+//   main → 'dual:role-changed' IPC で 'operator-solo' / 'operator' を通知。
+//   documentElement[data-role] を更新することで CSS が 2 画面用 / 単画面用レイアウトに
+//   自動追従し、表示踏襲問題（rc6: minimize 後も data-role="operator" が持続）が解消する。
+//   開いている dialog はそのまま（CSS 切替で見た目自動追従、ユーザー作業の中断を避ける）。
+//   hall は対象外（hall は別ウィンドウで close されるため受信しない）。
+// v2.0.4-rc12 真因根治: rc7〜rc10 の 4 連続失敗の真因は **ES module + contextBridge 凍結**。
+//   renderer.js は <script type="module"> 経由で読込まれ自動的に strict mode、preload.js の
+//   `contextBridge.exposeInMainWorld('appRole', _role)` で window.appRole は writable: false の
+//   property として固定される（Electron 仕様）。strict mode で `window.appRole = newRole` は
+//   TypeError を投げ、preload.js の `try { callback(newRole); } catch (_) {}` で握り潰される。
+//   結果、ハンドラは setAttribute に到達せず data-role が "operator" のまま残り、
+//   `[data-role="operator"] .clock { display: none }` が当たり続けて「タイマー画面消失」となる
+//   （rc11 計測ログで enter のみ出力 → before-setAttribute 不在で確定）。
+//   根治方針:
+//     - setAttribute('data-role', ...) を **ハンドラ最初の処理として移動**（throw 前に確実に実行）
+//     - window.appRole への代入は try-catch で防御（contextBridge 凍結による throw を握り潰す）
+//     - 後続 update* 呼出は引き続き個別 try-catch で守る（既存設計を踏襲）
+// v2.0.4-rc15 タスク 2: role 切替時の rolling ログ呼出ヘルパ（既存テスト regex の brittle match を回避）。
+//   インライン object literal を IPC 呼出に渡すと `[\s\S]*?\}\s*\)` が早期マッチして
+//   onRoleChanged ハンドラ抽出が短縮される問題を、関数分離で解消。
+function _logRoleChange(newRole) {
+  const o = {};
+  o.newRole = newRole;
+  o.prevRole = (typeof window !== 'undefined') ? window.appRole : null;
+  try { window.api?.log?.write?.('renderer:onRoleChanged', o); } catch (_) { /* ignore */ }
+}
+
+if (typeof window !== 'undefined' && window.appRole !== 'hall') {
+  window.api?.dual?.onRoleChanged?.((newRole) => {
+    // v2.0.4-rc15 タスク 2: role 切替を rolling ログに記録（_logRoleChange 経由でインライン {} を回避）
+    _logRoleChange(newRole);
+    if (typeof newRole !== 'string') return;
+    if (newRole !== 'operator' && newRole !== 'operator-solo') return;
+    // rc12 根治 Step 1: setAttribute を最優先で実行。CSS 表示制御の唯一のトリガで、
+    //   これに到達できれば「タイマー画面消失」は根治する。後続 throw があっても DOM は更新済。
+    try {
+      if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.setAttribute('data-role', newRole);
+      }
+    } catch (_) { /* documentElement 不在は通常あり得ないが防御 */ }
+    // rc12 根治 Step 2: window.appRole 代入は contextBridge 凍結で TypeError を投げる。
+    //   try-catch で握り潰す（assign 自体は失敗するが、setAttribute 完了済なので CSS は正しい）。
+    //   読み取り側コードの大半は `=== 'hall'` 検査で、stale value でも機能挙動への影響なし。
+    try { window.appRole = newRole; } catch (_) { /* contextBridge 凍結による失敗を許容 */ }
+    // role 変更後の関連 UI 即時反映（mute-indicator は CSS で role 別表示制御済、明示更新で確実化）
+    if (typeof updateMuteIndicator === 'function') {
+      try { updateMuteIndicator(); } catch (_) { /* ignore */ }
+    }
+    // v2.0.4-rc8 Fix 4 (対策 B): updateOperatorPane も即時呼出（rc7 修正漏れ補完）。
+    //   rc7 では「次の subscribe で再描画される」と判断したが、HDMI 抜き直後に手元 PC を復元した
+    //   タイミングでは subscribe 待ちで表示が古いまま見える時間帯が生じていた。
+    //   _lastTimerStateForRoleSwitch を用いて即時再描画（updateOperatorPane 内の早期 return で
+    //   operator-solo / hall は no-op、operator 復帰時のみ実際に再描画される）。
+    if (typeof updateOperatorPane === 'function' && _lastTimerStateForRoleSwitch) {
+      try { updateOperatorPane(_lastTimerStateForRoleSwitch); } catch (_) { /* ignore */ }
+    }
+    // v2.0.4-rc9 Fix 3-C: role 切替時もフォーカスバナー再描画
+    try { updateFocusBanner(); } catch (_) { /* ignore */ }
+  });
+}
+
 // STEP 6.6: ランタイム値調整（キーボードショートカットから呼ばれる）
 //
 // ↑キー: 新規エントリー追加（レイトレジ等で遅れて入場した人をカウント）
@@ -6302,6 +6452,20 @@ async function loadInitialSettings() {
 }
 
 async function initialize() {
+  // v2.0.4-rc15 タスク 2: 「ログフォルダを開く」ボタンの click ハンドラ登録（About タブ）
+  try {
+    const _openLogsBtn = document.getElementById('js-open-logs-folder');
+    if (_openLogsBtn && !_openLogsBtn._rc15Bound) {
+      _openLogsBtn._rc15Bound = true;
+      _openLogsBtn.addEventListener('click', async () => {
+        try {
+          if (window.api?.log?.openFolder) {
+            await window.api.log.openFolder();
+          }
+        } catch (_) { /* ignore */ }
+      });
+    }
+  } catch (_) { /* ignore */ }
   renderStaticInfo();
   renderPayouts();
   // loadInitialSettings は trueを返す＝blindPresetId からの復元成功
@@ -6369,6 +6533,40 @@ async function initialize() {
 //   - 'operator-solo': 単画面モード（HDMI なし）。v1.3.0 と完全同等の挙動を維持（後方互換不変条件）
 //   role 不明時は 'operator-solo' 扱い（preload.js の既定値と一致）。
 const __appRole = (typeof window !== 'undefined' && window.appRole) || 'operator-solo';
+
+// v2.0.4-rc15 タスク 2: グローバル例外 + window state 変化を rolling ログに記録
+//   error / unhandledrejection: 未捕捉例外を観測（既存の console.error を再現するだけで握り潰さない）
+//   focus / blur / resize: 200ms debounce で頻発を抑制、UI 状態の遷移を記録
+//   実装はすべて try-catch で防御、never throw from logging
+if (typeof window !== 'undefined') {
+  try {
+    window.addEventListener('error', (ev) => {
+      try { window.api?.log?.write?.('renderer:error', { message: ev && ev.message, source: ev && ev.filename, lineno: ev && ev.lineno }); } catch (_) {}
+    });
+    window.addEventListener('unhandledrejection', (ev) => {
+      try { window.api?.log?.write?.('renderer:unhandledrejection', { reason: ev && ev.reason && (ev.reason.message || String(ev.reason)) }); } catch (_) {}
+    });
+    let _windowStateLogTimer = null;
+    const _logWindowState = (label) => {
+      if (_windowStateLogTimer !== null) { clearTimeout(_windowStateLogTimer); }
+      _windowStateLogTimer = setTimeout(() => {
+        _windowStateLogTimer = null;
+        try {
+          window.api?.log?.write?.('renderer:window-state', {
+            label,
+            role: window.appRole,
+            hasFocus: (typeof document !== 'undefined' && typeof document.hasFocus === 'function') ? document.hasFocus() : null,
+            innerWidth: window.innerWidth, innerHeight: window.innerHeight
+          });
+        } catch (_) {}
+      }, 200);
+    };
+    window.addEventListener('focus', () => _logWindowState('focus'));
+    window.addEventListener('blur', () => _logWindowState('blur'));
+    window.addEventListener('resize', () => _logWindowState('resize'));
+  } catch (_) { /* ignore, logging is non-critical */ }
+}
+
 if (__appRole === 'hall') {
   // v2.0.1 #A1: hall 側 dual-sync 差分ハンドラを登録。
   //   main からの broadcast を受信したとき、kind 別に該当する apply* 関数を呼ぶ。
@@ -6412,6 +6610,22 @@ if (__appRole === 'hall') {
         if (typeof value.reentryCount === 'number') tournamentRuntime.reentryCount = value.reentryCount;
         if (typeof value.addOnCount === 'number') tournamentRuntime.addOnCount = value.addOnCount;
         renderStaticInfo();
+      } else if (kind === 'specialStack' && value && typeof value === 'object') {
+        // v2.0.4-rc10 Fix 1-C: Ctrl+E の特別スタック ±1 を hall に反映。
+        //   tournamentState.specialStack を更新後、AVG STACK 再計算 + op-pane / 静的情報を再描画。
+        //   updateOperatorPane は operator role のみ意味あり（hall では DOM 不在で no-op に近い）。
+        try {
+          if (typeof tournamentState !== 'undefined') {
+            tournamentState.specialStack = {
+              enabled: typeof value.enabled === 'boolean' ? value.enabled : !!(tournamentState.specialStack && tournamentState.specialStack.enabled),
+              label: typeof value.label === 'string' ? value.label : ((tournamentState.specialStack && tournamentState.specialStack.label) || '早期着席特典'),
+              chips: Number.isFinite(Number(value.chips)) ? Number(value.chips) : ((tournamentState.specialStack && tournamentState.specialStack.chips) ?? 5000),
+              appliedCount: Math.max(0, Math.min(999, Math.floor(Number(value.appliedCount)) || 0))
+            };
+          }
+          if (typeof renderStaticInfo === 'function') renderStaticInfo();
+          if (typeof updateOperatorPane === 'function') updateOperatorPane();
+        } catch (err) { console.warn('[dual-sync] specialStack 適用失敗:', err); }
       } else if (kind === 'tournamentBasics' && value) {
         // basics（id / name / subtitle / titleColor / blindPresetId）変更時は active 全体を再取得
         // applyTournament が tournamentState 更新 + 表示反映を網羅、最も安全な経路。
