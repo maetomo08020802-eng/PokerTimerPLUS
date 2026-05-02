@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4-rc21] - 2026-05-02
+
+### Fixed
+- **問題 ⑨ 根治（タスク 1、案 ⑨-A）**: rc20 試験で発覚した「タイマー未開始 / 一時停止中にブラインド構造を適用しても AC 上部 TIME / 中央タイマー / NEXT BREAK / op-pane 現/次ブラインドが古いまま」現象を根治。**真因 = `setStructure`（blinds.js:20-26）が `setState` を呼ばないため subscribe 経由の表示更新が trigger されず、適用系 4 経路（`handleTournamentGameTypeChange` idle / `handleTournamentSaveTournament` idle / `doApplyTournament` apply-only / `handlePresetApply` apply-only）で `renderCurrentLevel` / `renderNextLevel` のみ手動補完していた**（rc21 第 1 弾事前調査で 100% 確定）。修正: `src/renderer/renderer.js` に共通ヘルパ `_refreshDisplayAfterStructureChange()` を追加（IDLE 時は前原さん判断 α により `setState({ remainingMs, totalMs })` で新 Lv1 duration を反映 → subscribe 経由で全表示同時更新、非 IDLE 時は ③ c により `remainingMs` に触らず `updateOperatorStatusBar` / `updateOperatorPane` / `renderTime` / `renderNextBreak` の明示呼出のみ）+ 4 経路末尾に呼出 1 行追加。約 35 行 / 1 ファイル、致命バグ保護 5 件すべて完全無傷、`timer.js` の `targetTime` 経路に新規呼出なし（③ c 厳守）。
+
+### Investigated
+- **問題 ⑩ 計測ビルド投入（タスク 2、案 ⑩-C、rc22 で削除予定）**: rc20 試験で再発した「HDMI 抜きでタイマー画面消失」の真因を rc11 → rc12 と同パターンで時系列確定するため、8 ラベルを一時計測として追加。**rc12 修正コード（`src/renderer/renderer.js` の onRoleChanged ハンドラ内 `setAttribute('data-role', newRole)` + `window.appRole = newRole` の try-catch 順序）は完全不変保護**（テストで cross-check 済）。
+  - renderer.js（6 ラベル）: `renderer:onRoleChanged:before-setAttribute` / `:after-setAttribute`（data-role 現在値同梱）/ `:after-appRole-assign`（appRole 現在値同梱）/ `:after-updateMuteIndicator` / `:after-updateOperatorPane` / `:after-updateFocusBanner`
+  - preload.js（2 ラベル）: `preload:onRoleChanged:enter` / `preload:onRoleChanged:catch`（rc12 と同種の握り潰し catch を ipcRenderer.send 経由でログ化、コールバック内 throw の決定的証拠化）
+- **rc22 削除責任**: 本 8 ラベルは rc22 で問題 ⑩ 真因確定 + 根治コミット直後に**全件削除**する（cc-operation-pitfalls.md §6.1 準拠、削除予定 CC_REPORT §8 で明記）。
+
+### Tests
+- `tests/v204-rc21-display-refresh.test.js` 新規追加（タスク 1+2 関連、T1〜T9 + 致命バグ保護 5 件 cross-check + rc12 不変保護 + version assertion、合計 14 件）
+- 既存テスト 12 ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 / rc20 系列 1）の version assertion を `2.0.4-rc20` → `2.0.4-rc21` に追従更新
+
+### Compatibility (rc21)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）。`_refreshDisplayAfterStructureChange` ヘルパに `schedulePersistRuntime` を追加していない（C.1.8 境界保護）。
+- **rc12 修正コード保護**: onRoleChanged ハンドラ内 `setAttribute('data-role', newRole)` 最優先 + `window.appRole = newRole` try-catch の順序を完全維持（テスト T9 / rc12 不変保護で cross-check）。タスク 2 の 6 ラベルは既存ロジックの**前後挿入のみ**で内部順序に介入していない。
+- 前原さん判断 α（IDLE 時は新 Lv1 duration を即時反映）/ ③ c（進行中レベルの残り時間には反映しない、PAUSED 時は targetTime 整合性保護）すべて遵守。
+- rc20 までの確定 Fix（rc7〜rc20 全件）すべて維持。
+
+---
+
 ## [2.0.4-rc20] - 2026-05-02
 
 ### Fixed

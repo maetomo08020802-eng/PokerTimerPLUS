@@ -270,11 +270,13 @@ test('rc10 維持: app.requestSingleInstanceLock 維持', () => {
     'requestSingleInstanceLock 消失（rc10 Fix 3 破壊）');
 });
 
+// rc21 第 2 弾追従: onRoleChanged ハンドラに計測ラベル（インライン object literal 含む）追加に伴い、
+//   非貪欲な `\}\s*\)` 早期マッチ問題を解消するため balanced brace 抽出 (extractFunctionBody) に切替。
 test('rc12 維持: onRoleChanged 内で setAttribute("data-role") が window.appRole 代入より前', () => {
-  const m = RENDERER.match(/onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{[\s\S]*?\}\s*\)\s*;?\s*\}/);
-  assert.ok(m, 'onRoleChanged ハンドラ抽出失敗');
-  const setAttrIdx = m[0].search(/setAttribute\(\s*['"]data-role['"]/);
-  const assignIdx  = m[0].search(/window\.appRole\s*=\s*newRole/);
+  const handler = extractFunctionBody(RENDERER, /onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{/);
+  assert.ok(handler, 'onRoleChanged ハンドラ抽出失敗');
+  const setAttrIdx = handler.search(/setAttribute\(\s*['"]data-role['"]/);
+  const assignIdx  = handler.search(/window\.appRole\s*=\s*newRole/);
   assert.ok(setAttrIdx >= 0 && assignIdx >= 0);
   assert.ok(setAttrIdx < assignIdx,
     'rc12 真因根治の順序が逆転（setAttribute → window.appRole の順を維持必須）');
@@ -297,10 +299,10 @@ test('rc13 維持: _handleTournamentDuplicateImpl 内で ensureEditorEditableSta
 // version 同期確認（rc15）
 // ============================================================
 
-test('version: package.json は 2.0.4-rc20', () => {
+test('version: package.json は 2.0.4-rc21', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc20',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc20）`);
+  assert.equal(pkg.version, '2.0.4-rc21',
+    `package.json version が ${pkg.version}（期待 2.0.4-rc21）`);
 });
 
 test('version: scripts.test に v204-rc15-break-end-and-rolling-log.test.js が含まれる', () => {

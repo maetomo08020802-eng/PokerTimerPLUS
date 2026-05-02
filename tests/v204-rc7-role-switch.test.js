@@ -93,23 +93,23 @@ test('Fix 1-C: renderer.js で onRoleChanged ハンドラを登録', () => {
     'renderer.js で window.api.dual.onRoleChanged 登録なし');
 });
 
+// rc21 第 2 弾追従: onRoleChanged ハンドラに計測ラベル（インライン object literal 含む）追加に伴い、
+//   非貪欲な `\}\s*\)` 早期マッチ問題を解消するため balanced brace 抽出 (extractFunctionBody) に切替。
 test('Fix 1-C: ハンドラ内で window.appRole + documentElement[data-role] を更新', () => {
-  // onRoleChanged コールバック内に setAttribute('data-role', newRole) と window.appRole = newRole
-  const m = RENDERER.match(/onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{[\s\S]*?\}\s*\)/);
-  assert.ok(m, 'onRoleChanged コールバック本体が抽出できない');
-  assert.match(m[0], /window\.appRole\s*=\s*newRole/,
+  const handler = extractFunctionBody(RENDERER, /onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{/);
+  assert.ok(handler, 'onRoleChanged コールバック本体が抽出できない');
+  assert.match(handler, /window\.appRole\s*=\s*newRole/,
     'onRoleChanged で window.appRole = newRole なし');
-  assert.match(m[0], /setAttribute\(\s*['"]data-role['"]\s*,\s*newRole\s*\)/,
+  assert.match(handler, /setAttribute\(\s*['"]data-role['"]\s*,\s*newRole\s*\)/,
     'onRoleChanged で documentElement.setAttribute(data-role, newRole) なし');
 });
 
 test('Fix 1-C: ハンドラで操作対象 role を operator / operator-solo に限定（hall は無視）', () => {
-  const m = RENDERER.match(/onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{[\s\S]*?\}\s*\)/);
-  assert.ok(m, 'onRoleChanged コールバック本体が抽出できない');
-  // 'operator' / 'operator-solo' のホワイトリスト
-  assert.match(m[0], /['"]operator['"]/,
+  const handler = extractFunctionBody(RENDERER, /onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{/);
+  assert.ok(handler, 'onRoleChanged コールバック本体が抽出できない');
+  assert.match(handler, /['"]operator['"]/,
     'onRoleChanged で operator のホワイトリストなし');
-  assert.match(m[0], /['"]operator-solo['"]/,
+  assert.match(handler, /['"]operator-solo['"]/,
     'onRoleChanged で operator-solo のホワイトリストなし');
 });
 
@@ -120,9 +120,9 @@ test('Fix 1-C: ハンドラ登録ブロック自体が hall を除外（hall は
 });
 
 test('Fix 1-C: role 切替後に updateMuteIndicator を呼ぶ（即時反映）', () => {
-  const m = RENDERER.match(/onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{[\s\S]*?\}\s*\)/);
-  assert.ok(m, 'onRoleChanged コールバック本体が抽出できない');
-  assert.match(m[0], /updateMuteIndicator/,
+  const handler = extractFunctionBody(RENDERER, /onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{/);
+  assert.ok(handler, 'onRoleChanged コールバック本体が抽出できない');
+  assert.match(handler, /updateMuteIndicator/,
     'onRoleChanged で updateMuteIndicator 呼出なし（即時反映欠落）');
 });
 
@@ -265,8 +265,8 @@ test('rc9 改修: _showRestoreNoticeOnce フラグセットが撤去されてい
 test('version: package.json は最新 rc（rc8 以降）に追従', () => {
   // このテストは rc7 で導入された rc 段階追従用。本テスト自体は最新 rc 値に追従更新する。
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc20',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc20）`);
+  assert.equal(pkg.version, '2.0.4-rc21',
+    `package.json version が ${pkg.version}（期待 2.0.4-rc21）`);
 });
 
 test('version: scripts.test に v204-rc7-role-switch.test.js が含まれる', () => {

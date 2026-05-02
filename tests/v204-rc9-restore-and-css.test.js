@@ -203,11 +203,12 @@ test('Fix 3-C: window に focus / blur リスナー登録', () => {
     'window に blur イベントリスナー（updateFocusBanner）が登録されていない');
 });
 
+// rc21 第 2 弾追従: onRoleChanged ハンドラに計測ラベル（インライン object literal 含む）追加に伴い、
+//   非貪欲な `\}\s*\)` 早期マッチ問題を解消するため balanced brace 抽出 (extractFunctionBody) に切替。
 test('Fix 3-C: onRoleChanged ハンドラ末尾で updateFocusBanner を呼ぶ', () => {
-  // onRoleChanged 内に updateFocusBanner() 呼出が含まれることを確認
-  const m = RENDERER.match(/onRoleChanged\?\.\(\(newRole\)\s*=>\s*\{[\s\S]*?\}\s*\)\s*;/);
-  assert.ok(m, 'onRoleChanged ハンドラが見つからない');
-  assert.match(m[0], /updateFocusBanner\s*\(\s*\)/,
+  const handler = extractFunctionBody(RENDERER, /onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{/);
+  assert.ok(handler, 'onRoleChanged ハンドラが見つからない');
+  assert.match(handler, /updateFocusBanner\s*\(\s*\)/,
     'onRoleChanged ハンドラ内で updateFocusBanner が呼ばれていない');
 });
 
@@ -296,10 +297,10 @@ test('operator-solo 互換: rc8 で追加した [data-role="operator-solo"] 用 
 // ============================================================
 // version 同期確認（rc9）
 // ============================================================
-test('version: package.json は 2.0.4-rc20', () => {
+test('version: package.json は 2.0.4-rc21', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc20',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc20）`);
+  assert.equal(pkg.version, '2.0.4-rc21',
+    `package.json version が ${pkg.version}（期待 2.0.4-rc21）`);
 });
 
 test('version: scripts.test に v204-rc9-restore-and-css.test.js が含まれる', () => {

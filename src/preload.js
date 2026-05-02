@@ -137,7 +137,12 @@ contextBridge.exposeInMainWorld('api', {
     onRoleChanged: (callback) => {
       if (typeof callback !== 'function') return;
       ipcRenderer.on('dual:role-changed', (_event, newRole) => {
-        try { callback(newRole); } catch (_) { /* ignore */ }
+        // v2.0.4-rc21 タスク 2（問題 ⑩ 計測ビルド、rc22 で削除予定）: コールバック呼出前のエントリラベル
+        try { ipcRenderer.send('rolling-log:write', { label: 'preload:onRoleChanged:enter', data: { newRole } }); } catch (_) { /* never throw from logging */ }
+        try { callback(newRole); } catch (err) {
+          // v2.0.4-rc21 タスク 2（問題 ⑩ 計測ビルド、rc22 で削除予定）: コールバック throw を捕捉してログ化（rc12 真因再発の決定的証拠）
+          try { ipcRenderer.send('rolling-log:write', { label: 'preload:onRoleChanged:catch', data: { newRole, message: (err && err.message) || null, stack: (err && err.stack) || null } }); } catch (_) { /* never throw from logging */ }
+        }
       });
     },
     // v2.0.0 STEP 4: モニター選択ダイアログ（display-picker.html 専用）。

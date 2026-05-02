@@ -58,12 +58,13 @@ function extractFunctionBody(source, signaturePattern) {
 // Fix 1: onRoleChanged 真因根治
 // ============================================================
 
+// rc21 第 2 弾追従: onRoleChanged ハンドラに計測ラベル（インライン object literal 含む）追加に伴い、
+//   非貪欲な `\}\s*\)` 早期マッチ問題を解消するため balanced brace 抽出 (extractFunctionBody) に切替。
 test('Fix 1-A: onRoleChanged ハンドラ内で setAttribute("data-role", ...) が window.appRole 代入より「前」', () => {
-  // ハンドラ全体を抽出（rc12 で十分大きく取る）
-  const m = RENDERER.match(/onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{[\s\S]*?\}\s*\)\s*;?\s*\}/);
-  assert.ok(m, 'onRoleChanged ハンドラ抽出失敗');
-  const setAttrIdx = m[0].search(/setAttribute\(\s*['"]data-role['"]/);
-  const assignIdx  = m[0].search(/window\.appRole\s*=\s*newRole/);
+  const handler = extractFunctionBody(RENDERER, /onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{/);
+  assert.ok(handler, 'onRoleChanged ハンドラ抽出失敗');
+  const setAttrIdx = handler.search(/setAttribute\(\s*['"]data-role['"]/);
+  const assignIdx  = handler.search(/window\.appRole\s*=\s*newRole/);
   assert.ok(setAttrIdx >= 0, 'onRoleChanged で setAttribute("data-role", ...) が見つからない');
   assert.ok(assignIdx  >= 0, 'onRoleChanged で window.appRole = newRole が見つからない');
   assert.ok(setAttrIdx < assignIdx,
@@ -77,29 +78,29 @@ test('Fix 1-B: window.appRole 代入が try-catch で防御されている（con
 });
 
 test('Fix 1-C: onRoleChanged ハンドラ内の setAttribute が try-catch で防御されている', () => {
-  const m = RENDERER.match(/onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{[\s\S]*?\}\s*\)\s*;?\s*\}/);
-  assert.ok(m);
+  const handler = extractFunctionBody(RENDERER, /onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{/);
+  assert.ok(handler);
   // setAttribute の直近に try { ... } catch があるか
-  assert.match(m[0], /try\s*\{[\s\S]*?setAttribute\(\s*['"]data-role['"][\s\S]*?\}\s*catch/,
+  assert.match(handler, /try\s*\{[\s\S]*?setAttribute\(\s*['"]data-role['"][\s\S]*?\}\s*catch/,
     'onRoleChanged の setAttribute が try-catch で防御されていない');
 });
 
 test('Fix 1-D: 後続更新（updateMuteIndicator / updateOperatorPane / updateFocusBanner）が引き続き個別 try-catch で守られる', () => {
-  const m = RENDERER.match(/onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{[\s\S]*?\}\s*\)\s*;?\s*\}/);
-  assert.ok(m);
+  const handler = extractFunctionBody(RENDERER, /onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{/);
+  assert.ok(handler);
   // updateMuteIndicator の try-catch
-  assert.match(m[0], /try\s*\{\s*updateMuteIndicator\s*\(/,
+  assert.match(handler, /try\s*\{\s*updateMuteIndicator\s*\(/,
     'onRoleChanged 内の updateMuteIndicator が try-catch で守られていない');
   // updateFocusBanner の try-catch
-  assert.match(m[0], /try\s*\{\s*updateFocusBanner\s*\(/,
+  assert.match(handler, /try\s*\{\s*updateFocusBanner\s*\(/,
     'onRoleChanged 内の updateFocusBanner が try-catch で守られていない');
 });
 
 test('Fix 1-E: 早期 return（typeof newRole !== "string" 等）が引き続き存在し setAttribute 前に評価される', () => {
-  const m = RENDERER.match(/onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{[\s\S]*?\}\s*\)\s*;?\s*\}/);
-  assert.ok(m);
-  const guardIdx = m[0].search(/typeof\s+newRole\s*!==\s*['"]string['"]/);
-  const setAttrIdx = m[0].search(/setAttribute\(\s*['"]data-role['"]/);
+  const handler = extractFunctionBody(RENDERER, /onRoleChanged\?\.\(\s*\(newRole\)\s*=>\s*\{/);
+  assert.ok(handler);
+  const guardIdx = handler.search(/typeof\s+newRole\s*!==\s*['"]string['"]/);
+  const setAttrIdx = handler.search(/setAttribute\(\s*['"]data-role['"]/);
   assert.ok(guardIdx >= 0, 'newRole 型検査ガードが消失');
   assert.ok(setAttrIdx > guardIdx, 'setAttribute が型検査ガードより前にある（不正な newRole で DOM 破壊リスク）');
 });
@@ -274,10 +275,10 @@ test('operator-solo 互換: rc8 で追加した [data-role="operator-solo"] 用 
 // version 同期確認（rc12）
 // ============================================================
 
-test('version: package.json は 2.0.4-rc20', () => {
+test('version: package.json は 2.0.4-rc21', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc20',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc20）`);
+  assert.equal(pkg.version, '2.0.4-rc21',
+    `package.json version が ${pkg.version}（期待 2.0.4-rc21）`);
 });
 
 test('version: scripts.test に v204-rc12-role-change-completion.test.js が含まれる', () => {
