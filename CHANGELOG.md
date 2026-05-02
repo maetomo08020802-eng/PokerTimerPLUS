@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4-rc17] - 2026-05-02
+
+### Fixed
+- **問題 ② PAUSED 中 time-shift 不同期の根治（タスク 1）**: rc15 試験で観察された「PAUSED 中の進める/戻す操作で hall 側が固まり、解除時に一気に変わる」現象を構造的に解消。真因は `src/renderer/renderer.js:1579` の subscribe ガード `if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex)` が PAUSED 中の `remainingMs` 単独変化を弾いていたこと。修正案 ②-1（rc16 事前調査で確定）採用、ガードに `(state.status === States.PAUSED && state.remainingMs !== prev.remainingMs)` の OR 分岐を追加（1 行）→ `schedulePersistTimerState()` 経由で `tournaments:setTimerState` IPC が発火 → `_publishDualState` 経由で hall に同期。**500 ms debounce で IPC 集約は維持**、RUNNING / BREAK / PRE_START は対象外（既存ガードで十分）。
+
+### Added
+- **常時 3 ラベル rolling ログ（タスク 2）**: 配布版にも常時記録される 3 ラベルを追加、本配布後の障害発生時の自動観測ツールとして機能。
+  - `timer:state:send` — `src/main.js` `_publishDualState(kind, value)` 内で `kind === 'timerState'` のみ `rollingLog()` 呼出（main 送信 ts 記録）
+  - `timer:state:recv:hall` — `src/renderer/dual-sync.js` `_applyDiffToState(diff)` 入口で `kind === 'timerState'` のみ `window.api.log.write()` 呼出（hall 受信 ts 記録）
+  - `render:tick:hall` — `src/renderer/renderer.js` subscribe コールバック内で `window.appRole === 'hall'` のみ `window.api.log.write()` 呼出（hall 描画タイミング記録）
+  - すべて `try { ... } catch (_) {}` で wrap、never throw from logging。既存 rc15 rolling ログ機構流用、新規 IPC 追加なし。
+
+### Investigated
+- **問題 ③（トーナメント削除ダイアログが開かない、タスク 3）**: rc18 で修正予定。最有力候補は仮説 ③-3（別 `<dialog>` open 中の二重 `showModal()` で `InvalidStateError` がサイレント throw）。`renderer.js:3835` `el.tournamentDeleteDialog.showModal?.()` は `<dialog open>` 残存時に例外を throw するが、`handleTournamentRowDelete` は呼出側で `await` も `.catch` もしておらず、`try/finally` のみ（`catch` なし）→ 例外は unhandledrejection に流れるが rolling ログには記録なし = 無音失敗。修正案 A（dialog open ガード 1 行追加）+ 案 B（例外可視化 5〜8 行）併用を推奨、致命バグ保護 5 件への影響ゼロ。
+- **問題 ④（新規トーナメント名が編集できない再発、タスク 4、🚨最優先）**: rc18 で修正予定。**真因は致命級の対象オブジェクト誤認**。`ensureEditorEditableState`（renderer.js:4563-4575）は `el.presetName`（ブラインド構造プリセット名）と blinds テーブルのみを操作し、**`el.tournamentTitle`（イベント名 input）には一切触っていない**。git blame で C.1.4-fix1 Fix 5 当時から `_handleTournamentNewImpl` 末尾の `ensureEditorEditableState` 2 重呼出は完全維持されているが、その関数が `tournamentTitle` を救う対象として元から含んでいない。「タイマー画面に戻ると治る」現象は modal `<dialog>` の focus context リセットによる focus race の解消で説明可能。**致命バグ保護 5 件は無傷、テスト盲点（`tournamentTitle` の編集可能性検査が 0 件）が見逃しの構造原因**。修正案 A（`_handleTournamentNewImpl` 末尾で `tournamentTitle.readOnly = false; .disabled = false; removeAttribute` を明示クリア、約 10 行）推奨、致命バグ保護への影響ゼロ。
+
+### Compatibility (rc17)
+- **致命バグ保護 5 件すべて完全維持**: C.2.7-A / **C.2.7-D 強化方向**（PAUSED 中 remainingMs 同期経路追加でも timerState destructure 除外設計は維持）/ C.1-A2 + C.1.4-fix1 Fix 5 / C.1.7 / C.1.8
+- **rc7〜rc15 確定 Fix すべて維持**
+- **operator-solo モード（v1.3.0 互換）影響なし**
+
+### Tests (rc17)
+- **新規テスト 1 ファイル**: `tests/v204-rc17-paused-time-shift-sync.test.js` を T1〜T8（PAUSED 同期トリガ条件式 4 + 3 ラベル rolling ログ 4）+ 致命バグ保護 5 件 cross-check + rc15 機構維持 3 件 = **計 16 件すべて PASS**。既存テスト全件 (rc15 まで 524+ 件) PASS、追従更新の必要なし（grep で `schedulePersistTimerState` / `_publishDualState` / `_applyDiffToState` を確認、rc17 PAUSED 経路追加の影響なし）。
+
+---
+
 ## [2.0.4-rc15] - 2026-05-02
 
 ### Fixed

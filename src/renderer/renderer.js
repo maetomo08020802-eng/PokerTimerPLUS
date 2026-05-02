@@ -1573,10 +1573,19 @@ subscribe((state, prev) => {
       }
     } catch (err) { console.warn('pauseAfterBreak 処理失敗:', err); }
   }
+  // v2.0.4-rc17: 常時 3 ラベル rolling ログ #3（hall 描画 ts）
+  if (typeof window !== 'undefined' && window.appRole === 'hall') {
+    try { window.api?.log?.write?.('render:tick:hall', { status: state.status, level: state.currentLevelIndex, remainingMs: state.remainingMs }); } catch (_) { /* never throw from logging */ }
+  }
   renderTime(state.remainingMs);
   renderNextBreak(state.remainingMs, state.currentLevelIndex);
   // STEP 6.21: status / level 変化時にアクティブ TimerState を保存
-  if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex) {
+  // v2.0.4-rc17: PAUSED 中の time-shift（remainingMs 単独変化）も同期トリガに含める（修正案 ②-1）
+  if (
+    state.status !== prev.status ||
+    state.currentLevelIndex !== prev.currentLevelIndex ||
+    (state.status === States.PAUSED && state.remainingMs !== prev.remainingMs)
+  ) {
     schedulePersistTimerState();
     // リスト UI も状態反映のため再描画（軽量）
     renderTournamentList().catch(() => {});

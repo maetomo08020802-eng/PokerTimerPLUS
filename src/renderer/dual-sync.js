@@ -32,6 +32,10 @@ function _applyDiffToState(diff) {
   if (!diff || typeof diff !== 'object' || typeof diff.kind !== 'string') return;
   const { kind, value } = diff;
   if (value === undefined) return;
+  // v2.0.4-rc17: 常時 3 ラベル rolling ログ #2（hall 受信 ts、timerState のみ）
+  if (kind === 'timerState') {
+    try { window.api?.log?.write?.('timer:state:recv:hall', { status: value?.status, level: value?.currentLevel, elapsed: value?.elapsedSecondsInLevel, role: window.appRole }); } catch (_) { /* never throw from logging */ }
+  }
   // 1. state.js への記録（後方互換、debug 用）
   setState({ [`dual_${kind}`]: value });
   // 2. hall 側 renderer の動的反映（registerDualDiffHandler で登録済の場合のみ）

@@ -990,6 +990,10 @@ function _broadcastDualState(channel, payload) {
 function _publishDualState(kind, value) {
   if (!Object.prototype.hasOwnProperty.call(_dualStateCache, kind)) return;
   _dualStateCache[kind] = value;
+  // v2.0.4-rc17: 常時 3 ラベル rolling ログ #1（timerState 送信 ts）
+  if (kind === 'timerState') {
+    try { rollingLog('timer:state:send', { status: value?.status, level: value?.currentLevel, elapsed: value?.elapsedSecondsInLevel }); } catch (_) { /* never throw from logging */ }
+  }
   _broadcastDualState('dual:state-sync', { kind, value });
 }
 
