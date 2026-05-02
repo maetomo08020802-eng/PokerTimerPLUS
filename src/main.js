@@ -2086,9 +2086,13 @@ function registerIpcHandlers() {
     store.set('tournaments', list);
     // v2.0.0 STEP 2: 保存対象が active トーナメントなら hall に basics + displaySettings + marquee を再送
     if (validated.id === store.get('activeTournamentId')) {
+      // v2.0.4-rc19 タスク 2（問題 ⑥ 残部、案 ⑥-A）:
+      // hall 側の loadPresetById IPC 2 段化を回避するため、structure を payload に直接同梱。
+      // hall 受信側で value.structure があれば setStructure を直接呼び、無ければ既存フォールバック。
       _publishDualState('tournamentBasics', {
         id: validated.id, name: validated.name, subtitle: validated.subtitle,
-        titleColor: validated.titleColor, blindPresetId: validated.blindPresetId
+        titleColor: validated.titleColor, blindPresetId: validated.blindPresetId,
+        structure: validated.structure
       });
       if (validated.displaySettings)  _publishDualState('displaySettings', validated.displaySettings);
       if (validated.marqueeSettings)  _publishDualState('marqueeSettings', validated.marqueeSettings);

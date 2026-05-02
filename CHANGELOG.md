@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4-rc19] - 2026-05-02
+
+### Fixed
+- **問題 ④（新規トーナメント / ブラインド構造名が初回クリックで編集できない）根治（タスク 1、案 A'' + 案 C）**: rc15 試験以降残存していた致命的 UX バグ（`presetName` を最初の 1 クリックで編集できない、フォーカス切替で治る）の真因を確定 + 修正。**真因 = `[data-role="operator"] .operator-pane`（`src/renderer/style.css:3830-3845`）が opaque（background `#0A1F3D`）かつ z-index 90、`pointer-events: none` 宣言が欠落 → `<dialog>.showModal()` の Chromium top layer 昇格と layer composition race の組合せで初回 click を operator-pane が吸収していた**。修正: ① `body:has(dialog[open]) [data-role="operator"] .operator-pane { pointer-events: none; }` 追加（ダイアログ open 時のみ hit-test 対象から外す、通常時の前原さん運用「クリックで window focus 取得」は維持）、② `.form-dialog.form-dialog--tabs { z-index: 10000; }` 追加（Chromium top layer race の二重保険）。CSS のみで完結、JS 介入ゼロ、致命バグ保護 5 件すべて完全無傷。
+- **問題 ⑥ 残部（ブラインドタブ単独保存時の hall 同期遅延）解消（タスク 2、案 ⑥-A）**: rc18 第 1 弾で「トーナメントタブ保存は OK / ブラインドタブ単独保存は会場モニター切替がタイマースタート時まで遅れる」現象が残存。修正: `src/main.js:2086-2096` `tournaments:save` ハンドラの `_publishDualState('tournamentBasics', ...)` payload に `structure: validated.structure` を直接同梱、`src/renderer/renderer.js:6645-6679` の hall 側受信で `value.structure` があれば `setStructure(value.structure)` を直接呼び、無ければ既存 `loadPresetById(t.blindPresetId)` フォールバック維持で安全側。`loadPresetById` IPC 2 段化を回避、構造同期の即時化。
+- **問題 ⑦（PAUSED 中 Ctrl+E specialStack 同期漏れ）解消（タスク 3、案 ⑦-A）**: rc18 第 1 弾で 7 関数末尾に `updateOperatorPane(getState())` を追加したが、`adjustSpecialStack` だけ漏れていた問題 ⑤ と完全同構造の同期漏れ。修正: `src/renderer/renderer.js:6288-6309` `adjustSpecialStack` 関数末尾に `try { updateOperatorPane(getState()); } catch (_) {}` を 1 行追加。**重要警告（C.1.8 不変条件保護）**: `schedulePersistRuntime` は意図的に追加していない（`specialStack` は `tournamentState.specialStack` であり `tournamentRuntime` ではないため、永続化は既存 `window.api.tournament.set({ specialStack })` 経路で十分、runtime 永続化 8 箇所の境界を曖昧化させない）。
+- **問題 ⑧（AC 側「イベント名」項目空白表示）解消（タスク 4、案 3）**: rc18 第 1 弾試験で発覚、AC モニター左半分の「イベント名」項目が常に `'-'`（空白）表示。真因 = `updateOperatorPane`（`renderer.js:1670`）が `tournamentState.name` を読むが、initial state も `applyTournament` も `.title` のみ更新していた属性名不整合。修正: `src/renderer/renderer.js:1041-1051` `applyTournament` 内で `tournamentState.title` 代入と同時に `tournamentState.name` にも同期代入（双方向整合性保証）。
+
+### Tests
+- `tests/v204-rc19-dialog-overlay.test.js` 新規追加（タスク 1 関連、T1〜T4 + 致命バグ保護 cross-check）
+- `tests/v204-rc19-structure-payload.test.js` 新規追加（タスク 2 関連、T5〜T7 + version assertion）
+- `tests/v204-rc19-special-stack-and-name.test.js` 新規追加（タスク 3+4 関連、T8〜T11 + 致命バグ保護 5 件 cross-check + `schedulePersistRuntime` 不在 assertion）
+- 既存テスト 10 ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15）の version assertion を `2.0.4-rc18` → `2.0.4-rc19` に追従更新
+
+### Compatibility (rc19)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）。特に C.1-A2 は本 fix が外側 hit-test 経路の修正で関数本体無介入、C.1.8 は `adjustSpecialStack` への `schedulePersistRuntime` 追加禁止により永続化境界を維持。
+- rc18 第 1 弾の hall 側 `loadPresetById` フォールバック経路は完全維持（`value.structure` 不在時の旧経路）。
+- 通常時の operator-pane クリック focus 取得（前原さん運用「AC 左半分クリックで window focus」）は維持、ダイアログ open 時のみ素通し。
+
+---
+
 ## [2.0.4-rc18] - 2026-05-02
 
 ### Fixed

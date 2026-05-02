@@ -1040,7 +1040,14 @@ function applyTournament(t) {
   // 旧 title / 新 name 両対応
   const titleSrc = (typeof t.title === 'string') ? t.title
                   : (typeof t.name === 'string') ? t.name : undefined;
-  if (typeof titleSrc === 'string') tournamentState.title = titleSrc;
+  // v2.0.4-rc19 タスク 4（問題 ⑧ 修正、案 3）:
+  // updateOperatorPane（renderer.js:1670）が tournamentState.name を読むが、
+  // initial state も applyTournament も .title のみ更新していた → AC「イベント名」常時 '-'。
+  // 双方向整合性保証のため .title と .name を同期代入。
+  if (typeof titleSrc === 'string') {
+    tournamentState.title = titleSrc;
+    tournamentState.name = titleSrc;
+  }
   if (typeof t.subtitle === 'string') tournamentState.subtitle = t.subtitle;
   if (typeof t.currencySymbol === 'string' && t.currencySymbol.length > 0) {
     tournamentState.currencySymbol = t.currencySymbol;
@@ -6301,6 +6308,11 @@ function adjustSpecialStack(delta) {
   if (window.api?.tournament?.set) {
     window.api.tournament.set({ specialStack: { ...ss } }).catch(() => {});
   }
+  // v2.0.4-rc19 タスク 3（問題 ⑦ 修正、案 ⑦-A）:
+  // rc18 第 1 弾で 7 関数（addNewEntry / cancelNewEntry / eliminatePlayer / revivePlayer /
+  // resetTournamentRuntime / adjustReentry / adjustAddOn）末尾に updateOperatorPane(getState()) を追加したが、
+  // adjustSpecialStack だけ漏れていた。問題 ⑦（PAUSED 中 Ctrl+E で AC pane 据置）と完全同構造の同期漏れ修正。
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.9: 「特殊スタックを有効化」チェックボックスに応じて
@@ -6650,7 +6662,16 @@ if (__appRole === 'hall') {
           window.api.tournaments.getActive().then(async (t) => {
             if (!t) return;
             applyTournament(t);
-            if (typeof t.blindPresetId === 'string' && t.blindPresetId) {
+            // v2.0.4-rc19 タスク 2（問題 ⑥ 残部、案 ⑥-A）:
+            // payload に structure 同梱されていれば直接適用、無ければ rc18 第 1 弾の loadPresetById フォールバック
+            if (value.structure && typeof value.structure === 'object') {
+              try {
+                setStructure(value.structure);
+                const { currentLevelIndex } = getState();
+                renderCurrentLevel(currentLevelIndex);
+                renderNextLevel(currentLevelIndex);
+              } catch (err) { console.warn('[dual-sync] setStructure (direct) 失敗:', err); }
+            } else if (typeof t.blindPresetId === 'string' && t.blindPresetId) {
               try {
                 const preset = await loadPresetById(t.blindPresetId);
                 if (preset) {
@@ -6659,7 +6680,7 @@ if (__appRole === 'hall') {
                   renderCurrentLevel(currentLevelIndex);
                   renderNextLevel(currentLevelIndex);
                 }
-              } catch (err) { console.warn('[dual-sync] setStructure 失敗:', err); }
+              } catch (err) { console.warn('[dual-sync] setStructure (fallback) 失敗:', err); }
             }
           }).catch(() => { /* ignore */ });
         }

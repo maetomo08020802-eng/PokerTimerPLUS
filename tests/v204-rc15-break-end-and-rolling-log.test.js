@@ -297,10 +297,10 @@ test('rc13 維持: _handleTournamentDuplicateImpl 内で ensureEditorEditableSta
 // version 同期確認（rc15）
 // ============================================================
 
-test('version: package.json は 2.0.4-rc18', () => {
+test('version: package.json は 2.0.4-rc19', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc18',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc18）`);
+  assert.equal(pkg.version, '2.0.4-rc19',
+    `package.json version が ${pkg.version}（期待 2.0.4-rc19）`);
 });
 
 test('version: scripts.test に v204-rc15-break-end-and-rolling-log.test.js が含まれる', () => {
