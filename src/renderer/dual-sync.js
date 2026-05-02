@@ -36,6 +36,13 @@ function _applyDiffToState(diff) {
   if (kind === 'timerState') {
     try { window.api?.log?.write?.('timer:state:recv:hall', { status: value?.status, level: value?.currentLevel, elapsed: value?.elapsedSecondsInLevel, role: window.appRole }); } catch (_) { /* never throw from logging */ }
   }
+  // v2.0.4-rc18 第 1 弾 タスク 4: 常時 2 ラベル追加（runtime / blindPreset 受信 ts）
+  if (kind === 'tournamentRuntime') {
+    try { window.api?.log?.write?.('runtime:state:recv:hall', { playersInitial: value?.playersInitial, playersRemaining: value?.playersRemaining, reentryCount: value?.reentryCount, addOnCount: value?.addOnCount, role: window.appRole }); } catch (_) { /* never throw from logging */ }
+  }
+  if (kind === 'tournamentBasics') {
+    try { window.api?.log?.write?.('blindPreset:state:recv:hall', { presetId: value?.blindPresetId, presetName: value?.name, structureLength: value?.structure?.levels?.length || 0, role: window.appRole }); } catch (_) { /* never throw from logging */ }
+  }
   // 1. state.js への記録（後方互換、debug 用）
   setState({ [`dual_${kind}`]: value });
   // 2. hall 側 renderer の動的反映（registerDualDiffHandler で登録済の場合のみ）

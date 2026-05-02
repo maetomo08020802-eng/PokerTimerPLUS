@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4-rc18] - 2026-05-02
+
+### Fixed
+- **問題 ⑥ 新規トーナメント保存時の hall 構造同期漏れ根治（タスク 1、修正案 ⑥-A）**: rc17 試験で観察された「新規トーナメント保存時に hall（会場モニター）が違うブラインド構造を表示する」現象を構造的に解消。**v2.0.0 設計時から潜在していた構造的設計欠陥**（hall 側 dual-sync handler の `tournamentBasics` 受信時、`applyTournament` は `tournamentState.blindPresetId` をメモリ更新するが `setStructure(loadPresetById(blindPresetId))` を呼んでいなかった）。修正: `src/renderer/renderer.js:6645-6664` の hall 側 dual-sync handler を async 化し、`tournamentBasics` 受信後に `loadPresetById(t.blindPresetId)` で preset を取得して `setStructure(preset)` を呼ぶ + `renderCurrentLevel` / `renderNextLevel` で即時描画反映（約 14 行追加）。
+- **問題 ② PAUSED 中 time-shift 連動解消（タスク 1 副次効果）**: rc17 試験「あまり変わらず」の真の根本原因が問題 ⑥ と同根（hall は level=6 を受信しても structure 不整合で level=0 に丸めて描画していた）と確定。修正案 ⑥-A の連動効果で問題 ② も解消想定（rc17 修正案 ②-1 + rc18 修正案 ⑥-A の 2 段で完成）。
+- **問題 ⑤ PAUSED 中エントリー追加で AC 操作画面の operator-pane が更新されない（タスク 2）**: rc17 試験で観察された「PAUSED 中エントリー追加で AC 画面左半分の operator-pane（人数 / スタック数値表示エリア、rc4 追加）が変わらず、再開時に一気に更新される」現象を解消。真因: `addNewEntry` / `cancelNewEntry` / `eliminatePlayer` / `revivePlayer` / `resetTournamentRuntime` / `adjustReentry` / `adjustAddOn` の 7 関数は `tournamentRuntime` を直接 mutate（state.js を経由せず subscribe を発火しない）→ `updateOperatorPane()` が呼ばれない設計欠陥。修正: 各関数末尾の `schedulePersistRuntime();` 直後に `try { updateOperatorPane(getState()); } catch (_) {}` を 1 行追加（計 7 箇所、try/catch wrap）。
+
+### Added
+- **rolling ログ機構刷新（タスク 3、案 ①）**: fire-and-forget `fs.promises.appendFile` 一発打ちが I/O 順序を保証しないことが rc17 試験ログで判明（recv ts と書込順序の不一致、ログ末尾に古い ts が混入）→ **in-memory ring buffer 化**で根絶。`src/main.js:51-101` で:
+  - `let _rollingLogBuffer = []` 追加（同期 push、上限 5,000 件で `shift` で古いエントリ自動削除）
+  - `const ROLLING_LOG_BUFFER_MAX = 5000`（5 分 × 60 sec × 約 17 ラベル/秒余裕）
+  - `_truncateRollingLog` 関数を **削除**、`async function _flushRollingLog` で置換（5 分 retention で filter → `fs.promises.writeFile` でファイル全体上書き）
+  - 30 秒定期タイマーは `_flushRollingLog` を呼出（既存 `ROLLING_LOG_TRUNCATE_INTERVAL_MS` 流用）
+  - `app.on('will-quit', ...)` ハンドラに `_flushRollingLog` fire-and-forget 呼出追加（line 2452）
+  - `ipcMain.handle('logs:openFolder', ...)` ハンドラ先頭に `await _flushRollingLog()` 追加（line 2571、前原さんがログフォルダを開いた時点で最新状態反映）
+- **常時 4 ラベル rolling ログ追加（タスク 4）**: 問題 ⑤⑥ の自動観測のため配布版にも常時記録される 4 ラベルを追加。すべて既存 rc15 機構流用、新規 IPC 追加なし、すべて `try { ... } catch (_) {}` で wrap、never throw from logging。
+  - `runtime:state:send` — `src/main.js` `_publishDualState` 内で `kind === 'tournamentRuntime'` のみ `rollingLog` 呼出（main 送信 ts 記録）
+  - `runtime:state:recv:hall` — `src/renderer/dual-sync.js` `_applyDiffToState` 内で `kind === 'tournamentRuntime'` のみ `window.api.log.write` 呼出（hall 受信 ts 記録）
+  - `blindPreset:state:send` — `src/main.js` `_publishDualState` 内で `kind === 'tournamentBasics'` のみ `rollingLog` 呼出
+  - `blindPreset:state:recv:hall` — `src/renderer/dual-sync.js` `_applyDiffToState` 内で `kind === 'tournamentBasics'` のみ `window.api.log.write` 呼出
+
+### Investigated
+- **問題 ④（新規トーナメント名が編集できない）は本フェーズの対象外**（rc18 第 2 弾事前調査依頼予定、DevTools 実機観測待ち）
+- **問題 ① IPC レイテンシ「重い」体感**: rc17 試験ログ実測で 1ms〜574ms の極端二極化（94ms / 112ms / 1ms / 467ms / 574ms）を確認。重大発見: ログ ts そのものが信用できない可能性（fire-and-forget appendFile による I/O 順序乱れ）→ rc18 ring buffer 化で計測精度確保 → 再計測 → rc19 で本質的修正判断（IPC 順序入替案 ② は C.1.8 整合性窓拡大リスクのため第 2 弾以降で慎重判断）
+
+### Compatibility (rc18)
+- **致命バグ保護 5 件すべて完全維持**: C.2.7-A / C.2.7-D / C.1-A2 + C.1.4-fix1 Fix 5 / C.1.7 / C.1.8（タスク 2 で `schedulePersistRuntime` の 500ms debounce には触らず `updateOperatorPane` 呼出強化のみ）
+- **rc7〜rc17 確定 Fix すべて維持**
+- **operator-solo モード（v1.3.0 互換）影響なし**
+
+### Tests (rc18)
+- **新規テスト 2 ファイル**: `tests/v204-rc18-structure-and-pane-sync.test.js`（T1〜T8 + 致命バグ保護 5 件 + rc17 機構維持 = 計 15 件）+ `tests/v204-rc18-ring-buffer-and-labels.test.js`（T6〜T13 ring buffer + 4 ラベル + 致命バグ保護 5 件 + rc15/rc17 維持 + rc18 削除確認 = 計 19 件）。**追加 34 件すべて PASS**。
+- **既存テスト追従**: `tests/v204-rc15-break-end-and-rolling-log.test.js` の T6-B / T6-C / T7 を rc18 仕様（`_truncateRollingLog` → `_flushRollingLog`、`appendFile` → `writeFile`）に追従更新。各 rc 追従用 version assertion テスト 8 ファイルを `2.0.4-rc17` → `2.0.4-rc18` 値更新。既存テスト全件（rc15 まで 540 件 + 新規 34 件）PASS、skip / コメントアウト / 無効化なし。
+
+---
+
 ## [2.0.4-rc17] - 2026-05-02
 
 ### Fixed

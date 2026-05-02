@@ -39,11 +39,12 @@ const isDev = process.env.NODE_ENV === 'development';
 // バグ発見支援のため、直近 5 分間のイベントログを <userData>/logs/rolling-current.log に
 // JSON Lines 形式で記録する常時稼働機構。前原さん要望「1 ファイルコピーで済む」を満たす。
 //
-// 設計（CC_REPORT rc14 §3 推奨案 A 準拠）:
-// - append: fs.promises.appendFile（fire-and-forget、main プロセスのみが直接 fs アクセス）
-// - 切捨: 30s タイマーで読込→ts > now-300s で filter→書換（fs.promises 必須、同期 IO 禁止）
+// 設計（rc14 §3 推奨案 A → rc18 で ring buffer 化に進化）:
+// - rc18 改修: in-memory ring buffer (上限 5,000 件) に push、30s 定期 flush で writeFile 全体上書き。
+//   fire-and-forget の追記廃止により I/O 順序乱れを根絶（ts と書込順序が常に一致）。
+// - 切捨: flush 時に 5 分 retention で filter してから書換（fs.promises 必須、同期 IO 禁止）
 // - renderer は IPC 'rolling-log:write' 経由のみ（直接 fs アクセス禁止、ロックフリー化）
-// - クラッシュ耐性: append 都度ディスク到達、最大 OS バッファ分のみ損失リスク
+// - クラッシュ耐性: 最大 30s 分 + buffer 内未 flush 分のみ損失リスク
 // - 容量目安: 平均 440 B/行 × 約 200 行/5min ≒ 90 KB（上限 ~1 MB 想定）
 //
 // 致命バグ保護への影響: なし（C.1.7 等は観測のみ、再生経路に介入しない）
@@ -51,6 +52,9 @@ const ROLLING_LOG_RETENTION_MS = 5 * 60 * 1000;   // 5 分
 const ROLLING_LOG_TRUNCATE_INTERVAL_MS = 30 * 1000; // 30 秒
 let _rollingLogFilePath = null;
 let _rollingLogTruncateTimer = null;
+// v2.0.4-rc18 第 1 弾 タスク 3: ring buffer 化（fire-and-forget appendFile を廃止、I/O 順序乱れを根絶）
+const ROLLING_LOG_BUFFER_MAX = 5000;  // 5 分 × 60 sec × 約 17 ラベル/秒余裕
+let _rollingLogBuffer = [];
 function _initRollingLog() {
   if (_rollingLogFilePath !== null) return _rollingLogFilePath;
   try {
@@ -60,12 +64,10 @@ function _initRollingLog() {
     const logsDir = path.join(userData, 'logs');
     try { fs.mkdirSync(logsDir, { recursive: true }); } catch (_) { /* ignore */ }
     _rollingLogFilePath = path.join(logsDir, 'rolling-current.log');
-    // 起動時切捨（古いログを継承する場合に備え、起動直後に 5 分超は削除）
-    _truncateRollingLog().catch(() => { /* ignore */ });
-    // 30 秒定期切捨タイマー開始
+    // 30 秒定期 flush タイマー開始（rc18 で append 廃止、buffer から writeFile で全体上書き）
     if (_rollingLogTruncateTimer === null) {
       _rollingLogTruncateTimer = setInterval(() => {
-        _truncateRollingLog().catch(() => { /* never throw from logging */ });
+        _flushRollingLog().catch(() => { /* never throw from logging */ });
       }, ROLLING_LOG_TRUNCATE_INTERVAL_MS);
       if (typeof _rollingLogTruncateTimer.unref === 'function') _rollingLogTruncateTimer.unref();
     }
@@ -73,37 +75,30 @@ function _initRollingLog() {
   } catch (_) { _rollingLogFilePath = ''; }
   return _rollingLogFilePath;
 }
-async function _truncateRollingLog() {
-  if (!_rollingLogFilePath) return;
+async function _flushRollingLog() {
   try {
-    const fsp = fs.promises;
-    let content;
-    try { content = await fsp.readFile(_rollingLogFilePath, 'utf8'); }
-    catch (e) { if (e && e.code === 'ENOENT') return; throw e; }
+    const file = _initRollingLog();
+    if (!file || !_rollingLogBuffer.length) return;
+    // 5 分 retention で filter
     const cutoff = Date.now() - ROLLING_LOG_RETENTION_MS;
-    const lines = content.split('\n');
-    const kept = [];
-    for (const line of lines) {
-      if (!line) continue;
-      try {
-        const obj = JSON.parse(line);
-        const t = obj && obj.ts ? Date.parse(obj.ts) : NaN;
-        if (Number.isFinite(t) && t >= cutoff) kept.push(line);
-      } catch (_) { /* 不正行はスキップ */ }
-    }
-    const out = kept.length ? kept.join('\n') + '\n' : '';
-    await fsp.writeFile(_rollingLogFilePath, out);
+    _rollingLogBuffer = _rollingLogBuffer.filter((entry) => {
+      const t = Date.parse(entry.ts);
+      return Number.isFinite(t) && t >= cutoff;
+    });
+    if (!_rollingLogBuffer.length) return;
+    const out = _rollingLogBuffer.map((e) => JSON.stringify(e)).join('\n') + '\n';
+    await fs.promises.writeFile(file, out);
   } catch (_) { /* never throw */ }
 }
 function rollingLog(label, data) {
   // main プロセスから直接呼ぶエントリポイント。renderer からは IPC 'rolling-log:write' 経由。
   try {
-    const file = _initRollingLog();
-    if (!file) return;
     const entry = { ts: new Date().toISOString(), label: String(label || ''), data: data || null };
-    // fire-and-forget で append、エラーは握り潰し（never throw from logging）
-    fs.promises.appendFile(file, JSON.stringify(entry) + '\n').catch(() => { /* ignore */ });
-  } catch (_) { /* never throw */ }
+    _rollingLogBuffer.push(entry);
+    if (_rollingLogBuffer.length > ROLLING_LOG_BUFFER_MAX) {
+      _rollingLogBuffer.shift();   // 古いエントリ自動削除
+    }
+  } catch (_) { /* never throw from logging */ }
 }
 // rolling ログ用ヘルパ（display イベント用、IIFE で既存テスト regex を破壊しないため別関数化）
 function _safeDisplaysCount() {
@@ -993,6 +988,13 @@ function _publishDualState(kind, value) {
   // v2.0.4-rc17: 常時 3 ラベル rolling ログ #1（timerState 送信 ts）
   if (kind === 'timerState') {
     try { rollingLog('timer:state:send', { status: value?.status, level: value?.currentLevel, elapsed: value?.elapsedSecondsInLevel }); } catch (_) { /* never throw from logging */ }
+  }
+  // v2.0.4-rc18 第 1 弾 タスク 4: 常時 2 ラベル追加（runtime / blindPreset 送信 ts）
+  if (kind === 'tournamentRuntime') {
+    try { rollingLog('runtime:state:send', { playersInitial: value?.playersInitial, playersRemaining: value?.playersRemaining, reentryCount: value?.reentryCount, addOnCount: value?.addOnCount }); } catch (_) { /* never throw from logging */ }
+  }
+  if (kind === 'tournamentBasics') {
+    try { rollingLog('blindPreset:state:send', { presetId: value?.blindPresetId, presetName: value?.name, structureLength: value?.structure?.levels?.length || 0 }); } catch (_) { /* never throw from logging */ }
   }
   _broadcastDualState('dual:state-sync', { kind, value });
 }
@@ -2446,6 +2448,8 @@ function registerIpcHandlers() {
     _powerSaveBlockerId = null;
     // 2 つ目の will-quit ハンドラから統合
     try { globalShortcut.unregisterAll(); } catch (_) { /* ignore */ }
+    // v2.0.4-rc18 第 1 弾 タスク 3: 終了直前に最終 flush（fire-and-forget、5,000 件 buffer × 5 分 retention）
+    try { _flushRollingLog(); } catch (_) { /* never throw from logging */ }
   });
 
   ipcMain.handle('tournament:set', (_event, partial) => {
@@ -2563,6 +2567,8 @@ function registerIpcHandlers() {
   //   _resolveLogsDir は inline object literal を持たない（既存テスト regex 互換、
   //   `[\s\S]*?\}\s*\)\s*;` パターンに引っかかる { recursive: true } を関数化で回避）。
   ipcMain.handle('logs:openFolder', async () => {
+    // v2.0.4-rc18 第 1 弾 タスク 3: フォルダを開く前に最新状態を確実に書き出す
+    try { await _flushRollingLog(); } catch (_) { /* never throw from logging */ }
     const dir = _resolveLogsDir();
     if (!dir) return { ok: false, error: 'app.getPath unavailable' };
     const result = await shell.openPath(dir);

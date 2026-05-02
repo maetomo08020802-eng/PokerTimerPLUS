@@ -6177,6 +6177,7 @@ function addNewEntry() {
   tournamentRuntime.playersRemaining += 1;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.7: Shift+↑ で新規エントリー取消（直前の addNewEntry を打ち消す）
@@ -6190,6 +6191,7 @@ function cancelNewEntry() {
   tournamentRuntime.playersRemaining = Math.max(0, tournamentRuntime.playersRemaining - 1);
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // ↓キー: プレイヤー脱落（playersRemaining のみ減少）
@@ -6202,6 +6204,7 @@ function eliminatePlayer() {
   tournamentRuntime.playersRemaining -= 1;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.9: Shift+↓ プレイヤー復活（直前の脱落を取消）。
@@ -6213,6 +6216,7 @@ function revivePlayer() {
   tournamentRuntime.playersRemaining += 1;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.6: タイマーリセット時にトーナメントランタイムも初期化
@@ -6228,6 +6232,7 @@ function resetTournamentRuntime() {
   renderStaticInfo();
   // STEP 10 フェーズC.1.8: 明示的「タイマーリセット」時の 0 値も永続化（次回起動時も 0 を維持）
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // 全てのリセット経路で呼ぶラッパ。
@@ -6264,6 +6269,7 @@ function adjustReentry(delta) {
   tournamentRuntime.reentryCount = next;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 function adjustAddOn(delta) {
@@ -6273,6 +6279,7 @@ function adjustAddOn(delta) {
   tournamentRuntime.addOnCount = next;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.9: 特殊スタック適用人数（specialStack.appliedCount）を ±1 する。
@@ -6638,9 +6645,22 @@ if (__appRole === 'hall') {
       } else if (kind === 'tournamentBasics' && value) {
         // basics（id / name / subtitle / titleColor / blindPresetId）変更時は active 全体を再取得
         // applyTournament が tournamentState 更新 + 表示反映を網羅、最も安全な経路。
+        // v2.0.4-rc18 第 1 弾 修正案 ⑥-A: hall 側で blindPresetId 更新時に structure も再ロード（問題 ⑥ 真因修正）
         if (window.api?.tournaments?.getActive) {
-          window.api.tournaments.getActive().then((t) => {
-            if (t) applyTournament(t);
+          window.api.tournaments.getActive().then(async (t) => {
+            if (!t) return;
+            applyTournament(t);
+            if (typeof t.blindPresetId === 'string' && t.blindPresetId) {
+              try {
+                const preset = await loadPresetById(t.blindPresetId);
+                if (preset) {
+                  setStructure(preset);
+                  const { currentLevelIndex } = getState();
+                  renderCurrentLevel(currentLevelIndex);
+                  renderNextLevel(currentLevelIndex);
+                }
+              } catch (err) { console.warn('[dual-sync] setStructure 失敗:', err); }
+            }
           }).catch(() => { /* ignore */ });
         }
       } else if (kind === 'timerState' && value) {

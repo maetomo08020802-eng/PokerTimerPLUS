@@ -100,22 +100,17 @@ test('T6-A: main.js に rollingLog 関数定義が存在', () => {
     'main.js に rollingLog(label, data) 関数定義が見つからない');
 });
 
-test('T6-B: main.js に _initRollingLog / _truncateRollingLog ヘルパが存在', () => {
+test('T6-B: main.js に _initRollingLog / _flushRollingLog ヘルパが存在 (rc18 で _truncateRollingLog → _flushRollingLog 置換)', () => {
   assert.match(MAIN, /function\s+_initRollingLog\s*\(/, '_initRollingLog が見つからない');
-  assert.match(MAIN, /async\s+function\s+_truncateRollingLog\s*\(/, '_truncateRollingLog が見つからない');
+  assert.match(MAIN, /async\s+function\s+_flushRollingLog\s*\(/, '_flushRollingLog が見つからない（rc18 ring buffer 化で必要）');
 });
 
-test('T6-C: rolling ログは fs.promises 非同期 IO で書き込まれる（同期 IO 禁止）', () => {
-  // append は fs.promises.appendFile 経由
-  assert.match(MAIN, /fs\.promises\.appendFile/,
-    'rolling ログの append が非同期 (fs.promises.appendFile) で実装されていない');
-  // 切捨は fs.promises.readFile / writeFile 経由
-  const fnBody = extractFunctionBody(MAIN, /async\s+function\s+_truncateRollingLog\s*\([^)]*\)\s*\{/);
-  assert.ok(fnBody, '_truncateRollingLog 本体が見つからない');
-  assert.match(fnBody, /fs\.promises\.readFile|fsp\.readFile/,
-    '_truncateRollingLog で非同期 readFile が使われていない');
+test('T6-C: rolling ログは fs.promises 非同期 IO で書き込まれる（同期 IO 禁止、rc18 で writeFile 全体上書きに統一）', () => {
+  // rc18: rollingLog は ring buffer に push、flush 時に writeFile で全体上書き（appendFile は廃止）
+  const fnBody = extractFunctionBody(MAIN, /async\s+function\s+_flushRollingLog\s*\([^)]*\)\s*\{/);
+  assert.ok(fnBody, '_flushRollingLog 本体が見つからない');
   assert.match(fnBody, /fs\.promises\.writeFile|fsp\.writeFile/,
-    '_truncateRollingLog で非同期 writeFile が使われていない');
+    '_flushRollingLog で非同期 writeFile が使われていない');
 });
 
 test('T6-D: 5 分保持期間 + 30 秒切捨間隔の定数が定義されている', () => {
@@ -125,13 +120,13 @@ test('T6-D: 5 分保持期間 + 30 秒切捨間隔の定数が定義されてい
     '30 秒切捨間隔定数が見つからない');
 });
 
-test('T7: 30 秒切捨タイマーが setInterval で起動される（_initRollingLog 内）', () => {
+test('T7: 30 秒定期 flush タイマーが setInterval で起動される（_initRollingLog 内、rc18 で _flushRollingLog 呼出に変更）', () => {
   const fnBody = extractFunctionBody(MAIN, /function\s+_initRollingLog\s*\(\s*\)\s*\{/);
   assert.ok(fnBody);
   assert.match(fnBody, /setInterval\(/,
     '_initRollingLog 内で setInterval によるタイマー起動が見つからない');
-  assert.match(fnBody, /_truncateRollingLog/,
-    'setInterval で _truncateRollingLog が呼ばれていない');
+  assert.match(fnBody, /_flushRollingLog/,
+    'setInterval で _flushRollingLog が呼ばれていない（rc18 で _truncateRollingLog から置換）');
 });
 
 test('T8-A: ipcMain.handle("logs:openFolder") が登録されている', () => {
@@ -302,10 +297,10 @@ test('rc13 維持: _handleTournamentDuplicateImpl 内で ensureEditorEditableSta
 // version 同期確認（rc15）
 // ============================================================
 
-test('version: package.json は 2.0.4-rc17', () => {
+test('version: package.json は 2.0.4-rc18', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc17',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc17）`);
+  assert.equal(pkg.version, '2.0.4-rc18',
+    `package.json version が ${pkg.version}（期待 2.0.4-rc18）`);
 });
 
 test('version: scripts.test に v204-rc15-break-end-and-rolling-log.test.js が含まれる', () => {
