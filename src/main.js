@@ -1761,6 +1761,26 @@ function registerIpcHandlers() {
       presets.push(sanitized);
     }
     store.set('userPresets', presets);
+    // v2.0.4-rc20 タスク 1（案 A、問題 ⑥ 根治）:
+    // アクティブトーナメントが当該 preset を使っている場合のみ structure を hall に強制 publish。
+    // _dualStateCache.structure は v2.0.0 STEP 2 で予約済みの kind 枠（line 963）を活性化する。
+    // 既存 tournamentBasics 経路（rc18 第 1 弾の loadPresetById フォールバック）と非干渉。
+    // 前原さん判断 ③ c により、進行中レベルの残り時間には影響しない（hall 側 setStructure のみ、timer.js 不変）。
+    try {
+      const activeId = store.get('activeTournamentId');
+      const tournaments = store.get('tournaments') || [];
+      const activeT = tournaments.find((x) => x && x.id === activeId);
+      if (activeT && activeT.blindPresetId === id) {
+        _publishDualState('structure', sanitized);
+        // v2.0.4-rc20 タスク 3: 配布版常時記録ラベル（rc18 第 1 弾の 4 ラベルと同パターン）
+        try {
+          rollingLog('structure:state:send', {
+            presetId: id,
+            structureLength: sanitized?.levels?.length || 0
+          });
+        } catch (_) { /* never throw from logging */ }
+      }
+    } catch (_) { /* never throw from publish */ }
     return { ok: true, id };
   });
 
@@ -2089,6 +2109,10 @@ function registerIpcHandlers() {
       // v2.0.4-rc19 タスク 2（問題 ⑥ 残部、案 ⑥-A）:
       // hall 側の loadPresetById IPC 2 段化を回避するため、structure を payload に直接同梱。
       // hall 受信側で value.structure があれば setStructure を直接呼び、無ければ既存フォールバック。
+      // v2.0.4-rc20 (c) 並存方針: 本 structure フィールドは normalizeTournament が t.structure を
+      // out に伝播しないため現在常に undefined となる dead code。rc20 タスク 1 で案 A の
+      // `_publishDualState('structure', sanitized)`（presets:saveUser ハンドラ末尾）に置換済。
+      // 履歴保護 + 将来 normalizeTournament 修正時の自動有効化保険のため残置。
       _publishDualState('tournamentBasics', {
         id: validated.id, name: validated.name, subtitle: validated.subtitle,
         titleColor: validated.titleColor, blindPresetId: validated.blindPresetId,

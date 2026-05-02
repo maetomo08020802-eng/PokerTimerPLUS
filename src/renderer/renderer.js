@@ -6664,6 +6664,9 @@ if (__appRole === 'hall') {
             applyTournament(t);
             // v2.0.4-rc19 タスク 2（問題 ⑥ 残部、案 ⑥-A）:
             // payload に structure 同梱されていれば直接適用、無ければ rc18 第 1 弾の loadPresetById フォールバック
+            // v2.0.4-rc20 (c) 並存方針: main.js 側 normalizeTournament 仕様により value.structure は
+            // 現在常に undefined となり本分岐は事実上 dead code。rc20 で案 A の kind === 'structure' 経路に
+            // 置換、本分岐は履歴保護 + 将来 normalizeTournament 修正時の二重保証として残置。
             if (value.structure && typeof value.structure === 'object') {
               try {
                 setStructure(value.structure);
@@ -6691,6 +6694,24 @@ if (__appRole === 'hall') {
           const levels = (typeof getStructure === 'function') ? getStructure() : null;
           applyTimerStateToTimer(value, levels, { silent: true });
         } catch (err) { console.warn('[dual-sync] timerState 適用失敗:', err); }
+      } else if (kind === 'structure' && value && Array.isArray(value.levels)) {
+        // v2.0.4-rc20 タスク 1（案 A、問題 ⑥ 根治）:
+        // ブラインド構造の即時 hall 同期。前原さん判断 ③ c により、進行中レベルの残り時間には影響しない設計。
+        // setStructure で blinds.js の currentStructure を更新 → 次レベル切替時に新 duration が効く。
+        // timer.js の targetTime は意図的に再計算しない（現レベル末端まで古い duration で継続、③ c 厳守）。
+        try {
+          setStructure(value);
+          const { currentLevelIndex } = getState();
+          renderCurrentLevel(currentLevelIndex);
+          renderNextLevel(currentLevelIndex);
+          // v2.0.4-rc20 タスク 3: 配布版常時記録ラベル（rc18 第 1 弾の 4 ラベルと同パターン）
+          try {
+            window.api?.log?.write?.('structure:state:recv:hall', {
+              structureLength: value?.levels?.length || 0,
+              role: window.appRole
+            });
+          } catch (_) { /* never throw from logging */ }
+        } catch (err) { console.warn('[dual-sync] structure 適用失敗:', err); }
       }
       // structure / その他は initialize() 経由で active から取得済、broadcast での個別同期は B4 の構造変更時に対応
     } catch (err) {

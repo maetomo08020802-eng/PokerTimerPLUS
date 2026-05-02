@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4-rc20] - 2026-05-02
+
+### Fixed
+- **問題 ⑥ 根治（タスク 1、案 A 単独採用）**: rc15〜rc19 で残存していた「ブラインドタブで構造変更 → 保存 → 適用 → 会場モニターが古いブラインドのまま」現象を根治。**真因 = `_publishDualState('structure', …)` が v2.0.0 STEP 2 で予約された kind 枠（`_dualStateCache.structure`、main.js:963）にもかかわらず、コードベース全体で呼出 0 件で死枠化していた**（rc20 第 1 弾事前調査で確定、3 体並列 sub-agent 独立到達）。修正: `src/main.js:1764-1786` `presets:saveUser` ハンドラ末尾で、当該 preset を使うアクティブトーナメントが存在する場合のみ `_publishDualState('structure', sanitized)` を強制発火。`src/renderer/renderer.js:6695-6712` の hall dual-sync handler に `kind === 'structure'` case を追加（`setStructure(value)` + `renderCurrentLevel` / `renderNextLevel` で即時再描画）。前原さん判断 ③ c に基づき、**進行中レベルの残り時間には影響しない設計**（`timer.js` の `targetTime` キャッシュは意図的に再計算しない、現レベル末端まで古い duration で継続、次レベル切替時に新 duration が効く）。約 18 行 / 2 ファイル、致命バグ保護 5 件すべて完全無傷。
+
+### Added
+- **配布版常時記録ラベル `structure:state:send` / `structure:state:recv:hall`（タスク 3）**: rc18 第 1 弾の 4 ラベル（`runtime:state:send` 等）と同パターン、`try { ... } catch (_) { }` で wrap、never throw from logging。
+  - `structure:state:send` — `src/main.js:1772-1777` `presets:saveUser` ハンドラ内 `_publishDualState('structure', ...)` 直後で `rollingLog` 呼出（preset id + structureLength を記録）
+  - `structure:state:recv:hall` — `src/renderer/renderer.js:6708-6711` hall dual-sync の `kind === 'structure'` 分岐内 `setStructure(value)` 直後で `window.api.log.write` 呼出（structureLength + role を記録）
+- **rc20 試験で問題 ⑥ 真因確定の決定的証拠**として、これらラベルの時系列を rolling ログ採取で検証可能（rc20 第 1 弾事前調査 §6.2 シーケンス 1 参照）。
+
+### Investigated（rc19 死コードへの (c) 並存方針）
+- **rc19 で投入した `tournamentBasics` payload の `structure: validated.structure` 同梱（タスク 2）**: `normalizeTournament`（main.js:1814-1986）が `t.structure` を `out` に伝播しない仕様により、`validated.structure` は常に undefined となり**現在 dead code**。本 rc20 で案 A の `_publishDualState('structure', ...)` 経路に置換、rc19 経路は**履歴保護のため残置**（将来 normalizeTournament 修正時の二重保証）。`src/main.js:2092-2099` および `src/renderer/renderer.js:6667-6671` 双方にコメントで明示し、将来の混乱を防止。
+
+### Tests
+- `tests/v204-rc20-structure-publish.test.js` 新規追加（タスク 1+3 関連、T1〜T9 + 致命バグ保護 5 件 cross-check + rc19 (c) 並存方針 assertion + version assertion、合計 14 件）
+- 既存テスト 11 ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 ファイル）の version assertion を `2.0.4-rc19` → `2.0.4-rc20` に追従更新
+
+### Compatibility (rc20)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）。`presets:saveUser` ハンドラに `schedulePersistRuntime` を追加していない（preset と runtime の境界保護）。
+- 前原さん判断 ① β（保存 = 保存だけ）/ ② B（連続押下しない）/ ③ c（進行中レベルには反映しない）すべて遵守。`_savePresetCore` への `setStructure` 追加なし、`handlePresetApply` の clean 時 IPC 追加なし、`timer.js` の `targetTime` 再計算経路追加なし、`normalizeTournament` 修正なし。
+- rc19 までの確定 Fix（rc7〜rc18 第 1 弾 + rc19 の問題 ④⑦⑧ 解決）すべて維持。
+
+---
+
 ## [2.0.4-rc19] - 2026-05-02
 
 ### Fixed
