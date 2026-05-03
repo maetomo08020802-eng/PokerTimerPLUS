@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4-rc22] - 2026-05-02
+
+### Fixed
+- **問題 ⑨ 残部 根治（タスク 1、案 ⑨-A）**: rc21 試験で残存していた「タイマー未開始（IDLE）でブラインド構造を保存・適用しても会場モニター（hall）の表示が古い Lv1 duration のまま、タイマースタート時にようやく切替わる」現象を根治。**真因 = `src/renderer/renderer.js:1591-1595` の subscribe 持続条件（`schedulePersistTimerState` 発火 trigger）が `status 変化 / currentLevelIndex 変化 / (PAUSED && remainingMs 変化)` の 3 句のみで、IDLE 中に `_refreshDisplayAfterStructureChange` が `setState({ remainingMs, totalMs })` を呼んでも 3 句どれにもヒットせず → `tournaments:setTimerState` IPC 不発火 → main `_publishDualState('timerState', …)` 不発火 → hall 不到達**（rc22 第 1 弾事前調査で 3 体並列 sub-agent が独立に同根に到達）。修正: 既存 if 条件式に IDLE 限定 OR 句を 1 行追加（`(state.status === States.IDLE && (state.remainingMs !== prev.remainingMs || state.totalMs !== prev.totalMs))`）。③ c（PAUSED 進行中据置）と非干渉、致命バグ保護 5 件すべて影響なし。
+
+### Added
+- **`Ctrl + Shift + L` ショートカット（タスク 2、案 ⑩-A）**: タイマー画面消失時にも UI 不要でログフォルダを開ける救済策。`src/main.js:registerShortcuts()` に `globalShortcut.register('CommandOrControl+Shift+L', …)` 追加、ハンドラ内で `await _flushRollingLog()` → `_resolveLogsDir()` → `shell.openPath(dir)` の順で実行（rc18 第 1 弾の I/O 順序保証維持のため `await` 必須）。globalShortcut は webContents focus 不要のためタイマー画面が CSS / DOM / bounds / show のいずれの理由で消失しても発火する。
+- **起動時 rolling-current.log 復元（タスク 3、案 ⑩-D）**: SIGKILL 等で `app:will-quit` が走らずプロセス終了した場合の前回ログを継続使用可能に。`src/main.js:_initRollingLog()` 内 `mkdirSync` 直後で `fs.readFileSync(_rollingLogFilePath, 'utf8')` → `split('\n').filter(Boolean).forEach((line) => { JSON.parse(line); _rollingLogBuffer.push(...) })` で in-memory buffer に復元。**同期 `readFileSync` 維持厳守**（`_initRollingLog` 全体が同期コンテキスト、rc18 設計遵守、`appendFile` 復活なし）。5 分 retention は次回 `_flushRollingLog` 発火時に既存ロジックで適用される。
+
+### Tests
+- `tests/v204-rc22-subscribe-and-log.test.js` 新規追加（T1〜T9 + 致命バグ保護 5 件 cross-check + rc12 + rc18 ring buffer 設計 cross-check + 計測ラベル 8 件維持確認 + version assertion、合計 16 件）
+- 既存 version assertion ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 / rc20 / rc21）を `2.0.4-rc21` → `2.0.4-rc22` に追従更新
+
+### Compatibility (rc22)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）。
+- **rc12 修正コード保護**: onRoleChanged ハンドラ内 `setAttribute('data-role', newRole)` + `window.appRole = newRole` の try-catch 順序を完全維持（テスト rc12 不変保護 cross-check 済）。
+- **rc18 第 1 弾 ring buffer 設計保護**: `_flushRollingLog` の `fs.promises.writeFile` 維持、`appendFile` 不在（タスク 2/3 のいずれでも復活なし）。タスク 2 は `await _flushRollingLog()` で I/O 順序保証維持、タスク 3 は同期 `readFileSync` のみで write 経路に介入なし。
+- **計測ラベル 8 件は維持**（`renderer:onRoleChanged:` 系 6 件 + `preload:onRoleChanged:` 系 2 件）。rc22 第 2 弾完成後の試験で活用 → 真因確定 → **rc23 で問題 ⑩ 根治 + 観測ラベル 8 件全削除予定**。
+- 前原さん判断 α / ③ c 遵守（IDLE 時は新 Lv1 duration を反映、PAUSED / RUNNING の `remainingMs` には触らず）。
+- rc7〜rc21 までの確定 Fix すべて維持。
+
+---
+
 ## [2.0.4-rc21] - 2026-05-02
 
 ### Fixed

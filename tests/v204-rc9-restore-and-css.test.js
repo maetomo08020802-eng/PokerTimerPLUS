@@ -297,10 +297,10 @@ test('operator-solo 互換: rc8 で追加した [data-role="operator-solo"] 用 
 // ============================================================
 // version 同期確認（rc9）
 // ============================================================
-test('version: package.json は 2.0.4-rc21', () => {
+test('version: package.json は 2.0.4-rc22', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc21',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc21）`);
+  assert.equal(pkg.version, '2.0.4-rc22',
+    `package.json version が ${pkg.version}（期待 2.0.4-rc22）`);
 });
 
 test('version: scripts.test に v204-rc9-restore-and-css.test.js が含まれる', () => {

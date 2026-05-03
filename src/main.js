@@ -64,6 +64,17 @@ function _initRollingLog() {
     const logsDir = path.join(userData, 'logs');
     try { fs.mkdirSync(logsDir, { recursive: true }); } catch (_) { /* ignore */ }
     _rollingLogFilePath = path.join(logsDir, 'rolling-current.log');
+    // v2.0.4-rc22 タスク 3（問題 ⑩ 案 ⑩-D）:
+    //   起動時に前回セッションの rolling-current.log を読み込んで buffer 復元。
+    //   SIGKILL 等で will-quit が走らなかった場合の前回ログを継続使用可能にする。
+    //   同期 readFileSync 維持（_initRollingLog 全体が同期コンテキスト、rc18 設計遵守）。
+    //   5 分 retention は次回 _flushRollingLog 発火時に既存ロジックで適用される。
+    try {
+      const old = fs.readFileSync(_rollingLogFilePath, 'utf8');
+      old.split('\n').filter(Boolean).forEach((line) => {
+        try { _rollingLogBuffer.push(JSON.parse(line)); } catch (_) { /* skip malformed line */ }
+      });
+    } catch (_) { /* ファイル不在 / parse 失敗時は空 buffer 開始 */ }
     // 30 秒定期 flush タイマー開始（rc18 で append 廃止、buffer から writeFile で全体上書き）
     if (_rollingLogTruncateTimer === null) {
       _rollingLogTruncateTimer = setInterval(() => {
@@ -1517,6 +1528,17 @@ function registerShortcuts() {
   // STEP 6.21: 配布版（isDev=false）でも F12 で DevTools を開けるよう常時登録
   // before-input-event 側にもフォールバックを置いてあるので二重登録だが副作用なし
   globalShortcut.register('F12', toggleDevTools);
+  // v2.0.4-rc22 タスク 2（問題 ⑩ 案 ⑩-A）:
+  //   タイマー画面消失時にも UI 不要でログフォルダを開けるようにする救済策。
+  //   _flushRollingLog で in-memory buffer を確実にディスクに反映してから shell.openPath。
+  //   rc18 第 1 弾の I/O 順序保証維持のため、必ず await で待つ。
+  globalShortcut.register('CommandOrControl+Shift+L', async () => {
+    try { await _flushRollingLog(); } catch (_) { /* never throw from logging */ }
+    try {
+      const dir = _resolveLogsDir();
+      if (dir) shell.openPath(dir);
+    } catch (_) { /* shell.openPath 失敗時は何もしない */ }
+  });
 }
 
 // IPC: 設定ストアのブリッジ（preload経由でレンダラに公開）

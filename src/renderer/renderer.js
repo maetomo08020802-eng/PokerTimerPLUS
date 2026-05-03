@@ -1588,10 +1588,15 @@ subscribe((state, prev) => {
   renderNextBreak(state.remainingMs, state.currentLevelIndex);
   // STEP 6.21: status / level 変化時にアクティブ TimerState を保存
   // v2.0.4-rc17: PAUSED 中の time-shift（remainingMs 単独変化）も同期トリガに含める（修正案 ②-1）
+  // v2.0.4-rc22 タスク 1（問題 ⑨ 残部、案 ⑨-A）:
+  //   IDLE 中に _refreshDisplayAfterStructureChange が新 Lv1 duration を setState した場合、
+  //   既存 3 句どれにもヒットせず timerState 送信不発火 → hall 同期遅延の真因。
+  //   IDLE 限定で remainingMs/totalMs 変化を trigger に追加、③ c（PAUSED 進行中据置）と非干渉。
   if (
     state.status !== prev.status ||
     state.currentLevelIndex !== prev.currentLevelIndex ||
-    (state.status === States.PAUSED && state.remainingMs !== prev.remainingMs)
+    (state.status === States.PAUSED && state.remainingMs !== prev.remainingMs) ||
+    (state.status === States.IDLE && (state.remainingMs !== prev.remainingMs || state.totalMs !== prev.totalMs))
   ) {
     schedulePersistTimerState();
     // リスト UI も状態反映のため再描画（軽量）
