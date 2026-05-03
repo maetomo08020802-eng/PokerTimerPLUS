@@ -6188,8 +6188,6 @@ if (typeof window !== 'undefined' && window.appRole !== 'hall') {
     _logRoleChange(newRole);
     if (typeof newRole !== 'string') return;
     if (newRole !== 'operator' && newRole !== 'operator-solo') return;
-    // v2.0.4-rc21 タスク 2（問題 ⑩ 計測ビルド、rc22 で削除予定）: setAttribute 直前ラベル
-    try { window.api?.log?.write?.('renderer:onRoleChanged:before-setAttribute', { newRole }); } catch (_) { /* never throw from logging */ }
     // rc12 根治 Step 1: setAttribute を最優先で実行。CSS 表示制御の唯一のトリガで、
     //   これに到達できれば「タイマー画面消失」は根治する。後続 throw があっても DOM は更新済。
     try {
@@ -6197,20 +6195,14 @@ if (typeof window !== 'undefined' && window.appRole !== 'hall') {
         document.documentElement.setAttribute('data-role', newRole);
       }
     } catch (_) { /* documentElement 不在は通常あり得ないが防御 */ }
-    // v2.0.4-rc21 タスク 2（問題 ⑩ 計測ビルド、rc22 で削除予定）: setAttribute 直後ラベル（data-role 現在値も記録）
-    try { window.api?.log?.write?.('renderer:onRoleChanged:after-setAttribute', { newRole, dataRole: (typeof document !== 'undefined' && document.documentElement) ? document.documentElement.getAttribute('data-role') : null }); } catch (_) { /* never throw from logging */ }
     // rc12 根治 Step 2: window.appRole 代入は contextBridge 凍結で TypeError を投げる。
     //   try-catch で握り潰す（assign 自体は失敗するが、setAttribute 完了済なので CSS は正しい）。
     //   読み取り側コードの大半は `=== 'hall'` 検査で、stale value でも機能挙動への影響なし。
     try { window.appRole = newRole; } catch (_) { /* contextBridge 凍結による失敗を許容 */ }
-    // v2.0.4-rc21 タスク 2（問題 ⑩ 計測ビルド、rc22 で削除予定）: window.appRole 代入直後ラベル（凍結時 stale 値が記録される）
-    try { window.api?.log?.write?.('renderer:onRoleChanged:after-appRole-assign', { newRole, appRole: (typeof window !== 'undefined') ? window.appRole : null }); } catch (_) { /* never throw from logging */ }
     // role 変更後の関連 UI 即時反映（mute-indicator は CSS で role 別表示制御済、明示更新で確実化）
     if (typeof updateMuteIndicator === 'function') {
       try { updateMuteIndicator(); } catch (_) { /* ignore */ }
     }
-    // v2.0.4-rc21 タスク 2（問題 ⑩ 計測ビルド、rc22 で削除予定）: updateMuteIndicator 直後ラベル
-    try { window.api?.log?.write?.('renderer:onRoleChanged:after-updateMuteIndicator', { newRole }); } catch (_) { /* never throw from logging */ }
     // v2.0.4-rc8 Fix 4 (対策 B): updateOperatorPane も即時呼出（rc7 修正漏れ補完）。
     //   rc7 では「次の subscribe で再描画される」と判断したが、HDMI 抜き直後に手元 PC を復元した
     //   タイミングでは subscribe 待ちで表示が古いまま見える時間帯が生じていた。
@@ -6219,12 +6211,8 @@ if (typeof window !== 'undefined' && window.appRole !== 'hall') {
     if (typeof updateOperatorPane === 'function' && _lastTimerStateForRoleSwitch) {
       try { updateOperatorPane(_lastTimerStateForRoleSwitch); } catch (_) { /* ignore */ }
     }
-    // v2.0.4-rc21 タスク 2（問題 ⑩ 計測ビルド、rc22 で削除予定）: updateOperatorPane 直後ラベル
-    try { window.api?.log?.write?.('renderer:onRoleChanged:after-updateOperatorPane', { newRole }); } catch (_) { /* never throw from logging */ }
     // v2.0.4-rc9 Fix 3-C: role 切替時もフォーカスバナー再描画
     try { updateFocusBanner(); } catch (_) { /* ignore */ }
-    // v2.0.4-rc21 タスク 2（問題 ⑩ 計測ビルド、rc22 で削除予定）: updateFocusBanner 直後ラベル
-    try { window.api?.log?.write?.('renderer:onRoleChanged:after-updateFocusBanner', { newRole }); } catch (_) { /* never throw from logging */ }
   });
 }
 

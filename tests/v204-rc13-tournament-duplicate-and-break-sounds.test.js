@@ -276,10 +276,10 @@ test('operator-solo 互換: rc8 の [data-role="operator-solo"] 防御保険 CSS
 // version 同期確認（rc13）
 // ============================================================
 
-test('version: package.json は 2.0.4-rc22', () => {
+test('version: package.json は 2.0.4-rc23', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc22',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc22）`);
+  assert.equal(pkg.version, '2.0.4-rc23',
+    `package.json version が ${pkg.version}（期待 2.0.4-rc23）`);
 });
 
 test('version: scripts.test に v204-rc13-tournament-duplicate-and-break-sounds.test.js が含まれる', () => {

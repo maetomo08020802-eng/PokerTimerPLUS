@@ -122,10 +122,10 @@ test('致命バグ保護 C.1.8: tournaments:setRuntime IPC が維持 + adjustSpe
 // version assertion（rc19）
 // ============================================================
 
-test('version: package.json は 2.0.4-rc22', () => {
+test('version: package.json は 2.0.4-rc23', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc22',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc22）`);
+  assert.equal(pkg.version, '2.0.4-rc23',
+    `package.json version が ${pkg.version}（期待 2.0.4-rc23）`);
 });
 
 // ============================================================

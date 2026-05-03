@@ -1418,15 +1418,15 @@ function setupDisplayChangeListeners() {
     // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayRemovedPending` チェック後で確実に 1 回）
     rollingLog('display-removed', _safeDisplayRemovedSnapshot(removedDisplay));
     try {
-      let bounds;
-      try { bounds = hallWindow.getBounds(); } catch (_) { bounds = null; }
-      if (!bounds) return;
-      if (isWindowOnDisplay(bounds, removedDisplay)) {
-        try { hallWindow.close(); } catch (_) { /* ignore */ }
-        hallWindow = null;
-        // hall 不在のため _broadcastDualState は STEP 2 で確立した no-op ガードで自動的に止まる
-        await switchOperatorToSolo();
-      }
+      // v2.0.4-rc23 タスク 1（問題 ⑩ 真因根治）:
+      //   rc22 計測ビルド実機ログで真因確定 = HDMI 抜き直後 Windows が hallWindow を新 primary display
+      //   に瞬時移動 → 旧 isWindowOnDisplay 左上座標判定が必ず false 返却 → switchOperatorToSolo 不発火
+      //   → タイマー画面消失症状。前原さん運用方針 A（PC + HDMI 1 本のみ）確定により、display-removed
+      //   = 会場モニター消失と同義で扱える。hallWindow alive なら無条件 solo モード遷移。
+      try { hallWindow.close(); } catch (_) { /* ignore */ }
+      hallWindow = null;
+      // hall 不在のため _broadcastDualState は STEP 2 で確立した no-op ガードで自動的に止まる
+      await switchOperatorToSolo();
     } finally {
       _displayRemovedPending = false;
     }

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4-rc23] - 2026-05-03
+
+### Fixed
+- **問題 ⑩ 真因根治（タスク 1）**: rc22 計測ビルド実機ログ（`rolling-current.log` line 4717-4724）で**真因 100% 確定**。HDMI 抜き直後 Windows OS が hallWindow を新 primary display に瞬時移動 → 旧 `display-removed` ハンドラの `isWindowOnDisplay(bounds, removedDisplay)` 左上座標判定が必ず false を返却 → `switchOperatorToSolo()` 不発火 → hallWindow close なし、operator role 切替なし → AC 画面が `[data-role="operator"]` のままで `[data-role="operator"] .clock { display: none !important }` (style.css:3771-3781) が効いて**タイマー画面消失**症状が再現。前原さん運用方針 A（PC + HDMI 1 本のみ）確定により `display-removed` = 会場モニター消失と同義で扱える。修正: `src/main.js:setupDisplayChangeListeners` の `display-removed` ハンドラ内の `isWindowOnDisplay(bounds, removedDisplay)` 判定経路を削除し、`hallWindow` alive なら**無条件**で `hallWindow.close()` + `hallWindow = null` + `await switchOperatorToSolo()` を実行する経路に変更。`_displayRemovedPending` / `hallWindow.isDestroyed()` ガード + `rollingLog('display-removed', ...)` 配布版常時記録は維持。
+
+### Removed
+- **rc22 第 2 弾投入の観測ラベル 8 件全削除（タスク 2）**: rc22 計測ビルドで真因確定済のため。
+  - `src/renderer/renderer.js` から 6 件削除（`renderer:onRoleChanged:before-setAttribute` / `:after-setAttribute` / `:after-appRole-assign` / `:after-updateMuteIndicator` / `:after-updateOperatorPane` / `:after-updateFocusBanner`）
+  - `src/preload.js` から 2 件削除（`preload:onRoleChanged:enter` / `:catch`）
+  - **rc12 修正コード（`setAttribute('data-role', newRole)` + `window.appRole = newRole` の try-catch 順序）は完全維持**
+  - **preload.js の握り潰し try-catch パターン自体は rc12 真因防御として維持**（`try { callback(newRole); } catch (_) {}` を残置、コールバック throw 吸収機構は失わない）
+
+### Tests
+- `tests/v204-rc23-display-removed-fix.test.js` 新規追加（T1〜T14 + 致命バグ保護 5 件 cross-check + rc18 ring buffer 設計 cross-check + rc22（⑨-A / ⑩-A / ⑩-D）維持確認 + version assertion、合計 22 件）
+- 既存 rc21 / rc22 テストファイルの観測ラベル assertion を**「ラベル不在確認」に反転**（assertion 名と本体を rc23 削除確認用に書き換え）
+- 既存 version assertion ファイル 14 件を `2.0.4-rc22` → `2.0.4-rc23` に追従更新
+
+### Compatibility (rc23)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- **rc12 修正コード保護**: onRoleChanged ハンドラ内 `setAttribute('data-role', newRole)` + `window.appRole = newRole` の try-catch 順序を完全維持（テスト T14 で順序の前後関係を `setAttrIdx < appRoleIdx` で静的確認 + try ブロック存在を `assert.match` で確認）
+- **rc18 第 1 弾 ring buffer 設計保護**: `_flushRollingLog` の `fs.promises.writeFile` 維持、`appendFile` 不在
+- **rc22 維持**: ⑨-A subscribe 持続条件 IDLE OR 句、⑩-A `Ctrl+Shift+L` globalShortcut、⑩-D 起動時 `fs.readFileSync` 復元経路すべて存在確認
+- `isWindowOnDisplay` 関数自体は dead code 化させず一旦残置（他経路使用あれば残置、なければ rc24 以降で削除判断、本フェーズスコープ外）
+- rc7〜rc22 までの確定 Fix すべて維持
+
+---
+
 ## [2.0.4-rc22] - 2026-05-02
 
 ### Fixed
