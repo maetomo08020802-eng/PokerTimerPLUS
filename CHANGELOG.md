@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.4] - 2026-05-03
+
+PokerTimerPLUS+ v2.0.4 公式リリース。v1.3.0 → v2.0.4 へのアップグレードでは、新インストーラを実行するだけで自動的に置き換えられます（同じ `appId: com.shitamachi.pokertimerplus`、同じ `productName: PokerTimerPLUS+`）。
+
+### 主な変更
+
+- **HDMI 自動 2 画面対応**: HDMI 接続検知 → モニター選択ダイアログ → 会場モニター（フルスクリーン表示）と手元 PC（操作 UI）の自動振り分け
+- **HDMI 抜き差し時の自動レイアウト切替**: 2 画面 ↔ 単画面の自動追従、タイマー表示は途切れず継続（rc23 真因根治済）
+- **ブラインド構造変更の即時 hall 同期**: IDLE 時は新 Lv1 duration を hall に即時反映、PAUSED / RUNNING 時は進行中レベルの残り時間を保護（③ c 厳守）
+- **停止中エントリー追加 / Ctrl+E specialStack 変更の AC 即時反映**: hall への反映と AC 表示の同期遅延を解消
+- **AC「イベント名」表示修正**: tournamentTitle が AC に正しく表示されるよう同期経路を確立
+- **`Ctrl + Shift + L` ショートカット追加**: タイマー画面消失時にも UI 操作不要でログフォルダを開ける救済策（globalShortcut、webContents focus 不要）
+- **アプリ再起動後もログ保持**: 起動時に前回セッションの `rolling-current.log` を読み込んで in-memory ring buffer を復元（SIGKILL 等の異常終了でもログを失わない）
+
+### 致命級バグ修正
+
+- **rc12: `onRoleChanged` window.appRole TypeError 握り潰し**: ES module strict mode + contextBridge 凍結の合わせ技でコールバックが TypeError を throw → 後続 UI 更新が走らずタイマー画面消失していた症状を、`setAttribute('data-role', newRole)` を最優先実行 + `window.appRole` 代入を try-catch で握り潰す順序に変更で根治（rc6〜rc10 で 5 連続失敗後、rc11 計測ビルドで真因確定 → rc12 で根治）
+- **rc23: `display-removed` の `isWindowOnDisplay` 左上座標判定漏れ**: HDMI 抜き直後に Windows OS が hall ウィンドウを新 primary display に瞬時移動するため、旧判定が必ず false を返却 → solo モード切替不発火 → タイマー画面消失していた症状を、hallWindow alive なら**無条件**で `close()` + `switchOperatorToSolo()` を実行する経路に変更で根治（前原さん運用方針 A: PC + HDMI 1 本のみ確定により安全）
+
+### 既存機能との互換性
+
+- **単画面動作は v1.3.0 と完全互換**（HDMI 未接続環境では v1.3.0 と同じレイアウト・同じ操作）
+- **致命バグ保護 5 件すべて維持**（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）
+- 自動テスト全件 PASS（138 件 v1.x + 約 540 件 v2.x = 計約 670 件超）
+
+### アップグレード手順
+
+1. v1.3.0 が動作中なら閉じる
+2. `PokerTimerPLUS+ Setup 2.0.4.exe` を実行
+3. インストーラの指示に従う（既存設定・トーナメントデータは保持される）
+
+### 開発履歴
+
+詳細な変更履歴は本ファイル下部の `[2.0.4-rc1]` 〜 `[2.0.4-rc23]` 各セクション参照（試験版開発の段階的修正記録）。
+
+---
+
 ## [2.0.4-rc23] - 2026-05-03
 
 ### Fixed

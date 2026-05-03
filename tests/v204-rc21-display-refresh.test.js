@@ -238,10 +238,10 @@ test('rc12 不変保護: onRoleChanged ハンドラ内 _logRoleChange 呼出が 
 // version assertion（rc21）
 // ============================================================
 
-test('version: package.json は 2.0.4-rc23', () => {
+test('version: package.json は 2.0.4', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc23',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc23）`);
+  assert.equal(pkg.version, '2.0.4',
+    `package.json version が ${pkg.version}（期待 2.0.4）`);
 });
 
 test('version: scripts.test に v204-rc21-display-refresh.test.js が含まれる', () => {

@@ -297,10 +297,10 @@ test('rc22 ⑩-D: _initRollingLog 内に fs.readFileSync 経路が維持され�
 // version assertion
 // ============================================================
 
-test('version: package.json は 2.0.4-rc23', () => {
+test('version: package.json は 2.0.4', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.4-rc23',
-    `package.json version が ${pkg.version}（期待 2.0.4-rc23）`);
+  assert.equal(pkg.version, '2.0.4',
+    `package.json version が ${pkg.version}（期待 2.0.4）`);
 });
 
 test('version: scripts.test に v204-rc23-display-removed-fix.test.js が含まれる', () => {

@@ -1,7 +1,7 @@
 {
   "name": "pokertimerplus",
   "productName": "PokerTimerPLUS+",
-  "version": "2.0.4-rc23",
+  "version": "2.0.4",
   "description": "Free poker tournament clock — presented by Yu Shitamachi / PLUS2",
   "author": "Yu Shitamachi (PLUS2)",
   "license": "UNLICENSED",
@@ -35,8 +35,8 @@
     "sharp": "^0.34.5"
   },
   "build": {
-    "appId": "com.shitamachi.pokertimerplus.test",
-    "productName": "PokerTimerPLUS+ (Test)",
+    "appId": "com.shitamachi.pokertimerplus",
+    "productName": "PokerTimerPLUS+",
     "copyright": "© 2026 Yu Shitamachi / PLUS2",
     "directories": {
       "output": "dist",
