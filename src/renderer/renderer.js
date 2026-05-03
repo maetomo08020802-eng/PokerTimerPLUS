@@ -2427,8 +2427,26 @@ function applyPipSize(value) {
 }
 
 function activateSlideshow() {
-  if (slideshowState.active) return;
   if (breakImagesState.images.length === 0) return;
+  // v2.0.6 修正(c): 画像が 1 枚しかない場合は setInterval を起動せず、その 1 枚を静止表示するのみ
+  //   - 同じ画像で setInterval を回すと無意味なフェードイン/フェードアウト点滅が起きる症状を解消
+  //   - 既存 setInterval が動いていれば停止（2 枚→1 枚減少時の追従）
+  if (breakImagesState.images.length === 1) {
+    if (slideshowState.intervalId) {
+      clearInterval(slideshowState.intervalId);
+      slideshowState.intervalId = null;
+    }
+    slideshowState.active = true;
+    slideshowState.currentIndex = 0;
+    document.documentElement.dataset.slideshow = 'active';
+    if (el.slideshowImg) {
+      el.slideshowImg.src = breakImagesState.images[0];
+      el.slideshowImg.style.opacity = '1';
+    }
+    return;
+  }
+  // 2 枚以上: 既存ロジック（既に active かつ setInterval 動作中なら no-op、毎ティック再起動を防ぐ）
+  if (slideshowState.active && slideshowState.intervalId) return;
   slideshowState.active = true;
   slideshowState.currentIndex = 0;
   document.documentElement.dataset.slideshow = 'active';
@@ -2640,6 +2658,7 @@ function setBreakImagesError(msg) {
 
 async function persistBreakImagesField(field, value) {
   if (!window.api?.tournaments?.setDisplaySettings || !tournamentState.id) return;
+  const oldImagesLength = breakImagesState.images.length;
   try {
     const res = await window.api.tournaments.setDisplaySettings(tournamentState.id, { [field]: value });
     if (res?.ok && res.displaySettings) {
@@ -2649,6 +2668,13 @@ async function persistBreakImagesField(field, value) {
       if (typeof res.displaySettings.pipSize === 'string') breakImagesState.pipSize = res.displaySettings.pipSize;
       renderBreakImagesList();
       applyPipSize(breakImagesState.pipSize);
+      // v2.0.6 修正(c) 補足: 画像枚数変化（1↔N）でスライドショー active なら再評価
+      //   1→N: 1 枚静止モードから N 枚 setInterval 循環モードへ移行
+      //   N→1: N 枚循環モードから 1 枚静止モードへ移行
+      if (field === 'breakImages' && slideshowState.active && oldImagesLength !== breakImagesState.images.length) {
+        deactivateSlideshow();
+        activateSlideshow();
+      }
     }
     // STEP 10 フェーズC.1.4-fix3 Fix 3: 画像追加 / 削除で累積サイズが変わるため再評価
     checkImagesTotalSizeAndWarn().catch(() => {});
