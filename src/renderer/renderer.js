@@ -2722,6 +2722,12 @@ async function handleBreakImageIntervalChange(value) {
   const v = Number(value);
   if (!Number.isFinite(v)) return;
   await persistBreakImagesField('breakImageInterval', Math.floor(v));
+  // v2.0.6 修正(d): スライドショー実行中（active かつ setInterval 動作中 = 2 枚以上の循環モード）
+  //   なら新しい間隔で再起動。1 枚静止モード（active かつ intervalId === null）は再起動不要。
+  if (slideshowState.active && slideshowState.intervalId) {
+    deactivateSlideshow();
+    activateSlideshow();
+  }
 }
 
 async function handlePipSizeChange(value) {
