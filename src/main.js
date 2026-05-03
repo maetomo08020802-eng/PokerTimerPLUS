@@ -1290,22 +1290,6 @@ async function chooseHallDisplayInteractive(displays) {
   });
 }
 
-// v2.0.0 STEP 5: HDMI 抜き差し追従用ヘルパ。
-//   window.getBounds() の (x, y) が target display.bounds 矩形内に含まれているかで判定。
-//   左上座標で判定するシンプル方式（ウィンドウが完全に display 上にあるかではなく
-//   「主にこの display 上にある」程度の精度で十分）。
-function isWindowOnDisplay(windowBounds, display) {
-  if (!windowBounds || !display || !display.bounds) return false;
-  const wb = windowBounds;
-  const db = display.bounds;
-  return (
-    wb.x >= db.x &&
-    wb.x < db.x + db.width &&
-    wb.y >= db.y &&
-    wb.y < db.y + db.height
-  );
-}
-
 // v2.0.0 STEP 5: HDMI 抜き → 単画面モードに統合。
 //   - hallWindow が抜けた display 上にあった場合に呼ばれる
 //   - operator (mainWindow) を close → operator-solo モードで再生成

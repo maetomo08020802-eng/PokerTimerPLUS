@@ -6,7 +6,6 @@
  *   - display-removed: hallWindow.close + switchOperatorToSolo
  *   - display-added: displays.length < 2 早期 return + chooseHallDisplayInteractive 再呼出
  *   - switchOperatorToSolo / switchSoloToOperator がウィンドウ再生成方式（reload なし）
- *   - isWindowOnDisplay ヘルパが bounds.x/y vs display.bounds で判定
  *   - renderer.js の operator-solo 経路に ensureAudioReady 明示呼出
  *   - ポーリング不使用（setInterval で displays 監視なし）
  *   - _broadcastDualState の hall 不在 no-op ガードが維持されている
@@ -105,19 +104,6 @@ test('T4: switchOperatorToSolo は show + focus / switchSoloToOperator は close
   assert.match(dual, /createOperatorWindow\([^)]*,\s*false\s*\)/, 'createOperatorWindow(_, false) 再生成なし');
   assert.match(dual, /createHallWindow\s*\(/, 'createHallWindow 呼出なし');
   assert.doesNotMatch(dual, /webContents\.reload\s*\(/, 'switchSoloToOperator に reload 使用（再生成方式違反）');
-});
-
-// ============================================================
-// T5: isWindowOnDisplay ヘルパが bounds.x/y と display.bounds を比較
-// ============================================================
-test('T5: isWindowOnDisplay が windowBounds.x/y と display.bounds で重なり判定', () => {
-  assert.match(MAIN, /function\s+isWindowOnDisplay\s*\(/, 'isWindowOnDisplay 関数定義なし');
-  const body = extractFunctionBody(MAIN, 'isWindowOnDisplay');
-  assert.ok(body, 'isWindowOnDisplay 抽出失敗');
-  // display.bounds (db) と window bounds (wb) を比較
-  assert.match(body, /\.bounds/, 'display.bounds の参照なし');
-  assert.match(body, /wb\.x|windowBounds\.x/, 'window bounds.x の参照なし');
-  assert.match(body, /wb\.y|windowBounds\.y/, 'window bounds.y の参照なし');
 });
 
 // ============================================================
