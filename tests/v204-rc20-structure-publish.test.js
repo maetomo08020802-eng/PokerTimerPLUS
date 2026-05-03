@@ -186,10 +186,10 @@ test('rc19 (c) 並存方針: tournamentBasics の structure 同梱 dead code は
 // version assertion（rc20）
 // ============================================================
 
-test('version: package.json は 2.0.5', () => {
+test('version: package.json は 2.0.6', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.5',
-    `package.json version が ${pkg.version}（期待 2.0.5）`);
+  assert.equal(pkg.version, '2.0.6',
+    `package.json version が ${pkg.version}（期待 2.0.6）`);
 });
 
 // ============================================================

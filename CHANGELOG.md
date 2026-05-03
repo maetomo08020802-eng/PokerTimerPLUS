@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.6] - 2026-05-03
+
+PokerTimerPLUS+ v2.0.6 マイナーリリース。v2.0.5 ユーザーは新インストーラを実行するだけで自動アップグレード（同 `appId: com.shitamachi.pokertimerplus`、設定・トーナメントデータは保持）。
+
+### Fixed
+
+- **「スライドショーに戻る」ボタンの位置調整**: スライドショーからタイマー画面に戻したとき、H 押下後（テロップ縦幅が太い 9vh 状態）でボタンが完全に隠れる + 通常時（テロップ細い 6vh 状態）でも下に半分見切れる症状を解消。**画面左の縦中央付近（top: 50vh + transform: translateY(-50%)）に移動**したことで、テロップの太さに依存せずボタン全体が常に見える設計に変更。ロゴ画像（最大幅 14vw / 最大高さ 18vh）+ presented-by 表記の領域は画面上端から最大 約 20vh に収まるため、新位置（50vh）とは完全非干渉。**PIP ボタン（タイマーサイズ切替 = `#js-pip-show-timer`、左下 `bottom: 2vw` 配置）には触らず**（C.1.4-fix1 Fix 4 不変保護維持）。
+
+### Added
+
+- **`.gitattributes` 追加（Source code zip からの開発用ファイル除外）**: GitHub Release で自動生成される Source code zip / tar.gz から、CC（Claude Code）開発フロー用の作業ノート（`HANDOVER.md` / `CC_REPORT.md` / `NEXT_CC_PROMPT.md` / `NEXT_CC_PROMPT_*.md`）+ v1.3.0 配布時のインストールテスト手順書（`INSTALL_TEST.md`）を `export-ignore` 属性で除外。**git 履歴には残るがダウンロード時の zip からは除外される**ため、配布時に開発者向けノートが混入しない。アプリ動作には一切影響なし。
+
+### Tests
+
+- 新規 `tests/v206-slideshow-return-button-position.test.js`（T1〜T3 + PIP ボタン不変保護 + ロゴ領域非干渉 + version assertion、合計 7 件）
+- 既存 version assertion ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 / rc20 / rc21 / rc22 / rc23）を `2.0.5` → `2.0.6` に追従更新
+
+### Compatibility (v2.0.6)
+
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- **rc12 修正コード保護**: onRoleChanged ハンドラの setAttribute + window.appRole 代入の try-catch 順序を完全維持
+- **rc18 第 1 弾 ring buffer 設計保護**: `_flushRollingLog` の `fs.promises.writeFile` 維持、`appendFile` 不在
+- **rc22 維持**: ⑨-A subscribe 持続条件 IDLE OR 句 / ⑩-A `Ctrl+Shift+L` globalShortcut / ⑩-D 起動時 `fs.readFileSync` 復元すべて維持
+- **rc23 display-removed 無条件 solo 経路保護**: HDMI 抜き時の hallWindow alive → close + switchOperatorToSolo 経路維持
+- **PIP ボタン不変保護**: `#js-pip-show-timer` の `left: 2vw / bottom: 2vw` 配置を完全維持（C.1.4-fix1 Fix 4 と整合）
+- **`<dialog>` flex 化禁止 / カード幅 54vw / 46vw / Barlow Condensed 700** 等の不変ルール維持
+- src/ への変更は CSS のみ（`#js-pip-show-slideshow` ルール 6 行 → 9 行に変更）、JS / HTML 変更なし
+
+### アップグレード手順
+
+1. v2.0.5 が起動中なら閉じる
+2. `PokerTimerPLUS+ Setup 2.0.6.exe` を実行
+3. インストーラの指示に従う（既存設定・トーナメントデータは保持される）
+
+---
+
 ## [2.0.5] - 2026-05-03
 
 PokerTimerPLUS+ v2.0.5 マイナーリリース。v2.0.4 ユーザーは新インストーラを実行するだけで自動アップグレード（同 `appId: com.shitamachi.pokertimerplus`、設定・トーナメントデータは保持）。
