@@ -1,0 +1,11 @@
+# GitHub Release の Source code zip / tar.gz から除外する開発用ファイル
+# これらは git 履歴には残るが、ダウンロードされる zip からは除外される
+
+# CC（Claude Code）開発フロー用の作業ノート
+HANDOVER.md export-ignore
+CC_REPORT.md export-ignore
+NEXT_CC_PROMPT.md export-ignore
+NEXT_CC_PROMPT_*.md export-ignore
+
+# v1.3.0 配布時のインストールテスト手順書
+INSTALL_TEST.md export-ignore

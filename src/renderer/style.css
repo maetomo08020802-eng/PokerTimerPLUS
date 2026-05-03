@@ -3339,15 +3339,21 @@ body:not(.has-marquee) .marquee { display: none; }
 }
 .pip-action-btn[hidden] { display: none; }
 /* STEP 10 フェーズC.1.4-fix1 Fix 4: bottom-bar の右下「リセット / 一時停止 / 次レベル」等と
-   物理的に離すため、両ボタンとも画面左下に配置。スライドショー中は PIP（右下）と対角線で離れ、
-   通常画面（force-timer 状態）でも右下のボタン群と誤操作の可能性なし。 */
+   物理的に離すため、PIP ボタン（タイマーサイズ切替 = js-pip-show-timer）は画面左下に配置。
+   スライドショー中は PIP（右下）と対角線で離れ、通常画面（force-timer 状態）でも右下のボタン群と誤操作の可能性なし。 */
 #js-pip-show-timer {
   left: 2vw;
   bottom: 2vw;
 }
+/* v2.0.6: 「スライドショーに戻る」ボタンを画面左の縦中央に配置。
+   旧位置（左下 bottom: 2vw）はテロップ太い 9vh 状態で完全に隠れる + 通常 6vh 状態でも下に半分見切れる
+   症状があったため、テロップ高さに依存しない縦中央配置に変更。
+   ロゴ画像（max-width: 14vw, max-height: 18vh）+ presented-by 表記（margin-top: 0.2vh）の領域は
+   画面上端から最大 約 20vh に収まるため、top: 50vh の縦中央配置とは完全に非干渉。 */
 #js-pip-show-slideshow {
   left: 2vw;
-  bottom: 2vw;
+  top: 50vh;
+  transform: translateY(-50%);
 }
 
 /* ===== タイマーフォント選択（設定ダイアログ内） ===== */

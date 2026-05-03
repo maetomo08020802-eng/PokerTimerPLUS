@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.6] - 2026-05-03
+
+PokerTimerPLUS+ v2.0.6 マイナーリリース。v2.0.5 ユーザーは新インストーラを実行するだけで自動アップグレード（同 `appId: com.shitamachi.pokertimerplus`、設定・トーナメントデータは保持）。
+
+### Fixed
+
+- **「スライドショーに戻る」ボタンの位置調整**: スライドショーからタイマー画面に戻したとき、H 押下後（テロップ縦幅が太い 9vh 状態）でボタンが完全に隠れる + 通常時（テロップ細い 6vh 状態）でも下に半分見切れる症状を解消。**画面左の縦中央付近（top: 50vh + transform: translateY(-50%)）に移動**したことで、テロップの太さに依存せずボタン全体が常に見える設計に変更。ロゴ画像（最大幅 14vw / 最大高さ 18vh）+ presented-by 表記の領域は画面上端から最大 約 20vh に収まるため、新位置（50vh）とは完全非干渉。**PIP ボタン（タイマーサイズ切替 = `#js-pip-show-timer`、左下 `bottom: 2vw` 配置）には触らず**（C.1.4-fix1 Fix 4 不変保護維持）。
+- **スライドショーの画像が 1 枚しかない場合は静止表示に変更**: 同じ画像が繰り返しフェードイン / フェードアウトを繰り返す挙動を解消。1 枚のときは setInterval を起動せず、1 枚目を静止表示するだけにします。1 枚→2 枚以上に追加した場合は自動的に setInterval 循環モードに切り替わります（`persistBreakImagesField` 内で active 中の枚数変化を検知し deactivate→activate で再評価）。
+- **スライドショー実行中に切替間隔（秒）を変更したら、その変更が即時反映されるように修正**: これまでは新しい間隔は次回スライドショー開始時にしか反映されず、実行中は古い間隔（10 秒など）が継続していました。修正後は数値変更後にフォーカスを外す or Enter キーを押すと、実行中のスライドショーも新しい間隔で再起動されます（`handleBreakImageIntervalChange` 内で active 中なら deactivate→activate 経路で setInterval を新間隔で張り直し）。1 枚静止モード時は再起動不要（修正と整合）。
+
+### Added
+
+- **`.gitattributes` 追加（Source code zip からの開発用ファイル除外）**: GitHub Release で自動生成される Source code zip / tar.gz から、CC（Claude Code）開発フロー用の作業ノート（`HANDOVER.md` / `CC_REPORT.md` / `NEXT_CC_PROMPT.md` / `NEXT_CC_PROMPT_*.md`）+ v1.3.0 配布時のインストールテスト手順書（`INSTALL_TEST.md`）を `export-ignore` 属性で除外。**git 履歴には残るがダウンロード時の zip からは除外される**ため、配布時に開発者向けノートが混入しない。アプリ動作には一切影響なし。
+
+### Tests
+
+- 新規 `tests/v206-slideshow-return-button-position.test.js`（T1〜T3 + PIP ボタン不変保護 + ロゴ領域非干渉 + version assertion、合計 7 件）
+- 新規 `tests/v206-slideshow-single-image.test.js` 追加（T1〜T3 + 1↔N 再評価 + 既存ガード保護 + deactivate 不変 + version assertion、合計 7 件）
+- 新規 `tests/v206-slideshow-interval-live-update.test.js` 追加（T1〜T3 + 既存ガード保護 + change イベント仕様維持 + intervalSec 再評価証明 + version assertion、合計 7 件）
+- 既存 version assertion ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 / rc20 / rc21 / rc22 / rc23）を `2.0.5` → `2.0.6` に追従更新
+
+### Compatibility (v2.0.6)
+
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- **rc12 修正コード保護**: onRoleChanged ハンドラの setAttribute + window.appRole 代入の try-catch 順序を完全維持
+- **rc18 第 1 弾 ring buffer 設計保護**: `_flushRollingLog` の `fs.promises.writeFile` 維持、`appendFile` 不在
+- **rc22 維持**: ⑨-A subscribe 持続条件 IDLE OR 句 / ⑩-A `Ctrl+Shift+L` globalShortcut / ⑩-D 起動時 `fs.readFileSync` 復元すべて維持
+- **rc23 display-removed 無条件 solo 経路保護**: HDMI 抜き時の hallWindow alive → close + switchOperatorToSolo 経路維持
+- **PIP ボタン不変保護**: `#js-pip-show-timer` の `left: 2vw / bottom: 2vw` 配置を完全維持（C.1.4-fix1 Fix 4 と整合）
+- **`<dialog>` flex 化禁止 / カード幅 54vw / 46vw / Barlow Condensed 700** 等の不変ルール維持
+- **スライドショー基本機能保護**: フェード切替（opacity 0/1）/ PIP / 自動復帰（残り 60 秒以下）/ BREAK 30 秒遅延（fix2 Fix 1）/ autoEndedAt 解除（fix1 Fix 3）すべて完全維持
+- src/ への変更内訳: CSS の `#js-pip-show-slideshow` ルール（ボタン位置）+ renderer.js の `activateSlideshow` / `persistBreakImagesField` / `handleBreakImageIntervalChange` 3 関数のみ。HTML / preload.js / main.js / 設定ファイル変更なし
+
+### アップグレード手順
+
+1. v2.0.5 が起動中なら閉じる
+2. `PokerTimerPLUS+ Setup 2.0.6.exe` を実行
+3. インストーラの指示に従う（既存設定・トーナメントデータは保持される）
+
+---
+
 ## [2.0.5] - 2026-05-03
 
 PokerTimerPLUS+ v2.0.5 マイナーリリース。v2.0.4 ユーザーは新インストーラを実行するだけで自動アップグレード（同 `appId: com.shitamachi.pokertimerplus`、設定・トーナメントデータは保持）。
