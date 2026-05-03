@@ -1875,6 +1875,10 @@ body:not(.has-marquee) .marquee { display: none; }
      既存マーキー編集ダイアログ（.form-dialog 単体）は影響を受けない（このセレクタのみ）。
      ※ C.1.3-fix1 Fix 3 の flex 化は <dialog> 要素の挙動を壊し ✕ボタン / resize ハンドル両方が
         効かなくなったため緊急ロールバック（C.1.3-fix1-rollback 2026-04-30）。 */
+  /* v2.0.4-rc19 タスク 1（問題 ④ 修正、案 C）:
+     <dialog>.showModal() の top layer 昇格は仕様上ほぼ確実だが、Chromium 内部で layer composition race が稀に起きる。
+     z-index 明示で二重保険、operator-pane (z-index: 90) より確実に上層へ。 */
+  z-index: 10000;
   min-width: 600px;
   /* C.1.3-fix3 2026-04-30: 初期サイズが画面右端いっぱいだとリサイズハンドルが
      見えにくい問題を解消。width / height を画面より一回り小さい固定値（min で画面サイズに頭打ち）に。
@@ -3811,3 +3815,255 @@ tr.level-row--just-inserted {
 
 /* === role=operator-solo: v1.3.0 と完全同等。何も変えない（hidden ルールも一切当てない） === */
 /* operator-solo / data-role 未指定では .operator-status-bar は HTML 側 hidden 属性で非表示のまま */
+
+/* === v2.0.4-rc4 修正 2: operator role で body 背景画像を打ち消す === */
+/* operator は「フォーカスさせるためだけのウィンドウ」のため、お客様向け演出（背景画像）は非表示。
+   data-bg="image" のときだけ適用、attribute selector の特定性で operator-solo / hall には絶対マッチしない。
+   hall は元々 fullscreen + 既存 .bg-image 系で背景画像を表示する設計のため touch しない。 */
+[data-role="operator"][data-bg="image"] body {
+  background-image: none !important;
+  background-color: #0A1F3D !important;
+}
+
+/* === v2.0.4-rc4 修正 3: AC（operator）専用の支援パネル === */
+/* 既存 .operator-status-bar（top:0, height:36px）の直下 (top:36px) から画面下まで配置。
+   hall / operator-solo には HTML hidden + CSS [data-role] で 3 重防御で非表示維持。 */
+.operator-pane {
+  display: none;   /* デフォルト非表示、operator のみで表示打ち消し */
+}
+[data-role="operator"] .operator-pane {
+  display: flex !important;
+  flex-direction: column;
+  position: fixed;
+  top: 36px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 24px 32px;
+  gap: 18px;
+  background: #0A1F3D;
+  color: #E8E5DA;
+  font-family: 'Noto Sans JP', sans-serif;
+  overflow: auto;
+  z-index: 90;
+}
+/* v2.0.4-rc19 タスク 1（問題 ④ 修正、案 A''）:
+   ダイアログ open 時のみ operator-pane を hit-test 対象から外す。
+   通常時はデフォルト pointer-events: auto を維持し、前原さん運用「AC 左半分クリックで window focus 取得」を保護する。
+   Chromium の <dialog>.showModal() top layer 昇格と layer composition race が起きても、
+   ダイアログ open フラグで確実に operator-pane を素通しさせる。 */
+body:has(dialog[open]) [data-role="operator"] .operator-pane {
+  pointer-events: none;
+}
+[data-role="operator"] .operator-pane__notice {
+  padding: 14px 20px;
+  border: 2px solid #D4AF37;
+  border-radius: 8px;
+  background: rgba(212, 175, 55, 0.08);
+  font-family: 'Barlow Condensed', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  color: #E8E5DA;
+}
+[data-role="operator"] .operator-pane__body {
+  display: grid;
+  grid-template-columns: 35% 65%;
+  gap: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+[data-role="operator"] .operator-pane__col {
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 8px;
+  overflow: auto;
+}
+[data-role="operator"] .operator-pane__heading {
+  margin: 0 0 12px 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #D4AF37;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+  padding-bottom: 6px;
+}
+[data-role="operator"] .operator-pane__info-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+[data-role="operator"] .operator-pane__info-list dt {
+  color: rgba(232, 229, 218, 0.7);
+  letter-spacing: 0.06em;
+}
+[data-role="operator"] .operator-pane__info-list dd {
+  margin: 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #E8E5DA;
+}
+[data-role="operator"] .operator-pane__shortcut-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  font-size: 13px;
+}
+[data-role="operator"] .operator-pane__shortcut-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  color: #E8E5DA;
+}
+[data-role="operator"] .operator-pane__shortcut-list kbd,
+[data-role="operator"] .shortcut-section kbd {
+  display: inline-block;
+  min-width: 24px;
+  padding: 2px 6px;
+  font-family: 'JetBrains Mono', 'Barlow Condensed', monospace;
+  font-weight: 700;
+  font-size: 12px;
+  color: #D4AF37;
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* v2.0.4-rc5: 操作一覧の 5 カテゴリセクション（タイマー / プレイヤー / エントリー / ダイアログ表示 / アプリ） */
+[data-role="operator"] .shortcut-section {
+  margin-bottom: 12px;
+}
+[data-role="operator"] .shortcut-section:last-child {
+  margin-bottom: 0;
+}
+[data-role="operator"] .shortcut-section h3 {
+  margin: 0 0 6px 0;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(212, 175, 55, 0.85);
+  border-bottom: 1px dotted rgba(212, 175, 55, 0.3);
+  padding-bottom: 3px;
+}
+[data-role="operator"] .shortcut-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 14px;
+  font-size: 13px;
+}
+[data-role="operator"] .shortcut-section li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  color: #E8E5DA;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+}
+
+/* v2.0.4-rc5: operator-pane の「音」項目 (op-pane-mute-status) — ミュート時に赤系で強調 */
+[data-role="operator"] #op-pane-mute-status[data-muted="true"] {
+  color: #FF6B6B;
+}
+
+/* v2.0.4-rc5: ミュート視覚フィードバック（全 role 共通、operator は CSS で非表示打ち消し） */
+.mute-indicator {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  background: rgba(180, 30, 30, 0.85);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.2em;
+  padding: 8px 14px;
+  border-radius: 8px;
+  z-index: 95;
+  pointer-events: none;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+/* operator role (AC) には表示しない、運用情報「音」で代替 */
+[data-role="operator"] .mute-indicator { display: none !important; }
+/* hall / operator-solo / 未指定 role では HTML 側 hidden 属性が外れた時に通常表示。
+   前原さん指示「便利機能はどっちのモードにも適用」により operator-solo にも適用 (v1.3.0 互換例外) */
+
+/* === v2.0.4-rc8 対策 A: operator-solo モードの明示的 hidden ルール（rc7 案 B 補完）===
+   rc7 で renderer.js の onRoleChanged で documentElement[data-role] を 'operator' → 'operator-solo'
+   に動的切替する経路を実装したが、style.css に [data-role="operator-solo"] のルールが 0 件だった
+   ため（v1.3.0 互換のため意図的に空欄 / コメントは下記 1 行）、role 切替時に operator-pane /
+   operator-status-bar が CSS の specificity / cascade 計算で残存するケースがあった。
+   rc8 で明示的に「operator-solo では operator-pane / operator-status-bar を非表示」と宣言する
+   ことで、HDMI 抜き → AC 復元時の表示踏襲問題（設定タブが AC レイアウトで出る等）を解消。
+   なお最初から HDMI なし起動の operator-solo ユーザーは元々これらが HTML hidden 属性で非表示の
+   ため挙動変化なし（v1.3.0 互換維持）。rc7 までの opacity / display 関連は無加工。 */
+[data-role="operator-solo"] .operator-pane,
+[data-role="operator-solo"] .operator-status-bar {
+  display: none !important;
+}
+
+/* === v2.0.4-rc9 Fix 2-B: 防御保険 — operator-solo モードで .clock 表示保証 ===
+   CSS 仕様上は data-role が "operator-solo" に切替った瞬間に
+   [data-role="operator"] .clock { display: none !important } ルールは適用外になり、
+   .clock のデフォルト display: grid（行 391）に戻るはず。
+   ただし前原さんの実機観察で「HDMI 抜き後 .clock が見えない」症状が報告されたため、
+   万一の race / cascade 計算ミスへの保険として明示的に grid 表示を強制する。
+   v1.3.0 起動時の operator-solo は元々 .clock { display: grid } で表示されているため
+   この明示化で挙動変化なし（v1.3.0 互換維持）。 */
+[data-role="operator-solo"] .clock {
+  display: grid !important;
+}
+
+/* === v2.0.4-rc9 Fix 3-B: 手元 PC のフォーカス可視化バナー ===
+   2 画面（operator）モードのみ表示、operator-solo / hall では非表示。
+   document.hasFocus() による動的状態切替（is-focused / is-blurred）。 */
+.operator-focus-banner { display: none; }
+[data-role="operator"] .operator-focus-banner {
+  display: flex !important;
+  position: fixed;
+  top: 36px;  /* operator-status-bar の下 */
+  left: 0;
+  right: 0;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  font-family: 'BIZ UDPGothic', sans-serif;
+  font-size: 14px;
+  z-index: 9998;
+  gap: 8px;
+  padding: 0 12px;
+  user-select: none;
+  pointer-events: none;
+}
+.operator-focus-banner.is-focused {
+  background: rgba(20, 120, 60, 0.92);
+  color: #fff;
+}
+.operator-focus-banner.is-blurred {
+  background: rgba(180, 60, 50, 0.92);
+  color: #fff;
+}
+.operator-focus-banner__icon {
+  font-weight: 700;
+  font-size: 16px;
+}
+[data-role="operator-solo"] .operator-focus-banner,
+[data-role="hall"] .operator-focus-banner {
+  display: none !important;
+}
+

@@ -485,15 +485,31 @@ function buildVoicesForDef(ctx, def) {
 // ============================================================
 
 function _play(soundId) {
-  if (!audioContext || !isReady) return;
+  // v2.0.4-rc15 タスク 2: rolling ログ機構で全 audio 経路を観測。
+  //   タスク 1（break-end の onLevelEnd 移行）の効果検証 + 将来の audio バグ調査支援。
+  //   _writeLog はファイル IO のヘルパ（main IPC へ送信、never throw）。
+  const _writeLog = (label, data) => {
+    try { (typeof window !== 'undefined' && window.api && window.api.log && window.api.log.write) && window.api.log.write(label, data); }
+    catch (_) { /* never throw from logging */ }
+  };
+  if (!audioContext || !isReady) {
+    _writeLog('audio:play:skip', { soundId, reason: !audioContext ? 'no-context' : 'not-ready' });
+    return;
+  }
   const effectiveVolume = muted ? 0 : masterVolume;
-  if (effectiveVolume <= 0) return;
+  if (effectiveVolume <= 0) {
+    _writeLog('audio:play:skip', { soundId, reason: 'muted-or-zero-volume' });
+    return;
+  }
 
   const buffer = audioBuffers[soundId];
   if (!buffer) {
     // ロード未完 / 失敗は静かに無視（試聴 UI 側でヒント表示も検討）
+    _writeLog('audio:play:skip', { soundId, reason: 'no-buffer' });
     return;
   }
+
+  _writeLog('audio:play:enter', { soundId, contextState: audioContext.state });
 
   // STEP 10 フェーズC.1.7: AudioContext suspend 防御。
   //   長時間 PAUSED（5 分以上）/ 別ウィンドウフォーカス / PC スリープ等で
@@ -501,6 +517,7 @@ function _play(soundId) {
   //   音は再生されない。playSound の都度 state を確認し、suspended なら resume を試みる
   //   （fire-and-forget で待たない、軽量）。
   if (audioContext.state === 'suspended') {
+    _writeLog('audio:play:resumed', { soundId, prevState: 'suspended' });
     audioContext.resume().catch(() => { /* resume 失敗時は static に音なし、致命ではない */ });
   }
 
@@ -512,8 +529,10 @@ function _play(soundId) {
     source.connect(gain);
     gain.connect(audioContext.destination);
     source.start();
+    _writeLog('audio:play:exit:ok', { soundId });
   } catch (err) {
     console.warn(`playSound(${soundId}) 失敗:`, err);
+    _writeLog('audio:play:exit:error', { soundId, errorMessage: err && err.message });
   }
 }
 

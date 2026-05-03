@@ -6,7 +6,6 @@
  *   - display-removed: hallWindow.close + switchOperatorToSolo
  *   - display-added: displays.length < 2 早期 return + chooseHallDisplayInteractive 再呼出
  *   - switchOperatorToSolo / switchSoloToOperator がウィンドウ再生成方式（reload なし）
- *   - isWindowOnDisplay ヘルパが bounds.x/y vs display.bounds で判定
  *   - renderer.js の operator-solo 経路に ensureAudioReady 明示呼出
  *   - ポーリング不使用（setInterval で displays 監視なし）
  *   - _broadcastDualState の hall 不在 no-op ガードが維持されている
@@ -88,32 +87,23 @@ test('T3: display-added: displays.length < 2 で return, chooseHallDisplayIntera
 // ============================================================
 // T4: switchOperatorToSolo / switchSoloToOperator がウィンドウ再生成方式（reload 不使用）
 // ============================================================
-test('T4: switchOperatorToSolo / switchSoloToOperator: close → 再生成（webContents.reload なし）', () => {
+test('T4: switchOperatorToSolo は show + focus / switchSoloToOperator は close→再生成（rc9 改修）', () => {
+  // v2.0.4-rc9 Fix 2-A: switchOperatorToSolo は minimize → show + focus に変更（自動前面表示、IPC 遅延起因の表示消失を根治）
+  //   close せず保持する設計は rc6 から維持（race ゼロ）。_showRestoreNoticeOnce は rc9 Fix 2-C で撤去。
   const solo = extractFunctionBody(MAIN, 'switchOperatorToSolo', true);
   assert.ok(solo, 'switchOperatorToSolo 関数本体抽出失敗');
-  assert.match(solo, /mainWindow\.close\s*\(\s*\)/, 'switchOperatorToSolo で mainWindow.close なし');
-  assert.match(solo, /createOperatorWindow\([^)]*,\s*true\s*\)/, 'createOperatorWindow(_, true) 再生成なし');
+  assert.match(solo, /mainWindow\.show\s*\(\s*\)/, 'switchOperatorToSolo で mainWindow.show なし（rc9 で show 化必須）');
+  assert.doesNotMatch(solo, /mainWindow\.minimize\s*\(\s*\)/, 'switchOperatorToSolo に mainWindow.minimize 残存（rc9 で撤去必須）');
+  assert.doesNotMatch(solo, /_showRestoreNoticeOnce\s*=\s*true/, 'switchOperatorToSolo に _showRestoreNoticeOnce フラグ残存（rc9 で撤去必須）');
   assert.doesNotMatch(solo, /webContents\.reload\s*\(/, 'switchOperatorToSolo に reload 使用（再生成方式違反）');
 
+  // switchSoloToOperator は依然 close→再生成（role='operator-solo' → 'operator' 変更が必要）
   const dual = extractFunctionBody(MAIN, 'switchSoloToOperator', true);
   assert.ok(dual, 'switchSoloToOperator 関数本体抽出失敗');
   assert.match(dual, /mainWindow\.close\s*\(\s*\)/, 'switchSoloToOperator で mainWindow.close なし');
   assert.match(dual, /createOperatorWindow\([^)]*,\s*false\s*\)/, 'createOperatorWindow(_, false) 再生成なし');
   assert.match(dual, /createHallWindow\s*\(/, 'createHallWindow 呼出なし');
   assert.doesNotMatch(dual, /webContents\.reload\s*\(/, 'switchSoloToOperator に reload 使用（再生成方式違反）');
-});
-
-// ============================================================
-// T5: isWindowOnDisplay ヘルパが bounds.x/y と display.bounds を比較
-// ============================================================
-test('T5: isWindowOnDisplay が windowBounds.x/y と display.bounds で重なり判定', () => {
-  assert.match(MAIN, /function\s+isWindowOnDisplay\s*\(/, 'isWindowOnDisplay 関数定義なし');
-  const body = extractFunctionBody(MAIN, 'isWindowOnDisplay');
-  assert.ok(body, 'isWindowOnDisplay 抽出失敗');
-  // display.bounds (db) と window bounds (wb) を比較
-  assert.match(body, /\.bounds/, 'display.bounds の参照なし');
-  assert.match(body, /wb\.x|windowBounds\.x/, 'window bounds.x の参照なし');
-  assert.match(body, /wb\.y|windowBounds\.y/, 'window bounds.y の参照なし');
 });
 
 // ============================================================

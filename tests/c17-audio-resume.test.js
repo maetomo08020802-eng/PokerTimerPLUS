@@ -56,14 +56,23 @@ test('T37: _play 内で audioContext.state === \'suspended\' チェック + resu
 });
 
 // ============================================================
-// T38: handleAudioOnTick の BREAK 経路で 0 秒 break-end 発火（回帰防止）
+// T38: BREAK 終了 → break-end 発火（rc15 で onLevelEnd に移動）
 // ============================================================
-test("T38: handleAudioOnTick の BREAK 経路で remainingSec === 0 → playSound('break-end')", () => {
+test("T38: rc15 タスク 1 — onLevelEnd 内で lv.isBreak === true 時に playSound('break-end') 発火", () => {
+  // rc13 までは handleAudioOnTick の BREAK 経路で remainingSec === 0 で発火していたが、
+  // rc15 で onTick 瞬間判定 race（1 フレーム ~16ms しか持続せず onLevelEnd と event loop race）を
+  // 構造的に解消するため onLevelEnd へ移動。lv.isBreak === true 経路で break-end が呼ばれる。
+  const m = RENDERER.match(/onLevelEnd\s*:\s*\(\s*index\s*\)\s*=>\s*\{[\s\S]*?\n\s{2,4}\}/);
+  assert.ok(m, 'onLevelEnd ハンドラが見つからない');
+  assert.match(m[0], /lv\.isBreak[\s\S]*?playSound\(\s*['"]break-end['"]\s*\)/,
+    'onLevelEnd の lv.isBreak 経路に break-end が見つからない（rc15 タスク 1 不在）');
+  // 旧経路（handleAudioOnTick の BREAK ブロック内 break-end）が削除されていること
   const body = extractFunctionBody(RENDERER, 'handleAudioOnTick');
   assert.ok(body, 'handleAudioOnTick 関数本体抽出失敗');
-  // BREAK 中の status 分岐 + 0 秒で break-end
-  assert.match(body, /States\.BREAK[\s\S]*?remainingSec\s*===\s*0[\s\S]*?break-end/,
-    'BREAK 中で remainingSec === 0 → break-end 発火経路がない（音欠落の根本経路）');
+  const onTickBreakBlock = body.match(/if\s*\(\s*status\s*===?\s*States\.BREAK\s*\)\s*\{[\s\S]*?\}/);
+  assert.ok(onTickBreakBlock);
+  assert.doesNotMatch(onTickBreakBlock[0], /playSound\(\s*['"]break-end['"]/,
+    '旧経路（handleAudioOnTick BREAK ブロック内 break-end）が残存（rc15 で onLevelEnd 移動済のはず）');
 });
 
 // ============================================================

@@ -6,7 +6,81 @@ GitHub リポジトリ: <https://github.com/maetomo08020802-eng/PokerTimerPLUS>
 
 ---
 
-## 初回リリース（v1.3.0）
+## v2.0.4 リリース（v1.3.0 → v2.0.4 アップグレード）
+
+v2.0.4 は v1.3.0 を**置き換える形**で配布します。`appId` / `productName` を v1.3.0 と同じに揃えてあるため、ユーザーは新インストーラを実行するだけで自動的にアップグレードされます（既存設定・トーナメントデータは保持）。
+
+ビルド済 `.exe` は `dist/PokerTimerPLUS+ Setup 2.0.4.exe`（CC が生成済）。本セクションの手順は前原さんが Git Bash で実行します。
+
+### 手順 1: feature ブランチを main にマージ
+
+「Git Bash」を起動して、以下のコマンドを 1 行ずつ実行してください:
+
+```bash
+cd C:/Users/user/Documents/Claude/Projects/個人アシスタント/poker-clock
+
+# 念のため作業ツリーがクリーンか確認
+git status
+
+# main ブランチに切り替え
+git checkout main
+
+# main を最新化（リモートに変更がない場合はスキップされます）
+git pull --ff-only origin main
+
+# feature ブランチを main にマージ（fast-forward の代わりに merge コミット作成）
+git merge --no-ff feature/v2.0.4-rc1-test-build -m "Merge v2.0.4 final into main"
+
+# main を push
+git push origin main
+```
+
+**注意**: `git push` は初回認証時に Personal Access Token (PAT) が必要です。発行手順は本文書下部「Personal Access Token (PAT) の発行」セクション参照。
+
+### 手順 2: タグを打って push
+
+```bash
+# v2.0.4 タグを作成
+git tag v2.0.4
+
+# タグを push
+git push origin v2.0.4
+```
+
+### 手順 3: GitHub Releases ページで .exe を公開
+
+1. <https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases> にアクセス
+2. 「**Draft a new release**」をクリック
+3. 入力:
+   - **Choose a tag**: 既存の `v2.0.4` タグを選択（手順 2 で push 済）
+   - **Release title**: `v2.0.4 - HDMI 2 画面対応 + 致命級バグ修正`
+   - **Description**: 配布対象向けに、`CHANGELOG.md` の `## [2.0.4] - 2026-05-03` セクションをコピー&ペースト
+   - **Attach binaries**: `dist/PokerTimerPLUS+ Setup 2.0.4.exe` をドラッグ&ドロップでアップロード
+   - 同じく `dist/latest.yml`（自動更新マニフェスト）もアップロード推奨（既存ユーザーの自動更新通知に必要）
+4. 「**Publish release**」ボタン
+
+これで配布完了。誰でも Releases ページから `.exe` をダウンロード可能。v1.3.0 ユーザーは既存アプリを起動すると `electron-updater` が新バージョンを検知して通知します（`latest.yml` を Release に添付した場合）。
+
+### 手順 4: 配布告知（任意・前原さん判断）
+
+告知テンプレート例:
+
+```
+PokerTimerPLUS+ v2.0.4 を公開しました。
+v1.3.0 → v2.0.4 へのアップグレードはインストーラを実行するだけで自動的に置き換わります（設定・トーナメントデータは保持されます）。
+
+主な変更:
+・HDMI 自動 2 画面対応（会場モニター + 手元 PC）
+・HDMI 抜き差し時のレイアウト自動切替
+・致命的バグ 2 件修正（タイマー画面消失問題、HDMI 抜き時の同期問題）
+
+ダウンロード: https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.0.4
+変更履歴: https://github.com/maetomo08020802-eng/PokerTimerPLUS/blob/main/CHANGELOG.md
+```
+
+---
+
+## (履歴) 初回リリース（v1.3.0）
 
 ### 手順 1: コードを GitHub にアップロード（git push）
 
@@ -59,10 +133,10 @@ git push -u origin main
 
 ---
 
-## 次回以降のリリース（v1.3.1 / v1.4.0 など）
+## 次回以降のリリース（v2.0.5 / v2.1.0 など）
 
 ### 手順 1: バージョン変更
-- `package.json` の `version` を新値に変更（例: `"version": "1.3.1"`）
+- `package.json` の `version` を新値に変更（例: `"version": "2.0.5"`）
 - `CHANGELOG.md` に新セクション追加（先頭に追加）
 
 ### 手順 2: ビルド + コミット + push
@@ -78,10 +152,10 @@ npm run build:win
 
 # 変更をコミット
 git add .
-git commit -m "Release v1.3.1"
+git commit -m "Release v2.0.5"
 
 # タグを打つ（バージョン番号を v 付きで）
-git tag v1.3.1
+git tag v2.0.5
 
 # push（main ブランチ + タグ）
 git push
@@ -90,13 +164,13 @@ git push --tags
 
 ### 手順 3: GitHub Releases で公開
 
-初回と同じ手順で:
-1. Releases ページで「Create a new release」
-2. **Choose a tag**: 既存の `v1.3.1` タグを選択（push --tags で公開済）
-3. Release title / Description / Attach binaries を入力
+v2.0.4 と同じ手順で:
+1. Releases ページで「Draft a new release」
+2. **Choose a tag**: 既存の `v2.0.5` タグを選択（push --tags で公開済）
+3. Release title / Description / Attach binaries（`.exe` + `latest.yml`）を入力
 4. **Publish release**
 
-公開した瞬間から、既存ユーザーが次回起動時に**自動更新通知**を受け取ります（electron-updater が動作）。
+公開した瞬間から、既存ユーザーが次回起動時に**自動更新通知**を受け取ります（electron-updater が動作、`latest.yml` 添付必須）。
 
 ---
 
@@ -125,7 +199,7 @@ git push --tags
 - `package.json` の `build.publish` が GitHub provider + 正しい owner/repo になっているか確認
 - 公開した Release に `latest.yml` が含まれているか確認（`electron-builder` が自動生成）
   - 含まれていない場合、Release Assets に手動で `latest.yml`（dist/ 内）をアップロード
-- 配布バージョンと Release タグの version が一致しているか確認（`v1.3.1` と `package.json` の `1.3.1`）
+- 配布バージョンと Release タグの version が一致しているか確認（例: `v2.0.5` タグと `package.json` の `2.0.5`）
 
 ---
 

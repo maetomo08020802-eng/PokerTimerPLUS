@@ -1040,7 +1040,14 @@ function applyTournament(t) {
   // 旧 title / 新 name 両対応
   const titleSrc = (typeof t.title === 'string') ? t.title
                   : (typeof t.name === 'string') ? t.name : undefined;
-  if (typeof titleSrc === 'string') tournamentState.title = titleSrc;
+  // v2.0.4-rc19 タスク 4（問題 ⑧ 修正、案 3）:
+  // updateOperatorPane（renderer.js:1670）が tournamentState.name を読むが、
+  // initial state も applyTournament も .title のみ更新していた → AC「イベント名」常時 '-'。
+  // 双方向整合性保証のため .title と .name を同期代入。
+  if (typeof titleSrc === 'string') {
+    tournamentState.title = titleSrc;
+    tournamentState.name = titleSrc;
+  }
   if (typeof t.subtitle === 'string') tournamentState.subtitle = t.subtitle;
   if (typeof t.currencySymbol === 'string' && t.currencySymbol.length > 0) {
     tournamentState.currencySymbol = t.currencySymbol;
@@ -1334,8 +1341,19 @@ async function getCachedLevels(presetId) {
 //              第二引数 levels が undefined の場合は現在ロード済の structure（getLevelCount）を用いる
 //              opts.silent: true なら復元直後の音再生（5,4,3,2,1 等）をスキップ
 function applyTimerStateToTimer(ts, levels, opts = {}) {
-  if (!ts || typeof ts !== 'object') { timerReset(); return; }
-  if (ts.status === 'idle') { timerReset(); return; }
+  // v2.0.4 E-1 fix: idle / 不正値復元時も clock--timer-finished オーバーレイを解除する。
+  //   旧実装では running/paused/break への遷移時のみ class を消していたため、
+  //   終了済みトーナメントから別 t に切替（idle 復元）すると overlay が残るバグがあった。
+  if (!ts || typeof ts !== 'object') {
+    el.clock?.classList.remove('clock--timer-finished');
+    timerReset();
+    return;
+  }
+  if (ts.status === 'idle') {
+    el.clock?.classList.remove('clock--timer-finished');
+    timerReset();
+    return;
+  }
   // STEP 10 フェーズC.1.2 Fix 2: 'finished' 状態は idle 同様タイマー再開しない（完走表示のみ）。
   //   ユーザーが「タイマーリセット」を押すと idle に戻り、新規エントリーで再開可能。
   //   メイン画面に「トーナメント終了」オーバーレイを表示（緑系、playersRemaining=0 とは別経路）。
@@ -1531,7 +1549,14 @@ function syncPowerSaveBlocker(status) {
   } catch (_) { /* ignore */ }
 }
 
+// v2.0.4-rc8 Fix 4: HDMI 切替（onRoleChanged）時に直近 timerState で updateOperatorPane を
+//   即時再描画するため、subscribe で受け取る state を保持する。
+//   subscribe 経由でしか timerState は流れてこないため、role 切替時は次の tick を待たずに
+//   この変数を使って operator-pane を更新する（rc7 修正漏れの補完）。
+let _lastTimerStateForRoleSwitch = null;
+
 subscribe((state, prev) => {
+  _lastTimerStateForRoleSwitch = state;
   if (state.status !== prev.status) {
     renderControls(state.status);
     syncPowerSaveBlocker(state.status);
@@ -1555,10 +1580,24 @@ subscribe((state, prev) => {
       }
     } catch (err) { console.warn('pauseAfterBreak 処理失敗:', err); }
   }
+  // v2.0.4-rc17: 常時 3 ラベル rolling ログ #3（hall 描画 ts）
+  if (typeof window !== 'undefined' && window.appRole === 'hall') {
+    try { window.api?.log?.write?.('render:tick:hall', { status: state.status, level: state.currentLevelIndex, remainingMs: state.remainingMs }); } catch (_) { /* never throw from logging */ }
+  }
   renderTime(state.remainingMs);
   renderNextBreak(state.remainingMs, state.currentLevelIndex);
   // STEP 6.21: status / level 変化時にアクティブ TimerState を保存
-  if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex) {
+  // v2.0.4-rc17: PAUSED 中の time-shift（remainingMs 単独変化）も同期トリガに含める（修正案 ②-1）
+  // v2.0.4-rc22 タスク 1（問題 ⑨ 残部、案 ⑨-A）:
+  //   IDLE 中に _refreshDisplayAfterStructureChange が新 Lv1 duration を setState した場合、
+  //   既存 3 句どれにもヒットせず timerState 送信不発火 → hall 同期遅延の真因。
+  //   IDLE 限定で remainingMs/totalMs 変化を trigger に追加、③ c（PAUSED 進行中据置）と非干渉。
+  if (
+    state.status !== prev.status ||
+    state.currentLevelIndex !== prev.currentLevelIndex ||
+    (state.status === States.PAUSED && state.remainingMs !== prev.remainingMs) ||
+    (state.status === States.IDLE && (state.remainingMs !== prev.remainingMs || state.totalMs !== prev.totalMs))
+  ) {
     schedulePersistTimerState();
     // リスト UI も状態反映のため再描画（軽量）
     renderTournamentList().catch(() => {});
@@ -1577,7 +1616,42 @@ subscribe((state, prev) => {
   syncSlideshowFromState(state.remainingMs);
   // v2.0.0 STEP 3: operator モードのみミニ状態バーを更新（hall / operator-solo は no-op）
   updateOperatorStatusBar(state);
+  // v2.0.4-rc4: operator モードのみ支援パネル（運用情報）を更新（hall / operator-solo は no-op）
+  updateOperatorPane(state);
 });
+
+// v2.0.4-rc21 タスク 1（問題 ⑨ 案 ⑨-A）:
+//   `setStructure`-only 経路（subscribe 不発火）の表示更新漏れを補完する共通ヘルパ。
+//   IDLE 時は前原さん判断 α により新 Lv1 duration を state に反映 → setState 経由で subscribe 発火、全表示が同時更新される。
+//   非 IDLE 時（PAUSED 等）は ③ c により remainingMs / totalMs に絶対触らず、明示更新呼出のみで AC 各要素を再描画。
+//   PAUSED 時に setState({ remainingMs }) すると targetTime 整合性が壊れるため厳禁（ブラックリスト項目）。
+function _refreshDisplayAfterStructureChange() {
+  try {
+    const state = getState();
+    if (state.status === States.IDLE) {
+      // α: IDLE 時のみ新 Lv1 duration を即時反映、subscribe 経由で全表示更新
+      try {
+        const lv0 = getLevel(0);
+        if (lv0 && typeof lv0.durationMinutes === 'number') {
+          const newTotalMs = lv0.durationMinutes * 60 * 1000;
+          setState({ remainingMs: newTotalMs, totalMs: newTotalMs });
+        }
+      } catch (_) { /* getLevel 失敗時は明示呼出にフォールバック */ }
+      // setState 失敗時の保険として明示呼出も実行（idempotent、subscribe 経由と二重描画になっても DOM 上は同値）
+      const s = getState();
+      try { updateOperatorStatusBar(s); } catch (_) {}
+      try { updateOperatorPane(s); } catch (_) {}
+      try { renderTime(s.remainingMs); } catch (_) {}
+      try { renderNextBreak(s.remainingMs, s.currentLevelIndex); } catch (_) {}
+    } else {
+      // ③ c: 非 IDLE 時は state.remainingMs に触らず明示更新呼出のみ
+      try { updateOperatorStatusBar(state); } catch (_) {}
+      try { updateOperatorPane(state); } catch (_) {}
+      try { renderTime(state.remainingMs); } catch (_) {}
+      try { renderNextBreak(state.remainingMs, state.currentLevelIndex); } catch (_) {}
+    }
+  } catch (_) { /* never throw from display refresh */ }
+}
 
 // v2.0.0 STEP 3: operator モード（PC 側）専用のミニ状態バー更新。
 //   既存 subscribe からのみ呼ばれるため tick ごとの再計算ではなく差分更新になる。
@@ -1597,6 +1671,121 @@ function updateOperatorStatusBar(state) {
   const ss = String(totalSec % 60).padStart(2, '0');
   timeEl.textContent = `${mm}:${ss}`;
   stateEl.textContent = state.status || 'IDLE';
+}
+
+// v2.0.4-rc4: operator モード（PC 側）専用の支援パネル更新（運用情報 7 項目）。
+//   hall / operator-solo では JS guard で early return（3 重防御の JS 層）。
+//   状態は日本語化、ブラインドは現/次の SB/BB 表示、未取得は '-'。
+const _STATUS_JP_MAP = {
+  idle:        '開始前',
+  'pre-start': 'カウントダウン中',
+  prestart:    'カウントダウン中',
+  running:     '進行中',
+  paused:      '一時停止',
+  break:       'ブレイク中',
+  finished:    '終了'
+};
+function _formatBlindForPane(level) {
+  if (!level) return '-';
+  if (level.isBreak) return 'ブレイク';
+  const sb = (typeof level.sb === 'number') ? level.sb : null;
+  const bb = (typeof level.bb === 'number') ? level.bb : null;
+  if (sb === null || bb === null) return '-';
+  const ante = (typeof level.bbAnte === 'number' && level.bbAnte > 0) ? `（BB ANTE ${level.bbAnte}）` : '';
+  return `${sb} / ${bb}${ante}`;
+}
+function updateOperatorPane(state) {
+  if (typeof window === 'undefined' || window.appRole !== 'operator') return;
+  const pane = document.getElementById('js-operator-pane');
+  if (!pane) return;
+  // 初回のみ hidden 解除（pane 自体は HTML hidden、CSS で display 上書き、JS で hidden 属性を外す）
+  if (pane.hasAttribute('hidden')) pane.removeAttribute('hidden');
+
+  const eventEl   = document.getElementById('op-pane-event-name');
+  const statusEl  = document.getElementById('op-pane-status');
+  const curBlindEl = document.getElementById('op-pane-current-blind');
+  const nextBlindEl = document.getElementById('op-pane-next-blind');
+  const playersEl = document.getElementById('op-pane-players');
+  const avgEl     = document.getElementById('op-pane-avg-stack');
+  const reentryEl = document.getElementById('op-pane-reentry-addon');
+  const muteEl    = document.getElementById('op-pane-mute-status');
+  if (!eventEl || !statusEl) return;
+
+  // イベント名 (tournamentState.name)
+  eventEl.textContent = (tournamentState && tournamentState.name) ? tournamentState.name : '-';
+
+  // 状態（日本語化）
+  const rawStatus = String(state?.status || 'idle').toLowerCase();
+  statusEl.textContent = _STATUS_JP_MAP[rawStatus] || (state?.status || '-');
+
+  // 現ブラインド / 次ブラインド
+  const struct = (typeof getStructure === 'function') ? getStructure() : null;
+  const levels = (struct && Array.isArray(struct.levels)) ? struct.levels : [];
+  const idx = state?.currentLevelIndex || 0;
+  if (curBlindEl)  curBlindEl.textContent  = _formatBlindForPane(levels[idx]);
+  if (nextBlindEl) nextBlindEl.textContent = _formatBlindForPane(levels[idx + 1]);
+
+  // プレイヤー（残 / 初期）
+  const remaining = (tournamentRuntime && typeof tournamentRuntime.playersRemaining === 'number')
+    ? tournamentRuntime.playersRemaining : 0;
+  const initial = (tournamentRuntime && typeof tournamentRuntime.playersInitial === 'number')
+    ? tournamentRuntime.playersInitial : 0;
+  if (playersEl) playersEl.textContent = `${remaining} / ${initial}`;
+
+  // 平均スタック（既存 el.avgStack の textContent を流用）
+  if (avgEl) {
+    const avgText = el.avgStack ? (el.avgStack.textContent || '').trim() : '';
+    avgEl.textContent = avgText || '-';
+  }
+
+  // リエントリー / アドオン
+  const reentry = (tournamentRuntime && typeof tournamentRuntime.reentryCount === 'number')
+    ? tournamentRuntime.reentryCount : 0;
+  const addon = (tournamentRuntime && typeof tournamentRuntime.addOnCount === 'number')
+    ? tournamentRuntime.addOnCount : 0;
+  if (reentryEl) reentryEl.textContent = `リエントリー ${reentry} / アドオン ${addon}`;
+
+  // v2.0.4-rc7 Fix 2-B: 特別スタック（Ctrl+E 操作）の AC 表示。
+  //   rc4 で operator-pane 7 項目を実装した際に漏れていた項目。Ctrl+E は内部状態と
+  //   メイン画面 #js-special-stack-row には反映されているが、AC ペインに項目が無いため
+  //   ユーザーには「効かない」と認知された（表示踏襲問題と独立した補完バグ）。
+  const specialStackEl = document.getElementById('op-pane-special-stack');
+  if (specialStackEl) {
+    const ss = (tournamentState && tournamentState.specialStack) || {};
+    const enabled = !!ss.enabled && (Number(ss.appliedCount) || 0) > 0;
+    specialStackEl.textContent = enabled
+      ? `${ss.label || '特別配布'} × ${ss.appliedCount}`
+      : '-';
+  }
+
+  // v2.0.4-rc5: 音（ミュート状態）— 通常 / ミュート中、data-muted 属性で CSS の赤色強調を切替
+  if (muteEl) {
+    const muted = (typeof audioIsMuted === 'function') ? audioIsMuted() : false;
+    muteEl.textContent = muted ? 'ミュート中' : '通常';
+    muteEl.setAttribute('data-muted', muted ? 'true' : 'false');
+  }
+}
+
+// v2.0.4-rc5: ミュート視覚フィードバックの全 role 共通更新関数。
+//   right-bottom の .mute-indicator を hidden/visible で切替。operator role では CSS で打ち消し済のため
+//   実質的に hall / operator-solo のみ画面上に表示される。AC（operator）は operator-pane の「音」項目で代替。
+//   M キー押下時 + 起動時 + 設定タブからのミュート操作 hook で呼ぶ。
+function updateMuteIndicator() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const indicator = document.getElementById('js-mute-indicator');
+  if (!indicator) return;
+  const muted = (typeof audioIsMuted === 'function') ? audioIsMuted() : false;
+  if (muted) {
+    indicator.removeAttribute('hidden');
+  } else {
+    indicator.setAttribute('hidden', '');
+  }
+  // operator role（AC）の運用情報「音」項目も同期更新（updateOperatorPane 経由のみだと subscribe 待ち、即時反映用）
+  const muteEl = document.getElementById('op-pane-mute-status');
+  if (muteEl) {
+    muteEl.textContent = muted ? 'ミュート中' : '通常';
+    muteEl.setAttribute('data-muted', muted ? 'true' : 'false');
+  }
 }
 
 // 通知音発火: 同じ秒で複数フレーム検出されても1回だけ鳴らすためのガード
@@ -1621,8 +1810,17 @@ function handleAudioOnTick(remainingMs, currentLevelIndex) {
 
   const { status } = getState();
   if (status === States.BREAK) {
-    // ブレイク中: 残り0秒でブレイク終了音（次レベルへ自動遷移）
-    if (remainingSec === 0) playSound('break-end');
+    // v2.0.4-rc13 Fix 2: BREAK 中もブレイク終了に向けた予告音を再生（前原さん要望）。
+    //   既存音源（warning-10sec.mp3 / countdown-tick.mp3）を流用、新規音源不要。
+    //   要望 1: 残り 10 秒で警告音、要望 2: 残り 5/4/3/2/1 秒でカウント音（B-2-A、RUNNING 中と同 UX）。
+    //   要望 3: 残り 0 秒の break-end は既存維持（前原さん「現状で十分」確認済）。
+    //   playSound() 経由 → audio.js の _play() 経由で AudioContext resume を継承（C.1.7 完全準拠）。
+    if (remainingSec === 10) playSound('warning-10sec');
+    if (remainingSec >= 1 && remainingSec <= 5) playSound('countdown-tick');
+    // v2.0.4-rc15 タスク 1: BREAK 終了音 break-end は onLevelEnd ハンドラに移動。
+    //   旧実装（onTick の remainingSec === 0 瞬間判定）は 1 フレーム（〜16ms）しか持続せず、
+    //   onLevelEnd の event loop race で見落とされる症状（rc13 試験 NG）の構造的根治。
+    //   warning-10sec / countdown-tick は範囲判定で複数フレーム持続するため race 影響なし、維持。
     return;
   }
 
@@ -1667,7 +1865,16 @@ setHandlers({
   onLevelEnd: (index) => {
     // レベル終了の瞬間に level-end を1回鳴らす（onTick の remainingSec===0 検出より確実）
     const lv = getLevel(index);
-    if (lv && !lv.isBreak) playSound('level-end');
+    // v2.0.4-rc15 タスク 1: lv.isBreak === true 経路に break-end を追加（onTick から移動）。
+    //   onLevelEnd は level 境界で確実に 1 回発火するため、onTick の瞬間判定 race を構造的に解消。
+    //   playSound() 経由 → audio.js _play() 経由で AudioContext resume を継承（C.1.7 完全準拠）。
+    if (lv) {
+      if (lv.isBreak) {
+        playSound('break-end');
+      } else {
+        playSound('level-end');
+      }
+    }
   },
   onPreStartTick: (remainingMs) => {
     // renderTime は subscribe 側で発火するので、ここでは音のみ
@@ -2842,6 +3049,8 @@ async function handleTournamentGameTypeChange(newGameType) {
           setStructure(cloneStructure(preset));   // active 構造を切替
           renderCurrentLevel(currentLevelIndex || 0);
           renderNextLevel(currentLevelIndex || 0);
+          // v2.0.4-rc21 タスク 1（問題 ⑨ 案 ⑨-A）: AC 表示更新漏れ補完（α: IDLE 時は新 Lv1 duration 反映）
+          _refreshDisplayAfterStructureChange();
         } catch (err2) {
           console.warn('idle 時 active 構造切替失敗:', err2);
         }
@@ -3568,11 +3777,16 @@ async function _handleTournamentNewImpl() {
 async function handleTournamentDuplicate() {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は複製不可
   if (!window.api?.tournaments) return;
+  // v2.0.4 D-1 fix: 連打ガード（async 中の重複実行で複数の複製が作られないよう、
+  //   handleTournamentNew と同じ _inFlight パターンを適用）
+  if (handleTournamentDuplicate._inFlight) return;
+  handleTournamentDuplicate._inFlight = true;
   // STEP 10 フェーズC.1.1 Fix 2: 複製も active 切替を伴うため periodic skip（finally で確実解除）
   _tournamentSwitching = true;
   try {
     return await _handleTournamentDuplicateImpl();
   } finally {
+    handleTournamentDuplicate._inFlight = false;
     _tournamentSwitching = false;
   }
 }
@@ -3623,10 +3837,25 @@ async function _handleTournamentDuplicateImpl() {
   await loadTournamentIntoForm(cloned.id);
   setTournamentHint('トーナメントを複製しました', 'success');
   setTimeout(() => setTournamentHint(''), 2000);
+  // v2.0.4-rc13 Fix 1: 複製直後に readonly 残存バグ（前原さん観察「複製したら書き込めない」）を根治。
+  //   `_handleTournamentNewImpl` の line 3686 + 3696（同期 + RAF 内の 2 重呼出パターン）と完全パリティで
+  //   `ensureEditorEditableState()` を追加。rc13 事前調査の修正案 A-1 採用。
+  //   既存の `handlePresetDuplicate`（5108 + 5113）/ `handlePresetNew`（5077 + 5081）/
+  //   `_handleTournamentNewImpl`（3686 + 3696）には 2 重呼出があるのに、本関数のみパリティ違反だった。
+  //   `meta.builtin === true` 時は ensureEditorEditableState 内で no-op、builtin 保護維持。
+  //   致命バグ保護 C.1-A2 / C.1.2-bugfix の強化方向（4 重防御の対象がトーナメント複製にも拡張）。
+  if (typeof ensureEditorEditableState === 'function') {
+    try { ensureEditorEditableState(); } catch (_) { /* ignore */ }
+  }
   if (el.tournamentTitle) {
     requestAnimationFrame(() => {
       el.tournamentTitle.focus();
       el.tournamentTitle.select();
+      // v2.0.4-rc13 Fix 1: RAF 内でも再保証（applyTournament → renderBreakImagesList 等の race で
+      //   readonly が再付与される可能性に備える、_handleTournamentNewImpl:3696 と同パターン）
+      if (typeof ensureEditorEditableState === 'function') {
+        try { ensureEditorEditableState(); } catch (_) { /* ignore */ }
+      }
     });
   }
 }
@@ -3901,6 +4130,8 @@ async function handleTournamentSave() {
             setStructure(newPreset);
             renderCurrentLevel(currentLevelIndex || 0);
             renderNextLevel(currentLevelIndex || 0);
+            // v2.0.4-rc21 タスク 1（問題 ⑨ 案 ⑨-A）: AC 表示更新漏れ補完（α: IDLE 時は新 Lv1 duration 反映）
+            _refreshDisplayAfterStructureChange();
             setTournamentHint('保存しました（ブラインド構造も反映）', 'success');
           } else {
             setTournamentHint('保存しました（ブラインド構造の読込に失敗）', 'error');
@@ -4048,9 +4279,14 @@ async function doApplyTournament({ form, newPreset }, mode) {
         //   - handleReset()/timerStart() は呼ばない（タイマー暴発防止）
         //   - PAUSED 時は pausedRemainingMs / currentLevelIndex / status をすべて維持
         //   - メイン画面 BLINDS / NEXT カードを新構造で再描画
+        // v2.0.4 E-1 fix: 終了済み（clock--timer-finished）からの apply-only 経路でも
+        //   overlay を解除する（新ブラインド構造を適用したのに finished 表示が残る違和感を防止）。
+        el.clock?.classList.remove('clock--timer-finished');
         const { status: curStatus, currentLevelIndex } = getState();
         renderCurrentLevel(currentLevelIndex);
         renderNextLevel(currentLevelIndex);
+        // v2.0.4-rc21 タスク 1（問題 ⑨ 案 ⑨-A）: AC 表示更新漏れ補完（IDLE: 新 Lv1 duration / PAUSED: 残り時間保護）
+        _refreshDisplayAfterStructureChange();
         const msg = curStatus === States.PAUSED
           ? '保存して適用しました（一時停止状態を維持）'
           : '保存して適用しました（タイマーは停止のまま）';
@@ -5365,6 +5601,8 @@ async function handlePresetApply() {
       const { currentLevelIndex } = getState();
       renderCurrentLevel(currentLevelIndex);
       renderNextLevel(currentLevelIndex);
+      // v2.0.4-rc21 タスク 1（問題 ⑨ 案 ⑨-A）: AC 表示更新漏れ補完（PAUSED 限定経路、③ c により残り時間保護）
+      _refreshDisplayAfterStructureChange();
       setBlindsHint('適用しました（一時停止状態を維持、タイマー無変更）', 'success');
     } else {
       // 既定: リセット適用
@@ -5721,30 +5959,24 @@ el.marqueeDialog?.addEventListener('close', () => {
   restoreMarqueeIfPreviewing();
 });
 
-window.addEventListener('keydown', (event) => {
-  if (el.resetDialog.open) return;
+// v2.0.4-rc4: 操作系ショートカットの分岐本体を関数化。
+//   ローカル keydown とホール側 IPC 転送（hall:forwarded-key）の双方から呼ばれる共通 dispatcher。
+//   IPC 経由で渡される eventLike は preventDefault / stopPropagation を no-op として持つ最小オブジェクト。
+//   ガード（resetDialog / dialog[open]）は両経路に等しく適用、入力フィールドガードは
+//   ローカル keydown 専用（IPC は target を持たない）。
+function dispatchClockShortcut(event) {
+  // resetDialog 中は全ショートカットを抑制（既存挙動維持、Ctrl+T も含む）
+  if (el.resetDialog?.open) return;
 
-  // Ctrl+T: マーキー編集ダイアログを直接開く（input フォーカス中でも有効）
+  // Ctrl+T: マーキー編集ダイアログを直接開く（input フォーカス中でも有効、他 dialog 開でも有効）
   if ((event.ctrlKey || event.metaKey) && event.code === 'KeyT') {
     event.preventDefault();
     openMarqueeDialog();
     return;
   }
 
-  // 【最重要バグ修正】編集可能要素にフォーカスがある時は
-  // クロックショートカット（Space/←/→/R/S）を一切発火させない。
-  // dialog.open 判定ではエッジケース（フォーカスがダイアログ外要素に飛ぶ等）で
-  // 抜けることがあるため、target ベースで確実にガードする。
-  const target = event.target;
-  if (target && (
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT' ||
-    target.isContentEditable
-  )) return;
-
-  // ダイアログが開いている間も念のためクロック側を抑制（フォーカスが背景等にある場合）
-  if (el.marqueeDialog?.open || el.settingsDialog?.open) return;
+  // v2.0.4 B-1 fix: 任意の <dialog open> でショートカットを抑制（Ctrl+T を除く）
+  if (document.querySelector('dialog[open]')) return;
 
   switch (event.code) {
     case 'Space':
@@ -5818,6 +6050,12 @@ window.addEventListener('keydown', (event) => {
         ensureAudioReady().then(() => {
           const nowMuted = audioToggleMute();
           console.log(nowMuted ? 'ミュート: ON' : 'ミュート: OFF');
+          // v2.0.4-rc5: ミュート視覚フィードバック更新（全 role に hook、operator では mute-indicator は CSS で非表示）
+          updateMuteIndicator();
+          // v2.0.4-rc6 Fix 5-M: operator 役割なら hall 側にもミュート状態を同期（PC 側 M 押下 → hall 側 audio もミュート）
+          if (window.appRole === 'operator') {
+            window.api?.dual?.broadcastMuteState?.(nowMuted);
+          }
         });
       }
       break;
@@ -5826,12 +6064,157 @@ window.addEventListener('keydown', (event) => {
       if (!event.ctrlKey && !event.metaKey) {
         event.preventDefault();
         toggleBottomBar();
+        // v2.0.4-rc6 Fix 5-H: operator 役割なら hall 側にもボトムバー状態を同期。
+        //   既存 settings.setDisplay は永続化のみで runtime broadcast がないため、明示的に通知。
+        if (window.appRole === 'operator') {
+          // bottomBarHidden は applyBottomBarHidden が toggle 後に true/false 反映済（モジュール変数）
+          window.api?.dual?.broadcastBottomBarState?.(bottomBarHidden);
+        }
       }
+      break;
+    case 'Escape':
+      // v2.0.4-rc6 Fix 4-A: dispatcher 到達時は dialog 無し前提（dialog[open] ガードで弾かれる）。
+      //   hall が fullscreen の時、操作者が緊急で hall を窓化したいケース用に IPC 通知。
+      //   <dialog> の Esc default close は別経路で消費される（dispatcher に届かない）。
+      event.preventDefault();
+      window.api?.dual?.requestExitFullScreen?.();
       break;
     default:
       break;
   }
+}
+
+// v2.0.4-rc4: ローカル keydown ハンドラ。input フィールドガードはここでのみ適用。
+window.addEventListener('keydown', (event) => {
+  // 【最重要バグ修正】編集可能要素にフォーカスがある時はクロックショートカットを一切発火させない。
+  // この入力フィールドガードはローカル keydown 専用（IPC 経由の hall 転送には target が無い）。
+  const target = event.target;
+  if (target && (
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT' ||
+    target.isContentEditable
+  )) return;
+  dispatchClockShortcut(event);
 });
+
+// v2.0.4-rc4: hall 側 before-input-event で捕捉した操作系キーを IPC 経由で受信し、
+//   同じ dispatcher にディスパッチ。main 側は mainWindow.webContents.send で operator 限定送信のため、
+//   hall 側 renderer は受信しないが、念のため appRole === 'operator' で限定。
+//   rc3 sendInputEvent 方式では letter キーで event.code が空文字になる Electron 31 系の構造的制約により
+//   R / Ctrl+E / S 等 13 キーが無反応だった問題を、IPC 化で根本解消。
+if (typeof window !== 'undefined' && window.appRole === 'operator') {
+  window.api?.dual?.onHallForwardedKey?.((data) => {
+    if (!data || typeof data.code !== 'string') return;
+    dispatchClockShortcut({
+      code: data.code,
+      key: data.key,
+      ctrlKey: !!data.control,
+      shiftKey: !!data.shift,
+      altKey: !!data.alt,
+      metaKey: !!data.meta,
+      preventDefault: () => {},
+      stopPropagation: () => {}
+    });
+  });
+}
+
+// v2.0.4-rc9 Fix 3-C: 手元 PC のフォーカス可視化バナー更新関数。
+//   document.hasFocus() を見て is-focused / is-blurred クラスと文言を切替。
+//   role が operator のときのみ動作（operator-solo / hall は CSS で完全非表示）。
+function updateFocusBanner() {
+  if (typeof window === 'undefined' || window.appRole !== 'operator') return;
+  const el = document.getElementById('js-operator-focus-banner');
+  if (!el) return;
+  if (el.hasAttribute('hidden')) el.removeAttribute('hidden');
+  const iconEl = document.getElementById('js-operator-focus-banner-icon');
+  const textEl = document.getElementById('js-operator-focus-banner-text');
+  const isFocused = (typeof document !== 'undefined' && typeof document.hasFocus === 'function')
+    ? document.hasFocus()
+    : true;
+  el.classList.toggle('is-focused', isFocused);
+  el.classList.toggle('is-blurred', !isFocused);
+  if (iconEl) iconEl.textContent = isFocused ? '○' : '!';
+  if (textEl) {
+    textEl.textContent = isFocused
+      ? '現在操作可能（カーソルをこの画面に合わせると、会場モニターの数値等を操作できます）'
+      : 'この画面をクリックしてください';
+  }
+}
+if (typeof window !== 'undefined' && window.appRole !== 'hall') {
+  try {
+    window.addEventListener('focus', updateFocusBanner);
+    window.addEventListener('blur', updateFocusBanner);
+    // 初期描画
+    if (typeof document !== 'undefined' && document.readyState !== 'loading') {
+      updateFocusBanner();
+    } else if (typeof document !== 'undefined') {
+      document.addEventListener('DOMContentLoaded', updateFocusBanner, { once: true });
+    }
+  } catch (_) { /* ignore */ }
+}
+
+// v2.0.4-rc7 Fix 1-C: HDMI 切替時の role 動的切替ハンドラ。
+//   main → 'dual:role-changed' IPC で 'operator-solo' / 'operator' を通知。
+//   documentElement[data-role] を更新することで CSS が 2 画面用 / 単画面用レイアウトに
+//   自動追従し、表示踏襲問題（rc6: minimize 後も data-role="operator" が持続）が解消する。
+//   開いている dialog はそのまま（CSS 切替で見た目自動追従、ユーザー作業の中断を避ける）。
+//   hall は対象外（hall は別ウィンドウで close されるため受信しない）。
+// v2.0.4-rc12 真因根治: rc7〜rc10 の 4 連続失敗の真因は **ES module + contextBridge 凍結**。
+//   renderer.js は <script type="module"> 経由で読込まれ自動的に strict mode、preload.js の
+//   `contextBridge.exposeInMainWorld('appRole', _role)` で window.appRole は writable: false の
+//   property として固定される（Electron 仕様）。strict mode で `window.appRole = newRole` は
+//   TypeError を投げ、preload.js の `try { callback(newRole); } catch (_) {}` で握り潰される。
+//   結果、ハンドラは setAttribute に到達せず data-role が "operator" のまま残り、
+//   `[data-role="operator"] .clock { display: none }` が当たり続けて「タイマー画面消失」となる
+//   （rc11 計測ログで enter のみ出力 → before-setAttribute 不在で確定）。
+//   根治方針:
+//     - setAttribute('data-role', ...) を **ハンドラ最初の処理として移動**（throw 前に確実に実行）
+//     - window.appRole への代入は try-catch で防御（contextBridge 凍結による throw を握り潰す）
+//     - 後続 update* 呼出は引き続き個別 try-catch で守る（既存設計を踏襲）
+// v2.0.4-rc15 タスク 2: role 切替時の rolling ログ呼出ヘルパ（既存テスト regex の brittle match を回避）。
+//   インライン object literal を IPC 呼出に渡すと `[\s\S]*?\}\s*\)` が早期マッチして
+//   onRoleChanged ハンドラ抽出が短縮される問題を、関数分離で解消。
+function _logRoleChange(newRole) {
+  const o = {};
+  o.newRole = newRole;
+  o.prevRole = (typeof window !== 'undefined') ? window.appRole : null;
+  try { window.api?.log?.write?.('renderer:onRoleChanged', o); } catch (_) { /* ignore */ }
+}
+
+if (typeof window !== 'undefined' && window.appRole !== 'hall') {
+  window.api?.dual?.onRoleChanged?.((newRole) => {
+    // v2.0.4-rc15 タスク 2: role 切替を rolling ログに記録（_logRoleChange 経由でインライン {} を回避）
+    _logRoleChange(newRole);
+    if (typeof newRole !== 'string') return;
+    if (newRole !== 'operator' && newRole !== 'operator-solo') return;
+    // rc12 根治 Step 1: setAttribute を最優先で実行。CSS 表示制御の唯一のトリガで、
+    //   これに到達できれば「タイマー画面消失」は根治する。後続 throw があっても DOM は更新済。
+    try {
+      if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.setAttribute('data-role', newRole);
+      }
+    } catch (_) { /* documentElement 不在は通常あり得ないが防御 */ }
+    // rc12 根治 Step 2: window.appRole 代入は contextBridge 凍結で TypeError を投げる。
+    //   try-catch で握り潰す（assign 自体は失敗するが、setAttribute 完了済なので CSS は正しい）。
+    //   読み取り側コードの大半は `=== 'hall'` 検査で、stale value でも機能挙動への影響なし。
+    try { window.appRole = newRole; } catch (_) { /* contextBridge 凍結による失敗を許容 */ }
+    // role 変更後の関連 UI 即時反映（mute-indicator は CSS で role 別表示制御済、明示更新で確実化）
+    if (typeof updateMuteIndicator === 'function') {
+      try { updateMuteIndicator(); } catch (_) { /* ignore */ }
+    }
+    // v2.0.4-rc8 Fix 4 (対策 B): updateOperatorPane も即時呼出（rc7 修正漏れ補完）。
+    //   rc7 では「次の subscribe で再描画される」と判断したが、HDMI 抜き直後に手元 PC を復元した
+    //   タイミングでは subscribe 待ちで表示が古いまま見える時間帯が生じていた。
+    //   _lastTimerStateForRoleSwitch を用いて即時再描画（updateOperatorPane 内の早期 return で
+    //   operator-solo / hall は no-op、operator 復帰時のみ実際に再描画される）。
+    if (typeof updateOperatorPane === 'function' && _lastTimerStateForRoleSwitch) {
+      try { updateOperatorPane(_lastTimerStateForRoleSwitch); } catch (_) { /* ignore */ }
+    }
+    // v2.0.4-rc9 Fix 3-C: role 切替時もフォーカスバナー再描画
+    try { updateFocusBanner(); } catch (_) { /* ignore */ }
+  });
+}
 
 // STEP 6.6: ランタイム値調整（キーボードショートカットから呼ばれる）
 //
@@ -5847,6 +6230,7 @@ function addNewEntry() {
   tournamentRuntime.playersRemaining += 1;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.7: Shift+↑ で新規エントリー取消（直前の addNewEntry を打ち消す）
@@ -5860,6 +6244,7 @@ function cancelNewEntry() {
   tournamentRuntime.playersRemaining = Math.max(0, tournamentRuntime.playersRemaining - 1);
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // ↓キー: プレイヤー脱落（playersRemaining のみ減少）
@@ -5872,6 +6257,7 @@ function eliminatePlayer() {
   tournamentRuntime.playersRemaining -= 1;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.9: Shift+↓ プレイヤー復活（直前の脱落を取消）。
@@ -5883,6 +6269,7 @@ function revivePlayer() {
   tournamentRuntime.playersRemaining += 1;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.6: タイマーリセット時にトーナメントランタイムも初期化
@@ -5898,6 +6285,7 @@ function resetTournamentRuntime() {
   renderStaticInfo();
   // STEP 10 フェーズC.1.8: 明示的「タイマーリセット」時の 0 値も永続化（次回起動時も 0 を維持）
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // 全てのリセット経路で呼ぶラッパ。
@@ -5934,6 +6322,7 @@ function adjustReentry(delta) {
   tournamentRuntime.reentryCount = next;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 function adjustAddOn(delta) {
@@ -5943,6 +6332,7 @@ function adjustAddOn(delta) {
   tournamentRuntime.addOnCount = next;
   renderStaticInfo();
   schedulePersistRuntime();
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.9: 特殊スタック適用人数（specialStack.appliedCount）を ±1 する。
@@ -5964,6 +6354,11 @@ function adjustSpecialStack(delta) {
   if (window.api?.tournament?.set) {
     window.api.tournament.set({ specialStack: { ...ss } }).catch(() => {});
   }
+  // v2.0.4-rc19 タスク 3（問題 ⑦ 修正、案 ⑦-A）:
+  // rc18 第 1 弾で 7 関数（addNewEntry / cancelNewEntry / eliminatePlayer / revivePlayer /
+  // resetTournamentRuntime / adjustReentry / adjustAddOn）末尾に updateOperatorPane(getState()) を追加したが、
+  // adjustSpecialStack だけ漏れていた。問題 ⑦（PAUSED 中 Ctrl+E で AC pane 据置）と完全同構造の同期漏れ修正。
+  try { updateOperatorPane(getState()); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.9: 「特殊スタックを有効化」チェックボックスに応じて
@@ -6131,6 +6526,20 @@ async function loadInitialSettings() {
 }
 
 async function initialize() {
+  // v2.0.4-rc15 タスク 2: 「ログフォルダを開く」ボタンの click ハンドラ登録（About タブ）
+  try {
+    const _openLogsBtn = document.getElementById('js-open-logs-folder');
+    if (_openLogsBtn && !_openLogsBtn._rc15Bound) {
+      _openLogsBtn._rc15Bound = true;
+      _openLogsBtn.addEventListener('click', async () => {
+        try {
+          if (window.api?.log?.openFolder) {
+            await window.api.log.openFolder();
+          }
+        } catch (_) { /* ignore */ }
+      });
+    }
+  } catch (_) { /* ignore */ }
   renderStaticInfo();
   renderPayouts();
   // loadInitialSettings は trueを返す＝blindPresetId からの復元成功
@@ -6188,6 +6597,8 @@ async function initialize() {
       }
     });
   }
+  // v2.0.4-rc5: 起動時にミュートインジケータの初期反映（初期状態は通常 OFF だが将来の永続化対応も視野に統一）
+  updateMuteIndicator();
 }
 
 // v2.0.0 STEP 2: 起動時の役割分岐。
@@ -6196,6 +6607,40 @@ async function initialize() {
 //   - 'operator-solo': 単画面モード（HDMI なし）。v1.3.0 と完全同等の挙動を維持（後方互換不変条件）
 //   role 不明時は 'operator-solo' 扱い（preload.js の既定値と一致）。
 const __appRole = (typeof window !== 'undefined' && window.appRole) || 'operator-solo';
+
+// v2.0.4-rc15 タスク 2: グローバル例外 + window state 変化を rolling ログに記録
+//   error / unhandledrejection: 未捕捉例外を観測（既存の console.error を再現するだけで握り潰さない）
+//   focus / blur / resize: 200ms debounce で頻発を抑制、UI 状態の遷移を記録
+//   実装はすべて try-catch で防御、never throw from logging
+if (typeof window !== 'undefined') {
+  try {
+    window.addEventListener('error', (ev) => {
+      try { window.api?.log?.write?.('renderer:error', { message: ev && ev.message, source: ev && ev.filename, lineno: ev && ev.lineno }); } catch (_) {}
+    });
+    window.addEventListener('unhandledrejection', (ev) => {
+      try { window.api?.log?.write?.('renderer:unhandledrejection', { reason: ev && ev.reason && (ev.reason.message || String(ev.reason)) }); } catch (_) {}
+    });
+    let _windowStateLogTimer = null;
+    const _logWindowState = (label) => {
+      if (_windowStateLogTimer !== null) { clearTimeout(_windowStateLogTimer); }
+      _windowStateLogTimer = setTimeout(() => {
+        _windowStateLogTimer = null;
+        try {
+          window.api?.log?.write?.('renderer:window-state', {
+            label,
+            role: window.appRole,
+            hasFocus: (typeof document !== 'undefined' && typeof document.hasFocus === 'function') ? document.hasFocus() : null,
+            innerWidth: window.innerWidth, innerHeight: window.innerHeight
+          });
+        } catch (_) {}
+      }, 200);
+    };
+    window.addEventListener('focus', () => _logWindowState('focus'));
+    window.addEventListener('blur', () => _logWindowState('blur'));
+    window.addEventListener('resize', () => _logWindowState('resize'));
+  } catch (_) { /* ignore, logging is non-critical */ }
+}
+
 if (__appRole === 'hall') {
   // v2.0.1 #A1: hall 側 dual-sync 差分ハンドラを登録。
   //   main からの broadcast を受信したとき、kind 別に該当する apply* 関数を呼ぶ。
@@ -6239,12 +6684,53 @@ if (__appRole === 'hall') {
         if (typeof value.reentryCount === 'number') tournamentRuntime.reentryCount = value.reentryCount;
         if (typeof value.addOnCount === 'number') tournamentRuntime.addOnCount = value.addOnCount;
         renderStaticInfo();
+      } else if (kind === 'specialStack' && value && typeof value === 'object') {
+        // v2.0.4-rc10 Fix 1-C: Ctrl+E の特別スタック ±1 を hall に反映。
+        //   tournamentState.specialStack を更新後、AVG STACK 再計算 + op-pane / 静的情報を再描画。
+        //   updateOperatorPane は operator role のみ意味あり（hall では DOM 不在で no-op に近い）。
+        try {
+          if (typeof tournamentState !== 'undefined') {
+            tournamentState.specialStack = {
+              enabled: typeof value.enabled === 'boolean' ? value.enabled : !!(tournamentState.specialStack && tournamentState.specialStack.enabled),
+              label: typeof value.label === 'string' ? value.label : ((tournamentState.specialStack && tournamentState.specialStack.label) || '早期着席特典'),
+              chips: Number.isFinite(Number(value.chips)) ? Number(value.chips) : ((tournamentState.specialStack && tournamentState.specialStack.chips) ?? 5000),
+              appliedCount: Math.max(0, Math.min(999, Math.floor(Number(value.appliedCount)) || 0))
+            };
+          }
+          if (typeof renderStaticInfo === 'function') renderStaticInfo();
+          if (typeof updateOperatorPane === 'function') updateOperatorPane();
+        } catch (err) { console.warn('[dual-sync] specialStack 適用失敗:', err); }
       } else if (kind === 'tournamentBasics' && value) {
         // basics（id / name / subtitle / titleColor / blindPresetId）変更時は active 全体を再取得
         // applyTournament が tournamentState 更新 + 表示反映を網羅、最も安全な経路。
+        // v2.0.4-rc18 第 1 弾 修正案 ⑥-A: hall 側で blindPresetId 更新時に structure も再ロード（問題 ⑥ 真因修正）
         if (window.api?.tournaments?.getActive) {
-          window.api.tournaments.getActive().then((t) => {
-            if (t) applyTournament(t);
+          window.api.tournaments.getActive().then(async (t) => {
+            if (!t) return;
+            applyTournament(t);
+            // v2.0.4-rc19 タスク 2（問題 ⑥ 残部、案 ⑥-A）:
+            // payload に structure 同梱されていれば直接適用、無ければ rc18 第 1 弾の loadPresetById フォールバック
+            // v2.0.4-rc20 (c) 並存方針: main.js 側 normalizeTournament 仕様により value.structure は
+            // 現在常に undefined となり本分岐は事実上 dead code。rc20 で案 A の kind === 'structure' 経路に
+            // 置換、本分岐は履歴保護 + 将来 normalizeTournament 修正時の二重保証として残置。
+            if (value.structure && typeof value.structure === 'object') {
+              try {
+                setStructure(value.structure);
+                const { currentLevelIndex } = getState();
+                renderCurrentLevel(currentLevelIndex);
+                renderNextLevel(currentLevelIndex);
+              } catch (err) { console.warn('[dual-sync] setStructure (direct) 失敗:', err); }
+            } else if (typeof t.blindPresetId === 'string' && t.blindPresetId) {
+              try {
+                const preset = await loadPresetById(t.blindPresetId);
+                if (preset) {
+                  setStructure(preset);
+                  const { currentLevelIndex } = getState();
+                  renderCurrentLevel(currentLevelIndex);
+                  renderNextLevel(currentLevelIndex);
+                }
+              } catch (err) { console.warn('[dual-sync] setStructure (fallback) 失敗:', err); }
+            }
           }).catch(() => { /* ignore */ });
         }
       } else if (kind === 'timerState' && value) {
@@ -6254,11 +6740,47 @@ if (__appRole === 'hall') {
           const levels = (typeof getStructure === 'function') ? getStructure() : null;
           applyTimerStateToTimer(value, levels, { silent: true });
         } catch (err) { console.warn('[dual-sync] timerState 適用失敗:', err); }
+      } else if (kind === 'structure' && value && Array.isArray(value.levels)) {
+        // v2.0.4-rc20 タスク 1（案 A、問題 ⑥ 根治）:
+        // ブラインド構造の即時 hall 同期。前原さん判断 ③ c により、進行中レベルの残り時間には影響しない設計。
+        // setStructure で blinds.js の currentStructure を更新 → 次レベル切替時に新 duration が効く。
+        // timer.js の targetTime は意図的に再計算しない（現レベル末端まで古い duration で継続、③ c 厳守）。
+        try {
+          setStructure(value);
+          const { currentLevelIndex } = getState();
+          renderCurrentLevel(currentLevelIndex);
+          renderNextLevel(currentLevelIndex);
+          // v2.0.4-rc20 タスク 3: 配布版常時記録ラベル（rc18 第 1 弾の 4 ラベルと同パターン）
+          try {
+            window.api?.log?.write?.('structure:state:recv:hall', {
+              structureLength: value?.levels?.length || 0,
+              role: window.appRole
+            });
+          } catch (_) { /* never throw from logging */ }
+        } catch (err) { console.warn('[dual-sync] structure 適用失敗:', err); }
       }
       // structure / その他は initialize() 経由で active から取得済、broadcast での個別同期は B4 の構造変更時に対応
     } catch (err) {
       console.warn(`[dual-sync] kind=${kind} の適用に失敗:`, err);
     }
+  });
+  // v2.0.4-rc6 Fix 5: hall 側で operator のミュート / ボトムバー状態変更を受信して反映。
+  //   M / H キーは operator (PC) 側で押されるが、音響 / ボトムバー表示は hall 側にあるため、
+  //   IPC で論理ステートを通知し hall 側 audio API / DOM クラスに反映する。
+  //   致命バグ保護 C.1.7: ensureAudioReady().then(...) ラップを維持し audio resume 経路は触らない。
+  window.api?.dual?.onMuteStateChanged?.((muted) => {
+    ensureAudioReady().then(() => {
+      // audio.js には setMute API が無いため、現状値と差があるなら toggle で揃える
+      try {
+        if (typeof audioIsMuted === 'function' && audioIsMuted() !== !!muted) {
+          audioToggleMute();
+        }
+        updateMuteIndicator();
+      } catch (err) { console.warn('[dual-sync] mute apply 失敗:', err); }
+    });
+  });
+  window.api?.dual?.onBottomBarStateChanged?.((hidden) => {
+    try { applyBottomBarHidden(!!hidden); } catch (err) { console.warn('[dual-sync] bottombar apply 失敗:', err); }
   });
   // hall: 初期同期 → 既存 initialize（DOM/タイマー描画ロジック）を起動。
   //   await の失敗で initialize が止まらないよう finally でフォールバック。

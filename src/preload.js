@@ -106,11 +106,57 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
     },
     fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
+    // v2.0.4-rc4: hall 側 before-input-event で捕捉した操作系キーを operator 側に IPC 転送する受信口。
+    //   旧実装（rc3）の sendInputEvent 方式は letter キーで event.code が空文字になる Electron 31 系の
+    //   構造的制約により、R / Ctrl+E / S 等 13 キーが無反応だった。論理キーオブジェクトを直接送る
+    //   IPC 化で確実に operator の dispatchClockShortcut に届く。
+    onHallForwardedKey: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('hall:forwarded-key', (_event, payload) => callback(payload));
+    },
+    // v2.0.4-rc6 Fix 4-B: ESC で hall 全画面解除を main に通知（dispatcher 経由）
+    requestExitFullScreen: () => ipcRenderer.send('dual:request-exit-fullscreen'),
+    // v2.0.4-rc6 Fix 5-M: operator 側ミュート状態を hall に同期する送信口
+    broadcastMuteState: (muted) => ipcRenderer.send('dual:broadcast-mute-state', !!muted),
+    // v2.0.4-rc6 Fix 5-M: hall 側で operator のミュート状態を受信（subscribe）
+    onMuteStateChanged: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('dual:mute-state-changed', (_event, muted) => callback(!!muted));
+    },
+    // v2.0.4-rc6 Fix 5-H: operator 側ボトムバー状態を hall に同期する送信口
+    broadcastBottomBarState: (hidden) => ipcRenderer.send('dual:broadcast-bottombar-state', !!hidden),
+    // v2.0.4-rc6 Fix 5-H: hall 側で operator のボトムバー状態を受信
+    onBottomBarStateChanged: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('dual:bottombar-state-changed', (_event, hidden) => callback(!!hidden));
+    },
+    // v2.0.4-rc7 Fix 1-B: HDMI 切替時に main から renderer に role 変更を通知。
+    //   renderer 側で window.appRole + documentElement[data-role] を更新し、CSS が
+    //   2 画面用 / 単画面用レイアウトに自動追従する（表示踏襲問題の解消）。
+    //   ウィンドウ生成を伴わない動的切替のため race ゼロ。
+    onRoleChanged: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('dual:role-changed', (_event, newRole) => {
+        // rc12 防御: コールバック throw を握り潰す（contextBridge 凍結の TypeError 等を吸収）
+        try { callback(newRole); } catch (_) { /* ignore — rc12 防御 */ }
+      });
+    },
     // v2.0.0 STEP 4: モニター選択ダイアログ（display-picker.html 専用）。
     //   fetchDisplays: 検出済の displays + 前回選択 id を取得（invoke、結果を返す）
     //   selectHallMonitor: ユーザーが選んだモニター id を main に通知（send、結果不要）
     //   ※ ipcRenderer.send は通知系（main 側 ipcMain.on で受信）。invoke と区別。
     fetchDisplays: () => ipcRenderer.invoke('display-picker:fetch'),
     selectHallMonitor: (displayId) => ipcRenderer.send('dual:select-hall-monitor', displayId)
+  },
+  // v2.0.4-rc15 タスク 2: 5 分 rolling ログ機構の renderer ブリッジ。
+  //   write: send（一方向、結果不要、低 overhead）→ main の ipcMain.on('rolling-log:write') で集約。
+  //   openFolder: invoke（結果を Promise で返す）→ shell.openPath で OS のファイルマネージャを開く。
+  //   renderer 側は直接 fs アクセス禁止、main プロセス集約でロックフリー化（CC_REPORT rc14 §3.7）。
+  log: {
+    write: (label, data) => {
+      try { ipcRenderer.send('rolling-log:write', { label: String(label || ''), data: data || null }); }
+      catch (_) { /* never throw from logging */ }
+    },
+    openFolder: () => ipcRenderer.invoke('logs:openFolder')
   }
 });

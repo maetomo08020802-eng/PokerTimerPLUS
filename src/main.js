@@ -18,10 +18,118 @@ const Store = require('electron-store');
 // app.whenReady() より前に必ず設定（Electron 起動フラグのため）
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
+// v2.0.4-rc15 タスク 2: グローバル例外を rolling ログに記録（main プロセス側）。
+//   rollingLog 自体は never throw 設計なのでハンドラ内で安全に呼べる。
+//   既存挙動（プロセス継続 / 終了）には介入しない（観測のみ）。
+process.on('uncaughtException', (err) => {
+  try { rollingLog('main:uncaughtException', { message: err && err.message, stack: err && err.stack }); } catch (_) {}
+});
+process.on('unhandledRejection', (reason) => {
+  try { rollingLog('main:unhandledRejection', { reason: reason && (reason.message || String(reason)) }); } catch (_) {}
+});
+
 // ウィンドウタイトル（branding.md により固定、変更不可）
 const WINDOW_TITLE = 'PokerTimerPLUS+ — presented by Yu Shitamachi';
 
 const isDev = process.env.NODE_ENV === 'development';
+
+// ============================================================
+// v2.0.4-rc15 タスク 2: 5 分 rolling ログ機構（案 A 単一ファイル + 30s 切捨）
+// ============================================================
+// バグ発見支援のため、直近 5 分間のイベントログを <userData>/logs/rolling-current.log に
+// JSON Lines 形式で記録する常時稼働機構。前原さん要望「1 ファイルコピーで済む」を満たす。
+//
+// 設計（rc14 §3 推奨案 A → rc18 で ring buffer 化に進化）:
+// - rc18 改修: in-memory ring buffer (上限 5,000 件) に push、30s 定期 flush で writeFile 全体上書き。
+//   fire-and-forget の追記廃止により I/O 順序乱れを根絶（ts と書込順序が常に一致）。
+// - 切捨: flush 時に 5 分 retention で filter してから書換（fs.promises 必須、同期 IO 禁止）
+// - renderer は IPC 'rolling-log:write' 経由のみ（直接 fs アクセス禁止、ロックフリー化）
+// - クラッシュ耐性: 最大 30s 分 + buffer 内未 flush 分のみ損失リスク
+// - 容量目安: 平均 440 B/行 × 約 200 行/5min ≒ 90 KB（上限 ~1 MB 想定）
+//
+// 致命バグ保護への影響: なし（C.1.7 等は観測のみ、再生経路に介入しない）
+const ROLLING_LOG_RETENTION_MS = 5 * 60 * 1000;   // 5 分
+const ROLLING_LOG_TRUNCATE_INTERVAL_MS = 30 * 1000; // 30 秒
+let _rollingLogFilePath = null;
+let _rollingLogTruncateTimer = null;
+// v2.0.4-rc18 第 1 弾 タスク 3: ring buffer 化（fire-and-forget appendFile を廃止、I/O 順序乱れを根絶）
+const ROLLING_LOG_BUFFER_MAX = 5000;  // 5 分 × 60 sec × 約 17 ラベル/秒余裕
+let _rollingLogBuffer = [];
+function _initRollingLog() {
+  if (_rollingLogFilePath !== null) return _rollingLogFilePath;
+  try {
+    if (typeof app.getPath !== 'function') { _rollingLogFilePath = ''; return ''; }
+    const userData = app.getPath('userData');
+    if (!userData || typeof userData !== 'string') { _rollingLogFilePath = ''; return ''; }
+    const logsDir = path.join(userData, 'logs');
+    try { fs.mkdirSync(logsDir, { recursive: true }); } catch (_) { /* ignore */ }
+    _rollingLogFilePath = path.join(logsDir, 'rolling-current.log');
+    // v2.0.4-rc22 タスク 3（問題 ⑩ 案 ⑩-D）:
+    //   起動時に前回セッションの rolling-current.log を読み込んで buffer 復元。
+    //   SIGKILL 等で will-quit が走らなかった場合の前回ログを継続使用可能にする。
+    //   同期 readFileSync 維持（_initRollingLog 全体が同期コンテキスト、rc18 設計遵守）。
+    //   5 分 retention は次回 _flushRollingLog 発火時に既存ロジックで適用される。
+    try {
+      const old = fs.readFileSync(_rollingLogFilePath, 'utf8');
+      old.split('\n').filter(Boolean).forEach((line) => {
+        try { _rollingLogBuffer.push(JSON.parse(line)); } catch (_) { /* skip malformed line */ }
+      });
+    } catch (_) { /* ファイル不在 / parse 失敗時は空 buffer 開始 */ }
+    // 30 秒定期 flush タイマー開始（rc18 で append 廃止、buffer から writeFile で全体上書き）
+    if (_rollingLogTruncateTimer === null) {
+      _rollingLogTruncateTimer = setInterval(() => {
+        _flushRollingLog().catch(() => { /* never throw from logging */ });
+      }, ROLLING_LOG_TRUNCATE_INTERVAL_MS);
+      if (typeof _rollingLogTruncateTimer.unref === 'function') _rollingLogTruncateTimer.unref();
+    }
+    console.log('[rolling-log] file:', _rollingLogFilePath);
+  } catch (_) { _rollingLogFilePath = ''; }
+  return _rollingLogFilePath;
+}
+async function _flushRollingLog() {
+  try {
+    const file = _initRollingLog();
+    if (!file || !_rollingLogBuffer.length) return;
+    // 5 分 retention で filter
+    const cutoff = Date.now() - ROLLING_LOG_RETENTION_MS;
+    _rollingLogBuffer = _rollingLogBuffer.filter((entry) => {
+      const t = Date.parse(entry.ts);
+      return Number.isFinite(t) && t >= cutoff;
+    });
+    if (!_rollingLogBuffer.length) return;
+    const out = _rollingLogBuffer.map((e) => JSON.stringify(e)).join('\n') + '\n';
+    await fs.promises.writeFile(file, out);
+  } catch (_) { /* never throw */ }
+}
+function rollingLog(label, data) {
+  // main プロセスから直接呼ぶエントリポイント。renderer からは IPC 'rolling-log:write' 経由。
+  try {
+    const entry = { ts: new Date().toISOString(), label: String(label || ''), data: data || null };
+    _rollingLogBuffer.push(entry);
+    if (_rollingLogBuffer.length > ROLLING_LOG_BUFFER_MAX) {
+      _rollingLogBuffer.shift();   // 古いエントリ自動削除
+    }
+  } catch (_) { /* never throw from logging */ }
+}
+// rolling ログ用ヘルパ（display イベント用、IIFE で既存テスト regex を破壊しないため別関数化）
+function _safeDisplaysCount() {
+  const out = { count: null };
+  try {
+    if (typeof screen !== 'undefined' && typeof screen.getAllDisplays === 'function') {
+      const all = screen.getAllDisplays();
+      out.count = Array.isArray(all) ? all.length : null;
+    }
+  } catch (_) { /* ignore */ }
+  return out;
+}
+function _safeDisplayRemovedSnapshot(removedDisplay) {
+  const out = _safeDisplaysCount();
+  out.displayId = removedDisplay && removedDisplay.id || null;
+  return out;
+}
+// ============================================================
+// v2.0.4-rc15 タスク 2 ここまで
+// ============================================================
 
 // 列挙値（store マイグレーションや IPC 検証で参照されるため、store 初期化より前で宣言）
 // STEP 10 フェーズC.1.3: 9 種類目「カスタム画像」を追加（'image'）
@@ -870,7 +978,11 @@ const _dualStateCache = {
   tournamentBasics: null,  // { id, name, subtitle, titleColor, venueName, blindPresetId }
   audioSettings: null,
   logoUrl: null,
-  venueName: null
+  venueName: null,
+  // v2.0.4-rc10 Fix 1-A: Ctrl+E（特別スタック ±1）が hall に反映されない 3 重断絶を解消。
+  //   _publishDualState は hasOwnProperty チェックで未登録 kind を早期 return するため、
+  //   このキー追加が無いと publish が完全 no-op になる（rc10 事前調査 §2.3 確定真因）。
+  specialStack: null
 };
 function _broadcastDualState(channel, payload) {
   if (!hallWindow || hallWindow.isDestroyed()) return;
@@ -884,6 +996,17 @@ function _broadcastDualState(channel, payload) {
 function _publishDualState(kind, value) {
   if (!Object.prototype.hasOwnProperty.call(_dualStateCache, kind)) return;
   _dualStateCache[kind] = value;
+  // v2.0.4-rc17: 常時 3 ラベル rolling ログ #1（timerState 送信 ts）
+  if (kind === 'timerState') {
+    try { rollingLog('timer:state:send', { status: value?.status, level: value?.currentLevel, elapsed: value?.elapsedSecondsInLevel }); } catch (_) { /* never throw from logging */ }
+  }
+  // v2.0.4-rc18 第 1 弾 タスク 4: 常時 2 ラベル追加（runtime / blindPreset 送信 ts）
+  if (kind === 'tournamentRuntime') {
+    try { rollingLog('runtime:state:send', { playersInitial: value?.playersInitial, playersRemaining: value?.playersRemaining, reentryCount: value?.reentryCount, addOnCount: value?.addOnCount }); } catch (_) { /* never throw from logging */ }
+  }
+  if (kind === 'tournamentBasics') {
+    try { rollingLog('blindPreset:state:send', { presetId: value?.blindPresetId, presetName: value?.name, structureLength: value?.structure?.levels?.length || 0 }); } catch (_) { /* never throw from logging */ }
+  }
   _broadcastDualState('dual:state-sync', { kind, value });
 }
 
@@ -903,10 +1026,27 @@ function buildWebPreferences(role) {
   };
 }
 
+// v2.0.4-rc8 案 X: hall → operator のキーフォワードを完全無効化（最小変更）。
+//   前原さん要望「会場モニターにフォーカスして使う操作は完全に無効にして、
+//   手元 PC にフォーカスしないと動かない方がわかりやすい」を実現。
+//   IPC 経路（before-input-event ハンドラ + hall:forwarded-key 送信 + preload / renderer 受信）は
+//   rc8 では削除せず残す（dead code、将来再有効化が容易）。Set を空にすることで全 keydown が
+//   line 1080 の `if (!FORWARD_KEYS_FROM_HALL.has(input.code)) return;` で早期 return される。
+//   さらに rc8 Fix 2 で hallWindow に `focusable: false` を設定し、そもそも hall がフォーカスを
+//   取れないようにする多重防御で「会場モニターでキーが効かない」を保証。
+const FORWARD_KEYS_FROM_HALL = new Set([
+  // 空 Set = forward 対象なし（rc4-rc7 の Space / Arrow×4 / KeyR/A/E/S/M/T/H は全廃止）
+]);
+
 // v2.0.0 STEP 1: operator ウィンドウ生成。
 //   isSolo=true で role='operator-solo'（単画面モード、v1.3.0 と完全同等の見た目・挙動）。
 //   isSolo=false で role='operator'（2 画面モードの PC 側、STEP 3 でホール側のみの要素を hide 化予定）。
 function createOperatorWindow(targetDisplay, isSolo = false) {
+  // v2.0.4-rc6 Fix 1-C: 既存 mainWindow が残存していれば防御的に close（多重発火経路の保険）
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try { mainWindow._suppressCloseConfirm = true; mainWindow.close(); } catch (_) { /* ignore */ }
+  }
+  mainWindow = null;
   const role = isSolo ? 'operator-solo' : 'operator';
   const opts = {
     title: WINDOW_TITLE,
@@ -964,6 +1104,32 @@ function createOperatorWindow(targetDisplay, isSolo = false) {
     }
   });
 
+  // v2.0.4-rc3: × ボタンで操作画面を閉じようとした時に確認ダイアログを表示。
+  //   rc2 試験で「× で閉じると hall window だけ残って操作不能になる」致命的 UX バグを発見。
+  //   モード切替（switchOperatorToSolo / switchSoloToOperator）と confirmQuit / app.quit 経由は
+  //   `win._suppressCloseConfirm = true` をセットしてから close を呼ぶことで無音で通過する。
+  //   operator-solo（v1.3.0 互換モード）でも適用 — 操作ミス防止は普遍的価値（仕様書記載）。
+  // v2.0.4-rc9 Fix 2-C: rc6 で導入した解除時案内ポップアップ（_showRestoreNoticeOnce）は撤去。
+  //   rc9 Fix 2-A で switchOperatorToSolo が show() による自動前面表示に変更され、
+  //   minimize 経路自体が消滅したため案内ポップアップが不要になった。
+
+  win._suppressCloseConfirm = false;
+  win.on('close', (event) => {
+    if (win._suppressCloseConfirm) return;
+    event.preventDefault();
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'question',
+      buttons: ['アプリを終了', 'キャンセル'],
+      defaultId: 1,
+      cancelId: 1,
+      title: '操作画面を閉じますか？',
+      message: '操作画面を閉じるとアプリ全体が終了します。よろしいですか？'
+    });
+    if (choice === 0) {
+      win._suppressCloseConfirm = true;
+      app.quit();
+    }
+  });
   // v2.0.1: race 防止 — このウィンドウが「現在の mainWindow」である場合のみ null クリア
   win.on('closed', () => {
     if (mainWindow === win) {
@@ -976,17 +1142,40 @@ function createOperatorWindow(targetDisplay, isSolo = false) {
 // v2.0.0 STEP 1: hall ウィンドウ生成（最小骨格、STEP 3 で frame: false / fullscreen 等を追加）。
 //   現状は operator と同じ index.html をロード、role='hall' のみ差別化。
 //   状態同期は STEP 2 で実装。
+// v2.0.4-rc2: ホール側は起動時に自動全画面化（rc1 試験で「普通のウィンドウサイズで開く + レイアウトはみ出し」
+//   問題を確認。仮説: x/y で対象モニターに配置した上で fullscreen:true により当該モニター全画面化。
+//   レイアウトは vw/vh 基準のため、画面いっぱいに広がれば想定通りのサイズに収まる）。
 function createHallWindow(targetDisplay) {
+  // v2.0.4-rc6 Fix 1-C: 既存 hallWindow が残存していれば防御的に close（orphan H2/H3 並行存在を防御）
+  if (hallWindow && !hallWindow.isDestroyed()) {
+    try { hallWindow.close(); } catch (_) { /* ignore */ }
+  }
+  hallWindow = null;
   const opts = {
     title: WINDOW_TITLE + ' (Hall)',
     width: 1280,
     height: 720,
     minWidth: 960,
     minHeight: 540,
+    fullscreen: true,   // v2.0.4-rc2: 起動時に対象モニターで全画面化
+    // v2.0.4-rc8 Fix 2: 会場モニターはフォーカス不可（手元 PC にフォーカスが残る）。
+    //   focusable: false により hall ウィンドウをクリックしてもフォーカスが移らず、
+    //   手元 PC（mainWindow）でキーボード操作が継続できる。FORWARD_KEYS_FROM_HALL 空 Set 化（Fix 1）と
+    //   多重防御で「hall でキーが効かない」を保証。globalShortcut（F11 等）は webContents の
+    //   フォーカス可否と無関係に動作するため影響なし。
+    focusable: false,
+    // v2.0.4-rc9 Fix 1-A: focusable:false が描画優先度を下げる Windows 挙動を回避するため、
+    //   show:true を明示化 + paintWhenInitiallyHidden:true（webPreferences）で初期描画を保証。
+    //   backgroundThrottling:false は buildWebPreferences で既に設定済（重複指定なし）。
+    show: true,
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
-    webPreferences: buildWebPreferences('hall')
+    webPreferences: {
+      ...buildWebPreferences('hall'),
+      // v2.0.4-rc9 Fix 1-A: focusable:false 環境下でも初期 paint を即座に行う
+      paintWhenInitiallyHidden: true
+    }
   };
   if (targetDisplay && targetDisplay.bounds) {
     opts.x = targetDisplay.bounds.x + 40;
@@ -1000,7 +1189,36 @@ function createHallWindow(targetDisplay) {
   });
   win.setTitle(WINDOW_TITLE + ' (Hall)');
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // v2.0.4-rc4: hall にフォーカスがある状態で押された操作系キーを IPC 経由で operator に転送。
+  //   rc3 sendInputEvent 方式の構造的制約（letter キーで event.code が空文字）を解消するため、
+  //   論理キーオブジェクトを `hall:forwarded-key` チャネルで直接送る IPC 化を採用。
+  //   operator 側 renderer は dispatchClockShortcut(eventLike) で同じ分岐を流用する。
+  //   preventDefault で hall 自身は消化しない（二重発火防止）。
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    if (!FORWARD_KEYS_FROM_HALL.has(input.code)) return;
+    event.preventDefault();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      mainWindow.webContents.send('hall:forwarded-key', {
+        code: input.code,
+        key: input.key,
+        shift: input.shift,
+        control: input.control,
+        alt: input.alt,
+        meta: input.meta
+      });
+    } catch (_) { /* mainWindow transition 中は黙って無視 */ }
+  });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // v2.0.4-rc2: 保険として ready-to-show 時にも setFullScreen(true) を再適用。
+  //   一部の Windows 環境では BrowserWindow の opts.fullscreen が
+  //   x/y と協調しないケースがあるため、対象ディスプレイでの全画面化を二重に保証。
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed() && !win.isFullScreen()) {
+      win.setFullScreen(true);
+    }
+  });
   // v2.0.1: race 防止 — このウィンドウが「現在の hallWindow」である場合のみ null クリア
   win.on('closed', () => {
     if (hallWindow === win) {
@@ -1072,76 +1290,151 @@ async function chooseHallDisplayInteractive(displays) {
   });
 }
 
-// v2.0.0 STEP 5: HDMI 抜き差し追従用ヘルパ。
-//   window.getBounds() の (x, y) が target display.bounds 矩形内に含まれているかで判定。
-//   左上座標で判定するシンプル方式（ウィンドウが完全に display 上にあるかではなく
-//   「主にこの display 上にある」程度の精度で十分）。
-function isWindowOnDisplay(windowBounds, display) {
-  if (!windowBounds || !display || !display.bounds) return false;
-  const wb = windowBounds;
-  const db = display.bounds;
-  return (
-    wb.x >= db.x &&
-    wb.x < db.x + db.width &&
-    wb.y >= db.y &&
-    wb.y < db.y + db.height
-  );
-}
-
 // v2.0.0 STEP 5: HDMI 抜き → 単画面モードに統合。
 //   - hallWindow が抜けた display 上にあった場合に呼ばれる
 //   - operator (mainWindow) を close → operator-solo モードで再生成
 //   - additionalArguments は process.argv に乗るため reload では role 変更不可、再生成必須
 //   - タイマー進行は main プロセスで持続（store の timerState）、新ウィンドウは起動時 subscribe で復元
+// v2.0.4-rc6 Fix 1-A: モード切替の再入ガード（display-added / -removed の同時多発に対応）
+let _isSwitchingMode = false;
+
+// v2.0.4-rc6 Fix 2-A: HDMI 切断時は operator を close せず保持（前原さん要望）。
+//   旧実装は close → createOperatorWindow(_, true) で operator-solo 役割に動的切替していたが、
+//   close 完了が非同期で「手元 PC が裏に残って見える」race の元だった。Fix 2 で:
+//     - operator は close せず保持 → race が原理的に消滅
+//     - role='operator' を IPC 経由で 'operator-solo' に動的切替（rc7）
+//   これにより operator-solo 動的切替は廃止。最初から HDMI なし起動の v1.3.0 互換 operator-solo は
+//   従来通り createOperatorWindow(_, true) で起動するため影響なし。
+// v2.0.4-rc9 Fix 2-A: minimize を完全廃止し、show() + focus() で即時前面表示に変更。
+//   rc6/rc8 の minimize 方式では、minimize 中に届いた IPC（dual:role-changed 等）が
+//   描画キューで遅延し、ユーザーが手動復元した時点で「タイマー画面（.clock）が見えず、
+//   手元 PC ペイン（.operator-pane）の枠だけ残る」症状が発生していた（前原さん観察）。
+//   show() で即時前面表示にすれば role 切替 IPC も即時反映され、症状が根治する。
+//   close ではなく show なので race ゼロは維持。Fix 2-C で _showRestoreNoticeOnce ポップアップも撤去。
 async function switchOperatorToSolo() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const display = screen.getPrimaryDisplay();
-  try { mainWindow.close(); } catch (_) { /* ignore */ }
-  mainWindow = null;
-  // 新しい mainWindow を operator-solo（v1.3.0 同等）で再生成
-  createOperatorWindow(display, true);
+  rollingLog('switchOperatorToSolo:enter', { isSwitchingMode: _isSwitchingMode });
+  if (_isSwitchingMode) return;
+  _isSwitchingMode = true;
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    // hall 側だけ閉じる（operator は保持）
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.close(); } catch (_) { /* ignore */ }
+      hallWindow = null;
+    }
+    // v2.0.4-rc10 Fix 2-A (B-1): show の「前」に role 切替 IPC を 1 回送信。
+    //   show 直後の初期 paint タイミングで data-role が 'operator' のままだと
+    //   `[data-role="operator"] .clock { display: none !important }` が当たり続ける可能性
+    //   （rc10 事前調査 §3.4 候補 B-α）。show 前にも IPC を送って初期描画タイミングを保証。
+    //   後段の従来送信（show 後）と二重送信になるが idempotent なので無害。
+    try { mainWindow.webContents.send('dual:role-changed', 'operator-solo'); } catch (_) { /* ignore */ }
+    // v2.0.4-rc10 Fix 2-B (B-2): app.focus({ steal: true }) で前面化保険。
+    //   hall close 直後に Windows OS が app 全体の focus を失う事例が Electron Issue で報告されており、
+    //   mainWindow.focus() 単独では前面化しないケースの保険（rc10 事前調査 §3.4 候補 B-γ）。
+    try { app.focus({ steal: true }); } catch (_) { /* ignore */ }
+    // v2.0.4-rc9 Fix 2-A: minimize → show + focus（自動復元）
+    try { mainWindow.show(); } catch (_) { /* ignore */ }
+    try { mainWindow.focus(); } catch (_) { /* ignore */ }
+    // v2.0.4-rc7 Fix 1-A: renderer の role を 'operator-solo' に動的切替して
+    //   表示踏襲問題（rc6: minimize 後も data-role="operator" が持続して 2 画面用 CSS が
+    //   単画面状態のデータを描画する）を解消。ウィンドウ生成は伴わないため race ゼロ。
+    //   v2.0.4-rc10 Fix 2-A: 上の show 前送信と合わせて二重送信、idempotent で無害。
+    try {
+      mainWindow.webContents.send('dual:role-changed', 'operator-solo');
+    } catch (_) { /* ignore */ }
+  } finally {
+    _isSwitchingMode = false;
+    rollingLog('switchOperatorToSolo:exit', null);
+  }
 }
 
 // v2.0.0 STEP 5: HDMI 再接続 → 2 画面モードに復帰。
 //   - operator (mainWindow) を close → operator モードで再生成 + hallWindow を新規生成
 //   - hall 側は hall 側起動時に initDualSyncForHall で main から state を再同期（既存 STEP 2 経路）
+// v2.0.4-rc6 Fix 1-A: 再入ガード + orphan hallWindow 防御
 async function switchSoloToOperator(hallDisplay) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (!hallDisplay) return;
-  const operatorDisplay = screen.getPrimaryDisplay();
-  try { mainWindow.close(); } catch (_) { /* ignore */ }
-  mainWindow = null;
-  createOperatorWindow(operatorDisplay, false);
-  createHallWindow(hallDisplay);
+  rollingLog('switchSoloToOperator:enter', { hallDisplayId: hallDisplay && hallDisplay.id });
+  if (_isSwitchingMode) return;
+  _isSwitchingMode = true;
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (!hallDisplay) return;
+    // orphan hallWindow 検出 + close（display-added 多重発火による H2/H3 並行存在を防御）
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.close(); } catch (_) { /* ignore */ }
+      hallWindow = null;
+    }
+    const operatorDisplay = screen.getPrimaryDisplay();
+    // v2.0.4-rc3: モード切替時の close は確認ダイアログを抑制
+    mainWindow._suppressCloseConfirm = true;
+    try { mainWindow.close(); } catch (_) { /* ignore */ }
+    mainWindow = null;
+    createOperatorWindow(operatorDisplay, false);
+    createHallWindow(hallDisplay);
+    // v2.0.4-rc7 Fix 1-A: 新規 operator window は preload で role='operator' 起動済だが、
+    //   renderer の onRoleChanged ハンドラ整合性のため明示通知（idempotent、二重 setAttribute は無害）。
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('dual:role-changed', 'operator');
+      }
+    } catch (_) { /* ignore */ }
+  } finally {
+    _isSwitchingMode = false;
+    rollingLog('switchSoloToOperator:exit', null);
+  }
 }
 
 // v2.0.0 STEP 5: display-added / display-removed のイベント駆動追従（ポーリング禁止）。
 //   - removed: hallWindow がその display 上にあれば close + operator-solo 切替
 //   - added:   2 画面以上検出 + hallWindow 不在 → モニター選択ダイアログ → 2 画面復帰
 //   v2-dual-screen.md §3.1: 検出から状態切替まで 2 秒以内（ウィンドウ再生成 ~250ms × 2 で達成）
+// v2.0.4-rc6 Fix 1-B: display イベント多重発火の debounce ガード。
+//   Windows は HDMI 接続/切断時に display-added/-removed を複数回発火することがあり、
+//   旧実装ではガードが「hallWindow 存在チェック」だけだったため picker 並行起動 → orphan window が発生。
+let _displayAddedPending = false;
+let _displayRemovedPending = false;
+
 function setupDisplayChangeListeners() {
   screen.on('display-removed', async (_event, removedDisplay) => {
+    if (_displayRemovedPending) return;
     if (!hallWindow || hallWindow.isDestroyed()) return;
-    let bounds;
-    try { bounds = hallWindow.getBounds(); } catch (_) { bounds = null; }
-    if (!bounds) return;
-    if (isWindowOnDisplay(bounds, removedDisplay)) {
+    _displayRemovedPending = true;
+    // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayRemovedPending` チェック後で確実に 1 回）
+    rollingLog('display-removed', _safeDisplayRemovedSnapshot(removedDisplay));
+    try {
+      // v2.0.4-rc23 タスク 1（問題 ⑩ 真因根治）:
+      //   rc22 計測ビルド実機ログで真因確定 = HDMI 抜き直後 Windows が hallWindow を新 primary display
+      //   に瞬時移動 → 旧 isWindowOnDisplay 左上座標判定が必ず false 返却 → switchOperatorToSolo 不発火
+      //   → タイマー画面消失症状。前原さん運用方針 A（PC + HDMI 1 本のみ）確定により、display-removed
+      //   = 会場モニター消失と同義で扱える。hallWindow alive なら無条件 solo モード遷移。
       try { hallWindow.close(); } catch (_) { /* ignore */ }
       hallWindow = null;
       // hall 不在のため _broadcastDualState は STEP 2 で確立した no-op ガードで自動的に止まる
       await switchOperatorToSolo();
+    } finally {
+      _displayRemovedPending = false;
     }
   });
 
   screen.on('display-added', async () => {
-    const displays = screen.getAllDisplays();
-    if (!displays || displays.length < 2) return;
+    if (_displayAddedPending) return;
     if (hallWindow && !hallWindow.isDestroyed()) return;   // 既に 2 画面状態
-    const hallId = await chooseHallDisplayInteractive(displays);
-    if (hallId == null) return;   // キャンセル時は単画面のまま
-    const hallDisplay = displays.find((d) => d.id === hallId);
-    if (!hallDisplay) return;
-    await switchSoloToOperator(hallDisplay);
+    _displayAddedPending = true;
+    // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayAddedPending` チェック後で確実に 1 回）
+    rollingLog('display-added', _safeDisplaysCount());
+    try {
+      const displays = screen.getAllDisplays();
+      if (!displays || displays.length < 2) return;
+      // picker 起動前に再チェック（前回 await 中に状態が変わった race を救う）
+      if (hallWindow && !hallWindow.isDestroyed()) return;
+      const hallId = await chooseHallDisplayInteractive(displays);
+      if (hallId == null) return;   // キャンセル時は単画面のまま
+      const hallDisplay = displays.find((d) => d.id === hallId);
+      if (!hallDisplay) return;
+      await switchSoloToOperator(hallDisplay);
+    } finally {
+      _displayAddedPending = false;
+    }
   });
 }
 
@@ -1167,8 +1460,13 @@ async function createMainWindow() {
 }
 
 function toggleFullScreen() {
-  if (!mainWindow) return;
-  mainWindow.setFullScreen(!mainWindow.isFullScreen());
+  // v2.0.4-rc6 Fix 3: 2 画面モード時は常に hall を toggle（hall 側全画面解除等の操作者ニーズ）。
+  //   rc2 改修の「focused window を toggle」は実運用で前提崩れ（操作者は PC 側で操作するため
+  //   hall focused は発生しない → 常に operator が全画面化される問題があった）。
+  //   単画面モード（hallWindow 不在）では mainWindow を toggle（v1.3.0 完全互換維持）。
+  const target = (hallWindow && !hallWindow.isDestroyed()) ? hallWindow : mainWindow;
+  if (!target || target.isDestroyed()) return;
+  target.setFullScreen(!target.isFullScreen());
 }
 
 async function confirmQuit() {
@@ -1196,6 +1494,9 @@ async function confirmQuit() {
     message
   });
   if (result.response === 1) {
+    // v2.0.4-rc3: confirmQuit 経由は専用ダイアログで既に確認済のため、
+    //   close ハンドラの二重ダイアログを抑制してから app.quit へ。
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow._suppressCloseConfirm = true;
     app.quit();
   }
 }
@@ -1211,6 +1512,17 @@ function registerShortcuts() {
   // STEP 6.21: 配布版（isDev=false）でも F12 で DevTools を開けるよう常時登録
   // before-input-event 側にもフォールバックを置いてあるので二重登録だが副作用なし
   globalShortcut.register('F12', toggleDevTools);
+  // v2.0.4-rc22 タスク 2（問題 ⑩ 案 ⑩-A）:
+  //   タイマー画面消失時にも UI 不要でログフォルダを開けるようにする救済策。
+  //   _flushRollingLog で in-memory buffer を確実にディスクに反映してから shell.openPath。
+  //   rc18 第 1 弾の I/O 順序保証維持のため、必ず await で待つ。
+  globalShortcut.register('CommandOrControl+Shift+L', async () => {
+    try { await _flushRollingLog(); } catch (_) { /* never throw from logging */ }
+    try {
+      const dir = _resolveLogsDir();
+      if (dir) shell.openPath(dir);
+    } catch (_) { /* shell.openPath 失敗時は何もしない */ }
+  });
 }
 
 // IPC: 設定ストアのブリッジ（preload経由でレンダラに公開）
@@ -1455,6 +1767,26 @@ function registerIpcHandlers() {
       presets.push(sanitized);
     }
     store.set('userPresets', presets);
+    // v2.0.4-rc20 タスク 1（案 A、問題 ⑥ 根治）:
+    // アクティブトーナメントが当該 preset を使っている場合のみ structure を hall に強制 publish。
+    // _dualStateCache.structure は v2.0.0 STEP 2 で予約済みの kind 枠（line 963）を活性化する。
+    // 既存 tournamentBasics 経路（rc18 第 1 弾の loadPresetById フォールバック）と非干渉。
+    // 前原さん判断 ③ c により、進行中レベルの残り時間には影響しない（hall 側 setStructure のみ、timer.js 不変）。
+    try {
+      const activeId = store.get('activeTournamentId');
+      const tournaments = store.get('tournaments') || [];
+      const activeT = tournaments.find((x) => x && x.id === activeId);
+      if (activeT && activeT.blindPresetId === id) {
+        _publishDualState('structure', sanitized);
+        // v2.0.4-rc20 タスク 3: 配布版常時記録ラベル（rc18 第 1 弾の 4 ラベルと同パターン）
+        try {
+          rollingLog('structure:state:send', {
+            presetId: id,
+            structureLength: sanitized?.levels?.length || 0
+          });
+        } catch (_) { /* never throw from logging */ }
+      }
+    } catch (_) { /* never throw from publish */ }
     return { ok: true, id };
   });
 
@@ -1780,9 +2112,17 @@ function registerIpcHandlers() {
     store.set('tournaments', list);
     // v2.0.0 STEP 2: 保存対象が active トーナメントなら hall に basics + displaySettings + marquee を再送
     if (validated.id === store.get('activeTournamentId')) {
+      // v2.0.4-rc19 タスク 2（問題 ⑥ 残部、案 ⑥-A）:
+      // hall 側の loadPresetById IPC 2 段化を回避するため、structure を payload に直接同梱。
+      // hall 受信側で value.structure があれば setStructure を直接呼び、無ければ既存フォールバック。
+      // v2.0.4-rc20 (c) 並存方針: 本 structure フィールドは normalizeTournament が t.structure を
+      // out に伝播しないため現在常に undefined となる dead code。rc20 タスク 1 で案 A の
+      // `_publishDualState('structure', sanitized)`（presets:saveUser ハンドラ末尾）に置換済。
+      // 履歴保護 + 将来 normalizeTournament 修正時の自動有効化保険のため残置。
       _publishDualState('tournamentBasics', {
         id: validated.id, name: validated.name, subtitle: validated.subtitle,
-        titleColor: validated.titleColor, blindPresetId: validated.blindPresetId
+        titleColor: validated.titleColor, blindPresetId: validated.blindPresetId,
+        structure: validated.structure
       });
       if (validated.displaySettings)  _publishDualState('displaySettings', validated.displaySettings);
       if (validated.marqueeSettings)  _publishDualState('marqueeSettings', validated.marqueeSettings);
@@ -1793,6 +2133,10 @@ function registerIpcHandlers() {
 
   // STEP 6.21: timerState のみを部分更新（性能のため normalizeTournament を通さない）
   ipcMain.handle('tournaments:setTimerState', (_event, payload) => {
+    // v2.0.4-rc9 Fix 1-B: HDMI 切替（switchOperatorToSolo / switchSoloToOperator）中は
+    //   旧 window 由来の遅延した IPC が新 window state を踏み潰すため、ガードして無視する。
+    //   切替完了後は通常の subscribe 経路で state が再同期されるため副作用なし。
+    if (_isSwitchingMode) return { ok: false, error: 'switching-mode' };
     if (!payload || typeof payload !== 'object') return { ok: false, error: 'invalid-payload' };
     const { id, timerState } = payload;
     if (typeof id !== 'string' || !id) return { ok: false, error: 'invalid-id' };
@@ -2122,6 +2466,14 @@ function registerIpcHandlers() {
   //   旧構造: powerSaveBlocker 解放（ここ）+ globalShortcut.unregisterAll（whenReady の外）の 2 個別登録。
   //   保守性のため 1 つにまとめ、漏れ・重複登録のリスクを排除。
   app.on('will-quit', () => {
+    // v2.0.4-rc15 タスク 2: 終了直前にイベント記録 + 切捨タイマー停止
+    rollingLog('app:before-quit', null);
+    try {
+      if (_rollingLogTruncateTimer !== null) {
+        clearInterval(_rollingLogTruncateTimer);
+        _rollingLogTruncateTimer = null;
+      }
+    } catch (_) { /* ignore */ }
     try {
       if (_powerSaveBlockerId !== null && powerSaveBlocker.isStarted(_powerSaveBlockerId)) {
         powerSaveBlocker.stop(_powerSaveBlockerId);
@@ -2130,6 +2482,8 @@ function registerIpcHandlers() {
     _powerSaveBlockerId = null;
     // 2 つ目の will-quit ハンドラから統合
     try { globalShortcut.unregisterAll(); } catch (_) { /* ignore */ }
+    // v2.0.4-rc18 第 1 弾 タスク 3: 終了直前に最終 flush（fire-and-forget、5,000 件 buffer × 5 分 retention）
+    try { _flushRollingLog(); } catch (_) { /* never throw from logging */ }
   });
 
   ipcMain.handle('tournament:set', (_event, partial) => {
@@ -2143,6 +2497,13 @@ function registerIpcHandlers() {
     const updated = normalizeTournament({ ...partial, id }, list[idx]);
     list[idx] = updated;
     store.set('tournaments', list);
+    // v2.0.4-rc10 Fix 1-B: tournament:set 経路で specialStack 変更があった場合、
+    //   hall に dual:state-sync で broadcast する。Ctrl+E の AVG STACK / op-pane / 表示反映が
+    //   hall 側でリアルタイム同期されるようになる（rc10 事前調査 §2.3 確定真因の根治）。
+    //   partial に specialStack が含まれる場合のみ publish（idempotent、副作用なし）。
+    if (partial && partial.specialStack !== undefined && updated && updated.specialStack !== undefined) {
+      try { _publishDualState('specialStack', updated.specialStack); } catch (_) { /* ignore */ }
+    }
     return { ...updated, title: updated.name };
   });
 
@@ -2197,9 +2558,95 @@ function registerIpcHandlers() {
   //   経路で動作している。dual:operator-action は validate して payloadShape を返すだけの
   //   no-op だったため、関連する preload.js notifyOperatorAction と
   //   renderer.js notifyOperatorActionIfNeeded も同時撤去。
+
+  // v2.0.4-rc6 Fix 4-C: ESC キーで hall 全画面解除（renderer から ipcRenderer.send で通知）。
+  //   案 i 採用: dispatcher 到達時 dialog 無し前提（dialog[open] ガードを通過したケース）。
+  //   hall が fullscreen の時のみ解除する。operator-solo / hall 不在 / 既に窓化済の場合は no-op。
+  ipcMain.on('dual:request-exit-fullscreen', () => {
+    if (hallWindow && !hallWindow.isDestroyed() && hallWindow.isFullScreen()) {
+      try { hallWindow.setFullScreen(false); } catch (_) { /* ignore */ }
+    }
+  });
+
+  // v2.0.4-rc6 Fix 5-M: operator 側でミュート切替された時、hall 側 audio もミュート同期。
+  //   operator (PC) で M キー → audioToggleMute は operator の AudioContext のみミュート、
+  //   hall 側は別 renderer の AudioContext で音を出すため、本来別途同期が必要。
+  //   renderer → main → hall の 3 段で論理ステートを通す（preload で broadcastMuteState 公開）。
+  ipcMain.on('dual:broadcast-mute-state', (_event, muted) => {
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.webContents.send('dual:mute-state-changed', !!muted); } catch (_) { /* ignore */ }
+    }
+  });
+
+  // v2.0.4-rc6 Fix 5-H: operator 側でボトムバートグルされた時、hall 側にも同期。
+  //   既存の settings:setDisplay 経路は永続化のみで hall への runtime broadcast がないため、
+  //   M と同じ追加チャネルで明示的に通知する（永続化は既存経路に任せる）。
+  ipcMain.on('dual:broadcast-bottombar-state', (_event, hidden) => {
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.webContents.send('dual:bottombar-state-changed', !!hidden); } catch (_) { /* ignore */ }
+    }
+  });
+
+  // v2.0.4-rc15 タスク 2: rolling ログ機構の IPC エンドポイント
+  //   renderer は直接 fs アクセス禁止。'rolling-log:write' で main に集約してロックフリー化。
+  //   payload は { label: string, data: object } 形式（preload で String キャスト済）。
+  ipcMain.on('rolling-log:write', (_event, payload) => {
+    try {
+      if (!payload || typeof payload !== 'object') return;
+      const label = (typeof payload.label === 'string') ? payload.label : 'renderer:unknown';
+      rollingLog(label, payload.data || null);
+    } catch (_) { /* never throw from logging */ }
+  });
+  // 'ログフォルダを開く' ボタンから呼ばれる。shell.openPath で OS のファイルマネージャで logs/ を表示。
+  //   _resolveLogsDir は inline object literal を持たない（既存テスト regex 互換、
+  //   `[\s\S]*?\}\s*\)\s*;` パターンに引っかかる { recursive: true } を関数化で回避）。
+  ipcMain.handle('logs:openFolder', async () => {
+    // v2.0.4-rc18 第 1 弾 タスク 3: フォルダを開く前に最新状態を確実に書き出す
+    try { await _flushRollingLog(); } catch (_) { /* never throw from logging */ }
+    const dir = _resolveLogsDir();
+    if (!dir) return { ok: false, error: 'app.getPath unavailable' };
+    const result = await shell.openPath(dir);
+    return { ok: result === '', error: result || null, path: dir };
+  });
+}
+// rolling ログ用ヘルパ: <userData>/logs/ ディレクトリのパス解決 + 必要なら作成
+function _resolveLogsDir() {
+  try {
+    if (typeof app.getPath !== 'function') return null;
+    const dir = path.join(app.getPath('userData'), 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  } catch (_) { return null; }
 }
 
 app.whenReady().then(async () => {
+  // v2.0.4-rc10 Fix 3 (修正案 C-1): 単一インスタンス制御。
+  //   2 個目を起動した場合は即時 quit、既存の 1 個目を最前面化する（Electron 標準パターン）。
+  //   未実装のままだと electron-store の tournaments 配列 / runtime 永続化（致命バグ保護 C.1.8）に
+  //   write race が起きて「気づかぬデータ消失」のリスクあり（rc10 事前調査 §4.2 確定）。
+  //   2 個目起動時に呼ばれる second-instance ハンドラ内で mainWindow を restore + focus。
+  //   app.whenReady().then 冒頭に配置（テスト stub の whenReady never-resolves で副作用回避、
+  //   配布版では即実行されるため挙動同等）。
+  const _gotSingleInstanceLock = app.requestSingleInstanceLock();
+  if (!_gotSingleInstanceLock) {
+    app.quit();
+    return;
+  }
+  app.on('second-instance', () => {
+    rollingLog('second-instance', null);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      } catch (_) { /* ignore */ }
+    }
+  });
+
+  // v2.0.4-rc15 タスク 2: rolling ログ初期化 + app:ready 記録（最初のイベント）
+  _initRollingLog();
+  rollingLog('app:ready', { version: app.getVersion(), isPackaged: app.isPackaged });
+
   if (!isDev) {
     Menu.setApplicationMenu(null);
   }

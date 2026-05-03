@@ -12,8 +12,8 @@
        既存 body::before（菱形格子）/ body::after（4隅スート）の z-index: 0 と同階層、
        .clock 配下（z-index: 2）の背面に固定配置。pointer-events: none で操作素通し。 -->
   <div class="bg-image-overlay" id="js-bg-image-overlay" hidden></div>
-  <!-- v2.0.0 STEP 3: operator モード（PC 側）専用のミニ状態バー。
-       ホール側に出ている内容（Level / 残時間 / 状態）を画面上部に一行で要約表示。
+  <!-- v2.0.0 STEP 3: operator モード（手元 PC 側）専用のミニ状態バー。
+       会場モニターに出ている内容（Level / 残時間 / 状態）を画面上部に一行で要約表示。
        hall / operator-solo モードでは hidden 属性 + CSS [data-role] で非表示のまま。
        表示は CSS [data-role="operator"] .operator-status-bar { display: flex } で打ち消す。 -->
   <div class="operator-status-bar" id="js-operator-status" hidden>
@@ -30,6 +30,93 @@
       <span id="js-operator-status-state">IDLE</span>
     </span>
   </div>
+  <!-- v2.0.4-rc9 Fix 3-A: 手元 PC のフォーカス可視化バナー。
+       2 画面（operator）モードのみ表示、operator-solo / hall では非表示。
+       JS で document.hasFocus() を見て is-focused / is-blurred を切替、文言も動的更新。 -->
+  <div class="operator-focus-banner is-blurred" id="js-operator-focus-banner" hidden>
+    <span class="operator-focus-banner__icon" id="js-operator-focus-banner-icon">○</span>
+    <span class="operator-focus-banner__text" id="js-operator-focus-banner-text"></span>
+  </div>
+  <!-- v2.0.4-rc4: 手元 PC（operator role 限定）専用の支援パネル。
+       会場モニター / operator-solo（v1.3.0 互換）モードでは hidden 属性 + CSS [data-role] で 3 重防御非表示。
+       「ウィンドウをクリックでフォーカス → 会場モニター操作可能」案内 + 7 件の運用情報 + 25 件の操作一覧。 -->
+  <section class="operator-pane" id="js-operator-pane" hidden>
+    <div class="operator-pane__notice">
+      このウィンドウをクリックすると、会場モニターを操作できます。<br>
+      （キーボードのショートカットがすべて反応する状態になります）
+    </div>
+    <div class="operator-pane__body">
+      <div class="operator-pane__col operator-pane__col--info">
+        <h2 class="operator-pane__heading">運用情報</h2>
+        <dl class="operator-pane__info-list">
+          <dt>イベント名</dt><dd id="op-pane-event-name">-</dd>
+          <dt>状態</dt><dd id="op-pane-status">-</dd>
+          <dt>現ブラインド</dt><dd id="op-pane-current-blind">-</dd>
+          <dt>次ブラインド</dt><dd id="op-pane-next-blind">-</dd>
+          <dt>プレイヤー</dt><dd id="op-pane-players">-</dd>
+          <dt>平均スタック</dt><dd id="op-pane-avg-stack">-</dd>
+          <dt>リエントリー / アドオン</dt><dd id="op-pane-reentry-addon">-</dd>
+          <dt>特別スタック</dt><dd id="op-pane-special-stack">-</dd>
+          <dt>音</dt><dd id="op-pane-mute-status">通常</dd>
+        </dl>
+      </div>
+      <div class="operator-pane__col operator-pane__col--shortcuts">
+        <h2 class="operator-pane__heading">操作一覧</h2>
+        <!-- v2.0.4-rc5: 5 カテゴリに再構成（F2 / F12 削除、Ctrl+T はテロップ表記、M / H は前原さん判断で全 role 反応）-->
+        <div class="shortcut-section">
+          <h3>タイマー操作</h3>
+          <ul>
+            <li><kbd>Space</kbd> 一時停止 / 再開</li>
+            <li><kbd>Enter</kbd> スタート（開始前）</li>
+            <li><kbd>→</kbd> 残り時間 -30 秒（早送り）</li>
+            <li><kbd>←</kbd> 残り時間 +30 秒（巻き戻し）</li>
+            <li><kbd>R</kbd> リセットダイアログ</li>
+          </ul>
+        </div>
+        <div class="shortcut-section">
+          <h3>プレイヤー操作</h3>
+          <ul>
+            <li><kbd>↑</kbd> 新規エントリー追加</li>
+            <li><kbd>Shift</kbd>+<kbd>↑</kbd> 新規エントリー取消</li>
+            <li><kbd>↓</kbd> プレイヤー脱落</li>
+            <li><kbd>Shift</kbd>+<kbd>↓</kbd> 脱落取消（復活）</li>
+          </ul>
+        </div>
+        <div class="shortcut-section">
+          <h3>エントリー操作</h3>
+          <ul>
+            <li><kbd>Ctrl</kbd>+<kbd>R</kbd> リエントリー +1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd> リエントリー -1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>A</kbd> アドオン +1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> アドオン -1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>E</kbd> 特別スタック +1</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 特別スタック -1</li>
+          </ul>
+        </div>
+        <div class="shortcut-section">
+          <h3>ダイアログ / 表示</h3>
+          <ul>
+            <li><kbd>S</kbd> 設定ダイアログ</li>
+            <li><kbd>Ctrl</kbd>+<kbd>T</kbd> テロップ編集</li>
+            <li><kbd>M</kbd> ミュート切替</li>
+          </ul>
+        </div>
+        <div class="shortcut-section">
+          <h3>アプリ</h3>
+          <ul>
+            <li><kbd>F11</kbd> フルスクリーン切替</li>
+            <li><kbd>Ctrl</kbd>+<kbd>Q</kbd> アプリ終了</li>
+            <li><kbd>Esc</kbd> ダイアログを閉じる</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+  <!-- v2.0.4-rc5: ミュート視覚フィードバック。
+       全 role 共通で hidden 属性を JS でトグル。CSS で operator role のみ非表示打ち消し
+       （手元 PC は operator-pane の「音」項目で代替表示）。hall / operator-solo は通常通り右下に表示。
+       前原さん判断「便利機能はどっちのモードにも適用」に従い、operator-solo（v1.3.0 互換）にも適用する例外。 -->
+  <div class="mute-indicator" id="js-mute-indicator" hidden>🔇 ミュート中</div>
   <!-- STEP 10 フェーズC.1.4: 休憩中スライドショー全画面ステージ（data-slideshow="active" 時のみ表示） -->
   <!-- STEP 10 フェーズC.1.4-fix2 Fix 2: hidden 属性を外して CSS opacity フェードインを効かせる。
        非アクティブ時は opacity: 0 + pointer-events: none で完全に操作素通し。 -->
@@ -920,6 +1007,8 @@
           <p class="about-credit-attribution">効果音: <a href="https://soundeffect-lab.info/" target="_blank" rel="noopener">効果音ラボ</a></p>
           <!-- STEP 10 フェーズC.1.2 Fix 4: DevTools 注記（配布版でも F12 / Ctrl+Shift+I で開く） -->
           <p class="about-devtools-note">F12 / Ctrl+Shift+I で開発者ツールが開きます（開発者向け機能、通常使用には不要）</p>
+          <!-- v2.0.4-rc15 タスク 2: 5 分 rolling ログのフォルダを開くボタン（バグ調査支援） -->
+          <p class="about-devtools-note"><button type="button" id="js-open-logs-folder" class="btn btn-secondary">ログフォルダを開く</button></p>
 
           <!-- STEP 6.22: 店舗名入力（venueName）。クレジット欄とは <hr> で明示分離（branding.md §15.2 影響なし）
                STEP 6.22.fix: placeholder 短縮 + 9文字超見切れ注記追加 -->

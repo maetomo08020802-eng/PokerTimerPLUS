@@ -7,6 +7,272 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.5] - 2026-05-03
+
+PokerTimerPLUS+ v2.0.5 マイナーリリース。v2.0.4 ユーザーは新インストーラを実行するだけで自動アップグレード（同 `appId: com.shitamachi.pokertimerplus`、設定・トーナメントデータは保持）。
+
+### Changed
+
+- **同梱基本ブラインド「ターボ」「レギュラー」「ディープ」の level 9 以降の値を業界標準値に更新**: v2.0.4 までの level 9〜27 系列（1200/2400/3200/4000/5000/6000/8000/10000/12000/16000/20000/25000/30000/40000/50000/60000/80000）を、業界標準的な刻み（1500/2000/2500/3000/4000/5000/6000/8000/10000/15000/20000/25000/30000/40000/50000/60000/80000/100000）に置換。level 13 と level 14 の間に 5 分の休憩を 1 つ追加（元の level 27 は最大値が 100000 まで届いたため削除）。**level 1〜8 と既存ブレイク 2 箇所（4-5 間 / 8-9 間、いずれも 10 分）は変更なし**。
+  - 適用範囲: **新規トーナメント作成時 + プリセット未編集ユーザーのみ**反映。既存トーナメントの保存値・カスタマイズ済プリセット（ユーザー編集分）は影響なし。
+
+### Removed
+
+- **未使用関数 `isWindowOnDisplay` の削除**（dead code 整理）: rc23 で `display-removed` ハンドラから呼出を削除済のため、`src/main.js` から関数定義 + 直前の説明コメント計約 15 行を削除。`tests/v2-display-change.test.js` の T5（関数存在チェック）も同時削除。**動作変更なし**（呼出ゼロ確認済、致命バグ保護 5 件 + rc12 / rc18 / rc22 / rc23 すべて完全無傷）。
+
+### Tests
+
+- 既存 version assertion ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 / rc20 / rc21 / rc22 / rc23）を `2.0.4` → `2.0.5` に追従更新
+- `tests/v2-display-change.test.js` から T5 削除（テスト総数 1 件減）
+
+### アップグレード手順
+
+1. v2.0.4 が起動中なら閉じる
+2. `PokerTimerPLUS+ Setup 2.0.5.exe` を実行
+3. インストーラの指示に従う（既存設定・トーナメントデータは保持される）
+
+---
+
+## [2.0.4] - 2026-05-03
+
+PokerTimerPLUS+ v2.0.4 公式リリース。v1.3.0 → v2.0.4 へのアップグレードでは、新インストーラを実行するだけで自動的に置き換えられます（同じ `appId: com.shitamachi.pokertimerplus`、同じ `productName: PokerTimerPLUS+`）。
+
+### 主な変更
+
+- **HDMI 自動 2 画面対応**: HDMI 接続検知 → モニター選択ダイアログ → 会場モニター（フルスクリーン表示）と手元 PC（操作 UI）の自動振り分け
+- **HDMI 抜き差し時の自動レイアウト切替**: 2 画面 ↔ 単画面の自動追従、タイマー表示は途切れず継続（rc23 真因根治済）
+- **ブラインド構造変更の即時 hall 同期**: IDLE 時は新 Lv1 duration を hall に即時反映、PAUSED / RUNNING 時は進行中レベルの残り時間を保護（③ c 厳守）
+- **停止中エントリー追加 / Ctrl+E specialStack 変更の AC 即時反映**: hall への反映と AC 表示の同期遅延を解消
+- **AC「イベント名」表示修正**: tournamentTitle が AC に正しく表示されるよう同期経路を確立
+- **`Ctrl + Shift + L` ショートカット追加**: タイマー画面消失時にも UI 操作不要でログフォルダを開ける救済策（globalShortcut、webContents focus 不要）
+- **アプリ再起動後もログ保持**: 起動時に前回セッションの `rolling-current.log` を読み込んで in-memory ring buffer を復元（SIGKILL 等の異常終了でもログを失わない）
+
+### 致命級バグ修正
+
+- **rc12: `onRoleChanged` window.appRole TypeError 握り潰し**: ES module strict mode + contextBridge 凍結の合わせ技でコールバックが TypeError を throw → 後続 UI 更新が走らずタイマー画面消失していた症状を、`setAttribute('data-role', newRole)` を最優先実行 + `window.appRole` 代入を try-catch で握り潰す順序に変更で根治（rc6〜rc10 で 5 連続失敗後、rc11 計測ビルドで真因確定 → rc12 で根治）
+- **rc23: `display-removed` の `isWindowOnDisplay` 左上座標判定漏れ**: HDMI 抜き直後に Windows OS が hall ウィンドウを新 primary display に瞬時移動するため、旧判定が必ず false を返却 → solo モード切替不発火 → タイマー画面消失していた症状を、hallWindow alive なら**無条件**で `close()` + `switchOperatorToSolo()` を実行する経路に変更で根治（前原さん運用方針 A: PC + HDMI 1 本のみ確定により安全）
+
+### 既存機能との互換性
+
+- **単画面動作は v1.3.0 と完全互換**（HDMI 未接続環境では v1.3.0 と同じレイアウト・同じ操作）
+- **致命バグ保護 5 件すべて維持**（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）
+- 自動テスト全件 PASS（138 件 v1.x + 約 540 件 v2.x = 計約 670 件超）
+
+### アップグレード手順
+
+1. v1.3.0 が動作中なら閉じる
+2. `PokerTimerPLUS+ Setup 2.0.4.exe` を実行
+3. インストーラの指示に従う（既存設定・トーナメントデータは保持される）
+
+### 開発履歴
+
+詳細な変更履歴は本ファイル下部の `[2.0.4-rc1]` 〜 `[2.0.4-rc23]` 各セクション参照（試験版開発の段階的修正記録）。
+
+---
+
+## [2.0.4-rc23] - 2026-05-03
+
+### Fixed
+- **問題 ⑩ 真因根治（タスク 1）**: rc22 計測ビルド実機ログ（`rolling-current.log` line 4717-4724）で**真因 100% 確定**。HDMI 抜き直後 Windows OS が hallWindow を新 primary display に瞬時移動 → 旧 `display-removed` ハンドラの `isWindowOnDisplay(bounds, removedDisplay)` 左上座標判定が必ず false を返却 → `switchOperatorToSolo()` 不発火 → hallWindow close なし、operator role 切替なし → AC 画面が `[data-role="operator"]` のままで `[data-role="operator"] .clock { display: none !important }` (style.css:3771-3781) が効いて**タイマー画面消失**症状が再現。前原さん運用方針 A（PC + HDMI 1 本のみ）確定により `display-removed` = 会場モニター消失と同義で扱える。修正: `src/main.js:setupDisplayChangeListeners` の `display-removed` ハンドラ内の `isWindowOnDisplay(bounds, removedDisplay)` 判定経路を削除し、`hallWindow` alive なら**無条件**で `hallWindow.close()` + `hallWindow = null` + `await switchOperatorToSolo()` を実行する経路に変更。`_displayRemovedPending` / `hallWindow.isDestroyed()` ガード + `rollingLog('display-removed', ...)` 配布版常時記録は維持。
+
+### Removed
+- **rc22 第 2 弾投入の観測ラベル 8 件全削除（タスク 2）**: rc22 計測ビルドで真因確定済のため。
+  - `src/renderer/renderer.js` から 6 件削除（`renderer:onRoleChanged:before-setAttribute` / `:after-setAttribute` / `:after-appRole-assign` / `:after-updateMuteIndicator` / `:after-updateOperatorPane` / `:after-updateFocusBanner`）
+  - `src/preload.js` から 2 件削除（`preload:onRoleChanged:enter` / `:catch`）
+  - **rc12 修正コード（`setAttribute('data-role', newRole)` + `window.appRole = newRole` の try-catch 順序）は完全維持**
+  - **preload.js の握り潰し try-catch パターン自体は rc12 真因防御として維持**（`try { callback(newRole); } catch (_) {}` を残置、コールバック throw 吸収機構は失わない）
+
+### Tests
+- `tests/v204-rc23-display-removed-fix.test.js` 新規追加（T1〜T14 + 致命バグ保護 5 件 cross-check + rc18 ring buffer 設計 cross-check + rc22（⑨-A / ⑩-A / ⑩-D）維持確認 + version assertion、合計 22 件）
+- 既存 rc21 / rc22 テストファイルの観測ラベル assertion を**「ラベル不在確認」に反転**（assertion 名と本体を rc23 削除確認用に書き換え）
+- 既存 version assertion ファイル 14 件を `2.0.4-rc22` → `2.0.4-rc23` に追従更新
+
+### Compatibility (rc23)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- **rc12 修正コード保護**: onRoleChanged ハンドラ内 `setAttribute('data-role', newRole)` + `window.appRole = newRole` の try-catch 順序を完全維持（テスト T14 で順序の前後関係を `setAttrIdx < appRoleIdx` で静的確認 + try ブロック存在を `assert.match` で確認）
+- **rc18 第 1 弾 ring buffer 設計保護**: `_flushRollingLog` の `fs.promises.writeFile` 維持、`appendFile` 不在
+- **rc22 維持**: ⑨-A subscribe 持続条件 IDLE OR 句、⑩-A `Ctrl+Shift+L` globalShortcut、⑩-D 起動時 `fs.readFileSync` 復元経路すべて存在確認
+- `isWindowOnDisplay` 関数自体は dead code 化させず一旦残置（他経路使用あれば残置、なければ rc24 以降で削除判断、本フェーズスコープ外）
+- rc7〜rc22 までの確定 Fix すべて維持
+
+---
+
+## [2.0.4-rc22] - 2026-05-02
+
+### Fixed
+- **問題 ⑨ 残部 根治（タスク 1、案 ⑨-A）**: rc21 試験で残存していた「タイマー未開始（IDLE）でブラインド構造を保存・適用しても会場モニター（hall）の表示が古い Lv1 duration のまま、タイマースタート時にようやく切替わる」現象を根治。**真因 = `src/renderer/renderer.js:1591-1595` の subscribe 持続条件（`schedulePersistTimerState` 発火 trigger）が `status 変化 / currentLevelIndex 変化 / (PAUSED && remainingMs 変化)` の 3 句のみで、IDLE 中に `_refreshDisplayAfterStructureChange` が `setState({ remainingMs, totalMs })` を呼んでも 3 句どれにもヒットせず → `tournaments:setTimerState` IPC 不発火 → main `_publishDualState('timerState', …)` 不発火 → hall 不到達**（rc22 第 1 弾事前調査で 3 体並列 sub-agent が独立に同根に到達）。修正: 既存 if 条件式に IDLE 限定 OR 句を 1 行追加（`(state.status === States.IDLE && (state.remainingMs !== prev.remainingMs || state.totalMs !== prev.totalMs))`）。③ c（PAUSED 進行中据置）と非干渉、致命バグ保護 5 件すべて影響なし。
+
+### Added
+- **`Ctrl + Shift + L` ショートカット（タスク 2、案 ⑩-A）**: タイマー画面消失時にも UI 不要でログフォルダを開ける救済策。`src/main.js:registerShortcuts()` に `globalShortcut.register('CommandOrControl+Shift+L', …)` 追加、ハンドラ内で `await _flushRollingLog()` → `_resolveLogsDir()` → `shell.openPath(dir)` の順で実行（rc18 第 1 弾の I/O 順序保証維持のため `await` 必須）。globalShortcut は webContents focus 不要のためタイマー画面が CSS / DOM / bounds / show のいずれの理由で消失しても発火する。
+- **起動時 rolling-current.log 復元（タスク 3、案 ⑩-D）**: SIGKILL 等で `app:will-quit` が走らずプロセス終了した場合の前回ログを継続使用可能に。`src/main.js:_initRollingLog()` 内 `mkdirSync` 直後で `fs.readFileSync(_rollingLogFilePath, 'utf8')` → `split('\n').filter(Boolean).forEach((line) => { JSON.parse(line); _rollingLogBuffer.push(...) })` で in-memory buffer に復元。**同期 `readFileSync` 維持厳守**（`_initRollingLog` 全体が同期コンテキスト、rc18 設計遵守、`appendFile` 復活なし）。5 分 retention は次回 `_flushRollingLog` 発火時に既存ロジックで適用される。
+
+### Tests
+- `tests/v204-rc22-subscribe-and-log.test.js` 新規追加（T1〜T9 + 致命バグ保護 5 件 cross-check + rc12 + rc18 ring buffer 設計 cross-check + 計測ラベル 8 件維持確認 + version assertion、合計 16 件）
+- 既存 version assertion ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 / rc20 / rc21）を `2.0.4-rc21` → `2.0.4-rc22` に追従更新
+
+### Compatibility (rc22)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）。
+- **rc12 修正コード保護**: onRoleChanged ハンドラ内 `setAttribute('data-role', newRole)` + `window.appRole = newRole` の try-catch 順序を完全維持（テスト rc12 不変保護 cross-check 済）。
+- **rc18 第 1 弾 ring buffer 設計保護**: `_flushRollingLog` の `fs.promises.writeFile` 維持、`appendFile` 不在（タスク 2/3 のいずれでも復活なし）。タスク 2 は `await _flushRollingLog()` で I/O 順序保証維持、タスク 3 は同期 `readFileSync` のみで write 経路に介入なし。
+- **計測ラベル 8 件は維持**（`renderer:onRoleChanged:` 系 6 件 + `preload:onRoleChanged:` 系 2 件）。rc22 第 2 弾完成後の試験で活用 → 真因確定 → **rc23 で問題 ⑩ 根治 + 観測ラベル 8 件全削除予定**。
+- 前原さん判断 α / ③ c 遵守（IDLE 時は新 Lv1 duration を反映、PAUSED / RUNNING の `remainingMs` には触らず）。
+- rc7〜rc21 までの確定 Fix すべて維持。
+
+---
+
+## [2.0.4-rc21] - 2026-05-02
+
+### Fixed
+- **問題 ⑨ 根治（タスク 1、案 ⑨-A）**: rc20 試験で発覚した「タイマー未開始 / 一時停止中にブラインド構造を適用しても AC 上部 TIME / 中央タイマー / NEXT BREAK / op-pane 現/次ブラインドが古いまま」現象を根治。**真因 = `setStructure`（blinds.js:20-26）が `setState` を呼ばないため subscribe 経由の表示更新が trigger されず、適用系 4 経路（`handleTournamentGameTypeChange` idle / `handleTournamentSaveTournament` idle / `doApplyTournament` apply-only / `handlePresetApply` apply-only）で `renderCurrentLevel` / `renderNextLevel` のみ手動補完していた**（rc21 第 1 弾事前調査で 100% 確定）。修正: `src/renderer/renderer.js` に共通ヘルパ `_refreshDisplayAfterStructureChange()` を追加（IDLE 時は前原さん判断 α により `setState({ remainingMs, totalMs })` で新 Lv1 duration を反映 → subscribe 経由で全表示同時更新、非 IDLE 時は ③ c により `remainingMs` に触らず `updateOperatorStatusBar` / `updateOperatorPane` / `renderTime` / `renderNextBreak` の明示呼出のみ）+ 4 経路末尾に呼出 1 行追加。約 35 行 / 1 ファイル、致命バグ保護 5 件すべて完全無傷、`timer.js` の `targetTime` 経路に新規呼出なし（③ c 厳守）。
+
+### Investigated
+- **問題 ⑩ 計測ビルド投入（タスク 2、案 ⑩-C、rc22 で削除予定）**: rc20 試験で再発した「HDMI 抜きでタイマー画面消失」の真因を rc11 → rc12 と同パターンで時系列確定するため、8 ラベルを一時計測として追加。**rc12 修正コード（`src/renderer/renderer.js` の onRoleChanged ハンドラ内 `setAttribute('data-role', newRole)` + `window.appRole = newRole` の try-catch 順序）は完全不変保護**（テストで cross-check 済）。
+  - renderer.js（6 ラベル）: `renderer:onRoleChanged:before-setAttribute` / `:after-setAttribute`（data-role 現在値同梱）/ `:after-appRole-assign`（appRole 現在値同梱）/ `:after-updateMuteIndicator` / `:after-updateOperatorPane` / `:after-updateFocusBanner`
+  - preload.js（2 ラベル）: `preload:onRoleChanged:enter` / `preload:onRoleChanged:catch`（rc12 と同種の握り潰し catch を ipcRenderer.send 経由でログ化、コールバック内 throw の決定的証拠化）
+- **rc22 削除責任**: 本 8 ラベルは rc22 で問題 ⑩ 真因確定 + 根治コミット直後に**全件削除**する（cc-operation-pitfalls.md §6.1 準拠、削除予定 CC_REPORT §8 で明記）。
+
+### Tests
+- `tests/v204-rc21-display-refresh.test.js` 新規追加（タスク 1+2 関連、T1〜T9 + 致命バグ保護 5 件 cross-check + rc12 不変保護 + version assertion、合計 14 件）
+- 既存テスト 12 ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 / rc20 系列 1）の version assertion を `2.0.4-rc20` → `2.0.4-rc21` に追従更新
+
+### Compatibility (rc21)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）。`_refreshDisplayAfterStructureChange` ヘルパに `schedulePersistRuntime` を追加していない（C.1.8 境界保護）。
+- **rc12 修正コード保護**: onRoleChanged ハンドラ内 `setAttribute('data-role', newRole)` 最優先 + `window.appRole = newRole` try-catch の順序を完全維持（テスト T9 / rc12 不変保護で cross-check）。タスク 2 の 6 ラベルは既存ロジックの**前後挿入のみ**で内部順序に介入していない。
+- 前原さん判断 α（IDLE 時は新 Lv1 duration を即時反映）/ ③ c（進行中レベルの残り時間には反映しない、PAUSED 時は targetTime 整合性保護）すべて遵守。
+- rc20 までの確定 Fix（rc7〜rc20 全件）すべて維持。
+
+---
+
+## [2.0.4-rc20] - 2026-05-02
+
+### Fixed
+- **問題 ⑥ 根治（タスク 1、案 A 単独採用）**: rc15〜rc19 で残存していた「ブラインドタブで構造変更 → 保存 → 適用 → 会場モニターが古いブラインドのまま」現象を根治。**真因 = `_publishDualState('structure', …)` が v2.0.0 STEP 2 で予約された kind 枠（`_dualStateCache.structure`、main.js:963）にもかかわらず、コードベース全体で呼出 0 件で死枠化していた**（rc20 第 1 弾事前調査で確定、3 体並列 sub-agent 独立到達）。修正: `src/main.js:1764-1786` `presets:saveUser` ハンドラ末尾で、当該 preset を使うアクティブトーナメントが存在する場合のみ `_publishDualState('structure', sanitized)` を強制発火。`src/renderer/renderer.js:6695-6712` の hall dual-sync handler に `kind === 'structure'` case を追加（`setStructure(value)` + `renderCurrentLevel` / `renderNextLevel` で即時再描画）。前原さん判断 ③ c に基づき、**進行中レベルの残り時間には影響しない設計**（`timer.js` の `targetTime` キャッシュは意図的に再計算しない、現レベル末端まで古い duration で継続、次レベル切替時に新 duration が効く）。約 18 行 / 2 ファイル、致命バグ保護 5 件すべて完全無傷。
+
+### Added
+- **配布版常時記録ラベル `structure:state:send` / `structure:state:recv:hall`（タスク 3）**: rc18 第 1 弾の 4 ラベル（`runtime:state:send` 等）と同パターン、`try { ... } catch (_) { }` で wrap、never throw from logging。
+  - `structure:state:send` — `src/main.js:1772-1777` `presets:saveUser` ハンドラ内 `_publishDualState('structure', ...)` 直後で `rollingLog` 呼出（preset id + structureLength を記録）
+  - `structure:state:recv:hall` — `src/renderer/renderer.js:6708-6711` hall dual-sync の `kind === 'structure'` 分岐内 `setStructure(value)` 直後で `window.api.log.write` 呼出（structureLength + role を記録）
+- **rc20 試験で問題 ⑥ 真因確定の決定的証拠**として、これらラベルの時系列を rolling ログ採取で検証可能（rc20 第 1 弾事前調査 §6.2 シーケンス 1 参照）。
+
+### Investigated（rc19 死コードへの (c) 並存方針）
+- **rc19 で投入した `tournamentBasics` payload の `structure: validated.structure` 同梱（タスク 2）**: `normalizeTournament`（main.js:1814-1986）が `t.structure` を `out` に伝播しない仕様により、`validated.structure` は常に undefined となり**現在 dead code**。本 rc20 で案 A の `_publishDualState('structure', ...)` 経路に置換、rc19 経路は**履歴保護のため残置**（将来 normalizeTournament 修正時の二重保証）。`src/main.js:2092-2099` および `src/renderer/renderer.js:6667-6671` 双方にコメントで明示し、将来の混乱を防止。
+
+### Tests
+- `tests/v204-rc20-structure-publish.test.js` 新規追加（タスク 1+3 関連、T1〜T9 + 致命バグ保護 5 件 cross-check + rc19 (c) 並存方針 assertion + version assertion、合計 14 件）
+- 既存テスト 11 ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 ファイル）の version assertion を `2.0.4-rc19` → `2.0.4-rc20` に追従更新
+
+### Compatibility (rc20)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）。`presets:saveUser` ハンドラに `schedulePersistRuntime` を追加していない（preset と runtime の境界保護）。
+- 前原さん判断 ① β（保存 = 保存だけ）/ ② B（連続押下しない）/ ③ c（進行中レベルには反映しない）すべて遵守。`_savePresetCore` への `setStructure` 追加なし、`handlePresetApply` の clean 時 IPC 追加なし、`timer.js` の `targetTime` 再計算経路追加なし、`normalizeTournament` 修正なし。
+- rc19 までの確定 Fix（rc7〜rc18 第 1 弾 + rc19 の問題 ④⑦⑧ 解決）すべて維持。
+
+---
+
+## [2.0.4-rc19] - 2026-05-02
+
+### Fixed
+- **問題 ④（新規トーナメント / ブラインド構造名が初回クリックで編集できない）根治（タスク 1、案 A'' + 案 C）**: rc15 試験以降残存していた致命的 UX バグ（`presetName` を最初の 1 クリックで編集できない、フォーカス切替で治る）の真因を確定 + 修正。**真因 = `[data-role="operator"] .operator-pane`（`src/renderer/style.css:3830-3845`）が opaque（background `#0A1F3D`）かつ z-index 90、`pointer-events: none` 宣言が欠落 → `<dialog>.showModal()` の Chromium top layer 昇格と layer composition race の組合せで初回 click を operator-pane が吸収していた**。修正: ① `body:has(dialog[open]) [data-role="operator"] .operator-pane { pointer-events: none; }` 追加（ダイアログ open 時のみ hit-test 対象から外す、通常時の前原さん運用「クリックで window focus 取得」は維持）、② `.form-dialog.form-dialog--tabs { z-index: 10000; }` 追加（Chromium top layer race の二重保険）。CSS のみで完結、JS 介入ゼロ、致命バグ保護 5 件すべて完全無傷。
+- **問題 ⑥ 残部（ブラインドタブ単独保存時の hall 同期遅延）解消（タスク 2、案 ⑥-A）**: rc18 第 1 弾で「トーナメントタブ保存は OK / ブラインドタブ単独保存は会場モニター切替がタイマースタート時まで遅れる」現象が残存。修正: `src/main.js:2086-2096` `tournaments:save` ハンドラの `_publishDualState('tournamentBasics', ...)` payload に `structure: validated.structure` を直接同梱、`src/renderer/renderer.js:6645-6679` の hall 側受信で `value.structure` があれば `setStructure(value.structure)` を直接呼び、無ければ既存 `loadPresetById(t.blindPresetId)` フォールバック維持で安全側。`loadPresetById` IPC 2 段化を回避、構造同期の即時化。
+- **問題 ⑦（PAUSED 中 Ctrl+E specialStack 同期漏れ）解消（タスク 3、案 ⑦-A）**: rc18 第 1 弾で 7 関数末尾に `updateOperatorPane(getState())` を追加したが、`adjustSpecialStack` だけ漏れていた問題 ⑤ と完全同構造の同期漏れ。修正: `src/renderer/renderer.js:6288-6309` `adjustSpecialStack` 関数末尾に `try { updateOperatorPane(getState()); } catch (_) {}` を 1 行追加。**重要警告（C.1.8 不変条件保護）**: `schedulePersistRuntime` は意図的に追加していない（`specialStack` は `tournamentState.specialStack` であり `tournamentRuntime` ではないため、永続化は既存 `window.api.tournament.set({ specialStack })` 経路で十分、runtime 永続化 8 箇所の境界を曖昧化させない）。
+- **問題 ⑧（AC 側「イベント名」項目空白表示）解消（タスク 4、案 3）**: rc18 第 1 弾試験で発覚、AC モニター左半分の「イベント名」項目が常に `'-'`（空白）表示。真因 = `updateOperatorPane`（`renderer.js:1670`）が `tournamentState.name` を読むが、initial state も `applyTournament` も `.title` のみ更新していた属性名不整合。修正: `src/renderer/renderer.js:1041-1051` `applyTournament` 内で `tournamentState.title` 代入と同時に `tournamentState.name` にも同期代入（双方向整合性保証）。
+
+### Tests
+- `tests/v204-rc19-dialog-overlay.test.js` 新規追加（タスク 1 関連、T1〜T4 + 致命バグ保護 cross-check）
+- `tests/v204-rc19-structure-payload.test.js` 新規追加（タスク 2 関連、T5〜T7 + version assertion）
+- `tests/v204-rc19-special-stack-and-name.test.js` 新規追加（タスク 3+4 関連、T8〜T11 + 致命バグ保護 5 件 cross-check + `schedulePersistRuntime` 不在 assertion）
+- 既存テスト 10 ファイル（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15）の version assertion を `2.0.4-rc18` → `2.0.4-rc19` に追従更新
+
+### Compatibility (rc19)
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A `resetBlindProgressOnly` / C.2.7-D `timerState` destructure 除外 / C.1-A2 `ensureEditorEditableState` 4 重防御 / C.1.7 AudioContext resume / C.1.8 runtime 永続化 8 箇所）。特に C.1-A2 は本 fix が外側 hit-test 経路の修正で関数本体無介入、C.1.8 は `adjustSpecialStack` への `schedulePersistRuntime` 追加禁止により永続化境界を維持。
+- rc18 第 1 弾の hall 側 `loadPresetById` フォールバック経路は完全維持（`value.structure` 不在時の旧経路）。
+- 通常時の operator-pane クリック focus 取得（前原さん運用「AC 左半分クリックで window focus」）は維持、ダイアログ open 時のみ素通し。
+
+---
+
+## [2.0.4-rc18] - 2026-05-02
+
+### Fixed
+- **問題 ⑥ 新規トーナメント保存時の hall 構造同期漏れ根治（タスク 1、修正案 ⑥-A）**: rc17 試験で観察された「新規トーナメント保存時に hall（会場モニター）が違うブラインド構造を表示する」現象を構造的に解消。**v2.0.0 設計時から潜在していた構造的設計欠陥**（hall 側 dual-sync handler の `tournamentBasics` 受信時、`applyTournament` は `tournamentState.blindPresetId` をメモリ更新するが `setStructure(loadPresetById(blindPresetId))` を呼んでいなかった）。修正: `src/renderer/renderer.js:6645-6664` の hall 側 dual-sync handler を async 化し、`tournamentBasics` 受信後に `loadPresetById(t.blindPresetId)` で preset を取得して `setStructure(preset)` を呼ぶ + `renderCurrentLevel` / `renderNextLevel` で即時描画反映（約 14 行追加）。
+- **問題 ② PAUSED 中 time-shift 連動解消（タスク 1 副次効果）**: rc17 試験「あまり変わらず」の真の根本原因が問題 ⑥ と同根（hall は level=6 を受信しても structure 不整合で level=0 に丸めて描画していた）と確定。修正案 ⑥-A の連動効果で問題 ② も解消想定（rc17 修正案 ②-1 + rc18 修正案 ⑥-A の 2 段で完成）。
+- **問題 ⑤ PAUSED 中エントリー追加で AC 操作画面の operator-pane が更新されない（タスク 2）**: rc17 試験で観察された「PAUSED 中エントリー追加で AC 画面左半分の operator-pane（人数 / スタック数値表示エリア、rc4 追加）が変わらず、再開時に一気に更新される」現象を解消。真因: `addNewEntry` / `cancelNewEntry` / `eliminatePlayer` / `revivePlayer` / `resetTournamentRuntime` / `adjustReentry` / `adjustAddOn` の 7 関数は `tournamentRuntime` を直接 mutate（state.js を経由せず subscribe を発火しない）→ `updateOperatorPane()` が呼ばれない設計欠陥。修正: 各関数末尾の `schedulePersistRuntime();` 直後に `try { updateOperatorPane(getState()); } catch (_) {}` を 1 行追加（計 7 箇所、try/catch wrap）。
+
+### Added
+- **rolling ログ機構刷新（タスク 3、案 ①）**: fire-and-forget `fs.promises.appendFile` 一発打ちが I/O 順序を保証しないことが rc17 試験ログで判明（recv ts と書込順序の不一致、ログ末尾に古い ts が混入）→ **in-memory ring buffer 化**で根絶。`src/main.js:51-101` で:
+  - `let _rollingLogBuffer = []` 追加（同期 push、上限 5,000 件で `shift` で古いエントリ自動削除）
+  - `const ROLLING_LOG_BUFFER_MAX = 5000`（5 分 × 60 sec × 約 17 ラベル/秒余裕）
+  - `_truncateRollingLog` 関数を **削除**、`async function _flushRollingLog` で置換（5 分 retention で filter → `fs.promises.writeFile` でファイル全体上書き）
+  - 30 秒定期タイマーは `_flushRollingLog` を呼出（既存 `ROLLING_LOG_TRUNCATE_INTERVAL_MS` 流用）
+  - `app.on('will-quit', ...)` ハンドラに `_flushRollingLog` fire-and-forget 呼出追加（line 2452）
+  - `ipcMain.handle('logs:openFolder', ...)` ハンドラ先頭に `await _flushRollingLog()` 追加（line 2571、前原さんがログフォルダを開いた時点で最新状態反映）
+- **常時 4 ラベル rolling ログ追加（タスク 4）**: 問題 ⑤⑥ の自動観測のため配布版にも常時記録される 4 ラベルを追加。すべて既存 rc15 機構流用、新規 IPC 追加なし、すべて `try { ... } catch (_) {}` で wrap、never throw from logging。
+  - `runtime:state:send` — `src/main.js` `_publishDualState` 内で `kind === 'tournamentRuntime'` のみ `rollingLog` 呼出（main 送信 ts 記録）
+  - `runtime:state:recv:hall` — `src/renderer/dual-sync.js` `_applyDiffToState` 内で `kind === 'tournamentRuntime'` のみ `window.api.log.write` 呼出（hall 受信 ts 記録）
+  - `blindPreset:state:send` — `src/main.js` `_publishDualState` 内で `kind === 'tournamentBasics'` のみ `rollingLog` 呼出
+  - `blindPreset:state:recv:hall` — `src/renderer/dual-sync.js` `_applyDiffToState` 内で `kind === 'tournamentBasics'` のみ `window.api.log.write` 呼出
+
+### Investigated
+- **問題 ④（新規トーナメント名が編集できない）は本フェーズの対象外**（rc18 第 2 弾事前調査依頼予定、DevTools 実機観測待ち）
+- **問題 ① IPC レイテンシ「重い」体感**: rc17 試験ログ実測で 1ms〜574ms の極端二極化（94ms / 112ms / 1ms / 467ms / 574ms）を確認。重大発見: ログ ts そのものが信用できない可能性（fire-and-forget appendFile による I/O 順序乱れ）→ rc18 ring buffer 化で計測精度確保 → 再計測 → rc19 で本質的修正判断（IPC 順序入替案 ② は C.1.8 整合性窓拡大リスクのため第 2 弾以降で慎重判断）
+
+### Compatibility (rc18)
+- **致命バグ保護 5 件すべて完全維持**: C.2.7-A / C.2.7-D / C.1-A2 + C.1.4-fix1 Fix 5 / C.1.7 / C.1.8（タスク 2 で `schedulePersistRuntime` の 500ms debounce には触らず `updateOperatorPane` 呼出強化のみ）
+- **rc7〜rc17 確定 Fix すべて維持**
+- **operator-solo モード（v1.3.0 互換）影響なし**
+
+### Tests (rc18)
+- **新規テスト 2 ファイル**: `tests/v204-rc18-structure-and-pane-sync.test.js`（T1〜T8 + 致命バグ保護 5 件 + rc17 機構維持 = 計 15 件）+ `tests/v204-rc18-ring-buffer-and-labels.test.js`（T6〜T13 ring buffer + 4 ラベル + 致命バグ保護 5 件 + rc15/rc17 維持 + rc18 削除確認 = 計 19 件）。**追加 34 件すべて PASS**。
+- **既存テスト追従**: `tests/v204-rc15-break-end-and-rolling-log.test.js` の T6-B / T6-C / T7 を rc18 仕様（`_truncateRollingLog` → `_flushRollingLog`、`appendFile` → `writeFile`）に追従更新。各 rc 追従用 version assertion テスト 8 ファイルを `2.0.4-rc17` → `2.0.4-rc18` 値更新。既存テスト全件（rc15 まで 540 件 + 新規 34 件）PASS、skip / コメントアウト / 無効化なし。
+
+---
+
+## [2.0.4-rc17] - 2026-05-02
+
+### Fixed
+- **問題 ② PAUSED 中 time-shift 不同期の根治（タスク 1）**: rc15 試験で観察された「PAUSED 中の進める/戻す操作で hall 側が固まり、解除時に一気に変わる」現象を構造的に解消。真因は `src/renderer/renderer.js:1579` の subscribe ガード `if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex)` が PAUSED 中の `remainingMs` 単独変化を弾いていたこと。修正案 ②-1（rc16 事前調査で確定）採用、ガードに `(state.status === States.PAUSED && state.remainingMs !== prev.remainingMs)` の OR 分岐を追加（1 行）→ `schedulePersistTimerState()` 経由で `tournaments:setTimerState` IPC が発火 → `_publishDualState` 経由で hall に同期。**500 ms debounce で IPC 集約は維持**、RUNNING / BREAK / PRE_START は対象外（既存ガードで十分）。
+
+### Added
+- **常時 3 ラベル rolling ログ（タスク 2）**: 配布版にも常時記録される 3 ラベルを追加、本配布後の障害発生時の自動観測ツールとして機能。
+  - `timer:state:send` — `src/main.js` `_publishDualState(kind, value)` 内で `kind === 'timerState'` のみ `rollingLog()` 呼出（main 送信 ts 記録）
+  - `timer:state:recv:hall` — `src/renderer/dual-sync.js` `_applyDiffToState(diff)` 入口で `kind === 'timerState'` のみ `window.api.log.write()` 呼出（hall 受信 ts 記録）
+  - `render:tick:hall` — `src/renderer/renderer.js` subscribe コールバック内で `window.appRole === 'hall'` のみ `window.api.log.write()` 呼出（hall 描画タイミング記録）
+  - すべて `try { ... } catch (_) {}` で wrap、never throw from logging。既存 rc15 rolling ログ機構流用、新規 IPC 追加なし。
+
+### Investigated
+- **問題 ③（トーナメント削除ダイアログが開かない、タスク 3）**: rc18 で修正予定。最有力候補は仮説 ③-3（別 `<dialog>` open 中の二重 `showModal()` で `InvalidStateError` がサイレント throw）。`renderer.js:3835` `el.tournamentDeleteDialog.showModal?.()` は `<dialog open>` 残存時に例外を throw するが、`handleTournamentRowDelete` は呼出側で `await` も `.catch` もしておらず、`try/finally` のみ（`catch` なし）→ 例外は unhandledrejection に流れるが rolling ログには記録なし = 無音失敗。修正案 A（dialog open ガード 1 行追加）+ 案 B（例外可視化 5〜8 行）併用を推奨、致命バグ保護 5 件への影響ゼロ。
+- **問題 ④（新規トーナメント名が編集できない再発、タスク 4、🚨最優先）**: rc18 で修正予定。**真因は致命級の対象オブジェクト誤認**。`ensureEditorEditableState`（renderer.js:4563-4575）は `el.presetName`（ブラインド構造プリセット名）と blinds テーブルのみを操作し、**`el.tournamentTitle`（イベント名 input）には一切触っていない**。git blame で C.1.4-fix1 Fix 5 当時から `_handleTournamentNewImpl` 末尾の `ensureEditorEditableState` 2 重呼出は完全維持されているが、その関数が `tournamentTitle` を救う対象として元から含んでいない。「タイマー画面に戻ると治る」現象は modal `<dialog>` の focus context リセットによる focus race の解消で説明可能。**致命バグ保護 5 件は無傷、テスト盲点（`tournamentTitle` の編集可能性検査が 0 件）が見逃しの構造原因**。修正案 A（`_handleTournamentNewImpl` 末尾で `tournamentTitle.readOnly = false; .disabled = false; removeAttribute` を明示クリア、約 10 行）推奨、致命バグ保護への影響ゼロ。
+
+### Compatibility (rc17)
+- **致命バグ保護 5 件すべて完全維持**: C.2.7-A / **C.2.7-D 強化方向**（PAUSED 中 remainingMs 同期経路追加でも timerState destructure 除外設計は維持）/ C.1-A2 + C.1.4-fix1 Fix 5 / C.1.7 / C.1.8
+- **rc7〜rc15 確定 Fix すべて維持**
+- **operator-solo モード（v1.3.0 互換）影響なし**
+
+### Tests (rc17)
+- **新規テスト 1 ファイル**: `tests/v204-rc17-paused-time-shift-sync.test.js` を T1〜T8（PAUSED 同期トリガ条件式 4 + 3 ラベル rolling ログ 4）+ 致命バグ保護 5 件 cross-check + rc15 機構維持 3 件 = **計 16 件すべて PASS**。既存テスト全件 (rc15 まで 524+ 件) PASS、追従更新の必要なし（grep で `schedulePersistTimerState` / `_publishDualState` / `_applyDiffToState` を確認、rc17 PAUSED 経路追加の影響なし）。
+
+---
+
+## [2.0.4-rc15] - 2026-05-02
+
+### Fixed
+- **break-end 音が鳴らない問題の根治（タスク 1）**: rc13 試験で「BREAK 終了時の `break-end.mp3` だけ鳴らない」現象（パターン B）の真因を確定し構造的に解消。真因は `handleAudioOnTick` の `if (remainingSec === 0) playSound('break-end')` が onTick 1 フレーム（〜16 ms）しか持続せず、`onLevelEnd` の event loop race で見落とされること。修正: `playSound('break-end')` を `onLevelEnd` ハンドラの `lv.isBreak === true` 経路に移動（5〜6 行）、レベル境界で確実に発火。`warning-10sec` / `countdown-tick` は範囲判定のため race 影響なし、現状維持。
+
+### Added
+- **5 分 rolling ログ機構（タスク 2）**: バグ発見支援のため `<userData>/logs/rolling-current.log` に直近 5 分間のイベントを JSON Lines 形式で常時記録。30 秒定期で 5 分超を切り捨て（容量上限 ~1 MB）。記録対象: app:ready / app:before-quit / display-added/-removed / switchOperatorToSolo/SoloToOperator / second-instance / audio:play:enter/resumed/exit / window-state（focus/blur/resize、debounce 200ms）/ uncaughtException / unhandledRejection / renderer:onRoleChanged。タイマー 1 秒 tick / 通常ボタン click は記録しない（負荷主因）。**非同期 IO（`fs.promises`）必須**でメイン処理ブロック回避、main プロセス集約でロックフリー化。
+- **「ログフォルダを開く」ボタン**: 設定ダイアログ「ハウス情報」タブに追加（`shell.openPath` で OS のファイルマネージャを開く）。バグ発生時に前原さんが 1 ファイルコピーで構築士に共有可能。
+
+### Removed
+- **H ショートカット説明の行ごと完全削除（タスク 3）**: `src/renderer/index.html` 行 102 の `<li><kbd>H</kbd> 手元 PC 側のボトムバー切替</li>` および `docs/specs.md` 行 430 の H 行を削除。**H キー機能本体（renderer.js の keydown ハンドラ KeyH）は完全無変更**で維持。前原さん要望「AC 画面が見えている時はそもそもショートカット欄も見えていない」前提で説明文の意義が薄かったため。
+
+### Compatibility (rc15)
+- **致命バグ保護 5 件すべて完全維持**: C.2.7-A / C.2.7-D / C.1-A2 + C.1.2-bugfix / C.1.7（rolling ログは観測のみ介入なし）/ C.1.8
+- **rc7〜rc14 確定 Fix すべて維持**: specialStack / 二重送信 / app.focus / 単一インスタンス / onRoleChanged setAttribute 最優先 / appRole try-catch / 複製 readonly / BREAK 中 10 秒前 / 5 秒カウント音
+- **operator-solo モード（v1.3.0 互換）影響なし**
+
+### Tests (rc15)
+- **新規テスト 1 ファイル + 既存 6 ファイル追従更新**: `tests/v204-rc15-break-end-and-rolling-log.test.js` を T1〜T10（onLevelEnd 移行 + rolling ログ infrastructure + IPC + UI ボタン）で構築、既存テストの H 行検証を「不在確認」に統一書き換え + version 期待値を rc15 に追従。
+
+---
+
 ## [2.0.0] - 2026-05-01
 
 ### Added
