@@ -1288,7 +1288,10 @@ function computeLiveTimerState(ts, levels) {
 
   // running 中の総経過秒 = 累積 + (now - startedAt)
   let elapsed = (Number(ts.elapsedSecondsInLevel) || 0) + Math.max(0, (Date.now() - Number(ts.startedAt)) / 1000);
-  let level = Math.max(1, Number(ts.currentLevel) || 1);
+  // v2.0.14 Fix 3（M2 / A-3）: ブラインド構造を「より少ない levels」に切替で「経過時間継続」適用すると
+  //   currentLevel > levels.length の状態が一時的に発生し、durSecOf が Infinity を返して
+  //   while ループが即 break、elapsed が無効レベルの値のまま伝搬する。事前クランプで防御。
+  let level = Math.max(1, Math.min(levels.length, Number(ts.currentLevel) || 1));
 
   // レベル長は durationMinutes（既存仕様）から秒換算
   const durSecOf = (idx) => {
@@ -1512,8 +1515,32 @@ function stopListRefreshInterval() {
     listRefreshInterval = null;
   }
 }
+// v2.0.14 Fix 4（M3 / A-8）: schedulePersistRuntime の 500ms debounce 中に
+//   Alt+F4 / プロセス終了が走ると pending 操作が消失する。pending 時のみ flush 経路を発火。
+//   既存の C.1.8 設計（8 箇所の schedulePersistRuntime + resetBlindProgressOnly の意図的「フックなし」）
+//   は完全維持、本関数は debounce タイマーが動作中のときのみ「もう一度 IPC を即時 send」する追加保護。
+function flushPendingRuntimePersist() {
+  if (window.appRole === 'hall') return;        // hall は purely consumer
+  if (!runtimePersistTimer) return;             // idle 時は no-op
+  clearTimeout(runtimePersistTimer);
+  runtimePersistTimer = null;
+  if (_tournamentSwitching) return;             // 切替中は skip（schedulePersistRuntime と同パターン）
+  const id = tournamentState.id;
+  if (!id || !window.api?.tournaments?.setRuntime) return;
+  const rt = {
+    playersInitial: tournamentRuntime.playersInitial,
+    playersRemaining: tournamentRuntime.playersRemaining,
+    reentryCount: tournamentRuntime.reentryCount,
+    addOnCount: tournamentRuntime.addOnCount
+  };
+  // beforeunload では Promise を await できないが、invoke の IPC message は即時送信され、
+  // main 側は renderer unload と並行して store 書込を完了できる。
+  try { window.api.tournaments.setRuntime(id, rt); } catch (_) {}
+}
+
 // メモリリーク対策: ウィンドウクローズ時に必ずクリア
 window.addEventListener('beforeunload', () => {
+  flushPendingRuntimePersist();
   stopPeriodicTimerStatePersist();
   cancelPendingTimerStatePersist();
   stopListRefreshInterval();
@@ -2496,9 +2523,14 @@ function updatePipTimer(remainingMs, status) {
   if (status === States.PRE_START) {
     el.pipDigits.textContent = formatPreStartTime(remainingMs);
     el.pipLabel.textContent = '開始まで';
+    // v2.0.14 Fix 2（M4 / B-1）: PIP も 60 分跨ぎで桁数切替するため、メイン側 L767/L774
+    //   と同様に dataset.prestartFormat をセット（CSS で font-size を切替）。
+    if (el.pipTimer) el.pipTimer.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
   } else {
     el.pipDigits.textContent = formatTime(remainingMs);
     el.pipLabel.textContent = (status === States.BREAK) ? 'BREAK' : '';
+    // PRE_START 終了 / RUNNING / BREAK 等では prestartFormat 属性をクリア
+    if (el.pipTimer && 'prestartFormat' in el.pipTimer.dataset) delete el.pipTimer.dataset.prestartFormat;
   }
 }
 
@@ -2638,7 +2670,9 @@ function renderBreakImagesList() {
     el.breakImagesCount.textContent = `${images.length} / ${BREAK_IMAGES_MAX_COUNT} 枚`;
   }
   // 切替間隔・PIP サイズ入力を同期
-  if (el.breakImageInterval) {
+  // v2.0.14 Fix 6（M5 / B-2）: 2 画面 IPC broadcast による value 上書きで打鍵中の値が消えないよう
+  //   activeElement がこの input と一致するときは上書きをスキップ。
+  if (el.breakImageInterval && document.activeElement !== el.breakImageInterval) {
     el.breakImageInterval.value = String(breakImagesState.intervalSec);
   }
   const pipRadios = document.querySelectorAll('input[name="pip-size"]');
