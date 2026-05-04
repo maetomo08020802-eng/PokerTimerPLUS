@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.2] - 2026-05-05
+
+PokerTimerPLUS+ v2.1.2 自動更新の操作簡素化（方針 Z 採用）。**v2.1.1 の `quitAndInstall(true, true)` で発生した「アプリが終了できません」エラー + NSIS インストーラ UI 表示問題を、`autoInstallOnAppQuit: true` 化で根本解決**。
+
+### Changed
+
+- **自動更新の動作モデルを「次回起動時更新」に変更**: 自動更新通知の OK ボタンを押した時点では更新は走らず、次回アプリを通常終了 → 次回起動時に installer がサイレントで自動実行されるようになりました。ユーザー操作は **OK を 1 回押すだけ**で、以降の操作（「次へ」「インストール」「完了」等）は一切不要です。
+- **ダイアログ文言更新**: 「再起動して更新」「後で」の 2 ボタンから「OK」1 ボタンに簡素化、メッセージも「次回起動時に自動更新される」旨に変更
+- **`autoInstallOnAppQuit: true`**: electron-updater の公式標準パターンに変更（v2.0.10 で意図的に false にしていた設定を戻す形、当時の運用想定が変化したため）
+
+### Notes
+
+- v2.1.1 で発生した「アプリが終了できません」エラー + NSIS UI 表示は、`quitAndInstall(true, true)` 経由を使わない設計に変更したことで**根本的に発生しなくなりました**
+- `quitAndInstall` の呼出は削除、`app.quit` 経由で installer が自動実行される設計
+- v2.0.11 の自動更新根治設定（artifactName / verifyUpdateCodeSignature / publisherName 削除）は完全維持
+
+### Compatibility (v2.1.2)
+
+- 致命バグ保護 5 件すべて完全無傷（C.1.8 含む、will-quit 同期処理は通常終了パスを通るため C.1.8 / rolling log / powerSaveBlocker すべて正常完走）
+- v2.0.10 観測機構 + v2.0.11 自動更新根治 + v2.0.13 表示改善 + v2.0.14 audit 修正 + v2.0.15 ガード網羅 + v2.1.0 audit 消化すべて完全維持
+- アプリの動作・既存機能（タイマー / スライドショー / トーナメント編集 / リセット / 通知音）に影響なし
+- v2.1.1 ユーザーは自動更新で本リリースが配信される（**この更新からダイアログ操作が「OK」1 回のみになる**）
+
+---
+
 ## [2.1.1] - 2026-05-04
 
 PokerTimerPLUS+ v2.1.1 自動更新サイレントインストール対応版。
