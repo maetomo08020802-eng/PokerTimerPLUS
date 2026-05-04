@@ -1,5 +1,5 @@
 /**
- * v2.0.15 静的解析テスト — audit 結果中重要度 7 項目 + B-6 一括修正
+ * v2.1.0 静的解析テスト — audit 結果中重要度 7 項目 + B-6 一括修正
  *   Fix 1 (M8/C-2):  tournaments:setActive に _isSwitchingMode ガード
  *   Fix 2 (M4/B-1):  PIP タイマーの dataset.prestartFormat 切替 + CSS hms/ms ルール
  *   Fix 3 (M2/A-3):  computeLiveTimerState の currentLevelIndex クランプ
@@ -179,10 +179,10 @@ test('T10b (Fix 8): .pip-timer__digits の transition に font-size 含む', () 
 });
 
 // ============================================================
-// T11: package.json version 2.0.15 + scripts.test に v214 登録
+// T11: package.json version 2.1.0 + scripts.test に v214 登録
 // ============================================================
-test('T11: package.json version 2.0.15 + scripts.test に v214 登録', () => {
-  assert.equal(PKG.version, '2.0.15', `version が ${PKG.version}（期待 2.0.15）`);
+test('T11: package.json version 2.1.0 + scripts.test に v214 登録', () => {
+  assert.equal(PKG.version, '2.1.0', `version が ${PKG.version}（期待 2.1.0）`);
   assert.ok(PKG.scripts.test.includes('v214-audit-fixes.test.js'),
     'scripts.test に v214-audit-fixes.test.js が含まれない');
 });

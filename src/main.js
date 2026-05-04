@@ -203,9 +203,11 @@ function sanitizeRuntime(value, fallback) {
     if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return Math.max(0, Math.floor(fbV || 0));
     return Math.floor(v);
   };
+  const playersInitial = toNonNegInt(value.playersInitial, fb.playersInitial);
   return {
-    playersInitial:   toNonNegInt(value.playersInitial,   fb.playersInitial),
-    playersRemaining: toNonNegInt(value.playersRemaining, fb.playersRemaining),
+    playersInitial,
+    // v2.1.0 Fix 4 (M10 Edge-6): playersRemaining > playersInitial の異常状態を Math.min で正規化（avg stack 異常防止）
+    playersRemaining: Math.min(toNonNegInt(value.playersRemaining, fb.playersRemaining), playersInitial),
     reentryCount:     toNonNegInt(value.reentryCount,     fb.reentryCount),
     addOnCount:       toNonNegInt(value.addOnCount,       fb.addOnCount)
   };
@@ -779,6 +781,8 @@ function migrateTournamentSchema(s) {
       filledMarqueeSettings += 1;
     } else {
       const fixed = sanitizeMarqueeSettings(m.marqueeSettings, fallbackMarquee);
+      // v2.1.0 Fix 6 (M9 Edge-4) NOTE: JSON.stringify 比較はキー順依存。将来 displaySettings 等の
+      //   schema 拡張時はキー順を維持するか、L766-770 の field-by-field 比較に置換すること（誤検知防止）
       if (JSON.stringify(fixed) !== JSON.stringify(m.marqueeSettings)) {
         m.marqueeSettings = fixed;
         touched = true;
@@ -914,6 +918,8 @@ function isValidPreset(p) {
     ? p.structureType
     : 'BLIND';
   const fields = getStructureFields(structureType);
+  // v2.1.0 Fix 5 (M11 Edge-8): renderer 側 validateStructure と整合性を保つため通常レベル件数を追跡
+  let regularLevelCount = 0;
   for (const lv of p.levels) {
     if (!lv || typeof lv !== 'object') return false;
     if (typeof lv.durationMinutes !== 'number' || lv.durationMinutes <= 0) return false;
@@ -921,10 +927,13 @@ function isValidPreset(p) {
       // ブレイクは label のみ任意。構造型のフィールドは不問
       continue;
     }
+    regularLevelCount += 1;
     for (const f of fields) {
       if (typeof lv[f] !== 'number' || lv[f] < 0) return false;
     }
   }
+  // v2.1.0 Fix 5 (M11 Edge-8): 通常レベル 0 件は renderer 側 validateStructure で reject されるため main 側でも一致
+  if (regularLevelCount === 0) return false;
   return true;
 }
 
@@ -2312,6 +2321,9 @@ function registerIpcHandlers() {
     });
     if (result.canceled || !result.filePaths?.[0]) return { ok: false, error: 'canceled' };
     try {
+      // v2.1.0 Fix 3 (M8 Edge-3): import 前に size 上限（50MB）チェック、巨大 JSON で OOM 予防
+      const stat = fs.statSync(result.filePaths[0]);
+      if (stat.size > 50 * 1024 * 1024) return { ok: false, error: 'file-too-large', message: 'インポートファイルは 50MB 以下にしてください' };
       const raw = fs.readFileSync(result.filePaths[0], 'utf8');
       // STEP 10 フェーズC.2.7-audit-fix: UTF-8 BOM 混入対策（外部由来の JSON で先頭 0xFEFF が混じることがある）
       const cleaned = raw.charCodeAt(0) === 0xFEFF ? raw.slice(1) : raw;
