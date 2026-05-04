@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0] - 2026-05-04
+
+PokerTimerPLUS+ v2.1.0 = audit 消化版 minor bump。**v2.0.15 audit で列挙された中重要度 13 件のうち、HDMI なし環境で動作確認可能な 5 件 + コメント 1 件を一括消化**。番号の見た目を整える minor bump も兼ねる。
+
+### Changed
+
+- **トーナメント一覧の毎秒再描画を最適化**: イベント委譲化で 100 トーナメント環境でも毎秒の click listener 登録ゼロ、長時間営業 + 古い PC でのファン回り軽減（M4 Perf-3）
+- **カードの常時 GPU 負荷を軽減**: `backdrop-filter: blur` を半透明背景に置換、古い内蔵 GPU 環境のグラフィック負荷大幅減（M6 Perf-8）
+
+### Fixed
+
+- **インポート時の OOM 予防**: ファイル読込前に size 上限（50MB）チェック追加（M8 Edge-3）
+- **プレイヤー数の整合性検証**: `playersRemaining > playersInitial` の異常状態を Math.min で正規化（M10 Edge-6）
+- **import 検証の整合性**: main 側 `isValidPreset` と renderer 側 `validateStructure` の検証ロジックを統一（M11 Edge-8）
+
+### Notes
+
+- `migrateTournamentSchema` の `JSON.stringify` 比較に将来の displaySettings 拡張時の注意喚起コメント追加（M9 Edge-4）
+
+### Compatibility (v2.1.0)
+
+- 致命バグ保護 5 件すべて完全無傷（v2.0.15 で C.1.8 ガード網羅修正済の状態を維持）
+- v2.0.10 観測機構 + v2.0.11 自動更新根治 + v2.0.13 表示改善 + v2.0.14 audit 修正 + v2.0.15 ガード網羅すべて完全維持
+- アプリの動作・既存機能（タイマー / スライドショー / トーナメント編集 / リセット / 通知音）に影響なし
+- v2.0.15 ユーザーは自動更新で本リリースが配信される
+
+---
+
 ## [2.0.15] - 2026-05-04
 
 PokerTimerPLUS+ v2.0.15 = v2.0.15 audit Pattern A+α 実装版。**致命バグ保護 C.1.8 ガード漏れ修正 + 運用面 2 件改善**。

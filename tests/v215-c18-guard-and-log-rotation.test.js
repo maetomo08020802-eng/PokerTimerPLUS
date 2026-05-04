@@ -1,13 +1,13 @@
 /**
- * v2.0.15 静的解析テスト — C.1.8 ガード漏れ網羅修正 + 運用面 2 件
+ * v2.1.0 静的解析テスト — C.1.8 ガード漏れ網羅修正 + 運用面 2 件
  *   Fix 1 (H1 Edge-1): _isSwitchingMode ガード網羅修正
- *     - tournaments:setActive    （v2.0.15 既存）
+ *     - tournaments:setActive    （v2.1.0 既存）
  *     - tournaments:setTimerState（v2.0.4-rc9 既存）
- *     - tournaments:save         （v2.0.15 新規）
- *     - tournaments:setRuntime   （v2.0.15 新規・H1 Edge-1）
- *     - tournaments:setMarqueeSettings（v2.0.15 新規）
- *     - tournaments:setDisplaySettings（v2.0.15 新規）
- *     - tournament:set 旧API     （v2.0.15 新規）
+ *     - tournaments:save         （v2.1.0 新規）
+ *     - tournaments:setRuntime   （v2.1.0 新規・H1 Edge-1）
+ *     - tournaments:setMarqueeSettings（v2.1.0 新規）
+ *     - tournaments:setDisplaySettings（v2.1.0 新規）
+ *     - tournament:set 旧API     （v2.1.0 新規）
  *   Fix 2 (M7 Perf-9):  electron-log の maxSize / archiveLogFn 設定
  *   Fix 3 (M2 Sec-4):   rolling-log の presetName を hashPII 経由でハッシュ化
  *
@@ -64,13 +64,13 @@ function extractHandlerBody(channel) {
 // ============================================================
 test('T1 (Fix 1): 必要なハンドラ全件で _isSwitchingMode チェック存在（網羅）', () => {
   const requiredChannels = [
-    'tournaments:setActive',          // v2.0.15 既存
+    'tournaments:setActive',          // v2.1.0 既存
     'tournaments:setTimerState',      // v2.0.4-rc9 既存
-    'tournaments:save',               // v2.0.15 新規
-    'tournaments:setRuntime',         // v2.0.15 新規・H1 Edge-1
-    'tournaments:setMarqueeSettings', // v2.0.15 新規
-    'tournaments:setDisplaySettings', // v2.0.15 新規
-    'tournament:set'                  // v2.0.15 新規（旧 API）
+    'tournaments:save',               // v2.1.0 新規
+    'tournaments:setRuntime',         // v2.1.0 新規・H1 Edge-1
+    'tournaments:setMarqueeSettings', // v2.1.0 新規
+    'tournaments:setDisplaySettings', // v2.1.0 新規
+    'tournament:set'                  // v2.1.0 新規（旧 API）
   ];
   for (const ch of requiredChannels) {
     const body = extractHandlerBody(ch);
@@ -122,13 +122,13 @@ test('T2-5 (Fix 1): tournament:set 旧 API に _isSwitchingMode ガード', () =
 });
 
 // ============================================================
-// T3: 既存 setActive の v2.0.15 Fix 1 ガードが破壊されていない
+// T3: 既存 setActive の v2.1.0 Fix 1 ガードが破壊されていない
 // ============================================================
-test('T3 (Fix 1): setActive の v2.0.15 Fix 1 ガードが破壊されていない', () => {
+test('T3 (Fix 1): setActive の v2.1.0 Fix 1 ガードが破壊されていない', () => {
   const body = extractHandlerBody('tournaments:setActive');
   assert.ok(body, 'setActive ハンドラが見つからない');
   assert.ok(/if\s*\(\s*_isSwitchingMode\s*\)\s*return/.test(body),
-    'setActive の v2.0.15 ガードが消失している');
+    'setActive の v2.1.0 ガードが消失している');
 });
 
 // ============================================================
@@ -187,19 +187,19 @@ test('T7 (致命バグ保護): C.1.8 schedulePersistRuntime 呼出が存続', ()
   }
 });
 
-test('T7-2 (致命バグ保護): v2.0.15 setActive Fix が破壊されていない（再確認）', () => {
+test('T7-2 (致命バグ保護): v2.1.0 setActive Fix が破壊されていない（再確認）', () => {
   const body = extractHandlerBody('tournaments:setActive');
   assert.ok(body, 'setActive ハンドラが見つからない');
-  // v2.0.15 のコメント or 同等のガード行
+  // v2.1.0 のコメント or 同等のガード行
   assert.ok(/if\s*\(\s*_isSwitchingMode\s*\)\s*return\s+null/.test(body),
-    'setActive の v2.0.15 Fix 1 ガード（return null）が消失');
+    'setActive の v2.1.0 Fix 1 ガード（return null）が消失');
 });
 
 // ============================================================
-// T8: package.json version 2.0.15
+// T8: package.json version 2.1.0
 // ============================================================
-test('T8: package.json version が 2.0.15', () => {
-  assert.equal(PKG.version, '2.0.15', `version が ${PKG.version}（期待 2.0.15）`);
+test('T8: package.json version が 2.1.0', () => {
+  assert.equal(PKG.version, '2.1.0', `version が ${PKG.version}（期待 2.1.0）`);
 });
 
 // ============================================================

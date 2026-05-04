@@ -143,7 +143,7 @@ test('保護: rollingLog 関数定義 + Ctrl+Shift+L globalShortcut + display-re
 // ============================================================
 
 test('version: package.json は 2.0.11', () => {
-  assert.equal(PKG.version, '2.0.15',
+  assert.equal(PKG.version, '2.1.0',
     `package.json version が ${PKG.version}（期待 2.0.11）`);
 });
 

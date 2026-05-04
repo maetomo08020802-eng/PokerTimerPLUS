@@ -3479,11 +3479,41 @@ function formatLevelTime(elapsedSec) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// v2.1.0 Fix 1（M4 Perf-3）: イベント委譲を 1 度だけ親要素に登録するフラグ
+let _tournamentListDelegationInstalled = false;
+function ensureTournamentListDelegation() {
+  if (_tournamentListDelegationInstalled) return;
+  if (!el.tournamentList) return;
+  _tournamentListDelegationInstalled = true;
+  el.tournamentList.addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-action]');
+    if (!btn) return;
+    const li = btn.closest('li[data-tournament-id]');
+    if (!li) return;
+    const id = li.dataset.tournamentId;
+    const name = li.dataset.tournamentName || '';
+    const status = li.dataset.tournamentStatus || 'idle';
+    const action = btn.dataset.action;
+    if (action === 'toggle') {
+      handleTournamentListToggle(id, status);
+    } else if (action === 'reset') {
+      handleTournamentListReset(id, name);
+    } else if (action === 'select') {
+      handleTournamentListSelect(id);
+    } else if (action === 'delete') {
+      event.stopPropagation();
+      handleTournamentRowDelete(id, name);
+    }
+  });
+}
+
 async function renderTournamentList(prefetched) {
   if (!el.tournamentList) return;
   // STEP 6.21.4.2 / STEP 10 フェーズB.fix9: 入力中スキップ。統一ヘルパに置換。
   // 1秒ごとの自動再描画で focus/打鍵イベントが奪われる現象を原理的に防止。
   if (isUserTypingInInput()) return;
+  // v2.1.0 Fix 1（M4 Perf-3）: 親要素 1 個に click delegation を登録（毎秒の listener 再登録を撲滅）
+  ensureTournamentListDelegation();
   let list = prefetched;
   if (!Array.isArray(list)) {
     try { list = await window.api?.tournaments?.list() || []; } catch (_) { list = []; }
@@ -3512,6 +3542,10 @@ function buildTournamentListItem(t, ts, isActive, listLength = 99) {
   const li = document.createElement('li');
   li.className = 'tournament-list__item';
   if (isActive) li.classList.add('is-active');
+  // v2.1.0 Fix 1（M4 Perf-3）: イベント委譲用の識別属性。click は親要素に集約済。
+  li.dataset.tournamentId = t.id;
+  li.dataset.tournamentName = t.name || '';
+  li.dataset.tournamentStatus = ts.status || 'idle';
 
   const badge = document.createElement('span');
   badge.className = 'tournament-status-badge';
@@ -3544,15 +3578,15 @@ function buildTournamentListItem(t, ts, isActive, listLength = 99) {
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'tournament-list__btn';
+    toggle.dataset.action = 'toggle';
     toggle.textContent = (ts.status === 'running') ? '一時停止' : '再開';
-    toggle.addEventListener('click', () => handleTournamentListToggle(t.id, ts.status));
     actions.appendChild(toggle);
 
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'tournament-list__btn';
+    reset.dataset.action = 'reset';
     reset.textContent = 'リセット';
-    reset.addEventListener('click', () => handleTournamentListReset(t.id, t.name));
     actions.appendChild(reset);
   }
 
@@ -3561,27 +3595,24 @@ function buildTournamentListItem(t, ts, isActive, listLength = 99) {
     const select = document.createElement('button');
     select.type = 'button';
     select.className = 'tournament-list__btn is-primary';
+    select.dataset.action = 'select';
     select.textContent = '選択';
-    select.addEventListener('click', () => handleTournamentListSelect(t.id));
     actions.appendChild(select);
   }
 
   // STEP 7.x ③-b/c/e: 各行右端の🗑削除ボタン
   // - listLength <= 1 のとき disabled（最後の1件は削除不可、main.js IPC ガードと整合）
-  // - click で stopPropagation → 行クリックの暴発抑止 + 削除確認ダイアログ
+  // - 委譲ハンドラ側で stopPropagation 実行（行クリック暴発抑止 + 削除確認ダイアログ）
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.className = 'tournament-list__delete-btn';
+  delBtn.dataset.action = 'delete';
   delBtn.textContent = '🗑';
   delBtn.setAttribute('aria-label', '削除');
   if (listLength <= 1) {
     delBtn.disabled = true;
     delBtn.title = '最後の1件は削除できません';
   }
-  delBtn.addEventListener('click', (event) => {
-    event.stopPropagation();
-    handleTournamentRowDelete(t.id, t.name);
-  });
   actions.appendChild(delBtn);
 
   li.appendChild(actions);
