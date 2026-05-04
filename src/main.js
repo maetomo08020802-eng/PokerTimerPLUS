@@ -2810,7 +2810,11 @@ app.whenReady().then(async () => {
           cancelId: 1
         });
         if (result.response === 0) {
-          autoUpdater.quitAndInstall();
+          // v2.1.1: NSIS installer をサイレント実行 + アプリ自動再起動
+          //   isSilent=true → installer に /S フラグ → NSIS UI 非表示でサイレントインストール
+          //   isForceRunAfter=true → インストール後にアプリ自動再起動（macOS は無効）
+          //   oneClick:false の手動インストーラ UI は維持（初回手動 DL 時のみ表示）
+          autoUpdater.quitAndInstall(true, true);
         }
       });
       rollingLog('autoUpdater:check-call', null);

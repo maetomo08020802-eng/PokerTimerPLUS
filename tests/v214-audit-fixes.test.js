@@ -182,7 +182,7 @@ test('T10b (Fix 8): .pip-timer__digits の transition に font-size 含む', () 
 // T11: package.json version 2.1.0 + scripts.test に v214 登録
 // ============================================================
 test('T11: package.json version 2.1.0 + scripts.test に v214 登録', () => {
-  assert.equal(PKG.version, '2.1.0', `version が ${PKG.version}（期待 2.1.0）`);
+  assert.equal(PKG.version, '2.1.1', `version が ${PKG.version}（期待 2.1.0）`);
   assert.ok(PKG.scripts.test.includes('v214-audit-fixes.test.js'),
     'scripts.test に v214-audit-fixes.test.js が含まれない');
 });
@@ -226,7 +226,8 @@ test('保護: v2.0.13 formatPreStartTime の ms 引数判定維持', () => {
 test('保護: autoUpdater quitAndInstall + ダイアログ文言完全維持', () => {
   assert.ok(/dialog\.showMessageBox\(mainWindow,\s*\{[\s\S]*?title:\s*'更新の準備ができました'/.test(MAIN_JS),
     'update-downloaded ハンドラの「更新の準備ができました」ダイアログが破壊されている');
-  assert.ok(/autoUpdater\.quitAndInstall\(\)/.test(MAIN_JS),
+  // v2.1.1: サイレントインストール対応で (true, true) 引数追加、引数の有無は許容
+  assert.ok(/autoUpdater\.quitAndInstall\(/.test(MAIN_JS),
     'autoUpdater.quitAndInstall 呼出が削除されている');
 });
 

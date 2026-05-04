@@ -101,9 +101,9 @@ test('T6: update-downloaded ハンドラ内に dialog.showMessageBox + quitAndIn
     'ダイアログ title「更新の準備ができました」が変更された（NEXT_CC_PROMPT §1.3 違反）');
   assert.match(MAIN, /buttons:\s*\[\s*['"]再起動して更新['"]\s*,\s*['"]後で['"]\s*\]/,
     'ダイアログ buttons「再起動して更新」「後で」が変更された');
-  // quitAndInstall 呼出
-  assert.match(MAIN, /autoUpdater\.quitAndInstall\s*\(\s*\)/,
-    'autoUpdater.quitAndInstall() 呼出が削除された');
+  // quitAndInstall 呼出（v2.1.1 でサイレントインストール用に (true, true) 引数追加、引数の有無は許容）
+  assert.match(MAIN, /autoUpdater\.quitAndInstall\s*\(/,
+    'autoUpdater.quitAndInstall(...) 呼出が削除された');
 });
 
 // ============================================================
@@ -131,7 +131,7 @@ test('保護: main.js の rolling log / Ctrl+Shift+L / display-removed 経路に
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.0',
+  assert.equal(pkg.version, '2.1.1',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 
