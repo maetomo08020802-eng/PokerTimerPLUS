@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.10] - 2026-05-04
+
+PokerTimerPLUS+ v2.0.10 観測ビルド。**機能変更なし、autoUpdater 経路のログ機構強化のみ**。v2.0.4〜v2.0.9 で「自動更新通知が出ない」真因を実機ログで確定するための観測リリース。
+
+### Changed
+
+- **自動更新（autoUpdater）の挙動観測のため、main プロセスにログ機構を追加**:
+  - `electron-log ^5.0.0` を `dependencies` に追加し、`autoUpdater.logger = log` を設定（公式推奨パターン）。`%APPDATA%/PokerTimerPLUS+/logs/main.log` に internal な debug 情報が記録される。
+  - autoUpdater のすべてのイベント（`checking-for-update` / `update-available` / `update-not-available` / `download-progress` / `update-downloaded` / `error`）と setup フェーズ（`setup-enter` / `logger-attached` / `check-call` / `check-rejected` / `setup-error`）を `rollingLog`（rc18 第 1 弾、`Ctrl+Shift+L` で取得可能）にも記録。
+  - 既存の `console.log` / `console.warn` 出力は完全維持（後方互換）。autoUpdater のダイアログ文言・`quitAndInstall` ロジック・起動条件 `app.isPackaged` も完全維持。
+  - **機能変更なし、観測手段の追加のみ**。Phase 2（v2.0.11）でログ取得結果に基づき真因に対する根治修正を実装予定。
+
+### Tests
+
+- 新規 `tests/v210-autoupdater-logging.test.js` 追加（rollingLog ラベル件数 + electron-log 統合 + 既存ハンドラ破壊なし + 既存 console 出力維持の assertion）
+- 既存 20 ファイルの version assertion を `2.0.9` → `2.0.10` に追従更新
+- 既存 `tests/v208-auto-updater-fix.test.js` は引き続き PASS（autoUpdater イベントハンドラ・ダイアログ文言・quitAndInstall すべて完全維持）
+
+### Compatibility (v2.0.10)
+
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- rc12 / rc18 / rc22 / rc23 / C.1.4-fix1 / v2.0.6 修正(c)(d) / v2.0.7 修正 / v2.0.8 修正 すべて完全維持
+- autoUpdater イベントハンドラ・ダイアログ文言（「更新の準備ができました」「再起動して更新」「後で」）・`quitAndInstall` ロジック・`autoInstallOnAppQuit: false` 設定すべて完全維持
+- `verifyUpdateCodeSignature` / `publisherName` / `app-update.yml` には触らず（v2.0.11 の Phase 2 用）
+- src/ への変更は main.js の autoUpdater ブロックのみ（約 30 行追加、削除なし）
+
+### アップグレード手順 / 検証手順（前原さん向け）
+
+1. v2.0.9 が起動中なら閉じる
+2. `PokerTimerPLUS+ Setup 2.0.10.exe` を実行（手動 DL、自動更新は依然として未動作の想定）
+3. インストーラの指示に従う（既存設定・トーナメントデータは保持）
+4. アプリを起動 → **5 分以上待つ**（autoUpdater が動く時間を確保）
+5. `Ctrl+Shift+L` でログフォルダを開く → `rolling-current.log` の中身を構築士に送付
+6. `%APPDATA%/PokerTimerPLUS+/logs/main.log`（electron-log の出力先、新規ファイル）の中身も併せて構築士に送付
+7. 既存機能（タイマー / スライドショー / トーナメント編集）が壊れていないことを目視確認
+
+---
+
 ## [2.0.9] - 2026-05-04
 
 PokerTimerPLUS+ v2.0.9 自動更新動作検証ビルド。**コード変更ゼロ、`package.json` のバージョン番号のみ `2.0.8 → 2.0.9` に上げたリリース**。v2.0.8 で根治した「自動更新の真因修正（hasPublishConfig 削除）」が実機で本当に機能しているかを検証する目的のリリースです。
