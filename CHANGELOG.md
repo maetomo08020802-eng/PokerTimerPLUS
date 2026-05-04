@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.7] - 2026-05-04
+
+PokerTimerPLUS+ v2.0.7 マイナーリリース。v2.0.4 以降のユーザーは新インストーラを実行するだけで自動アップグレード（同 `appId: com.shitamachi.pokertimerplus`、設定・トーナメントデータは保持）。
+
+### Fixed
+
+- **ハウス情報タブの「バージョン」表示が「—」のままだったバグを修正**: 設定ダイアログの「ハウス情報」タブで現在のアプリバージョンが表示されない症状を解消。原因は renderer 側のコードで `loadInitialSettings()` 内の `return false;` の後にバージョン取得コードが置かれていたため、永遠に実行されない状態（unreachable code）でした。修正は **独立関数 `loadAppVersion()` として切り出し、`initialize()` の末尾から fire-and-forget で呼出**。preload.js（`getVersion: () => ipcRenderer.invoke('app:getVersion')`）と main.js（`ipcMain.handle('app:getVersion', () => app.getVersion())`）は既に正常実装済のため、renderer 側のコード配置ミスのみが真因。修正後は **設定ダイアログを開くたびに最新バージョン（2.0.7 等）が正しく表示**されます。
+
+### Tests
+
+- 新規テストファイル `tests/v207-app-version-display.test.js` 追加（T1〜T5 + version assertion 2 件、合計 9 件 PASS）
+- 既存 18 ファイルの version assertion を `2.0.6` → `2.0.7` に追従更新（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 / rc20 / rc21 / rc22 / rc23 / v206 系列 3）
+
+### Compatibility (v2.0.7)
+
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- **rc12 修正コード保護**: onRoleChanged ハンドラの setAttribute + window.appRole 代入の try-catch 順序を完全維持
+- **rc18 第 1 弾 ring buffer 設計保護**: `_flushRollingLog` の `fs.promises.writeFile` 維持
+- **rc22 維持**: ⑨-A subscribe 持続条件 / ⑩-A `Ctrl+Shift+L` globalShortcut / ⑩-D 起動時 `fs.readFileSync` 復元すべて維持
+- **rc23 display-removed 無条件 solo 経路保護**: HDMI 抜き時の hallWindow alive → close + switchOperatorToSolo 経路維持
+- **C.1.4-fix1 PIP ボタン位置保護**: `#js-pip-show-timer` の `left: 2vw / bottom: 2vw` 配置を完全維持
+- **`<dialog>` flex 化禁止 / カード幅 54vw / 46vw / Barlow Condensed 700** 等の不変ルール維持
+- src/ への変更は renderer.js のみ（`loadInitialSettings()` から unreachable code 12 行削除 + 独立関数 `loadAppVersion()` 14 行追加 + `initialize()` 末尾に `loadAppVersion();` 1 行呼出）。preload.js / main.js / index.html / CSS 変更なし
+
+### アップグレード手順
+
+1. v2.0.6 が起動中なら閉じる
+2. `PokerTimerPLUS+ Setup 2.0.7.exe` を実行
+3. インストーラの指示に従う（既存設定・トーナメントデータは保持される）
+
+※ v2.0.4 以降のユーザーは起動時に自動更新通知が出ます
+
+---
+
 ## [2.0.6] - 2026-05-03
 
 PokerTimerPLUS+ v2.0.6 マイナーリリース。v2.0.5 ユーザーは新インストーラを実行するだけで自動アップグレード（同 `appId: com.shitamachi.pokertimerplus`、設定・トーナメントデータは保持）。
