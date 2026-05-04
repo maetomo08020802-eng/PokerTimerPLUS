@@ -142,9 +142,9 @@ test('保護: rollingLog 関数定義 + Ctrl+Shift+L globalShortcut + display-re
 // version assertion
 // ============================================================
 
-test('version: package.json は 2.0.10', () => {
-  assert.equal(PKG.version, '2.0.10',
-    `package.json version が ${PKG.version}（期待 2.0.10）`);
+test('version: package.json は 2.0.11', () => {
+  assert.equal(PKG.version, '2.0.11',
+    `package.json version が ${PKG.version}（期待 2.0.11）`);
 });
 
 test('version: scripts.test に v210-autoupdater-logging.test.js が含まれる', () => {
