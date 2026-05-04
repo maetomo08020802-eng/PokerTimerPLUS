@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.12] - 2026-05-04
+
+PokerTimerPLUS+ v2.0.12 自動更新検証ビルド。**機能変更ゼロ、コード変更ゼロ、バージョン番号のみ bump**。v2.0.11 で実装した自動更新の根治修正（真因 2 件: ファイル名 404 + 署名検証失敗）が実機で機能するかを検証する目的で公開。
+
+### Changed
+
+- `package.json` の `version` を `2.0.11` → `2.0.12` に bump（version assertion 追従テストのみ追従更新）
+- アプリの動作・UI・配布インフラ（artifactName / verifyUpdateCodeSignature / publisherName 削除）すべて v2.0.11 と完全同一
+
+### Tests
+
+- 既存 22 ファイルの version assertion を `2.0.11` → `2.0.12` に追従更新
+
+### Compatibility (v2.0.12)
+
+- v2.0.11 と完全同一の動作（src/ 配下に一切の変更なし）
+- 致命バグ保護 5 件すべて完全無傷
+- v2.0.11 → v2.0.12 の自動更新が動作する想定（v2.0.11 の根治修正の検証）
+
+### 検証手順
+
+1. v2.0.11 がインストール済の PC を起動 → 1〜5 分待つ
+2. 「更新の準備ができました」ダイアログが自動で出れば → 真因 2 件根治確定
+3. 出なければ → `Ctrl+Shift+L` でログ取得 → 構築士に送付 → 別の真因調査
+
+---
+
 ## [2.0.11] - 2026-05-04
 
 PokerTimerPLUS+ v2.0.11 自動更新根治版。**v2.0.10 観測ビルドで取得した実機ログから真因 2 件を確定 → 根治**。コード変更ゼロ、`package.json` の `build.win` 設定 3 項目変更のみで配布インフラ周りを修正。
