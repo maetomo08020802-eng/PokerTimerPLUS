@@ -99,19 +99,24 @@ test('T7: main.js が electron-updater を require + autoUpdater 設定', () => 
   assert.match(MAIN, /if\s*\(\s*!isDev\s+&&\s+autoUpdater\b/, 'isDev スキップガードがない');
 });
 
-test('T8: build.publish が GitHub provider で設定済 + main.js の hasPublishConfig ガード維持', () => {
+test('T8: build.publish が GitHub provider で設定済 + v2.0.8 で main.js の autoUpdater 起動条件は app.isPackaged のみ', () => {
   assert.ok(PKG.build, 'build セクションがない');
   // C.3-A: GitHub リポジトリ作成済（maetomo08020802-eng/PokerTimerPLUS）。
   //   publish 設定が github provider + owner + repo で有効化されていることを検証。
+  //   この設定は electron-builder がビルド時に app-update.yml を生成するために必須。
   assert.ok(PKG.build.publish, 'build.publish が未設定（C.3-A 配布準備で再追加されているはず）');
   assert.equal(PKG.build.publish.provider, 'github', 'provider が github でない');
   assert.ok(typeof PKG.build.publish.owner === 'string' && PKG.build.publish.owner.length > 0,
     'build.publish.owner が空');
   assert.ok(typeof PKG.build.publish.repo === 'string' && PKG.build.publish.repo.length > 0,
     'build.publish.repo が空');
-  // main.js 側: publish 未設定時の no-op ガードは維持（hasPublishConfig 判定）
-  assert.match(MAIN, /hasPublishConfig/, 'main.js に publish 設定の存在チェック (hasPublishConfig) がない');
-  assert.match(MAIN, /build\.publish/, 'main.js で package.json の build.publish を参照していない');
+  // v2.0.8 真因修正: main.js 側の hasPublishConfig チェックは削除済（asar 内 package.json から
+  //   build フィールドが削除されるため pkg.build.publish 参照は常に undefined だった真因）。
+  //   起動条件は app.isPackaged のみ。autoUpdater は app-update.yml を内部で読むため build.publish 参照不要。
+  assert.doesNotMatch(MAIN, /hasPublishConfig/,
+    'v2.0.8 で削除されたはずの hasPublishConfig が main.js に残存');
+  assert.match(MAIN, /if\s*\(\s*!isDev\s*&&\s*autoUpdater\s*&&\s*app\.isPackaged\s*\)/,
+    'v2.0.8 の autoUpdater 起動条件 `if (!isDev && autoUpdater && app.isPackaged)` がない');
 });
 
 test('T9: dependencies に electron-updater', () => {
@@ -134,7 +139,7 @@ test('T11: package.json version === 2.0.0', () => {
   // v2.0.0 STEP 7 (2026-05-01): version bump 1.3.0 → 2.0.0 に追従。
   // 本テストは「リリース版を表すバージョン文字列が期待値である」ことを担保するもの。
   // 今後の minor / patch リリース時はここを追従更新する（テスト skip / 無効化ではない）。
-  assert.equal(PKG.version, '2.0.7', `version が ${PKG.version}（期待 2.0.7）`);
+  assert.equal(PKG.version, '2.0.8', `version が ${PKG.version}（期待 2.0.8）`);
 });
 
 // ============================================================

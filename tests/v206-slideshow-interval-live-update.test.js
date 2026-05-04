@@ -119,10 +119,10 @@ test('再起動時新値反映: activateSlideshow が breakImagesState.intervalS
 // version assertion
 // ============================================================
 
-test('version: package.json は 2.0.7', () => {
+test('version: package.json は 2.0.8', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.7',
-    `package.json version が ${pkg.version}（期待 2.0.7）`);
+  assert.equal(pkg.version, '2.0.8',
+    `package.json version が ${pkg.version}（期待 2.0.8）`);
 });
 
 test('version: scripts.test に v206-slideshow-interval-live-update.test.js が含まれる', () => {

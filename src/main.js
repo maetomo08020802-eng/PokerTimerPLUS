@@ -2677,19 +2677,17 @@ app.whenReady().then(async () => {
     return ALLOWED_PERMISSIONS.has(permission);
   });
 
-  // STEP 10 フェーズC.1.2 Fix 3 + C.1.2-followup: 自動更新（electron-updater）— 配布版のみ動作、開発時はスキップ。
+  // STEP 10 フェーズC.1.2 Fix 3 + v2.0.8 真因修正: 自動更新（electron-updater）— 配布版のみ動作、開発時はスキップ。
   //   GitHub Releases から新版をチェック → 通知 → ダウンロード → ユーザー確認後に再起動。
   //   isDev のときは何もせず（npm start での誤動作 / GitHub レート消費を防止）。
-  //   C.1.2-followup: GitHub リポジトリ未作成のため publish 設定は package.json から削除済。
-  //   publish 未設定だと checkForUpdatesAndNotify は内部で warning を出すため、ハンドラ側で抑制する（クラッシュなし）。
-  //   GitHub リリース運用開始時は package.json の build.publish を再度設定する。
-  const hasPublishConfig = !!(app.isPackaged && (() => {
-    try {
-      const pkg = require('../package.json');
-      return pkg && pkg.build && pkg.build.publish;
-    } catch (_) { return false; }
-  })());
-  if (!isDev && autoUpdater && hasPublishConfig) {
+  //
+  // v2.0.8 真因修正: 旧コードは pkg.build.publish の存在判定で条件分岐していたが、
+  //   electron-builder は asar 内 package.json から build フィールドを削除するため、
+  //   pkg.build.publish 参照は常に undefined → 条件が常に false で
+  //   autoUpdater が一度も起動していなかった（v2.0.4〜v2.0.7 全バージョンで自動更新不能）。
+  //   autoUpdater は app-update.yml（electron-builder がビルド時に生成）を内部で読むため
+  //   package.json の build.publish チェックは不要。app.isPackaged のみで判定する。
+  if (!isDev && autoUpdater && app.isPackaged) {
     try {
       autoUpdater.autoDownload = true;
       autoUpdater.autoInstallOnAppQuit = false;   // ユーザー確認を経て quitAndInstall 呼出
@@ -2714,15 +2712,12 @@ app.whenReady().then(async () => {
         }
       });
       autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-        // publish 未設定 / ネットワーク不通 / レート制限など — 通常運用に影響なし
+        // ネットワーク不通 / レート制限 / app-update.yml 不在など — 通常運用に影響なし
         console.log('[auto-updater] update check skipped:', err && err.message);
       });
     } catch (err) {
       console.log('[auto-updater] setup skipped:', err && err.message);
     }
-  } else if (!isDev && autoUpdater && !hasPublishConfig) {
-    // GitHub リポジトリ未作成のため自動更新は将来有効化予定。本起動では何もしない。
-    console.log('[auto-updater] disabled: build.publish not configured (planned for future GitHub release)');
   }
 
   // STEP 6.21.4: PC スリープ → 復帰時にレンダラへ通知

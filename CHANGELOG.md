@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.8] - 2026-05-04
+
+PokerTimerPLUS+ v2.0.8 マイナーリリース。**【重大】v2.0.4 以降一度も機能していなかった自動更新機能の真因を根治**。v2.0.7 以前のユーザーは本バージョンを手動 DL してインストールしてください。**v2.0.8 以降は次回リリースから自動更新通知が出ます**。
+
+### Fixed
+
+- **【重大】自動更新機能の真因バグ修正**: v2.0.4 以降、設計上は自動更新が有効だったはずだが、**実際には一度も機能していなかった**ことが判明。原因は `src/main.js` の `hasPublishConfig` チェックで、electron-builder がビルド時に asar 内の package.json から `build` フィールドを削除する標準挙動のため、`pkg.build.publish` が常に `undefined` → 起動条件 `!isDev && autoUpdater && hasPublishConfig` が常に `false` で autoUpdater のセットアップが一度も呼ばれていなかった。autoUpdater は `app-update.yml`（electron-builder がビルド時に `dist/win-unpacked/resources/app-update.yml` として正しく生成）を内部で読むため、package.json の build.publish チェックは元々不要 + 害だった。修正後は **アプリ起動時に GitHub Releases から最新版を確認 → 通知ダイアログが正しく表示**されるようになります。
+- **影響範囲**: v2.0.4 / v2.0.5 / v2.0.6 / v2.0.7 すべてのユーザーに該当。v2.0.8 をインストールしたユーザーは、それ以降の v2.0.9 / v2.1.0 等で自動更新通知を受け取れるようになります（v2.0.7 以前は GitHub Releases ページから手動 DL が必要でした）。
+
+### Tests
+
+- 新規テストファイル `tests/v208-auto-updater-fix.test.js` 追加（T1〜T6 + 致命バグ保護 cross-check + version assertion 2 件、合計 9 件 PASS）
+- 既存 19 ファイルの version assertion を `2.0.7` → `2.0.8` に追従更新（v130-features / rc7 / rc8 / rc9 / rc10 / rc12 / rc13 / rc15 / rc19 系列 3 / rc20 / rc21 / rc22 / rc23 / v206 系列 3 / v207）
+
+### Compatibility (v2.0.8)
+
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- **rc12 修正コード保護**: onRoleChanged ハンドラの setAttribute + window.appRole 代入の try-catch 順序を完全維持
+- **rc18 第 1 弾 ring buffer 設計保護**: `_flushRollingLog` の `fs.promises.writeFile` 維持
+- **rc22 維持**: ⑨-A subscribe 持続条件 / ⑩-A `Ctrl+Shift+L` globalShortcut / ⑩-D 起動時 `fs.readFileSync` 復元すべて維持
+- **rc23 display-removed 無条件 solo 経路保護**: HDMI 抜き時の hallWindow alive → close + switchOperatorToSolo 経路維持
+- **C.1.4-fix1 PIP ボタン位置保護**: `#js-pip-show-timer` の `left: 2vw / bottom: 2vw` 配置を完全維持
+- **autoUpdater イベントハンドラ完全維持**: `error` / `update-available` / `update-downloaded` の 3 ハンドラ + `dialog.showMessageBox` ダイアログ文言（「更新の準備ができました」「再起動して更新」「後で」）+ `quitAndInstall` ロジックすべて変更なし
+- **`<dialog>` flex 化禁止 / カード幅 54vw / 46vw / Barlow Condensed 700** 等の不変ルール維持
+- src/ への変更は main.js のみ（`hasPublishConfig` 変数定義 6 行削除 + `else if` 警告ブロック 4 行削除 + 起動条件 1 行変更 + 説明コメント 6 行追加）。renderer.js / preload.js / index.html / CSS 変更なし
+
+### アップグレード手順
+
+1. v2.0.7 が起動中なら閉じる
+2. `PokerTimerPLUS+ Setup 2.0.8.exe` を実行（GitHub Releases から手動 DL、または前原さんが直接送付）
+3. インストーラの指示に従う（既存設定・トーナメントデータは保持される）
+
+※ **v2.0.8 以降は自動更新が機能する**ので、次回以降のリリースは起動時に通知が出ます。v2.0.7 以前のユーザーが「自動更新が来ない」と感じていたのは本バグが真因でした。
+
+---
+
 ## [2.0.7] - 2026-05-04
 
 PokerTimerPLUS+ v2.0.7 マイナーリリース。v2.0.4 以降のユーザーは新インストーラを実行するだけで自動アップグレード（同 `appId: com.shitamachi.pokertimerplus`、設定・トーナメントデータは保持）。
