@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.11] - 2026-05-04
+
+PokerTimerPLUS+ v2.0.11 自動更新根治版。**v2.0.10 観測ビルドで取得した実機ログから真因 2 件を確定 → 根治**。コード変更ゼロ、`package.json` の `build.win` 設定 3 項目変更のみで配布インフラ周りを修正。
+
+### Fixed
+
+- **自動更新（autoUpdater）が一度も動作していなかった真因を根治**:
+  - **真因 1（ファイル名 404）**: ビルド成果物 `PokerTimerPLUS+ Setup ${version}.exe` を GitHub Releases に手動アップロードすると、GitHub がスペースを `.` に置換して `PokerTimerPLUS+.Setup.${version}.exe` になり、`latest.yml` が要求する `pokertimerplus-setup-${version}.exe` と不一致 → 404 エラーで silent fail。**修正**: `build.win.artifactName` を `pokertimerplus-setup-${version}.${ext}` に固定し、ビルド時から `latest.yml` と一致する正規化名で出力するようにした（GitHub アップロード時のリネーム作業も不要になる）。
+  - **真因 2（署名検証失敗）**: 未署名 NSIS インストーラに対して `app-update.yml` の `publisherName: ['Yu Shitamachi']` で publisher 検証が走り、`New version 2.0.X is not signed by the application owner: publisherNames: Yu Shitamachi` で reject → silent fail。**修正**: `build.win.publisherName` 設定を完全削除し（`app-update.yml` から `publisherName` 行が消える）、`build.win.verifyUpdateCodeSignature: false` を追加して未署名インストーラに対する署名検証を無効化。
+- **影響範囲**: v2.0.4 / v2.0.5 / v2.0.6 / v2.0.7 / v2.0.8 / v2.0.9 / v2.0.10 すべてのバージョンから v2.0.11 への自動更新は**動作しません**（手動 DL → 上書きインストールが必要）。**v2.0.11 以降のバージョン間（v2.0.12 以降）の自動更新は動作する想定**。
+
+### Tests
+
+- 新規 `tests/v211-autoupdater-fix.test.js` 追加（artifactName / verifyUpdateCodeSignature / publisherName 削除 / version の assertion）
+- 既存 21 ファイルの version assertion を `2.0.10` → `2.0.11` に追従更新
+
+### Compatibility (v2.0.11)
+
+- 既存設定・トーナメントデータ・ランタイム永続化データはすべて保持（`appId: com.shitamachi.pokertimerplus` 継続、`deleteAppDataOnUninstall: false` 維持）
+- アプリの動作・UI には変更なし（src/ 配下に一切の変更なし）、配布インフラ周りの修正のみ
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- rc12 / rc18 / rc22 / rc23 / C.1.4-fix1 / v2.0.6 修正(c)(d) / v2.0.7 修正 / v2.0.8 修正 / v2.0.10 観測機構（electron-log + rollingLog）すべて完全維持
+- autoUpdater イベントハンドラ・ダイアログ文言（「更新の準備ができました」「再起動して更新」「後で」）・`quitAndInstall` ロジック・`autoInstallOnAppQuit: false` 設定すべて完全維持
+
+### アップグレード手順
+
+1. v2.0.4〜v2.0.10 が起動中なら閉じる
+2. GitHub Releases から `pokertimerplus-setup-2.0.11.exe` を手動 DL
+3. ダウンロードした .exe をダブルクリック → 既存版に上書きインストール（設定・トーナメントデータ保持）
+4. **v2.0.11 以降の更新は自動で動作する想定**（v2.0.12 リリース時に起動時通知が出るか観察）
+
+---
+
 ## [2.0.10] - 2026-05-04
 
 PokerTimerPLUS+ v2.0.10 観測ビルド。**機能変更なし、autoUpdater 経路のログ機構強化のみ**。v2.0.4〜v2.0.9 で「自動更新通知が出ない」真因を実機ログで確定するための観測リリース。
