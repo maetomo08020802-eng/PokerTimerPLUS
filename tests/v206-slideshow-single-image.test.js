@@ -129,7 +129,7 @@ test('保護: deactivateSlideshow は intervalId クリア + active=false を維
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.14',
+  assert.equal(pkg.version, '2.0.15',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 

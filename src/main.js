@@ -101,6 +101,14 @@ async function _flushRollingLog() {
     await fs.promises.writeFile(file, out);
   } catch (_) { /* never throw */ }
 }
+// v2.0.15 Fix 3（M2 Sec-4）: rolling-log への出力時に店舗識別情報（presetName 等）を
+//   SHA-256 短縮ハッシュに置換する PII 配慮。ハッシュ化は rolling-log への出力時のみで、
+//   store / IPC / UI 表示等の本来データはハッシュ化しない。
+const _hashPIICrypto = require('crypto');
+function hashPII(value) {
+  if (!value) return '';
+  return _hashPIICrypto.createHash('sha256').update(String(value)).digest('hex').substring(0, 8);
+}
 function rollingLog(label, data) {
   // main プロセスから直接呼ぶエントリポイント。renderer からは IPC 'rolling-log:write' 経由。
   try {
@@ -1005,7 +1013,8 @@ function _publishDualState(kind, value) {
     try { rollingLog('runtime:state:send', { playersInitial: value?.playersInitial, playersRemaining: value?.playersRemaining, reentryCount: value?.reentryCount, addOnCount: value?.addOnCount }); } catch (_) { /* never throw from logging */ }
   }
   if (kind === 'tournamentBasics') {
-    try { rollingLog('blindPreset:state:send', { presetId: value?.blindPresetId, presetName: value?.name, structureLength: value?.structure?.levels?.length || 0 }); } catch (_) { /* never throw from logging */ }
+    // v2.0.15 Fix 3（M2 Sec-4）: presetName を hashPII でハッシュ化（rolling-log 出力時のみ）
+    try { rollingLog('blindPreset:state:send', { presetId: value?.blindPresetId, presetName: hashPII(value?.name), structureLength: value?.structure?.levels?.length || 0 }); } catch (_) { /* never throw from logging */ }
   }
   _broadcastDualState('dual:state-sync', { kind, value });
 }
@@ -2099,6 +2108,8 @@ function registerIpcHandlers() {
   // STEP 6.7: 新規追加時は MAX_TOURNAMENTS（100件）上限を超えないようガード。
   //           既存IDの上書きはカウントに影響しないため常に許可。
   ipcMain.handle('tournaments:save', (_event, t) => {
+    // v2.0.15 Fix 1（H1 Edge-1）: HDMI 切替中の旧 window 由来 IPC が新 window state を踏み潰すのを防ぐ
+    if (_isSwitchingMode) return { ok: false, error: 'switching-mode' };
     if (!t || typeof t !== 'object' || typeof t.id !== 'string' || !t.id) {
       return { ok: false, error: 'invalid-tournament' };
     }
@@ -2160,6 +2171,8 @@ function registerIpcHandlers() {
   //   renderer 側で値が変わるたびに呼ばれる（debounce 500ms）。
   //   アプリ終了 → 再起動でランタイムが消失する重大バグの修正。
   ipcMain.handle('tournaments:setRuntime', (_event, payload) => {
+    // v2.0.15 Fix 1（H1 Edge-1）: HDMI 切替中の旧 window 由来 IPC が新 window state を踏み潰すのを防ぐ
+    if (_isSwitchingMode) return { ok: false, error: 'switching-mode' };
     if (!payload || typeof payload !== 'object') return { ok: false, error: 'invalid-payload' };
     const { id, runtime } = payload;
     if (typeof id !== 'string' || !id) return { ok: false, error: 'invalid-id' };
@@ -2179,6 +2192,8 @@ function registerIpcHandlers() {
 
   // STEP 6.22.1: marqueeSettings のみを部分更新（テロップ enabled/text/speed の即時保存用）
   ipcMain.handle('tournaments:setMarqueeSettings', (_event, payload) => {
+    // v2.0.15 Fix 1（H1 Edge-1）: HDMI 切替中の旧 window 由来 IPC が新 window state を踏み潰すのを防ぐ
+    if (_isSwitchingMode) return { ok: false, error: 'switching-mode' };
     if (!payload || typeof payload !== 'object') return { ok: false, error: 'invalid-payload' };
     const { id, marqueeSettings } = payload;
     if (typeof id !== 'string' || !id) return { ok: false, error: 'invalid-id' };
@@ -2199,6 +2214,8 @@ function registerIpcHandlers() {
   // STEP 6.21.6: displaySettings のみを部分更新（背景プリセット / タイマーフォントの即時保存用）
   // STEP 10 フェーズC.1.3: backgroundImage / backgroundOverlay も部分更新可能
   ipcMain.handle('tournaments:setDisplaySettings', (_event, payload) => {
+    // v2.0.15 Fix 1（H1 Edge-1）: HDMI 切替中の旧 window 由来 IPC が新 window state を踏み潰すのを防ぐ
+    if (_isSwitchingMode) return { ok: false, error: 'switching-mode' };
     if (!payload || typeof payload !== 'object') return { ok: false, error: 'invalid-payload' };
     const { id, displaySettings } = payload;
     if (typeof id !== 'string' || !id) return { ok: false, error: 'invalid-id' };
@@ -2490,6 +2507,8 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('tournament:set', (_event, partial) => {
+    // v2.0.15 Fix 1（H1 Edge-1）: HDMI 切替中の旧 window 由来 IPC が新 window state を踏み潰すのを防ぐ
+    if (_isSwitchingMode) return getActiveTournamentWithAliases();
     if (!partial || typeof partial !== 'object') {
       return getActiveTournamentWithAliases();
     }
@@ -2733,6 +2752,13 @@ app.whenReady().then(async () => {
         const log = require('electron-log');
         autoUpdater.logger = log;
         log.transports.file.level = 'info';
+        // v2.0.15 Fix 2（M7 Perf-9）: 長期運用でのログファイル肥大化を防ぐローテーション設定
+        log.transports.file.maxSize = 5 * 1024 * 1024;   // 5MB ローテ
+        log.transports.file.archiveLogFn = (oldLogFile) => {
+          // archive 1 世代のみ保持（main.old.log）
+          const newPath = oldLogFile.toString().replace(/\.log$/, '.old.log');
+          try { fs.renameSync(oldLogFile.toString(), newPath); } catch (_) { /* never throw from logging */ }
+        };
         let logPath = null;
         try { logPath = log.transports.file.getFile && log.transports.file.getFile().path; } catch (_) {}
         rollingLog('autoUpdater:logger-attached', { logPath });
