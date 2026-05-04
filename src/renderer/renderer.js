@@ -6542,8 +6542,14 @@ async function loadInitialSettings() {
     }
   }
   return false;
+}
 
-  // ハウス情報タブのバージョン番号（IPC 経由で package.json から取得）
+// v2.0.7 修正: ハウス情報タブのバージョン番号を取得して表示する独立関数。
+//   旧コードは loadInitialSettings() 内の `return false;` 後（unreachable）に置かれていたため
+//   永遠に実行されず、ハウス情報タブの「バージョン」欄が「—」のままだった症状を解消。
+//   IPC 経路（preload.js: getVersion → main.js: ipcMain.handle('app:getVersion', ...)）は
+//   既に正常実装済のため、renderer 側の関数切り出しと initialize() からの呼出のみで根治。
+async function loadAppVersion() {
   if (el.appVersion && window.api?.app?.getVersion) {
     try {
       const version = await window.api.app.getVersion();
@@ -6631,6 +6637,8 @@ async function initialize() {
   }
   // v2.0.4-rc5: 起動時にミュートインジケータの初期反映（初期状態は通常 OFF だが将来の永続化対応も視野に統一）
   updateMuteIndicator();
+  // v2.0.7 修正: ハウス情報タブの「バージョン」表示を更新（fire-and-forget で起動を待たせない）
+  loadAppVersion();
 }
 
 // v2.0.0 STEP 2: 起動時の役割分岐。
