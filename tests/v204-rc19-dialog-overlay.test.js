@@ -65,7 +65,7 @@ test('T4: .operator-pane 本体ルール（[data-role="operator"] .operator-pane
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.12',
+  assert.equal(pkg.version, '2.0.13',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 

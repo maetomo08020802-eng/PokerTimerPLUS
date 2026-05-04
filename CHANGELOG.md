@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.13] - 2026-05-04
+
+PokerTimerPLUS+ v2.0.13 表示まわり改善版。**v2.0.12 はスキップ**（GitHub Releases 未公開の検証ビルド）し、v2.0.13 で機能修正 + 自動更新検証を兼ねる。
+
+### Changed
+
+- **PRE_START カウントダウン表示の桁数自動切替**: 60 分以上で開始しても、残り時間が 60 分未満になったら自動的に 4 桁表示（MM:SS）に切替えるよう変更
+  - 旧: 60 分以上で開始すると最後まで HH:MM:SS のまま（layout shift 防止のための意図設計）
+  - 新: 残り時間で動的判定、60 分跨ぎ瞬間に layout shift が発生（前原さん承認済の仕様変更）
+  - 影響: メインタイマー画面 + スライドショー時 PIP タイマー両方
+- **スライドショー時 PIP タイマーの幅変動を解消**: 数字が変わるたびに幅が動く現象（Barlow Condensed のプロポーショナル数字幅が原因）を `font-variant-numeric: tabular-nums` 追加で解消。メインタイマー `.clock__time` で既に採用済の対策を PIP にも反映
+
+### Tests
+
+- 新規 `tests/v213-prestart-and-pip-format.test.js` 追加
+- 既存 22 ファイルの version assertion を `2.0.12` → `2.0.13` に追従更新
+
+### Compatibility (v2.0.13)
+
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- v2.0.10 観測機構（electron-log + rollingLog）+ v2.0.11 自動更新根治（artifactName / verifyUpdateCodeSignature / publisherName 削除）すべて完全維持
+- アプリの動作・既存機能（タイマー・スライドショー・トーナメント編集）に影響なし、表示まわりの改善のみ
+
+### 自動更新検証兼用
+
+- v2.0.11 → v2.0.13 の自動更新通知が両 PC（自宅・会社）で出るかを実機検証
+- 出れば → v2.0.11 根治修正の正常動作を確認 → ブランド戦略の本配布告知に進める段階
+
+---
+
 ## [2.0.12] - 2026-05-04
 
 PokerTimerPLUS+ v2.0.12 自動更新検証ビルド。**機能変更ゼロ、コード変更ゼロ、バージョン番号のみ bump**。v2.0.11 で実装した自動更新の根治修正（真因 2 件: ファイル名 404 + 署名検証失敗）が実機で機能するかを検証する目的で公開。
