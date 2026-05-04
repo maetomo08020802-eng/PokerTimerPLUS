@@ -265,7 +265,7 @@ test('rc9 改修: _showRestoreNoticeOnce フラグセットが撤去されてい
 test('version: package.json は最新 rc（rc8 以降）に追従', () => {
   // このテストは rc7 で導入された rc 段階追従用。本テスト自体は最新 rc 値に追従更新する。
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.14',
+  assert.equal(pkg.version, '2.0.15',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 
