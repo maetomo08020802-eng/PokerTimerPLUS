@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.14] - 2026-05-04
+
+PokerTimerPLUS+ v2.0.14 audit 結果反映版。**v2.0.14 audit フェーズで列挙された中重要度 11 件のうち、配布後対応推奨の 7 項目 + B-6（60 分跨ぎ なめらかアニメ）を一括修正**。
+
+### Changed
+
+- **HDMI 切替 + トーナメント切替の race 予防**: `tournaments:setActive` ハンドラに `_isSwitchingMode` ガード追加（既存 `setTimerState` 同様の保護）
+- **PIP タイマー 60 分跨ぎ切替対応**: 60 分以上の長尺プレスタート + スライドショー併用時の PIP 横あふれを解消、メインタイマーと同じ動的桁切替対応
+- **ブラインド構造段数減少時の残時間計算保護**: `currentLevelIndex` クランプ追加で「経過時間継続」適用時の予期せぬ finished 化を防止
+- **Alt+F4 / プロセスクラッシュ直前 0.5 秒の runtime 操作消失予防**: `schedulePersistRuntime` の beforeunload flush 経路追加（C.1.8 拡張）
+- **操作者画面の数字幅固定**: `.operator-pane__info-list dd` / `.operator-status-bar__item` に `font-variant-numeric: tabular-nums` 追加（PIP / メインタイマーと同等品質）
+- **休憩切替間隔の打鍵中値消失予防**: `renderBreakImagesList` 内で打鍵中の `breakImageInterval` 上書きをスキップ
+- **自動更新失敗時のダイアログ通知**: silent fail を解消、初回失敗時にダイアログで通知 + 再試行ボタン
+- **60 分跨ぎ font-size 切替のなめらか化**: メインタイマー / PIP タイマーの `transition` に `font-size 0.2s ease-out` 追加、layout shift 違和感を緩和
+
+### Tests
+
+- 新規 `tests/v214-audit-fixes.test.js` 追加
+- 既存 23 ファイルの version assertion を `2.0.13` → `2.0.14` に追従更新
+
+### Compatibility (v2.0.14)
+
+- 致命バグ保護 5 件すべて完全無傷（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8 のうち、C.1.8 は本フェーズで「拡張保護」として強化）
+- v2.0.10 観測機構 + v2.0.11 自動更新根治 + v2.0.13 表示改善すべて完全維持
+- アプリの動作・既存機能（タイマー・スライドショー・トーナメント編集）に影響なし、品質改善のみ
+- v2.0.13 ユーザーは自動更新で本リリースが配信される
+
+---
+
 ## [2.0.13] - 2026-05-04
 
 PokerTimerPLUS+ v2.0.13 表示まわり改善版。**v2.0.12 はスキップ**（GitHub Releases 未公開の検証ビルド）し、v2.0.13 で機能修正 + 自動更新検証を兼ねる。

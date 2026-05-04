@@ -2076,6 +2076,9 @@ function registerIpcHandlers() {
 
   // active 切替（id が存在することを確認）
   ipcMain.handle('tournaments:setActive', (_event, id) => {
+    // v2.0.14 Fix 1（M8 / C-2）: HDMI 切替中の旧 window 由来 IPC が新 window state を
+    //   踏み潰すのを防ぐ。setTimerState（L2139）と同等のガードを追加。
+    if (_isSwitchingMode) return null;
     const list = store.get('tournaments') || [];
     const found = list.find((t) => t.id === id);
     if (!found) return null;
@@ -2692,6 +2695,37 @@ app.whenReady().then(async () => {
   //   既存の console.log/warn は完全維持、ダイアログ文言・quitAndInstall ロジックも完全維持。
   //   v2.0.4〜v2.0.9 で自動更新が機能しない真因を実機ログで確定するための観測手段。
   rollingLog('autoUpdater:setup-enter', { isDev, hasAutoUpdater: !!autoUpdater, isPackaged: app.isPackaged, version: app.getVersion() });
+
+  // v2.0.14 Fix 7（M11 / C-11）: autoUpdater error / check-rejected 時のダイアログ通知。
+  //   既存の rollingLog + console.warn は完全維持、追加で「初回のみ」ダイアログ表示する。
+  //   再試行ボタン → autoUpdater.checkForUpdatesAndNotify() を再実行。
+  //   セッション中の重複表示防止フラグで頻発を抑制（毎回出すと UX 悪化）。
+  let _autoUpdaterErrorDialogShown = false;
+  function notifyAutoUpdaterError(err) {
+    if (_autoUpdaterErrorDialogShown) return;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    _autoUpdaterErrorDialogShown = true;
+    const message = (err && err.message) || '不明なエラー';
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: '自動更新の確認に失敗しました',
+      message: '更新の確認に失敗しました。',
+      detail: `理由: ${message}\n\nネットワーク接続をご確認のうえ、必要であれば再試行してください。`,
+      buttons: ['再試行', '閉じる'],
+      defaultId: 0,
+      cancelId: 1
+    }).then((result) => {
+      if (result.response === 0 && autoUpdater) {
+        _autoUpdaterErrorDialogShown = false;  // 再試行を許可するため flag をリセット
+        try {
+          autoUpdater.checkForUpdatesAndNotify().catch((err2) => {
+            rollingLog('autoUpdater:retry-rejected', { message: err2 && err2.message });
+          });
+        } catch (_) {}
+      }
+    }).catch(() => {});
+  }
+
   if (!isDev && autoUpdater && app.isPackaged) {
     try {
       // v2.0.10: electron-log 統合（autoUpdater.logger 設定、公式推奨パターン）
@@ -2720,6 +2754,7 @@ app.whenReady().then(async () => {
       autoUpdater.on('error', (err) => {
         rollingLog('autoUpdater:error', { message: err && err.message, stack: err && err.stack });
         console.warn('[auto-updater] error:', err && err.message);
+        notifyAutoUpdaterError(err);
       });
       autoUpdater.on('update-available', (info) => {
         rollingLog('autoUpdater:update-available', { version: info?.version, releaseDate: info?.releaseDate });
@@ -2745,6 +2780,7 @@ app.whenReady().then(async () => {
         // ネットワーク不通 / レート制限 / app-update.yml 不在など — 通常運用に影響なし
         rollingLog('autoUpdater:check-rejected', { message: err && err.message, stack: err && err.stack });
         console.log('[auto-updater] update check skipped:', err && err.message);
+        notifyAutoUpdaterError(err);
       });
     } catch (err) {
       rollingLog('autoUpdater:setup-error', { message: err && err.message, stack: err && err.stack });

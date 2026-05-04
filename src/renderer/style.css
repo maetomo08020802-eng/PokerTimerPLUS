@@ -720,7 +720,9 @@ img {
   text-align: center;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  transition: color 0.3s ease-out, transform 0.3s ease-out, text-shadow 0.3s ease-out;
+  /* v2.0.14 Fix 8（B-6）: 60 分跨ぎ瞬間に font-size が瞬時に変わると体感が悪い
+     ため、なめらか化アニメ（0.2s）追加。前原さん承認済の仕様変更。 */
+  transition: color 0.3s ease-out, transform 0.3s ease-out, text-shadow 0.3s ease-out, font-size 0.2s ease-out;
 }
 
 /* タイマー警告: 60〜11秒 黄（同じく 3 層 vw 相対で全文字カバー） */
@@ -3301,6 +3303,8 @@ body:not(.has-marquee) .marquee { display: none; }
   color: var(--gold);
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  /* v2.0.14 Fix 8（B-6）: 60 分跨ぎで font-size が変わるため、なめらか化アニメ追加 */
+  transition: font-size 0.2s ease-out;
 }
 .pip-timer__label {
   font-family: var(--font-label);
@@ -3313,6 +3317,11 @@ body:not(.has-marquee) .marquee { display: none; }
 :root[data-pip-size="small"]  .pip-timer__digits { font-size: 4.5vw; }
 :root[data-pip-size="medium"] .pip-timer__digits { font-size: 6vw; }
 :root[data-pip-size="large"]  .pip-timer__digits { font-size: 8vw; }
+/* v2.0.14 Fix 2（M4 / B-1）: PIP 用 60 分跨ぎ桁切替（PRE_START 時のみ）。
+   HMS（HH:MM:SS）は 8 文字あるので MS（5 文字）の約 5/8 に縮小して PIP 内に収める。 */
+:root[data-pip-size="small"]  .pip-timer[data-prestart-format="hms"] .pip-timer__digits { font-size: 2.8vw; }
+:root[data-pip-size="medium"] .pip-timer[data-prestart-format="hms"] .pip-timer__digits { font-size: 3.7vw; }
+:root[data-pip-size="large"]  .pip-timer[data-prestart-format="hms"] .pip-timer__digits { font-size: 5vw; }
 
 /* ===== STEP 10 フェーズC.1.4: 手動切替ボタン ===== */
 .pip-action-btn {
@@ -3812,6 +3821,8 @@ tr.level-row--just-inserted {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* v2.0.14 Fix 5（M6 / B-4）: 数字幅を等幅化、毎秒の左右ブレを解消 */
+  font-variant-numeric: tabular-nums;
 }
 [data-role="operator"] .operator-status-bar__label {
   opacity: 0.6;
@@ -3916,6 +3927,8 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
   font-weight: 700;
   font-size: 16px;
   color: #E8E5DA;
+  /* v2.0.14 Fix 5（M6 / B-4）: 数字幅を等幅化、毎秒の左右ブレを解消 */
+  font-variant-numeric: tabular-nums;
 }
 [data-role="operator"] .operator-pane__shortcut-list {
   list-style: none;
