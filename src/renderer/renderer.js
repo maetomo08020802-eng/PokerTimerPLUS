@@ -742,15 +742,15 @@ function classifyTimerState(remainingMs) {
   return 'normal';
 }
 
-// PRE_START 用フォーマット: 選択時間が 60 分以上なら HH:MM:SS 固定、未満なら MM:SS 固定。
-// （プレスタート総時間で1度だけ決まるため、進行中に表示桁数が変わらず layout shift しない）
+// PRE_START 用フォーマット: 残り時間が 60 分以上なら HH:MM:SS、未満なら MM:SS。
+// （残り時間で動的判定するため、60 分跨ぎで桁数が切替わる = その瞬間に layout shift が発生）
 function formatPreStartTime(ms) {
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
   const hours = Math.floor(totalSec / 3600);
   const minutes = Math.floor((totalSec % 3600) / 60);
   const seconds = totalSec % 60;
   const pad = (n) => String(n).padStart(2, '0');
-  const useHMS = getPreStartTotalMs() >= 60 * 60 * 1000;
+  const useHMS = ms >= 60 * 60 * 1000;
   return useHMS
     ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
     : `${pad(minutes)}:${pad(seconds)}`;
@@ -763,15 +763,15 @@ function renderTime(remainingMs) {
     el.time.textContent = formatPreStartTime(remainingMs);
     // PRE_START では最後10秒のみ赤、それ以外は通常色
     el.clock.dataset.timerState = remainingMs > 0 && remainingMs <= DANGER_THRESHOLD_MS ? 'danger' : 'normal';
-    // フォーマット属性: 60分以上は HH:MM:SS（hms）、未満は MM:SS（ms）→ CSS が font-size を切替
-    el.clock.dataset.prestartFormat = getPreStartTotalMs() >= 60 * 60 * 1000 ? 'hms' : 'ms';
+    // フォーマット属性: 残り時間が 60 分以上は HH:MM:SS（hms）、未満は MM:SS（ms）→ CSS が font-size を切替
+    el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
     return;
   }
   // PAUSED 中も PRE_START 由来なら同じフォーマットを維持
   if (status === States.PAUSED && isPreStartActive()) {
     el.time.textContent = formatPreStartTime(remainingMs);
     el.clock.dataset.timerState = 'normal';
-    el.clock.dataset.prestartFormat = getPreStartTotalMs() >= 60 * 60 * 1000 ? 'hms' : 'ms';
+    el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
     return;
   }
   // PRE_START 終了 / RUNNING / IDLE / etc → 属性をクリア

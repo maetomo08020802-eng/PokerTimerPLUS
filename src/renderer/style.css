@@ -3300,6 +3300,7 @@ body:not(.has-marquee) .marquee { display: none; }
   font-size: 6vw;   /* medium 既定 */
   color: var(--gold);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .pip-timer__label {
   font-family: var(--font-label);
