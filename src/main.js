@@ -2687,17 +2687,46 @@ app.whenReady().then(async () => {
   //   autoUpdater が一度も起動していなかった（v2.0.4〜v2.0.7 全バージョンで自動更新不能）。
   //   autoUpdater は app-update.yml（electron-builder がビルド時に生成）を内部で読むため
   //   package.json の build.publish チェックは不要。app.isPackaged のみで判定する。
+  // v2.0.10 ログ機構追加（観測のみ、機能変更なし）: setup-enter / event-name / check-call / catch
+  //   をすべて rollingLog（Ctrl+Shift+L で取得）+ electron-log（%APPDATA%/PokerTimerPLUS+/logs/main.log）に記録。
+  //   既存の console.log/warn は完全維持、ダイアログ文言・quitAndInstall ロジックも完全維持。
+  //   v2.0.4〜v2.0.9 で自動更新が機能しない真因を実機ログで確定するための観測手段。
+  rollingLog('autoUpdater:setup-enter', { isDev, hasAutoUpdater: !!autoUpdater, isPackaged: app.isPackaged, version: app.getVersion() });
   if (!isDev && autoUpdater && app.isPackaged) {
     try {
+      // v2.0.10: electron-log 統合（autoUpdater.logger 設定、公式推奨パターン）
+      try {
+        const log = require('electron-log');
+        autoUpdater.logger = log;
+        log.transports.file.level = 'info';
+        let logPath = null;
+        try { logPath = log.transports.file.getFile && log.transports.file.getFile().path; } catch (_) {}
+        rollingLog('autoUpdater:logger-attached', { logPath });
+      } catch (err) {
+        rollingLog('autoUpdater:logger-attach-failed', { message: err && err.message });
+      }
       autoUpdater.autoDownload = true;
       autoUpdater.autoInstallOnAppQuit = false;   // ユーザー確認を経て quitAndInstall 呼出
+      // v2.0.10 追加 3 イベントハンドラ（観測のみ、ダウンロード進捗 / 更新確認開始 / 最新済の判定タイミング把握）
+      autoUpdater.on('checking-for-update', () => {
+        rollingLog('autoUpdater:checking-for-update', null);
+      });
+      autoUpdater.on('update-not-available', (info) => {
+        rollingLog('autoUpdater:update-not-available', { version: info?.version, releaseDate: info?.releaseDate });
+      });
+      autoUpdater.on('download-progress', (progress) => {
+        rollingLog('autoUpdater:download-progress', { percent: Math.floor(progress?.percent || 0), transferred: progress?.transferred, total: progress?.total });
+      });
       autoUpdater.on('error', (err) => {
+        rollingLog('autoUpdater:error', { message: err && err.message, stack: err && err.stack });
         console.warn('[auto-updater] error:', err && err.message);
       });
       autoUpdater.on('update-available', (info) => {
+        rollingLog('autoUpdater:update-available', { version: info?.version, releaseDate: info?.releaseDate });
         console.log('[auto-updater] update-available:', info?.version);
       });
       autoUpdater.on('update-downloaded', async (info) => {
+        rollingLog('autoUpdater:update-downloaded', { version: info?.version });
         if (!mainWindow || mainWindow.isDestroyed()) return;
         const result = await dialog.showMessageBox(mainWindow, {
           type: 'info',
@@ -2711,11 +2740,14 @@ app.whenReady().then(async () => {
           autoUpdater.quitAndInstall();
         }
       });
+      rollingLog('autoUpdater:check-call', null);
       autoUpdater.checkForUpdatesAndNotify().catch((err) => {
         // ネットワーク不通 / レート制限 / app-update.yml 不在など — 通常運用に影響なし
+        rollingLog('autoUpdater:check-rejected', { message: err && err.message, stack: err && err.stack });
         console.log('[auto-updater] update check skipped:', err && err.message);
       });
     } catch (err) {
+      rollingLog('autoUpdater:setup-error', { message: err && err.message, stack: err && err.stack });
       console.log('[auto-updater] setup skipped:', err && err.message);
     }
   }

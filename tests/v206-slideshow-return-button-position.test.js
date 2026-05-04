@@ -96,10 +96,10 @@ test('ロゴ領域非干渉: .clock__logo-img の max-width/max-height が想定
 // version assertion
 // ============================================================
 
-test('version: package.json は 2.0.9', () => {
+test('version: package.json は 2.0.10', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.0.9',
-    `package.json version が ${pkg.version}（期待 2.0.9）`);
+  assert.equal(pkg.version, '2.0.10',
+    `package.json version が ${pkg.version}（期待 2.0.10）`);
 });
 
 test('version: scripts.test に v206-slideshow-return-button-position.test.js が含まれる', () => {
