@@ -2778,7 +2778,7 @@ app.whenReady().then(async () => {
         rollingLog('autoUpdater:logger-attach-failed', { message: err && err.message });
       }
       autoUpdater.autoDownload = true;
-      autoUpdater.autoInstallOnAppQuit = false;   // ユーザー確認を経て quitAndInstall 呼出
+      autoUpdater.autoInstallOnAppQuit = true;   // v2.1.2 方針 Z: 通常終了で installer 自動実行（次回起動時更新）
       // v2.0.10 追加 3 イベントハンドラ（観測のみ、ダウンロード進捗 / 更新確認開始 / 最新済の判定タイミング把握）
       autoUpdater.on('checking-for-update', () => {
         rollingLog('autoUpdater:checking-for-update', null);
@@ -2801,21 +2801,17 @@ app.whenReady().then(async () => {
       autoUpdater.on('update-downloaded', async (info) => {
         rollingLog('autoUpdater:update-downloaded', { version: info?.version });
         if (!mainWindow || mainWindow.isDestroyed()) return;
-        const result = await dialog.showMessageBox(mainWindow, {
+        // v2.1.2 方針 Z: quitAndInstall を呼ばず、ダイアログを通知のみに変更。
+        //   autoInstallOnAppQuit: true により、次回アプリ通常終了時 → 次回起動時の流れで installer が自動実行される。
+        //   v2.1.1 で発生した「アプリが終了できません」エラー + NSIS UI 表示は本設計で根本回避。
+        await dialog.showMessageBox(mainWindow, {
           type: 'info',
           title: '更新の準備ができました',
-          message: `新しいバージョン (${info?.version || '最新版'}) のダウンロードが完了しました。\n再起動して更新しますか？`,
-          buttons: ['再起動して更新', '後で'],
+          message: `新しいバージョン v${info?.version || '最新版'} が準備できました。次回 PokerTimerPLUS+ を起動した時に自動的に更新されます。`,
+          buttons: ['OK'],
           defaultId: 0,
-          cancelId: 1
+          cancelId: 0
         });
-        if (result.response === 0) {
-          // v2.1.1: NSIS installer をサイレント実行 + アプリ自動再起動
-          //   isSilent=true → installer に /S フラグ → NSIS UI 非表示でサイレントインストール
-          //   isForceRunAfter=true → インストール後にアプリ自動再起動（macOS は無効）
-          //   oneClick:false の手動インストーラ UI は維持（初回手動 DL 時のみ表示）
-          autoUpdater.quitAndInstall(true, true);
-        }
       });
       rollingLog('autoUpdater:check-call', null);
       autoUpdater.checkForUpdatesAndNotify().catch((err) => {

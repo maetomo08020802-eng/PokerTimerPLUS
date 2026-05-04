@@ -101,14 +101,13 @@ test('T6: 追加 3 イベントハンドラ（checking-for-update / update-not-a
 // T7: ダイアログ文言・quitAndInstall ロジック完全維持（v2.0.8 保護）
 // ============================================================
 
-test('T7: ダイアログ文言（更新の準備ができました / 再起動して更新 / 後で）+ quitAndInstall 完全維持', () => {
+test('T7: ダイアログ title 維持 + v2.1.2 文言更新 + checkForUpdatesAndNotify 維持', () => {
   assert.match(MAIN, /title:\s*['"]更新の準備ができました['"]/,
     'ダイアログ title「更新の準備ができました」が変更された');
-  assert.match(MAIN, /buttons:\s*\[\s*['"]再起動して更新['"]\s*,\s*['"]後で['"]\s*\]/,
-    'ダイアログ buttons「再起動して更新」「後で」が変更された');
-  // v2.1.1: サイレントインストール対応で (true, true) 引数追加、引数の有無は許容
-  assert.match(MAIN, /autoUpdater\.quitAndInstall\s*\(/,
-    'autoUpdater.quitAndInstall(...) 呼出が削除された');
+  // v2.1.2 方針 Z: 「次回起動時に自動更新」文言 + buttons は OK のみ
+  assert.match(MAIN, /buttons:\s*\[\s*['"]OK['"]\s*\]/,
+    'v2.1.2 ダイアログ buttons が ["OK"] になっていない');
+  // v2.1.2: quitAndInstall は呼ばない（autoInstallOnAppQuit: true で代替）
   assert.match(MAIN, /autoUpdater\.checkForUpdatesAndNotify\s*\(\s*\)\s*\.catch/,
     'autoUpdater.checkForUpdatesAndNotify().catch(...) 呼出が削除された');
 });
@@ -143,9 +142,9 @@ test('保護: rollingLog 関数定義 + Ctrl+Shift+L globalShortcut + display-re
 // version assertion
 // ============================================================
 
-test('version: package.json は 2.0.11', () => {
-  assert.equal(PKG.version, '2.1.1',
-    `package.json version が ${PKG.version}（期待 2.0.11）`);
+test('version: package.json は 2.1.2', () => {
+  assert.equal(PKG.version, '2.1.2',
+    `package.json version が ${PKG.version}（期待 2.1.2）`);
 });
 
 test('version: scripts.test に v210-autoupdater-logging.test.js が含まれる', () => {

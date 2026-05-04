@@ -181,8 +181,8 @@ test('T10b (Fix 8): .pip-timer__digits の transition に font-size 含む', () 
 // ============================================================
 // T11: package.json version 2.1.0 + scripts.test に v214 登録
 // ============================================================
-test('T11: package.json version 2.1.0 + scripts.test に v214 登録', () => {
-  assert.equal(PKG.version, '2.1.1', `version が ${PKG.version}（期待 2.1.0）`);
+test('T11: package.json version 2.1.2 + scripts.test に v214 登録', () => {
+  assert.equal(PKG.version, '2.1.2', `version が ${PKG.version}（期待 2.1.2）`);
   assert.ok(PKG.scripts.test.includes('v214-audit-fixes.test.js'),
     'scripts.test に v214-audit-fixes.test.js が含まれない');
 });
@@ -223,12 +223,16 @@ test('保護: v2.0.13 formatPreStartTime の ms 引数判定維持', () => {
     'formatPreStartTime の useHMS 判定が ms ベースでない（v2.0.13 退行）');
 });
 
-test('保護: autoUpdater quitAndInstall + ダイアログ文言完全維持', () => {
+test('保護: autoUpdater update-downloaded ダイアログ + v2.1.2 方針 Z（quitAndInstall 削除済）', () => {
   assert.ok(/dialog\.showMessageBox\(mainWindow,\s*\{[\s\S]*?title:\s*'更新の準備ができました'/.test(MAIN_JS),
     'update-downloaded ハンドラの「更新の準備ができました」ダイアログが破壊されている');
-  // v2.1.1: サイレントインストール対応で (true, true) 引数追加、引数の有無は許容
-  assert.ok(/autoUpdater\.quitAndInstall\(/.test(MAIN_JS),
-    'autoUpdater.quitAndInstall 呼出が削除されている');
+  // v2.1.2 方針 Z: update-downloaded ハンドラ内では quitAndInstall を呼ばない（autoInstallOnAppQuit:true で代替）
+  const handlerStart = MAIN_JS.indexOf("autoUpdater.on('update-downloaded'");
+  assert.ok(handlerStart >= 0, 'update-downloaded ハンドラが見つからない');
+  const handlerEnd = MAIN_JS.indexOf("rollingLog('autoUpdater:check-call'", handlerStart);
+  const handlerBlock = MAIN_JS.slice(handlerStart, handlerEnd > 0 ? handlerEnd : handlerStart + 1500);
+  assert.ok(!/autoUpdater\.quitAndInstall\s*\(/.test(handlerBlock),
+    'v2.1.2 違反: update-downloaded ハンドラ内に quitAndInstall 呼出が残存');
 });
 
 test('保護: rollingLog 関数 + Ctrl+Shift+L 救済経路維持', () => {

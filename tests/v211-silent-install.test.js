@@ -1,6 +1,8 @@
 /**
- * v2.1.1 静的解析テスト — 自動更新サイレントインストール対応
- *   Fix 1: autoUpdater.quitAndInstall(true, true) 引数追加
+ * v2.1.1 → v2.1.2 静的解析テスト — 自動更新サイレントインストール対応
+ *   v2.1.1: autoUpdater.quitAndInstall(true, true) 引数追加
+ *   v2.1.2: 方針 Z 採用、autoInstallOnAppQuit: true 化 + ダイアログ簡素化
+ *           （quitAndInstall 呼出削除、UX「次回起動時更新」に変更）
  *
  * 致命バグ保護 5 件への影響: すべて影響なし（autoUpdater 経路のみ修正）。
  *
@@ -23,30 +25,27 @@ function test(name, fn) {
 }
 
 // ============================================================
-// T1 (Fix 1): main.js 内に autoUpdater.quitAndInstall(true, true) パターン存在
+// T1 (v2.1.2 方針 Z): autoUpdater.quitAndInstall は update-downloaded ハンドラ内で呼ばない
 // ============================================================
-test('T1 (Fix 1): autoUpdater.quitAndInstall(true, true) 呼出パターン存在', () => {
-  assert.ok(/autoUpdater\.quitAndInstall\(\s*true\s*,\s*true\s*\)/.test(MAIN_JS),
-    'autoUpdater.quitAndInstall(true, true) パターンが main.js にない');
+test('T1 (v2.1.2): update-downloaded ハンドラ内に quitAndInstall 呼出なし', () => {
+  const handlerStart = MAIN_JS.indexOf("autoUpdater.on('update-downloaded'");
+  assert.ok(handlerStart >= 0, "autoUpdater.on('update-downloaded') ハンドラが見つからない");
+  const handlerEnd = MAIN_JS.indexOf("rollingLog('autoUpdater:check-call'", handlerStart);
+  const handlerBlock = MAIN_JS.slice(handlerStart, handlerEnd > 0 ? handlerEnd : handlerStart + 1500);
+  assert.ok(!/autoUpdater\.quitAndInstall\s*\(/.test(handlerBlock),
+    'v2.1.2 違反: update-downloaded ハンドラ内に quitAndInstall 呼出が残存（autoInstallOnAppQuit:true で代替されるべき）');
 });
 
-test('T1-2 (Fix 1): 引数なしの autoUpdater.quitAndInstall() が残っていない', () => {
-  // 旧 quitAndInstall() 引数なし呼出が残っていないことを確認（v2.1.0 までの実装が残置していないか）
-  assert.ok(!/autoUpdater\.quitAndInstall\(\s*\)/.test(MAIN_JS),
-    '引数なしの autoUpdater.quitAndInstall() が残っている');
-});
-
 // ============================================================
-// T2 (保護): 既存の update-downloaded ハンドラのダイアログ文言が破壊されていない
+// T2 (v2.1.2): ダイアログ文言が「次回起動時自動更新」 + buttons は OK のみ
 // ============================================================
-test('T2 (保護): 「更新の準備ができました」「再起動して更新」「後で」ダイアログ文言維持', () => {
+test('T2 (v2.1.2): ダイアログ title 維持 + buttons は OK 1 つ + 「次回起動時自動更新」文言', () => {
   assert.ok(/title:\s*['"]更新の準備ができました['"]/.test(MAIN_JS),
     'title: 「更新の準備ができました」 が維持されていない');
-  assert.ok(/buttons:\s*\[\s*['"]再起動して更新['"]\s*,\s*['"]後で['"]\s*\]/.test(MAIN_JS),
-    'buttons: ["再起動して更新", "後で"] が維持されていない');
-  // result.response === 0 → quitAndInstall ロジック維持
-  assert.ok(/result\.response\s*===\s*0/.test(MAIN_JS),
-    'result.response === 0 判定が維持されていない');
+  assert.ok(/buttons:\s*\[\s*['"]OK['"]\s*\]/.test(MAIN_JS),
+    'v2.1.2 ダイアログ buttons が ["OK"] になっていない');
+  assert.ok(/次回[^"']*起動[^"']*自動的に更新/.test(MAIN_JS),
+    'v2.1.2 ダイアログ文言「次回起動時に自動更新」が反映されていない');
 });
 
 // ============================================================
@@ -87,10 +86,10 @@ test('T4-2 (保護): build.nsis 設定 (oneClick: false) 維持', () => {
 });
 
 // ============================================================
-// T5: package.json version が 2.1.1
+// T5: package.json version が 2.1.2
 // ============================================================
-test('T5: package.json version が 2.1.1', () => {
-  assert.equal(PKG.version, '2.1.1', `version が ${PKG.version}（期待 2.1.1）`);
+test('T5: package.json version が 2.1.2', () => {
+  assert.equal(PKG.version, '2.1.2', `version が ${PKG.version}（期待 2.1.2）`);
 });
 
 test('T5-2: scripts.test に v211-silent-install.test.js が登録', () => {
@@ -102,9 +101,9 @@ test('T5-2: scripts.test に v211-silent-install.test.js が登録', () => {
 // ============================================================
 // 致命バグ保護 cross-check
 // ============================================================
-test('保護: autoInstallOnAppQuit: false（ユーザー確認経由のみインストール）維持', () => {
-  assert.ok(/autoUpdater\.autoInstallOnAppQuit\s*=\s*false/.test(MAIN_JS),
-    'autoUpdater.autoInstallOnAppQuit = false が消失');
+test('v2.1.2 保護: autoInstallOnAppQuit: true（次回起動時自動更新）', () => {
+  assert.ok(/autoUpdater\.autoInstallOnAppQuit\s*=\s*true/.test(MAIN_JS),
+    'autoUpdater.autoInstallOnAppQuit = true が消失（v2.1.2 方針 Z）');
 });
 
 test('保護: electron-log 統合（v2.0.10 + v2.0.15 ローテ）維持', () => {
