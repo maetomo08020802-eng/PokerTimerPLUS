@@ -911,13 +911,26 @@ const VALID_PAYOUT_ROUNDINGS_RENDERER = [1, 10, 100, 1000];
 
 // STEP 6.5: 配当金額を計算（端数処理 + 余りを1位に上乗せ）
 // 戻り値: payouts と同順の数値配列（円単位）
+// v2.1.4 方針 A: amount フィールドが全順位に有効値で存在し、合計が pool と完全一致するなら、
+//   それを直接返す（金額モードで保存した絶対金額を精度損失なく復元）。
+//   pool 変動 / amount 不在 の場合は既存の % 計算にフォールバック（後方互換）。
 function computeRoundedAmounts() {
   const pool = computeTotalPool();
   const rounding = VALID_PAYOUT_ROUNDINGS_RENDERER.includes(tournamentState.payoutRounding)
     ? tournamentState.payoutRounding : 100;
   const payouts = tournamentState.payouts || [];
   if (payouts.length === 0 || pool <= 0) return payouts.map(() => 0);
-  // 各順位を端数処理
+
+  // v2.1.4: 全順位に有効な amount があり、合計 === pool ならそれを使う
+  const allHaveAmount = payouts.every((p) => Number.isFinite(p.amount) && p.amount >= 0);
+  if (allHaveAmount) {
+    const amountSum = payouts.reduce((s, p) => s + p.amount, 0);
+    if (amountSum === pool) {
+      return payouts.map((p) => p.amount);
+    }
+  }
+
+  // 既存の % 計算（amount 不在 or pool 変動時のフォールバック）
   const amounts = payouts.map((p) => {
     const raw = pool * (Number(p.percentage) || 0) / 100;
     return Math.floor(raw / rounding) * rounding;
@@ -1081,7 +1094,12 @@ function applyTournament(t) {
     };
   }
   if (Array.isArray(t.payouts) && t.payouts.length > 0) {
-    tournamentState.payouts = t.payouts.map((p) => ({ rank: p.rank, percentage: Number(p.percentage) || 0 }));
+    // v2.1.4 方針 A: amount フィールドがあればそれも引き継ぐ（精度損失回避）
+    tournamentState.payouts = t.payouts.map((p) => {
+      const out = { rank: p.rank, percentage: Number(p.percentage) || 0 };
+      if (Number.isFinite(p.amount) && p.amount >= 0) out.amount = p.amount;
+      return out;
+    });
   }
   // STEP 6.5
   if (typeof t.guarantee === 'number' && t.guarantee >= 0) {
@@ -3280,7 +3298,11 @@ function renderPayoutsEditor(payouts) {
     input.min = '0';
     if (payoutInputMode === 'amount') {
       input.step = '100';
-      input.value = String(Math.floor(pool * (Number(p.percentage) || 0) / 100));
+      // v2.1.4: amount 保持があれば優先表示、無ければ % から逆算（後方互換）
+      const hasAmt = Number.isFinite(p.amount) && p.amount >= 0;
+      input.value = hasAmt
+        ? String(p.amount)
+        : String(Math.floor(pool * (Number(p.percentage) || 0) / 100));
     } else {
       input.max = '100';
       input.step = '0.5';
@@ -3341,6 +3363,7 @@ function setPayoutRankCount(n, applyPreset = false) {
 
 // フォームから現在の賞金構造を取り出す（内部スキーマは常に %）
 // 金額モードの場合: 各順位の入力金額 ÷ プール × 100 で % へ換算して保存
+// v2.1.4 方針 A: 金額モード時は amount フィールドも同梱して精度損失（toFixed(2) 丸め）を回避
 function readPayoutsFromForm() {
   if (!el.tournamentPayoutsEditor) return tournamentState.payouts || [];
   const rows = el.tournamentPayoutsEditor.querySelectorAll('.payouts-editor__row');
@@ -3349,9 +3372,9 @@ function readPayoutsFromForm() {
     const pool = computeTotalPoolFromForm();
     rows.forEach((row, i) => {
       const inp = row.querySelector('.payouts-editor__pct-input');
-      const amt = Number(inp?.value) || 0;
+      const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
       const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
-      out.push({ rank: i + 1, percentage: pct });
+      out.push({ rank: i + 1, percentage: pct, amount: amt });
     });
   } else {
     rows.forEach((row, i) => {
@@ -3405,6 +3428,7 @@ function rerenderPayoutsEditorIfNeeded() {
 }
 
 // 金額モード時でも、内部 % で取り出すヘルパ（再描画用）
+// v2.1.4 方針 A: 金額モード時は amount フィールドも同梱して精度損失を回避
 function readPayoutsFromFormAsPercent() {
   const rows = el.tournamentPayoutsEditor?.querySelectorAll('.payouts-editor__row') || [];
   const pool = computeTotalPoolFromForm();
@@ -3412,9 +3436,9 @@ function readPayoutsFromFormAsPercent() {
   rows.forEach((row, i) => {
     const inp = row.querySelector('.payouts-editor__pct-input');
     if (payoutInputMode === 'amount') {
-      const amt = Number(inp?.value) || 0;
+      const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
       const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
-      out.push({ rank: i + 1, percentage: pct });
+      out.push({ rank: i + 1, percentage: pct, amount: amt });
     } else {
       out.push({ rank: i + 1, percentage: Number(inp?.value) || 0 });
     }
