@@ -2815,10 +2815,12 @@ app.whenReady().then(async () => {
         // v2.1.2 方針 Z: quitAndInstall を呼ばず、ダイアログを通知のみに変更。
         //   autoInstallOnAppQuit: true により、次回アプリ通常終了時 → 次回起動時の流れで installer が自動実行される。
         //   v2.1.1 で発生した「アプリが終了できません」エラー + NSIS UI 表示は本設計で根本回避。
+        // v2.1.5: NSIS installer 処理時間（実測 30〜60 秒）を考慮し、「2 分待機」を明示。
+        //   v2.1.2 配布で「閉じてすぐ再起動」によるインストール失敗が頻発したための UX 改善。
         await dialog.showMessageBox(mainWindow, {
           type: 'info',
           title: '更新の準備ができました',
-          message: `新しいバージョン v${info?.version || '最新版'} が準備できました。次回 PokerTimerPLUS+ を起動した時に自動的に更新されます。`,
+          message: `新しいバージョン v${info?.version || '最新版'} が準備できました。\nアプリを閉じてから2分以上待って再起動すると、自動的に最新版に切り替わります。\n（installer の処理に時間がかかるため、すぐ再起動するとアップグレードに失敗する場合があります）`,
           buttons: ['OK'],
           defaultId: 0,
           cancelId: 0
