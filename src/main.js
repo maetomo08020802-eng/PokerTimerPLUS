@@ -1839,6 +1839,8 @@ function registerIpcHandlers() {
   }
 
   // payouts 配列をバリデート: rank 1..N の連番、percentage 数値、合計 100 を許容範囲（±0.01）
+  // v2.1.4 方針 A: amount フィールド（円単位の整数、任意）が有限の非負数値ならば保存。
+  //   金額モードでの精度損失（toFixed(2) 丸め）を回避するため、絶対金額を保持する。
   function normalizePayouts(arr, fallback) {
     if (!Array.isArray(arr) || arr.length === 0) return fallback.map((p) => ({ ...p }));
     const cleaned = [];
@@ -1847,12 +1849,21 @@ function registerIpcHandlers() {
       if (!p || typeof p !== 'object') continue;
       const rank = Math.max(1, Math.floor(Number(p.rank)) || (cleaned.length + 1));
       const pct = toNonNegNumber(p.percentage, 0);
-      cleaned.push({ rank, percentage: pct });
+      // v2.1.4: amount は Number.isFinite(n) && n >= 0 のときだけ保存（NaN / 負値 / 文字列は捨てる）
+      const amtNum = Number(p.amount);
+      const hasAmount = Number.isFinite(amtNum) && amtNum >= 0;
+      cleaned.push(hasAmount
+        ? { rank, percentage: pct, amount: amtNum }
+        : { rank, percentage: pct });
     }
     if (cleaned.length === 0) return fallback.map((p) => ({ ...p }));
     // rank の重複排除＆連番化
     cleaned.sort((a, b) => a.rank - b.rank);
-    return cleaned.map((p, idx) => ({ rank: idx + 1, percentage: p.percentage }));
+    return cleaned.map((p, idx) => {
+      const out = { rank: idx + 1, percentage: p.percentage };
+      if ('amount' in p) out.amount = p.amount;
+      return out;
+    });
   }
 
   function normalizeTournament(t, fallback = {}) {
