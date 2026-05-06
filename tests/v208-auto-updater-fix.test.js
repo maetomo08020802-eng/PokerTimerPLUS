@@ -99,9 +99,11 @@ test('T6: update-downloaded ハンドラ内に dialog.showMessageBox（v2.1.2: q
   // ダイアログ title 維持（v2.1.2 でも変更なし）
   assert.match(MAIN, /title:\s*['"]更新の準備ができました['"]/,
     'ダイアログ title「更新の準備ができました」が変更された');
-  // v2.1.2 方針 Z: ダイアログ文言「次回起動時に自動更新」に変更
-  assert.match(MAIN, /次回[^"']*起動[^"']*自動的に更新/,
-    'v2.1.2 ダイアログ文言「次回起動時に自動更新」が反映されていない');
+  // v2.1.5: ダイアログ文言「2 分以上待って再起動」に変更（v2.1.2 の「次回起動時に自動更新」から進化）
+  assert.match(MAIN, /2\s*分/,
+    'v2.1.5 ダイアログ文言「2 分以上待って再起動」の「2分」が反映されていない');
+  assert.match(MAIN, /閉じて[^`]*再起動/,
+    'v2.1.5 ダイアログ文言の「閉じて...再起動」が反映されていない');
   // v2.1.2 方針 Z: buttons は OK 1 つだけ
   assert.match(MAIN, /buttons:\s*\[\s*['"]OK['"]\s*\]/,
     'v2.1.2 ダイアログ buttons が ["OK"] になっていない');
@@ -141,8 +143,8 @@ test('保護: main.js の rolling log / Ctrl+Shift+L / display-removed 経路に
 
 test('version: package.json は 2.1.2', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.4',
-    `package.json version が ${pkg.version}（期待 2.1.4）`);
+  assert.equal(pkg.version, '2.1.5',
+    `package.json version が ${pkg.version}（期待 2.1.5）`);
 });
 
 test('version: scripts.test に v208-auto-updater-fix.test.js が含まれる', () => {
