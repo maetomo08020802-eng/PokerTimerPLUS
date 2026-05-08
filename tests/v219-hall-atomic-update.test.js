@@ -62,10 +62,15 @@ function buildBufferSandbox(applySpy) {
     .replace(/^const (DIFF_BUFFER_MAX|_diffBuffer)\b/gm, 'var $1')
     .replace(/^let (_flushTimer|_isFlushing)\b/gm, 'var $1');
 
-  // sandbox: window モック + console + setTimeout/clearTimeout
+  // sandbox: window モック + console + setTimeout/clearTimeout/requestAnimationFrame/cancelAnimationFrame
+  // v2.1.9: dual-sync.js は flush 予約に requestAnimationFrame を使うため stub を提供。
+  //   Node 環境には rAF が無いので setTimeout(cb, 0) で代替し、既存の
+  //   await new Promise(r => setTimeout(r, 10)) パターンで flush タイミングを再現する。
   const ctx = {
     console: { warn: () => {}, log: () => {} },
     setTimeout, clearTimeout,
+    requestAnimationFrame: (cb) => setTimeout(cb, 0),
+    cancelAnimationFrame: (id) => clearTimeout(id),
     _applyDiffToState: applySpy,
     window: {
       api: { log: { write: () => {} } },
@@ -79,13 +84,14 @@ function buildBufferSandbox(applySpy) {
 }
 
 // ============================================================
-// T1: _diffBuffer が空時、新 diff 到着で setTimeout(0) が登録される
+// T1: _diffBuffer が空時、新 diff 到着で requestAnimationFrame が登録される
+// （v2.1.9: setTimeout(0) → requestAnimationFrame に変更）
 // ============================================================
 test('T1 (Fix 1): _diffBuffer 空時、_bufferDiff で _flushTimer が登録される', () => {
   const ctx = buildBufferSandbox(() => {});
-  // 静的: _flushTimer === null チェック + setTimeout(_flushDiffBuffer, 0) が存在
-  assert.match(DUAL_SYNC, /if\s*\(\s*_flushTimer\s*===\s*null\s*\)\s*\{[\s\S]*?_flushTimer\s*=\s*setTimeout\(\s*_flushDiffBuffer\s*,\s*0\s*\)/,
-    '_flushTimer === null guard + setTimeout(_flushDiffBuffer, 0) が存在しない');
+  // 静的: _flushTimer === null チェック + requestAnimationFrame で flush 予約が存在
+  assert.match(DUAL_SYNC, /if\s*\(\s*_flushTimer\s*===\s*null\s*\)\s*\{[\s\S]*?_flushTimer\s*=\s*requestAnimationFrame\(/,
+    '_flushTimer === null guard + requestAnimationFrame による flush 予約が存在しない');
   // 動的: 1 回 push して _flushTimer が non-null になる
   assert.equal(ctx._flushTimer, null, '初期状態で _flushTimer が null でない');
   ctx._bufferDiff({ kind: 'timerState', value: { status: 'running' } });
@@ -174,10 +180,11 @@ test('T6 (Fix 2): beforeunload で _flushTimer + _diffBuffer がクリアされ�
   assert.equal(ctx._flushTimer, null, 'beforeunload で _flushTimer がクリアされていない');
   assert.equal(ctx._diffBuffer.length, 0, 'beforeunload で _diffBuffer がクリアされていない');
 
-  // 静的検証: clearTimeout 呼出 + 配列 length=0 リセットが存在
+  // 静的検証: cancelAnimationFrame 呼出 + 配列 length=0 リセットが存在
+  // v2.1.9: clearTimeout → cancelAnimationFrame に変更
   assert.match(DUAL_SYNC,
-    /window\.addEventListener\(\s*['"]beforeunload['"][\s\S]*?clearTimeout\s*\(\s*_flushTimer\s*\)[\s\S]*?_diffBuffer\.length\s*=\s*0/,
-    'beforeunload で clearTimeout(_flushTimer) + _diffBuffer.length=0 のリセットが見つからない');
+    /window\.addEventListener\(\s*['"]beforeunload['"][\s\S]*?cancelAnimationFrame\s*\(\s*_flushTimer\s*\)[\s\S]*?_diffBuffer\.length\s*=\s*0/,
+    'beforeunload で cancelAnimationFrame(_flushTimer) + _diffBuffer.length=0 のリセットが見つからない');
 });
 
 // ============================================================
@@ -214,6 +221,7 @@ test('T8 (Fix 1): preStartState diff も buffer 経路を通る', async () => {
   ctx._bufferDiff({ kind: 'preStartState', value: { isActive: true,  totalMs: 60000, remainingMs: 60000, _src: 'start' } });
   ctx._bufferDiff({ kind: 'preStartState', value: { isActive: true,  totalMs: 60000, remainingMs: 59000, _src: 'tick1' } });
   ctx._bufferDiff({ kind: 'preStartState', value: { isActive: true,  totalMs: 60000, remainingMs: 58000, _src: 'tick2' } });
+  // v2.1.9: rAF stub は setTimeout(cb, 0) なので 10ms 待機で発火する
   await new Promise((resolve) => setTimeout(resolve, 10));
   // 同一 kind dedup により最後の tick2 だけ apply される
   assert.equal(applied.length, 1, 'preStartState 3 件の dedup が機能していない');

@@ -160,16 +160,18 @@ test('T7: v2.1.7 dual-sync buffer 機構が touch されていない', () => {
   assert.match(DUAL_SYNC, /dual\.subscribeStateSync\s*\(\s*\(diff\)\s*=>\s*_bufferDiff\(diff\)\s*\)/,
     'subscribeStateSync が _bufferDiff 経由でなくなっている');
   // beforeunload cleanup
-  assert.match(DUAL_SYNC, /window\.addEventListener\(\s*['"]beforeunload['"][\s\S]*?clearTimeout\s*\(\s*_flushTimer\s*\)/,
-    'beforeunload cleanup が dual-sync.js から消えている');
+  // v2.1.9 で setTimeout → requestAnimationFrame 切替に伴い clearTimeout → cancelAnimationFrame に変更
+  // 当 T7 は「機構が触られていない」確認なので、cleanup 経路の存在保証として cancelAnimationFrame で追従
+  assert.match(DUAL_SYNC, /window\.addEventListener\(\s*['"]beforeunload['"][\s\S]*?cancelAnimationFrame\s*\(\s*_flushTimer\s*\)/,
+    'beforeunload cleanup が dual-sync.js から消えている（v2.1.9 で cancelAnimationFrame に切替済）');
 });
 
 // ============================================================
-// T8: package.json version 2.1.8 + scripts.test に v220 登録
+// T8: package.json version 2.1.9 + scripts.test に v220 登録
 // ============================================================
-test('T8: package.json version は 2.1.8 + scripts.test に v220 登録', () => {
-  assert.equal(PKG.version, '2.1.8',
-    `package.json version が ${PKG.version}（期待 2.1.8）`);
+test('T8: package.json version は 2.1.9 + scripts.test に v220 登録', () => {
+  assert.equal(PKG.version, '2.1.9',
+    `package.json version が ${PKG.version}（期待 2.1.9）`);
   assert.match(PKG.scripts.test, /v220-prestart-audio-hall-guard\.test\.js/,
     'scripts.test に v220-prestart-audio-hall-guard.test.js が登録されていない');
 });

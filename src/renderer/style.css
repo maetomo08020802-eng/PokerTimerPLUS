@@ -3787,10 +3787,14 @@ tr.level-row--just-inserted {
 [data-role="hall"] .confirm-dialog {
   display: none !important;
 }
-/* PIP の操作ボタン（タイマー / スライドショー切替）はホール側でも触らせない */
-[data-role="hall"] .pip-action-btn {
-  display: none !important;
-}
+/* v2.1.9 緊急差し込み根治: hall（会場モニター）でも .pip-action-btn を表示する。
+   旧コメント「ホール側でも触らせない」前提を撤回。前原さん運用上、会場モニターは
+   マウス操作可能で、1 画面モードと同等の操作性を望むため。クリックハンドラ
+   handlePipShowTimer / handlePipShowSlideshow には appRole ガードなしで素直に動作する。
+   slideshowState は hall window 内 local 変数のため、hall ローカルで完結。
+   下の [data-role="operator"] セクションで operator window では引き続き
+   非表示維持（手元 PC は装飾なしの操作画面、ボタン置き場所がないため）。 */
+/* （旧 [data-role="hall"] .pip-action-btn { display: none !important; } ルールを削除） */
 
 /* === role=operator: 大表示要素を hidden、ミニ状態バー + 操作 UI のみ === */
 /* メインタイマー / ロゴ / ブラインドカード を含む clock セクション全体を hidden */

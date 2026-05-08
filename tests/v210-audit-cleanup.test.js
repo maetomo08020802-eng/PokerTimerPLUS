@@ -154,7 +154,7 @@ test('T6 (Fix 6): migrateTournamentSchema 内に displaySettings 拡張時の注
 // T7: package.json version が 2.1.0
 // ============================================================
 test('T7: package.json version が 2.1.0', () => {
-  assert.equal(PKG.version, '2.1.8', `version が ${PKG.version}（期待 2.1.0）`);
+  assert.equal(PKG.version, '2.1.9', `version が ${PKG.version}（期待 2.1.0）`);
 });
 
 test('T7-2: scripts.test に v210-audit-cleanup.test.js が登録', () => {
