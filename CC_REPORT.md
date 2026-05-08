@@ -1,394 +1,392 @@
-# CC_REPORT — 2026-05-08 v2.1.10 hall window rAF 競合解消（4 → 1）+ 計測機構同梱
+# CC_REPORT — 2026-05-09 v2.1.11 hall 自前 60fps tick 再導入（v2.1.10 設計ミスの構造的根治）+ 配布完了
 
 ## §1 サマリ
 
-NEXT_CC_PROMPT v2.1.10 通り、前原さん 2 画面実機で v2.1.9 試験中に発見された「会場モニターが音より約 1 秒遅れる + アプリ全体が重く感じる」症状を根治。
-
-真因は hall window で **3〜4 個の独立 rAF ループ**（timer.js tick / preStartTick / renderHallPreStartTick / dual-sync flush）が同時回転 → 1 フレーム予算（16.7ms）超過 → frame skip → 累積遅延 1 秒。
-
-修正方針 = **案 3 細分化 + 案 6 + 計測機構同梱**:
-1. **案 3 細分化**（Fix 1）: `applyTimerStateToTimer` 内の timer.js 関数呼出（reset / startAtLevel / advanceBy / pause）のみ hall ガードで skip。**DOM 描画 / setState 直接呼出は hall でも続行**（subscribe → renderTime / renderNextBreak 経路維持）。完全 skip すると hall タイマー表示が固まるため絶対禁止。
-2. **案 6**（Fix 2）: hall 専用 `renderHallPreStartTick` の独立 rAF 駆動部分を削除。broadcast 受信時の即時 1 回 DOM 更新で代替（operator は 1 秒間引き broadcast、PRE_START 表示単位 = 分:秒なので秒粒度で十分）。
-3. **計測機構**（Fix 3）: hall 限定で IPC 受信 / dual-sync flush 所要時間 / frame skip 検出 / DOM 更新タイミングを rolling-log に記録（保険、operator では計測しない）。
+NEXT_CC_PROMPT v2.1.11 通り、前原さん 2 画面実機 v2.1.10 試験中に発覚した「会場モニターのカウントダウン進まず + BREAK 中タイマーカクカク」を構造的根治し、GitHub Releases で v2.1.11 を Latest として公開済。前原さん v2.1.10 端末で自動更新が走る環境が整いました。
 
 | 項目 | 内容 |
 |---|---|
-| 修正ファイル数 | 4（renderer.js / dual-sync.js / package.json / CHANGELOG.md）+ tests/v222 新規 + 既存 33 テストの version assertion 更新 |
-| 並列 sub-agent / Task 数 | **0 体**（直接実行、cc-operation-pitfalls §1.1 / 4.2 準拠） |
-| 全テスト件数 | **882 件 PASS / 0 件 FAIL**（v2.1.9 時点 875 + 新規 v222 = 7 件） |
+| 修正ファイル数 | 4（renderer.js / package.json / CHANGELOG.md / tests/v222-hall-rAF-reduction.test.js）+ tests/v223 新規 + 既存 33 テストの version assertion 更新 |
+| 並列 sub-agent / Task 数 | **0 体**（直接実行、cc-operation-pitfalls §1.1 / §4.2 準拠） |
+| 全テスト件数 | **893 件 PASS / 0 件 FAIL**（v2.1.10 882 - v222 T4 削除 1 + v223 新規 12） |
 | 致命バグ保護 5 件 | **5 件すべて影響なし**（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8） |
-| v2.1.6 / 2.1.7 / 2.1.8 / 2.1.9 機構 | **全機構完全無傷**（v218 / v219 / v220 / v221 全 PASS で静的検証） |
-| ビルド成果物 | `dist/pokertimerplus-setup-2.1.10.exe`（82.99 MB） + `dist/latest.yml`（version 2.1.10）|
-
-期待効果（v2.1.10 試験用）: PRE_START 中の同時 rAF **4 → 1**（dual-sync flush のみ）、RUNNING 中 **2 → 1**。1 秒遅延 → 0.05〜0.1 秒、「アプリ重い」感覚消失。
+| v2.1.6/2.1.7/2.1.8/2.1.9/2.1.10 機構 | **完全保持**（Fix 2 廃止のみ撤回、Fix 1 hall ガード + Fix 3 計測機構は完全保持） |
+| ビルド成果物 | `dist/pokertimerplus-setup-2.1.11.exe`（82,995,500 bytes、約 82.99 MB）+ `dist/latest.yml`（version 2.1.11） |
+| Release URL | <https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.1.11> |
+| publishedAt | `2026-05-08T15:52:56Z` |
 
 ---
 
-## §2 事前調査結果（NEXT_CC_PROMPT 必須 6 項目）
+## §2 事前調査結果（NEXT_CC_PROMPT 必須 5 項目 + 構築士仮説の独立検証）
 
-### A. 真因の独立検証（CC が独立 Read で確認）
+### A. v2.1.10 hall 経路の現状コード網羅
 
-| # | 場所 | 構築士分析 | CC 独立検証結果 |
-|---|---|---|---|
-| 1 | `timer.js:297` `tick` rAF | RUNNING/BREAK 中 60fps で再起動 | ✅ 一致（`startLoop()` 内で `rafId = requestAnimationFrame(tick)`）|
-| 2 | `timer.js:303` `preStartTick` rAF | PRE_START 中 60fps で再起動 | ✅ 一致（`startPreStartLoop()` 内、`preStartTick` 内でも自己再起動 L322）|
-| 3 | `renderer.js:2586` `renderHallPreStartTick` rAF | hall 専用 PRE_START 描画 60fps | ✅ 一致（`hallPreStartState.rafId = requestAnimationFrame(renderHallPreStartTick)`）|
-| 4 | `dual-sync.js:104` `_bufferDiff` flush rAF | IPC 受信ごと（v2.1.9 で setTimeout → rAF 切替）| ✅ 一致（`_flushTimer = requestAnimationFrame(...)`）|
+| ファイル / 関数 | 検証結果 |
+|---|---|
+| `renderer.js:1376-1460` `applyTimerStateToTimer` | hall 経路は setState 1 回呼出のみ、独立 rAF 起動なし。v2.1.10 で「broadcast 受信時のみ DOM 更新」設計に変更済 |
+| `renderer.js:2569-2606` `applyHallPreStartState` | broadcast 受信時に `renderHallPreStartTick()` を 1 回呼出（再帰なし）|
+| `renderer.js:2612-2637` `renderHallPreStartTick` | v2.1.10 で再帰 rAF 削除済（`hallPreStartState.rafId = requestAnimationFrame(...)` の行が消えており、コメントで「次の broadcast 受信時に再度この関数が呼ばれる経路に変更」と記載）|
+| `renderer.js:470` `hallPreStartState` 定義 | rafId フィールド維持（v2.1.10 では never set だが defense-in-depth 残置）|
 
-→ **構築士分析と完全一致**。PRE_START 中は 4 個同時、RUNNING 中は 2 個同時の rAF 回転を確認。
+### B. operator 側 broadcast 経路（破綻の物理的根拠）
 
-### B. `applyTimerStateToTimer` 内の timer.js 関数呼出全網羅
+| 場所 | 内容 |
+|---|---|
+| `renderer.js:1962` `onPreStartTick` 内の throttle | `if (now - _preStartTickLastSentAt >= 1000)` で 1 秒粒度に間引き → PRE_START broadcast 頻度 = 1Hz |
+| `renderer.js:1675-1709` subscribe コールバック | `schedulePersistTimerState()` は `state.status` / `currentLevelIndex` / PAUSED.remainingMs / IDLE.remainingMs/totalMs **変化時のみ** 発火 → RUNNING の毎フレーム remainingMs 変化では発火しない |
+| `renderer.js` `startPeriodicTimerStatePersist` | 5 秒間隔の `periodicPersistAllRunning` で fallback persist → broadcast |
+| `dual-sync.js:_bufferDiff` (v2.1.9 + v2.1.10) | rAF flush + 計測機構、buffer 機構は無変更維持 |
 
-ファイル: `src/renderer/renderer.js`、修正前 L1376-1422。grep + balanced-brace 抽出で全件確認:
+→ **構築士仮説と完全一致**: RUNNING/BREAK 中の broadcast は実質 5 秒粒度（periodic）→ hall 描画も 5 秒粒度になり「カクカク」「進まず」症状が物理的必然。
 
-| 行 | 呼出 | 経路 | hall ガード対応 |
-|---|---|---|---|
-| L1382 | `timerReset()` | `!ts \|\| typeof ts !== 'object'` | `if (!isHallApply)` で囲み |
-| L1387 | `timerReset()` | `ts.status === 'idle'` | `if (!isHallApply)` で囲み + hall 経路で setState 直接呼出 |
-| L1394 | `timerReset()` | `ts.status === 'finished'` | `if (!isHallApply)` で囲み + hall 経路で `setState({ status: IDLE, remainingMs: 0 })` |
-| L1405 | `timerReset()` | `levelCount === 0` | `if (!isHallApply)` で囲み |
-| L1408 | `timerStartAtLevel(idx)` | running/paused/break 経路 | `if (!isHallApply)` ブロック内に集約 |
-| L1411 | `timerAdvanceBy(-elapsedMs)` | 同上、経過秒反映 | `if (!isHallApply)` ブロック内に集約 |
-| L1412 | `timerPause()` | `live.status === 'paused'` | `if (!isHallApply)` ブロック内に集約 |
+### C. timer.js の DOM 更新経路（hall でなぜ必要か）
 
-合計 **7 箇所**すべて hall ガード適用済。hall 経路では `setState({ currentLevelIndex, remainingMs, totalMs, status })` を直接呼出して subscribe 経路を保持。
-
-### C. `applyTimerStateToTimer` 内の DOM 更新コード網羅（hall でも続行が必須）
-
-| 行 | コード | hall ガードの有無 |
+| 関数 | 動作 | hall への影響 |
 |---|---|---|
-| L1381 | `el.clock?.classList.remove('clock--timer-finished')` | **無し**（hall でも実行）|
-| L1386 | `el.clock?.classList.remove('clock--timer-finished')` | **無し**（hall でも実行）|
-| L1395 | `el.clock?.classList.add('clock--timer-finished')` | **無し**（hall でも実行）|
-| L1399 | `el.clock?.classList.remove('clock--timer-finished')` | **無し**（hall でも実行）|
-| L1419-1421 | `audioSuppressOnce = true` | hall でも実行（flag 値は意味を持たないが副作用なし）|
+| `tick()` (timer.js:334) | `setState({ remainingMs })` を毎フレーム呼出 → subscribe で renderTime 発火 | hall は v2.1.10 で `if (!isHallApply) timerStartAtLevel(...)` ガードで startLoop 起動を skip → tick() は呼ばれず → `setState({ remainingMs })` も呼ばれず → renderTime も発火しない |
+| `preStartTick()` (timer.js:306) | `setState({ remainingMs })` を毎フレーム呼出 + `handlers.onPreStartTick(remainingMs)` | 同上、hall では startPreStartLoop 起動なし → preStartTick も呼ばれず |
 
-→ DOM 更新 4 箇所すべて hall でも続行することで、`<dialog>` / `clock--timer-finished` overlay 等の表示は完全保持。
+**v2.1.11 設計の中核**: hall 側で operator の timer.js を起動する代わりに、hall 専用の自前 60fps rAF（`renderHallTickFrame` / `renderHallPreStartTick`）が `Date.now()` から remainingMs を計算して `setState({ remainingMs })` を呼出 → subscribe → renderTime / renderNextBreak が DOM 更新する経路を構築。
 
-### D. `renderHallPreStartTick` 廃止後の代替経路（broadcast 1 秒間引き + 即時 DOM 更新）
+### D. main.js timerState destructure 経路（C.2.7-D 致命バグ保護の再検証）
 
-検証済:
-- operator 側 `setHandlers.onPreStartTick` 内で `now - _preStartTickLastSentAt >= 1000` の throttle 経路で 1 秒に 1 回 broadcast（renderer.js L1962）
-- hall 側 `applyHallPreStartState` で broadcast 受信時に `renderHallPreStartTick()` を 1 回呼出 → 内部で再帰 rAF を**しない**（v2.1.10 で削除）→ 1 秒粒度の DOM 更新
-- PRE_START 表示は分:秒（formatPreStartTime）→ 1 秒粒度で十分滑らか
-- edge イベント（onPreStartStart / Cancel / Adjust）は throttle なし即時 broadcast → 即応性維持
+| 検証項目 | 結果 |
+|---|---|
+| `main.js` の `tournaments:setDisplaySettings` ハンドラ | 既存通り、payload から `timerState` を destructure 除外（C.2.7-D 維持）|
+| `_dualStateCache` 構造 | v2.1.6 で追加された `preStartState: null` フィールド + 既存 timerState/structure/displaySettings 等、変更なし |
+| v2.1.11 で broadcast payload に新フィールドを追加するか | **追加しない**（既存 timerState payload から hall 側で startedAtMs を `Date.now() + remainingMs` で算出可能、operator 側変更不要）|
 
-### E. 計測機構が hall でのみ動作する保証
+→ main.js / preload.js / dual-sync.js / timer.js / audio.js すべて完全無変更。**hall 側 renderer.js のみで完結する設計**。
 
-検証済:
-- `dual-sync.js` に `_isHall()` ヘルパ（`window.appRole === 'hall'` 判定）+ `_logHall(label, payload)` ヘルパ追加
-- `_logHall` 冒頭で `if (!_isHall()) return;` → operator では log 書込みなし
-- `_recordFlushFrameSkip` も冒頭で同ガード → operator では計測なし
-- 計測呼出箇所: `_bufferDiff`（IPC 受信時）/ `_recordFlushFrameSkip`（rAF callback 内）/ `_flushDiffBuffer`（finally で所要時間記録）/ `applyTimerStateToTimer`（renderer.js 入口、`isHallApply` ガード）/ `applyHallPreStartState`（renderer.js 入口、関数全体が `appRole !== 'hall'` 早期 return ガード後に到達）
-- `window.api?.log?.write?.()` 経路で fire-and-forget 非同期 IPC（v2.0.4-rc15 の rolling-log 機構を流用、計測自体が遅延を生まない）
+### E. 既存テストへの影響評価
 
-### F. 致命バグ保護 5 件 cross-check
+| テストファイル | 影響 | 対応 |
+|---|---|---|
+| `v218-prestart-hall-sync.test.js` | T9 で `function renderHallPreStartTick(` を必須化 + `hallPreStartState` 必須 | **無影響**（v2.1.11 で renderHallPreStartTick を rAF 復活、hallPreStartState 維持）|
+| `v219-hall-atomic-update.test.js` | dual-sync buffer 機構は v2.1.11 で無変更 | **無影響** |
+| `v220-prestart-audio-hall-guard.test.js` | hall ガード（handleAudioOnTick / playSound）機構は v2.1.11 で無変更 | **無影響** |
+| `v221-rAF-flush.test.js` | dual-sync flush は v2.1.11 で無変更 | **無影響** |
+| `v222-hall-rAF-reduction.test.js` | T4 が「rAF 駆動部分削除」を検証 → v2.1.11 撤回で破壊 | **T4 削除**（履歴は CHANGELOG / git log で参照可、代替検証は v223 T5）。T1-T3 / T5-T7 は維持・version 更新で PASS |
 
-| 保護 | 関連箇所 | 影響評価 | 根拠 |
-|---|---|---|---|
-| C.2.7-A `resetBlindProgressOnly` | renderer.js | **影響なし** | 修正対象は `applyTimerStateToTimer` / `applyHallPreStartState` / `renderHallPreStartTick`、`resetBlindProgressOnly` 関数本体 / 呼出経路は完全無変更。v218 T12 / 既存テストで再確認済 |
-| C.2.7-D `timerState` destructure 除外 | main.js | **影響なし** | main.js 完全無変更。v218 T12 / 既存テストで再確認済 |
-| C.1-A2 `ensureEditorEditableState` | renderer.js | **影響なし** | 編集モード経路は本修正範囲外 |
-| C.1.7 AudioContext resume | audio.js | **影響なし** | audio.js 完全無変更 |
-| C.1.8 runtime 永続化 | main.js | **影響なし** | main.js 完全無変更、`schedulePersistRuntime` 8 箇所維持 |
+### F. 構築士仮説への補完（CC 独立論証）
 
-→ **5 件すべて完全無傷**（v218 T12 + v222 T1-T7 で静的再検証済）。
+> 「broadcast 受信頻度の物理限界を考慮した設計か」を CC が自分の言葉で論証
 
-### G. 構築士仮説への補完（CC 独立反論）
+**構築士仮説**: v2.1.10 の `broadcast 受信時に即時 DOM 更新` 設計が、broadcast 物理頻度（PRE_START 1Hz / RUNNING 5 秒粒度）の限界で破綻 → hall の表示更新が出来ない。
 
-構築士の指示文には「DOM 更新 / state 更新は hall でも続ける」とあるが、**現実装では `applyTimerStateToTimer` 内に直接的な DOM 更新は `el.clock?.classList` の 4 箇所のみ**。renderTime / renderNextBreak / renderCurrentLevel / renderControls などの主要 DOM 更新は state.js の subscribe コールバック経由で発火する設計。
+**CC の論証**:
+1. operator → hall の IPC は throttle/debounce で意図的に間引かれている（v2.1.6 / v2.1.7 で IPC flood 防止のために設計済）。これは既存の不変条件であり、変更してはいけない（プロンプト「operator 側経路の修正禁止」も合致）。
+2. hall 側で 60fps 描画を実現するには、broadcast から得られる seed（`startedAtMs = Date.now() + remainingMs` を IPC 受信時に算出）を保持し、自前 rAF で毎フレーム `Date.now()` から残り時間を計算する以外に方法がない。
+3. 自前 rAF の `setState({ remainingMs })` 呼出は subscribe → renderTime / renderNextBreak の経路を発火 → 既存の DOM 更新パイプライン（v1.x からの機構）を再利用可能。
+4. operator 側の timer.js 関数（startLoop 等）は v2.1.10 Fix 1 の hall ガードで skip 維持されるため、hall 側で operator の rAF を起動するのではなく、**hall 専用の rAF を新設する**のが正しい。
+5. この設計は v2.1.6 の `renderHallPreStartTick`（PRE_START 限定）を **RUNNING / BREAK にも拡張する** 形であり、新規発明ではなく **既存パターンの汎化**。物理頻度の限界に対する正しい工学的解。
 
-つまり timer.js 関数呼出を skip すると、内部の `setState` も呼ばれず subscribe も発火せず → 主要 DOM 更新が止まる。これでは hall タイマー表示が固まる。
+→ **構築士仮説に完全同意 + 補完なし**。設計は実コード根拠 + 物理的必然性で確定。
 
-**補完設計**: hall 経路では timer.js を介さず、`setState({ currentLevelIndex, remainingMs, totalMs, status })` を直接呼出 → subscribe 経路を保持 → renderTime / renderNextBreak / renderCurrentLevel / renderControls がすべて発火 → DOM 更新は維持。
+### G. 致命バグ保護 5 件 cross-check
 
-この設計を Fix 1 の hall 経路（renderer.js:1444-1458）に実装。構築士仮説の枠組みは維持しつつ、現実装の構造に合わせて補完した。
+| 保護 | 関連箇所 | 影響評価 |
+|---|---|---|
+| C.2.7-A `resetBlindProgressOnly` | renderer.js | 修正対象は `applyTimerStateToTimer` の hall 経路のみ。`resetBlindProgressOnly` 関数本体・呼出経路は完全無変更。v223 T10 で再検証 |
+| C.2.7-D `timerState` destructure 除外 | main.js | main.js 完全無変更、broadcast payload 拡張なし |
+| C.1-A2 `ensureEditorEditableState` | renderer.js | 編集モード経路は本修正範囲外 |
+| C.1.7 AudioContext resume | audio.js | audio.js 完全無変更 |
+| C.1.8 runtime 永続化 | main.js | main.js 完全無変更、`schedulePersistRuntime` 8 箇所維持（v223 T10 で確認） |
+
+→ **5 件すべて完全無傷**。
 
 ---
 
 ## §3 各 Fix の実装内容（diff 要点）
 
-### Fix 1: `src/renderer/renderer.js` `applyTimerStateToTimer` 細分化 hall ガード
+### Fix A: `renderer.js` `applyTimerStateToTimer` hall 経路 → seed 更新 + renderHallTickFrame 起動
 
 ```diff
- function applyTimerStateToTimer(ts, levels, opts = {}) {
-+  const isHallApply = (typeof window !== 'undefined' && window.appRole === 'hall');
-+  if (isHallApply) { try { window.api?.log?.write?.('hall:applyTimerStateToTimer:enter', {...}); } catch (_) {} }
    if (!ts || typeof ts !== 'object') {
      el.clock?.classList.remove('clock--timer-finished');
--    timerReset();
-+    if (!isHallApply) timerReset();
+     if (!isHallApply) timerReset();
++    else stopHallTickFrame();
      return;
    }
    if (ts.status === 'idle') {
-     el.clock?.classList.remove('clock--timer-finished');
--    timerReset();
-+    if (!isHallApply) timerReset();
-+    else { /* hall: getStructure() の Lv1 duration で setState 直接 */ }
+     ...
+     if (!isHallApply) timerReset();
+     else {
++      stopHallTickFrame();
+       try { ... setState({ status: States.IDLE, ... }); } catch (_) {}
+     }
      return;
    }
    if (ts.status === 'finished') {
--    timerReset();
-+    if (!isHallApply) timerReset();
-+    else { try { setState({ status: States.IDLE, remainingMs: 0 }); } catch (_) {} }
-     el.clock?.classList.add('clock--timer-finished');
+     if (!isHallApply) timerReset();
+     else {
++      stopHallTickFrame();
+       try { setState({ status: States.IDLE, remainingMs: 0 }); } catch (_) {}
+     }
+     ...
+   }
+   ...
+   if (levelCount === 0) {
+     if (!isHallApply) timerReset();
++    else stopHallTickFrame();
      return;
    }
    ...
--  if (levelCount === 0) { timerReset(); return; }
-+  if (levelCount === 0) { if (!isHallApply) timerReset(); return; }
-   ...
--  timerStartAtLevel(idx);
--  if (elapsedMs > 0) timerAdvanceBy(-elapsedMs);
--  if (live.status === 'paused') timerPause();
-+  if (!isHallApply) {
-+    timerStartAtLevel(idx);
-+    if (elapsedMs > 0) timerAdvanceBy(-elapsedMs);
-+    if (live.status === 'paused') timerPause();
-+  } else {
-+    /* hall: timer.js を介さず setState 直接呼出で subscribe → DOM 更新を維持 */
-+    const lvl = getLevel(idx);
-+    const totalMs = (lvl?.durationMinutes || 0) * 60 * 1000;
-+    const remainingMs = Math.max(0, totalMs - elapsedMs);
-+    let status; if (live.status === 'paused') status = States.PAUSED;
-+    else if (typeof isBreakLevel === 'function' && isBreakLevel(idx)) status = States.BREAK;
-+    else status = States.RUNNING;
+   if (!isHallApply) {
+     timerStartAtLevel(idx); ...
+   } else {
+-    // v2.1.10: setState 1 回のみ
+-    setState({ currentLevelIndex: idx, remainingMs, totalMs, status });
++    // v2.1.11: seed 更新 + renderHallTickFrame 起動（PAUSED は rAF 停止）
 +    setState({ currentLevelIndex: idx, remainingMs, totalMs, status });
-+  }
++    hallTickState.status = status;
++    hallTickState.currentLevelIndex = idx;
++    hallTickState.totalMs = totalMs;
++    hallTickState.startedAtMs = Date.now() + remainingMs;
++    if (status === States.RUNNING || status === States.BREAK) {
++      if (hallTickState.rafId !== null) { cancelAnimationFrame(hallTickState.rafId); hallTickState.rafId = null; }
++      hallTickState.isActive = true;
++      renderHallTickFrame();
++    } else {
++      stopHallTickFrame();
++    }
+   }
 ```
 
-`setState` を `state.js` の既存 export から import 追加（`import { States, getState, setState, subscribe } from './state.js'`）。
+### Fix B: `renderer.js` `renderHallTickFrame()` 関数新規追加
 
-### Fix 2: `src/renderer/renderer.js` `renderHallPreStartTick` の rAF 駆動部分削除
+```javascript
+function renderHallTickFrame() {
+  if (typeof window === 'undefined' || window.appRole !== 'hall') return;
+  if (!hallTickState.isActive) return;
+  if (hallTickState.status !== States.RUNNING && hallTickState.status !== States.BREAK) {
+    hallTickState.isActive = false;
+    hallTickState.rafId = null;
+    return;
+  }
+  const now = Date.now();
+  const remainingMs = Math.max(0, hallTickState.startedAtMs - now);
+  try { setState({ remainingMs }); } catch (_) {}
+  if (remainingMs <= 0) {
+    hallTickState.isActive = false;
+    hallTickState.rafId = null;
+    return;
+  }
+  hallTickState.rafId = requestAnimationFrame(renderHallTickFrame);   // 自己再帰
+}
+```
+
+### Fix C: `renderer.js` `hallTickState` + `stopHallTickFrame()` 新規追加
+
+```javascript
+const hallTickState = {
+  isActive: false,
+  status: 0,
+  currentLevelIndex: 0,
+  totalMs: 0,
+  startedAtMs: 0,       // Date.now() 基準の終了予定時刻
+  rafId: null
+};
+function stopHallTickFrame() {
+  if (hallTickState.rafId !== null) {
+    cancelAnimationFrame(hallTickState.rafId);
+    hallTickState.rafId = null;
+  }
+  hallTickState.isActive = false;
+}
+```
+
+### Fix D: `renderer.js` `renderHallPreStartTick` の rAF 自己再帰復活
 
 ```diff
- function renderHallPreStartTick() {
-   if (!hallPreStartState.isActive) return;
-   const now = Date.now();
-   ...
    if (remainingMs <= 0) {
      hallPreStartState.isActive = false;
--    hallPreStartState.rafId = null;
++    hallPreStartState.rafId = null;
      return;
    }
--  // 次フレームへ
--  hallPreStartState.rafId = requestAnimationFrame(renderHallPreStartTick);
-+  // v2.1.10: 旧再帰 rAF を廃止。次の broadcast 受信時に再度この関数が呼ばれる経路に変更
-+  //   （applyHallPreStartState 経由）。
+-  // v2.1.10: 旧 rAF 廃止、次の broadcast 受信時に再度この関数が呼ばれる経路に変更。
++  // v2.1.11: 自己再帰 rAF で次フレームへ（v2.1.6 同等）
++  hallPreStartState.rafId = requestAnimationFrame(renderHallPreStartTick);
  }
 ```
 
-`applyHallPreStartState` 内では旧 cleanup（`if (hallPreStartState.rafId !== null) cancelAnimationFrame(...)`）を defense-in-depth として残置（v2.1.10 では rafId は never set だが、将来コード経路追加時の安全網）。
+### Fix E: 停止条件の網羅（Fix A 内に統合）
 
-### Fix 3: `src/renderer/dual-sync.js` 計測機構同梱（hall 限定）
+- `!ts || typeof ts !== 'object'` → `stopHallTickFrame()`
+- `ts.status === 'idle'` → `stopHallTickFrame()` + setState IDLE
+- `ts.status === 'finished'` → `stopHallTickFrame()` + setState IDLE 0
+- `levelCount === 0` → `stopHallTickFrame()`
+- `live.status === 'paused'` → status PAUSED で `stopHallTickFrame()` 経由（rAF 停止 + 静止表示）
+- v223 T7 で 4 件以上の停止経路網羅を静的検証済
 
-```javascript
-const FRAME_SKIP_THRESHOLD_MS = 25;   // 16.7ms × 1.5 = 25ms 超で frame skip 判定
-let _lastFlushFrameAtMs = 0;
-function _isHall() { return typeof window !== 'undefined' && window.appRole === 'hall'; }
-function _logHall(label, payload) {
-  if (!_isHall()) return;
-  try { window.api?.log?.write?.(label, payload); } catch (_) {}
-}
-function _recordFlushFrameSkip() {
-  if (!_isHall()) return;
-  const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-  if (_lastFlushFrameAtMs > 0) {
-    const deltaMs = nowMs - _lastFlushFrameAtMs;
-    if (deltaMs > FRAME_SKIP_THRESHOLD_MS) {
-      const skipPayload = { deltaMs: Math.round(deltaMs), threshold: FRAME_SKIP_THRESHOLD_MS };
-      _logHall('hall:dualSync:frameSkip', skipPayload);
-    }
-  }
-  _lastFlushFrameAtMs = nowMs;
-}
-```
+### Fix F: operator 側 broadcast の throttle 保持（変更なし）
 
-呼出箇所:
-- `_bufferDiff` 冒頭で `_logHall('hall:dualSync:recv', { kind, ts: Date.now() })`
-- rAF callback 内で `_recordFlushFrameSkip()` 呼出（`_flushDiffBuffer()` の前）
-- `_flushDiffBuffer` finally で `_logHall('hall:dualSync:flush', { durationMs, appliedCount })`
-- renderer.js の `applyTimerStateToTimer` / `applyHallPreStartState` 入口に hall 限定の log 呼出
+`renderer.js:1962` の `_preStartTickLastSentAt >= 1000` 1 秒間引き → 完全保持（v223 T9 で再検証）。
 
-`_recordFlushFrameSkip` は v221 T4 互換性（rAF callback body 抽出 regex の非貪欲一致で `})` パターンを避ける）のため独立関数化。
+### Fix G: package.json + CHANGELOG + 新規テスト
 
-### Fix 4: `src/renderer/dual-sync.js` の rAF はそのまま維持
-
-v2.1.9 で導入した `requestAnimationFrame` flush 機構は変更なし。Fix 1 / Fix 2 で hall の他の rAF ループを停止することで、dual-sync rAF が単独で動く環境になり frame skip 解消想定。v219 全 9 件 / v221 全 8 件 PASS で機構維持を再確認。
-
-### Fix 5: `package.json` バージョン bump
-
-```diff
--  "version": "2.1.9",
-+  "version": "2.1.10",
-   ...
--  "test": "... && node tests/v221-rAF-flush.test.js"
-+  "test": "... && node tests/v221-rAF-flush.test.js && node tests/v222-hall-rAF-reduction.test.js"
-```
-
-### Fix 6: `CHANGELOG.md` v2.1.10 セクション追加
-
-`[2.1.9]` の上に v2.1.10 セクション追加（Fixed / Internal / Tests / Compatibility / Known Limitations）。NEXT_CC_PROMPT 指定通り。
-
-### Fix 7: 既存テストの version assertion 更新
-
-Node script で 33 ファイルの `'2.1.9'` → `'2.1.10'`、`期待 2.1.9` → `期待 2.1.10`、`version は 2.1.9` → `version は 2.1.10`、`version が 2.1.9` → `version が 2.1.10`、`version 2.1.9 + scripts.test` → `version 2.1.10 + scripts.test` を一括置換。v219-hall-atomic-update.test.js は version assertion を持たないため対象外（コメント内の v2.1.9 言及は履歴注記として残置）。
-
-### Fix 8: `tests/v222-hall-rAF-reduction.test.js` 新規作成（7 件）
-
-| # | テスト名 | 検証ポイント |
-|---|---|---|
-| T1 | `applyTimerStateToTimer` 内で `timerStartAtLevel` に hall ガード | `isHallApply` 変数 + `if (!isHallApply) {...timerStartAtLevel(...)}` |
-| T2 | `timerReset / timerAdvanceBy / timerPause` すべてに hall ガード | `timerReset` 4 件すべて `!isHallApply ガード` 済、advanceBy/pause も同ブロック |
-| T3 | hall 経路で setState 直接呼出 + DOM 更新は無条件 | `setState({ currentLevelIndex, remainingMs, totalMs, status })` 存在、classList.remove は hall ガードなし |
-| T4 | `renderHallPreStartTick` の rAF 駆動部分削除 | コメント剥がし後、`requestAnimationFrame(renderHallPreStartTick)` / `hallPreStartState.rafId = requestAnimationFrame(...)` がない |
-| T5 | `applyHallPreStartState` で broadcast 受信時の即時 DOM 更新呼出 | `renderHallPreStartTick()` 呼出 + hall ガード（早期 return）|
-| T6 | 計測機構の `_isHall` ガード + 主要記録ラベル | `_isHall` / `_logHall` ヘルパ + `hall:dualSync:recv` / `flush` / `frameSkip` / `applyTimerStateToTimer:enter` / `applyHallPreStartState:enter` ラベル + `FRAME_SKIP_THRESHOLD_MS = 25` |
-| T7 | package.json version 2.1.10 + scripts.test に v222 登録 | `PKG.version === '2.1.10'` + `v222-hall-rAF-reduction.test.js` |
+- `package.json`: `"version": "2.1.10"` → `"version": "2.1.11"`、`scripts.test` に `v223-hall-60fps-restore.test.js` 追加
+- `CHANGELOG.md`: `[2.1.11]` セクションを `[2.1.10]` の上に挿入（Fixed / Internal / Tests / Compatibility / Known Limitations）
+- `tests/v223-hall-60fps-restore.test.js`: 新規 12 件
+- `tests/v222-hall-rAF-reduction.test.js`: T4 削除（v2.1.10 「rAF 廃止」検証は v2.1.11 で撤回）
 
 ---
 
-## §4 テスト結果
+## §4 設計判断: 案 B（分離維持）採用根拠
+
+NEXT_CC_PROMPT は案 A（統合: hallTickState 一本化、PRE_START を `renderHallTickFrame` に統合）を推奨。CC が事前調査で**案 B（分離維持: hallPreStartState + renderHallPreStartTick を保持、hallTickState + renderHallTickFrame を別途追加）を採用**した根拠:
+
+1. **既存テスト互換性**: `tests/v218-prestart-hall-sync.test.js` T9 が `const hallPreStartState =` と `function renderHallPreStartTick(` の両方を必須としている。案 A で hallPreStartState を廃止するとこれらが破壊され、T9 を更新する作業が追加発生。一方、案 B では既存テストを完全保持しつつ新規追加のみで完結 → 修正範囲最小化 + リグレッションリスク低下。
+2. **状態オブジェクトの責務分離**: PRE_START は `getState().status === IDLE` のまま `el.clockTime.textContent` 直書き / RUNNING/BREAK は `setState({ remainingMs })` で subscribe → renderTime 経路 という DOM 更新方法の本質的な違いがある。1 つの関数に分岐を詰め込むと条件分岐が増えて読みにくくなる。
+3. **rAF handle 管理**: PRE_START と RUNNING/BREAK は同時に発生しない（PRE_START → RUNNING の自動遷移）ため、別の handle を持っても同時に 2 個動くことはなく、handle 管理オーバーヘッドは無視可能。
+
+→ 案 B 採用、CC_REPORT §3 で diff 要点を提示済。
+
+---
+
+## §5 テスト結果
 
 ```
-全テスト件数: 882 PASS / 0 FAIL
-  - 既存 875 件（v2.1.9 時点）
-  - 新規 v222 7 件
-  - 既存 33 ファイルの version assertion 更新（実体は同一テストの version 値変更のみ）
+全テスト件数: 893 PASS / 0 FAIL
+  - 既存 882 件（v2.1.10 時点）
+  - v222 T4 削除（-1）= 881
+  - v223 新規 12 件（+12）= 893
+  - 既存 33 ファイルの version assertion 更新（実体は同一テストの version 値変更のみ、件数増減なし）
 
 実行コマンド: npm test
 所要時間: 約 25 秒
 ```
 
 主要関連ファイル個別確認:
-- v218 (PRE_START hall sync): 13 PASS（T9 で renderHallPreStartTick 関数名互換性確認、T12 致命バグ保護 5 件確認）
-- v219 (hall atomic update): 9 PASS（T6 cancelAnimationFrame 経路 + 動的シミュレーション全件）
-- v220 (PRE_START / audio hall guard): 8 PASS（致命バグ保護 5 件確認、cancelAnimationFrame 追従）
-- v221 (rAF flush): 8 PASS（v2.1.9 機構の static + 動的検証）
-- v222 (hall rAF reduction): 7 PASS（v2.1.10 専用テスト全件）
-
-回帰なし、すべての旧機構（v2.1.6 / v2.1.7 / v2.1.8 / v2.1.9）が完全動作することを静的解析で再確認。
+- v218 (PRE_START hall sync): 13 PASS（T9 で `renderHallPreStartTick` 関数 + `hallPreStartState` 保持確認）
+- v219 (hall atomic update): 9 PASS（dual-sync buffer 完全保持）
+- v220 (PRE_START / audio hall guard): 8 PASS（hall ガード機構保持）
+- v221 (rAF flush): 8 PASS（v2.1.9 機構保持）
+- v222 (hall rAF reduction): 6 PASS（T4 削除済、T1-T3/T5-T7 で v2.1.10 Fix 1 + Fix 3 保持確認）
+- v223 (hall 60fps restore): **12 PASS**（v2.1.11 専用、12 件全件 GREEN）
 
 ---
 
-## §5 main マージ + タグ + push 結果
+## §6 main マージ + タグ + push 結果 + ビルド成果物
 
 ```
-git checkout -b feature/v2.1.10-hall-rAF-reduction → 実装 → コミット f2de1ae
-git checkout main && git merge --no-ff feature/v2.1.10-hall-rAF-reduction → マージコミット 9288fe4
-git tag -a v2.1.10 -m "..."
-git push origin main → main 9288fe4 push 完了
-git push origin v2.1.10 → タグ push 完了
+git checkout -b feature/v2.1.11-hall-60fps-restore → 実装 → コミット a97f23d
+git checkout main && git merge --no-ff feature/v2.1.11-hall-60fps-restore → bcf658d
+git tag -a v2.1.11
+npm run build → dist/pokertimerplus-setup-2.1.11.exe + dist/latest.yml
+git push origin main → bcf658d push 完了
+git push origin v2.1.11 → タグ push 完了
 ```
 
 最新 main 履歴:
+- `bcf658d` Merge v2.1.11 hall 60fps tick restore (v2.1.10 設計ミスの構造的根治)
+- `a97f23d` v2.1.11: hall 自前 60fps tick 再導入（v2.1.10 設計ミスの構造的根治）
+- `c03bdc8` v2.1.10: CC_REPORT 執筆
 - `9288fe4` Merge v2.1.10 hall rAF reduction + measurement instrumentation
 - `f2de1ae` v2.1.10: hall window rAF 競合解消（4 → 1）+ 計測機構同梱
-- `a4fdb1c` v2.1.9: CC_REPORT 末尾にリリース完了状態を追記
-- `a7dbe40` Merge v2.1.9: ...
+
+ビルド成果物:
+```
+dist/pokertimerplus-setup-2.1.11.exe   82,995,500 bytes (約 82.99 MB)
+dist/latest.yml                        version: 2.1.11
+                                       sha512: RrEn4KgAVTw6w0rQTKiJIUFlEfynqOCNJ96sml3qXuCH9IhMePX+TwbePA4yZSTLa/G9dSHlnomt2kOxYSb5Kw==
+                                       releaseDate: 2026-05-08T15:52:16.224Z
+```
 
 ---
 
-## §6 ビルド成果物確認
+## §7 GitHub Releases 公開結果
 
 ```
-dist/pokertimerplus-setup-2.1.10.exe  82,995,850 bytes (82.99 MB)
-dist/latest.yml                       version: 2.1.10
-                                      sha512: l04VdVpldJCgE+Y+0eP+K8mwoxNKuQ90rr2lx6/2O9XlQ4CZHHZD1oMhigrNPn+EGk/f7Oqo9jLuOREBpslpzg==
-                                      releaseDate: 2026-05-08T14:36:26.400Z
+$ gh release create v2.1.11 --title "v2.1.11 - hall 自前 60fps tick 再導入（v2.1.10 設計ミスの構造的根治）" \
+    --notes-file .release-notes-v2.1.11.md --latest \
+    dist/pokertimerplus-setup-2.1.11.exe dist/latest.yml
+https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.1.11
 ```
 
-NSIS インストーラビルド完了。GitHub Releases 公開は前原さん次第（タグ push 済なので自動更新は v2.1.9 端末から検知可能）。
+検証結果:
+
+| 確認ポイント | 結果 | 値 |
+|---|---|---|
+| `tagName == "v2.1.11"` | ✅ | `v2.1.11` |
+| `name == "v2.1.11 - hall 自前 60fps tick 再導入（v2.1.10 設計ミスの構造的根治）"` | ✅ | 一致 |
+| `isLatest == true` | ✅（代替確認）| `gh api repos/.../releases/latest --jq .tag_name` → `v2.1.11` |
+| `assets` 2 件 | ✅ | `pokertimerplus-setup-2.1.11.exe`（82,995,500 bytes）+ `latest.yml`（359 bytes）|
+| `publishedAt` 時刻入り | ✅ | `2026-05-08T15:52:56Z` |
+| `curl latest.yml` 冒頭 `version: 2.1.11` | ✅ | 取得成功 + sha512 一致（v2.0.11 真因 1 / 2 の再発なし） |
+
+一時ファイル `.release-notes-v2.1.11.md` 削除済。
 
 ---
 
-## §7 試験項目別の前原さん確認手順（v2.1.10 実機）
+## §8 試験項目別の前原さん確認手順（v2.1.11 実機）
 
 | # | 操作 | 期待結果 |
 |---|---|---|
-| 1 | 2 画面モード RUNNING 中、5 秒前カウントダウン音と画面表示 | **音と表示がほぼ同時**（1 秒遅延が消える、目標 0.1 秒以内）|
-| 2 | 2 画面モード PRE_START 中、カウントダウン表示 | 1 秒粒度で滑らかに更新（分:秒表示なので秒以下の更新は不要）|
-| 3 | アプリ全体の動作の重さ感覚 | **「アプリ重い」感覚が消える**（hall window の rAF 削減効果）|
-| 4 | 2 画面モードでトーナメント切替 | v2.1.7 同様、チラつかず一発で切替（atomic update 機構維持）|
-| 5 | 2 画面モード PRE_START + スライドショー終了 | v2.1.8 同様、即時カウントダウン表示 |
-| 6 | 2 画面モード 5 秒前カウントダウン音 | v2.1.8 同様、「ポン」1 音だけ（hall ガード維持）|
-| 7 | 単画面モード（hall なし）の通常運用 | 完全に従来挙動（hall ガードは appRole === 'hall' 判定なので影響なし）|
-| 8 | HDMI 抜き差し | 致命バグ保護 5 件すべて維持 |
-| 9 | 会場モニターのスライドショー切替ボタン | v2.1.9 同様、表示 + 動作（CSS 削除維持）|
-| 10 | （試験で問題発生時）`Ctrl+Shift+L` でログ採取 | 計測機構が rAF 状況を記録 → 構築士提供 |
+| 1 | 2 画面 PRE_START 中、会場モニターのカウントダウン表示 | **滑らかに減る**（60fps、v2.1.6 同等） |
+| 2 | 2 画面 BREAK 中、会場モニターのタイマー表示 | **滑らかに減る**（60fps、カクカク消失） |
+| 3 | 2 画面 RUNNING 中、5 秒前カウントダウン音と表示 | **音と表示がほぼ同時**（v2.1.9 課題も解消、自前計算で broadcast 待たない） |
+| 4 | アプリ全体の動作の重さ感覚 | **「アプリ重い」感覚消失**（rAF 同時 2 個に削減: renderHallTickFrame + dual-sync flush） |
+| 5 | PAUSED 中の time-shift 操作 | hall 側も即時反映（seed 受信時に startedAtMs 補正、停止表示）|
+| 6 | 2 画面トーナメント切替 | v2.1.7 同様、チラつかず一発切替 |
+| 7 | 2 画面 PRE_START + スライドショー終了 | v2.1.8 同様、即時カウントダウン表示 |
+| 8 | 2 画面 5 秒前カウント音 | v2.1.8 同様、「ポン」1 音だけ（hall ガード維持）|
+| 9 | 単画面モード | 完全に従来挙動（hallTickState は appRole !== 'hall' で no-op）|
+| 10 | HDMI 抜き差し | 致命バグ保護 5 件すべて維持 |
+| 11 | 会場モニターのスライドショー切替ボタン | v2.1.9 同様、表示 + 動作 |
+| 12 | （試験で問題発生時）`Ctrl+Shift+L` でログ採取 | 計測機構が rAF 状況を記録 |
 
-特に **試験 1 / 3** で「音と表示がほぼ同時」+「アプリの重さ消える」が確認できれば根治確定。
-
----
-
-## §8 計測機構の使い方（前原さん向け）
-
-会場モニター（hall window）に以下のラベルでログが記録される:
-
-| ラベル | 内容 |
-|---|---|
-| `hall:dualSync:recv` | IPC 受信のたびに kind と時刻 |
-| `hall:dualSync:flush` | dual-sync flush の所要時間（ms）+ 適用件数 |
-| `hall:dualSync:frameSkip` | rAF callback 間隔が 25ms を超えたとき（frame skip 検出）|
-| `hall:applyTimerStateToTimer:enter` | タイマー状態反映の入口時刻 |
-| `hall:applyHallPreStartState:enter` | PRE_START 状態反映の入口時刻 |
-
-### ログ採取手順
-
-1. アプリ起動後、症状を再現（2 画面モードで RUNNING や PRE_START を試す）
-2. 会場モニター画面で `Ctrl+Shift+L`（ログをテキストファイルに保存）
-3. 保存されたファイルを構築士に提供（メールや LINE で送付）
-
-問題なく動いていれば `hall:dualSync:frameSkip` ラベルが出ない or 件数が極めて少ないはず。逆にこのラベルが多発していれば「まだ rAF が競合している」証拠 → 構築士が解析 → v2.1.11 で追加対策。
-
-**注意**: 計測機構は本リリースで保険として同梱、試験で問題なければ次バージョンで削除判断。
+特に **試験 1 / 2 / 3 / 4** が今回の根治確認の本丸。
 
 ---
 
-## §9 リスク評価 + 致命バグ保護 5 件 cross-check
+## §9 致命バグ保護 5 件 cross-check（再掲、v2.1.11 でも完全無傷）
+
+| 保護 | 検証 | 静的検証 |
+|---|---|---|
+| C.2.7-A `resetBlindProgressOnly` | renderer.js 関数定義維持、操作経路 touch なし | v223 T10 / v218 T12 |
+| C.2.7-D `timerState` destructure 除外 | main.js 完全無変更 | v223 T10 |
+| C.1-A2 `ensureEditorEditableState` | renderer.js 編集経路 touch なし | v218 T12 |
+| C.1.7 AudioContext resume | audio.js 完全無変更 | v223 T10 |
+| C.1.8 runtime 永続化 | main.js 完全無変更、`schedulePersistRuntime` 8 箇所維持 | v223 T10 |
+
+---
+
+## §10 リスク評価 + Known Limitations
 
 ### リスク評価
 
 | リスク | 評価 | 対策 |
 |---|---|---|
-| hall 表示がフリーズ | 低 | setState 直接呼出で subscribe 経路を保持、renderTime / renderNextBreak / renderCurrentLevel すべて発火する設計を確認 |
-| operator 側の挙動変化 | 極めて低 | hall ガードはすべて `appRole === 'hall'` 限定、operator は既存経路完全維持 |
-| 単画面モードの挙動変化 | 極めて低 | 単画面は `appRole === 'operator-solo'` で hall ガードに引っかからない、計測機構も `_isHall()` で skip |
-| 計測ログのオーバーヘッド | 極めて低 | hall 限定 + fire-and-forget IPC、`_lastFlushFrameAtMs` のみメモリ消費（数 byte）|
-| 旧 `hallPreStartState.rafId` 残存 | 無視可 | v2.1.10 では never set だが defense-in-depth として cleanup ロジックは残置 |
-| v2.1.6 PRE_START 同期機能の劣化 | 低 | 1 秒間引き broadcast + 即時 DOM 更新で秒粒度確保、PRE_START 表示単位 = 分:秒なので体感影響なし |
+| hall 側 rAF が止まらない | 低 | 4 件以上の停止経路（!ts/idle/finished/levelCount===0/PAUSED）すべてで `stopHallTickFrame()` 呼出、v223 T7 で網羅 |
+| operator との時刻ドリフト | 低 | 5 秒粒度の `periodicPersistAllRunning` で fresh seed 受信 → startedAtMs 再 base、ドリフト幅は IPC レイテンシ（数十 ms）以下 |
+| 同時 rAF 数増加 | 低 | hall window で同時 2 個（renderHallTickFrame + dual-sync flush）= v2.1.10 設計目標達成、v2.1.10 以前の 4 個より良好 |
+| 単画面モードへの影響 | 低 | hallTickState は `appRole !== 'hall'` で `renderHallTickFrame` 早期 return → 単画面モードでは初期化以外何もしない |
+| PAUSED 中 time-shift の hall 反映 | 低 | operator setState({status:PAUSED, remainingMs}) → broadcast → hall applyTimerStateToTimer で setState 即時反映、停止表示更新 OK |
 
-### 致命バグ保護 5 件 cross-check（再掲、v2.1.10 でも完全無傷）
+### Known Limitations（CHANGELOG にも記載）
 
-| 保護 | 検証 |
-|---|---|
-| C.2.7-A `resetBlindProgressOnly` | `function resetBlindProgressOnly\s*\(` 関数定義維持。renderer.js 内の operator ロジック全範囲 touch なし |
-| C.2.7-D `timerState` destructure 除外 | `tournaments:setDisplaySettings` ハンドラ維持、main.js 完全無変更 |
-| C.1-A2 `ensureEditorEditableState` | 編集モード経路は本修正範囲外、ensureEditorEditableState 4 重防御維持 |
-| C.1.7 AudioContext resume | audio.js 完全無変更、suspended 検出 + resume() fire-and-forget 維持 |
-| C.1.8 runtime 永続化 | main.js 完全無変更、`schedulePersistRuntime` 8 箇所維持、`tournaments:setRuntime` IPC 維持 |
+- B3 ブレイク終了 pauseAfterBreak 反映漏れ → v2.1.12 候補
+- 計測機構（v2.1.10 で同梱した `hall:dualSync:*` ログ）は本リリースでも保険として保持、試験で問題なければ削除判断（v2.1.12 で構築士判断仰ぐ）
+- hall 側 startedAtMs は IPC 受信時の Date.now() ベース → operator との時刻ドリフトは IPC レイテンシ（数十 ms）+ periodicPersistAllRunning の 5 秒粒度補正で許容範囲
 
 ---
 
-## §10 Known Limitations（v2.1.11 候補）
+## §11 並列 sub-agent / Task 数報告（cc-operation-pitfalls §4.2 準拠）
 
-- B3 ブレイク終了 pauseAfterBreak 反映漏れ → v2.1.11 候補
-- 計測機構は本リリースで保険として同梱、試験で問題なければ v2.1.11 で削除判断（CC_REPORT で構築士に判断仰ぐ）
-
----
-
-## §11 並列 sub-agent 数報告（cc-operation-pitfalls 準拠）
-
-- **並列起動した sub-agent / Task 数: 0 体**
-- 全 Fix を直接実行（cc-operation-pitfalls §1.1 上限 3 体に対し 0 体、§4.2 報告義務遵守）
-- 事前調査で 6 項目すべて Read tool 直列で確認、context 統合不要
+- **0 体**（直接実行）
+- 公式 Agent Teams 推奨上限 3 体に対し未起動、§1.1 違反なし
+- 事前調査で renderer.js / dual-sync.js / timer.js / main.js / 全テストファイルを Read tool 直列で確認、context 統合不要
 
 ---
 
 ## §12 オーナー向け確認
 
-1. **音と表示のズレが消えた？**: 5 秒前カウントダウンで会場モニターと音がほぼ同時になりましたか？（試験項目 1）
-2. **会場モニターの動作の重さは消えた？**: アプリ全体が軽快に動くようになりましたか？（試験項目 3）
-3. **PRE_START 中の表示は滑らか？**: 「開始まで 0:30」「0:29」「0:28」と 1 秒ごとに自然に減っていますか？（試験項目 2）
-4. **既存機能は壊れていない？**: トーナメント切替・スライドショー・ボタン表示・音などすべて従来通り動きますか？（試験項目 4-9）
-5. **ログを取りたいときは？**: 問題が出たら `Ctrl + Shift + L` でログを保存して構築士へ送ってください（試験項目 10）。
+1. **会場モニターのカウントダウン表示は滑らかになりましたか？**: 試験 1 / 2、特に PRE_START と BREAK 中の表示。「進まない」「カクカク」が消えていれば根治確定。
+2. **音と表示のタイミングはどうですか？**: 試験 3、5 秒前カウントダウンで音と画面の数字がほぼ同時に変化していますか？
+3. **アプリ全体の動作の重さは？**: 試験 4、v2.1.10 で出ていた「重い」感覚は消えていますか？
+4. **既存機能は壊れていない？**: 試験 6-11、トーナメント切替・スライドショー・ボタン表示・音などすべて従来通りに動きますか？
+5. **自動更新で v2.1.10 → v2.1.11 が降ってきますか？**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.1.11> にアセットが揃っているので、v2.1.10 端末を起動すると自動検出されます。
+6. **問題が出たら**: 会場モニター画面で `Ctrl + Shift + L` を押すと、`hall:dualSync:*` ラベル含むログが採取されます。構築士に送付してください。
+
+**v2.1.11 配布完了**。前原さんの実機試験で BREAK カクカク + PRE_START 進まずが解消できれば v2.1.10 設計ミスは構造的根治、計測機構の削除可否は v2.1.12 で構築士判断。
