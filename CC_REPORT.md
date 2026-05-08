@@ -218,12 +218,11 @@ PASS: 875 / FAIL: 0
 
 ## §9 ビルド成果物確認（リリース工程）
 
-- ✅ ブランチ: `feature/v2.1.9-rAF-flush` → main へ `--no-ff` マージ予定
-- ✅ タグ: `v2.1.9` 作成予定
-- ✅ ビルド: `dist/pokertimerplus-setup-2.1.9.exe` + `dist/latest.yml` (version: 2.1.9) 予定
-- ✅ push: main + v2.1.9 タグを origin へ push 予定
-
-→ 詳細は本レポート末尾に追記。
+- ✅ ブランチ: `feature/v2.1.9-rAF-flush` → main へ `--no-ff` マージ済（マージコミット a7dbe40）
+- ✅ タグ: `v2.1.9` 作成済 + push 済
+- ✅ ビルド: `dist/pokertimerplus-setup-2.1.9.exe` (82,995,776 bytes / 82.99 MB) + `dist/latest.yml` (version: 2.1.9、sha512 計算済)
+- ✅ push: main + v2.1.9 タグを origin へ push 完了
+- 直近コミット: 5a1d413（feature commit）→ a7dbe40（merge commit）
 
 ---
 
