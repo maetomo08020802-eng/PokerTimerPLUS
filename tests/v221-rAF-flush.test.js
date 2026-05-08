@@ -148,8 +148,8 @@ test('T7 (Fix 4 動作保証): handlePipShowTimer / handlePipShowSlideshow に a
 // T8: package.json version 2.1.12 + scripts.test に v221 登録
 // ============================================================
 test('T8: package.json version は 2.1.12 + scripts.test に v221 登録', () => {
-  assert.equal(PKG.version, '2.1.14',
-    `package.json version が ${PKG.version}（期待 2.1.14）`);
+  assert.equal(PKG.version, '2.1.15-rc1',
+    `package.json version が ${PKG.version}（期待 2.1.15-rc1）`);
   assert.match(PKG.scripts.test, /v221-rAF-flush\.test\.js/,
     'scripts.test に v221-rAF-flush.test.js が登録されていない');
 });

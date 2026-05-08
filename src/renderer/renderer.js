@@ -1469,8 +1469,27 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
       const remainingMs = Math.max(0, totalMs - elapsedMs);
       let status;
       if (live.status === 'paused') status = States.PAUSED;
-      else if (typeof isBreakLevel === 'function' && isBreakLevel(idx)) status = States.BREAK;
-      else status = States.RUNNING;
+      else {
+        const isBreakResult = (typeof isBreakLevel === 'function') ? isBreakLevel(idx) : false;
+        // v2.1.15-rc1 計測ログ C: hall 側 isBreakLevel 結果と currentStructure の状態を観測
+        if (window.appRole === 'hall') {
+          try {
+            const struct = (typeof getStructure === 'function') ? getStructure() : null;
+            const lvAtIdx = struct?.levels?.[idx];
+            window.api?.log?.write?.('meas:isBreakLevel:check', {
+              idx,
+              isBreakResult,
+              lvAtIdx_isBreak: lvAtIdx?.isBreak,
+              lvAtIdx_isBreakType: typeof lvAtIdx?.isBreak,
+              lvAtIdx_duration: lvAtIdx?.durationMinutes,
+              lvAtIdx_hasIsBreakKey: lvAtIdx && Object.prototype.hasOwnProperty.call(lvAtIdx, 'isBreak'),
+              structLevelsCount: struct?.levels?.length || 0
+            });
+          } catch (_) { /* never throw from logging */ }
+        }
+        if (isBreakResult) status = States.BREAK;
+        else status = States.RUNNING;
+      }
       // 初回 setState（subscribe → renderTime 経由で初期表示反映）
       setState({ currentLevelIndex: idx, remainingMs, totalMs, status });
       // hallTickState seed 更新（毎フレーム Date.now() との差で remainingMs を算出するため）
@@ -1818,6 +1837,20 @@ function updateOperatorStatusBar(state) {
   const stateEl = document.getElementById('js-operator-status-state');
   if (!levelEl || !timeEl || !stateEl) return;
   // Level: 1-indexed 表示（getLevel は 0-indexed）
+  // v2.1.15-rc1 計測ログ E: ヘッダーレベル表示時の現状値観測（② 真因特定用）
+  try {
+    const idx = state.currentLevelIndex || 0;
+    const lv = (typeof getLevel === 'function') ? getLevel(idx) : null;
+    const isBr = (typeof isBreakLevel === 'function') ? isBreakLevel(idx) : false;
+    window.api?.log?.write?.('meas:headerLevel:render', {
+      idx,
+      displayedNumber: idx + 1,
+      lv_isBreak: lv?.isBreak,
+      lv_durationMinutes: lv?.durationMinutes,
+      isBreakLevelResult: isBr,
+      role: typeof window !== 'undefined' ? window.appRole : null
+    });
+  } catch (_) { /* never throw from logging */ }
   levelEl.textContent = String((state.currentLevelIndex || 0) + 1);
   // Time: MM:SS 表示（既存 renderTime と同じ formatter を再利用したいが、最小実装のため自前計算）
   const ms = Math.max(0, state.remainingMs || 0);
@@ -6927,6 +6960,13 @@ async function loadAppVersion() {
     try {
       const version = await window.api.app.getVersion();
       el.appVersion.textContent = version;
+      // v2.1.15-rc1: 計測モード（-rcN サフィックス）かつ operator 画面のみ赤バッジを表示。
+      //   hall は CSS [data-role="hall"] で display:none、operator-solo は appRole 判定で hidden 属性のまま。
+      try {
+        if (typeof window !== 'undefined' && window.appRole !== 'hall' && /-rc\d+/.test(version || '')) {
+          document.getElementById('measurement-mode-badge')?.removeAttribute('hidden');
+        }
+      } catch (_) { /* never throw from badge toggle */ }
     } catch (err) {
       console.warn('バージョン取得に失敗:', err);
       el.appVersion.textContent = '0.1.0';
@@ -7176,6 +7216,21 @@ if (__appRole === 'hall') {
         // setStructure で blinds.js の currentStructure を更新 → 次レベル切替時に新 duration が効く。
         // timer.js の targetTime は意図的に再計算しない（現レベル末端まで古い duration で継続、③ c 厳守）。
         try {
+          // v2.1.15-rc1 計測ログ B: hall setStructure 直前、value.levels の isBreak フィールド観測
+          try {
+            window.api?.log?.write?.('meas:structure:recv', {
+              levelsCount: value?.levels?.length || 0,
+              levels: (value?.levels || []).map((lv, idx) => ({
+                idx,
+                isBreak: lv?.isBreak,
+                isBreakType: typeof lv?.isBreak,
+                durationMinutes: lv?.durationMinutes,
+                hasIsBreakKey: lv && Object.prototype.hasOwnProperty.call(lv, 'isBreak')
+              })),
+              role: window.appRole,
+              valueKeys: value && typeof value === 'object' ? Object.keys(value) : null
+            });
+          } catch (_) { /* never throw from logging */ }
           setStructure(value);
           const { currentLevelIndex } = getState();
           renderCurrentLevel(currentLevelIndex);

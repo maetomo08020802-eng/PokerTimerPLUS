@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.15-rc1] - 2026-05-09 (観測ビルド、GitHub Releases 未公開)
+
+### Internal
+- v2.1.14 配布後 2 画面運用で発覚した未解決 3 件（① PRE_START 一時停止 hall 不到達 / ② BREAK 中ヘッダーレベル表示異常 / ③ BREAK スライドショー自動起動しない）の真因特定用計測ログ 6 か所追加
+  - meas:structure:publish (main.js): operator → main の structure 送信時、levels の isBreak フィールド観測
+  - meas:structure:recv (renderer.js): hall setStructure 直前、value.levels の isBreak フィールド観測
+  - meas:isBreakLevel:check (renderer.js): hall 側 isBreakLevel 結果と currentStructure の状態を観測
+  - meas:preset:save (main.js): presets:saveUser 受信時、preset.levels の isBreak フィールド観測
+  - meas:headerLevel:render (renderer.js): ヘッダーレベル表示時の現状値観測
+  - meas:timer:pause:enter (timer.js): pause 関数呼出時の現状値観測
+- 計測モードバッジ追加（operator 画面のみ、起動時表示）
+- 修正ロジックは一切なし、ログ追加のみ
+
+### Compatibility
+- v2.1.14 完全互換、全機構保持、致命バグ保護 5 件無傷
+
+---
+
 ## [2.1.14] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.14 BREAK 中スライドショー不発の構造同期 2 穴 + ログ過剰の根治リリース（3 ファイル / 約 30 行）。
