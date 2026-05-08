@@ -1,155 +1,163 @@
-# CC_REPORT — 2026-05-08 v2.1.8 PRE_START 関連 2 件のバグ根治
+# CC_REPORT — 2026-05-08 v2.1.9 hall 表示遅延 0.2 秒の根治 + 会場モニターのスライドショー切替ボタン表示根治
 
 ## §1 サマリ
 
-NEXT_CC_PROMPT v2.1.8 通り、前原さん 2 画面実機で発見された 2 件のバグ（バグ A: スライドショー終了→PRE_START カウントダウン非表示 / バグ B: 5 秒前カウント音 2 重再生）を根治。バグ B は 3 箇所の hall ガード追加（多層防御）、バグ A は CSS の `display: none` を `opacity: 0; pointer-events: none` に切替えて reflow 待ちを回避。
+NEXT_CC_PROMPT v2.1.9 通り、前原さん 2 画面実機で v2.1.8 試験中に発見された 2 件のバグを根治。
+1. **遅延 0.2 秒の根治**: `dual-sync.js` の flush 予約を `setTimeout(0)` → `requestAnimationFrame` に切替。macrotask boundary の 50〜200ms 遅延を次フレーム（16〜50ms）に短縮、描画パイプと自然同期。
+2. **緊急差し込み（hall ボタン消失）の根治**: `style.css:3791-3793` の `[data-role="hall"] .pip-action-btn { display: none !important; }` ルールを削除し、会場モニターでもスライドショー切替ボタンを表示。
 
 | 項目 | 内容 |
 |---|---|
-| 修正ファイル数 | 5（renderer.js / audio.js / style.css / package.json / CHANGELOG.md） + tests/v220 新規 + 既存テスト 31 ファイルの version assertion 更新 |
+| 修正ファイル数 | 5（dual-sync.js / style.css / package.json / CHANGELOG.md / tests/v221 新規） + tests/v219 / tests/v220 追従更新 + 既存テスト 32 ファイルの version assertion 更新 |
 | 並列 sub-agent / Task 数 | **0 体**（直接実行、cc-operation-pitfalls §1.1 / 4.2 準拠） |
-| 全テスト件数 | **867 件 PASS / 0 件 FAIL**（v2.1.7 時点 859 + 新規 v220 = 8 件） |
+| 全テスト件数 | **875 件 PASS / 0 件 FAIL**（v2.1.8 時点 867 + 新規 v221 = 8 件） |
 | 致命バグ保護 5 件 | **5 件すべて影響なし**（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8） |
-| v2.1.7 dual-sync buffer 機構 | **完全無傷**（dual-sync.js touch なし、T7 で静的検証） |
+| v2.1.6 / v2.1.7 / v2.1.8 機構 | **全機構完全無傷**（v220 T6/T7 + v221 全テストで静的検証） |
 
 ---
 
 ## §2 事前調査結果（NEXT_CC_PROMPT 必須項目）
 
-### A. 真因 6 箇所の独立検証（CC が独立 Read で確認）
+### A. 真因の独立検証（CC が独立 Read で確認）
 
 | # | 場所 | 構築士分析 | CC 独立検証結果 |
 |---|---|---|---|
-| 1 | `renderer.js:1376` `applyTimerStateToTimer` | hall でも timerState を反映する経路、appRole ガードなし | ✅ 一致（`function applyTimerStateToTimer(ts, levels, opts = {}) {` 直前に何のガードもなし。本関数は touch 禁止、ガードは音発火経路のみ） |
-| 2 | `renderer.js:1857` `handleAudioOnTick` | RUNNING / BREAK 中の音発火、appRole ガードなし | ✅ 一致（先頭で `const remainingSec = Math.ceil(...)` の後に直接 `playSound('warning-1min' / 'warning-10sec' / 'countdown-tick')` を発火、ガードゼロ） |
-| 3 | `renderer.js:1893` `handleAudioOnPreStartTick` | PRE_START 中 5,4,3,2,1 秒で countdown-tick 発火、appRole ガードなし | ✅ 一致（先頭で `playSound('countdown-tick')` を直接発火） |
-| 4 | `renderer.js:6766` `initialize()` | hall でも全初期化が走る | ✅ 一致（`async function initialize() {` 冒頭に appRole 分岐なし） |
-| 5 | `audio.js:543` `playSound` | enabledMap チェックのみ、appRole ガードなし | ✅ 一致（`if (!enabledMap[soundId]) return; _play(soundId);` のみ） |
-| 6 | `style.css:3268-3273` `:root[data-slideshow="active"] .clock` | display: none で reflow タイミングずれ | ✅ 一致（`.clock`, `.bottom-bar`, `.marquee`, `.event-header` の 4 セレクタが束ねられて `display: none`） |
+| 1 | `dual-sync.js:98-100` | `setTimeout(_flushDiffBuffer, 0)` で flush 予約、macrotask 遅延 50〜200ms | ✅ 一致（`if (_flushTimer === null) { _flushTimer = setTimeout(_flushDiffBuffer, 0); }`） |
+| 2 | `dual-sync.js:135-143` | beforeunload で `clearTimeout(_flushTimer)` cleanup | ✅ 一致 |
+| 3 | `style.css:3791-3793` | `[data-role="hall"] .pip-action-btn { display: none !important; }` で hall 強制非表示 | ✅ 一致（旧コメント「ホール側でも触らせない」前提） |
+| 4 | `style.css:3804` | `[data-role="operator"] ... .pip-action-btn ... { display: none !important; }` で operator も非表示 | ✅ 一致（**operator セクションは触らない**、操作画面なので非表示維持が正解） |
+| 5 | `renderer.js:2762, 2769` | `handlePipShowTimer` / `handlePipShowSlideshow` に appRole ガードなし | ✅ 一致（hall でクリックしても素直に動作） |
+| 6 | `slideshowState` | hall window 内 local 変数 | ✅ 一致（broadcast 不要、hall ローカルで完結） |
 
-→ **構築士分析と完全一致**、反論なし。修正方針 4 箇所（音発火 3 + CSS 1）で根治。
+→ **構築士分析と完全一致**、反論なし。
 
-### B. 既存 hall ガードの一貫性確認
+### B. 既存 v219 テストへの影響範囲確認
 
-renderer.js 内の `window.appRole === 'hall'` 既存使用箇所を grep（`renderer.js:1438` 以降に 30 件以上）。すべて `if (window.appRole === 'hall') return;` 形式。本実装でも同形式を採用、ただし **audio.js は preload bridge を介さないモジュールスコープのため `typeof window !== 'undefined'` ガードを併用**して安全側で書く（既存 dual-sync.js のパターンに合わせ）。
+`tests/v219-hall-atomic-update.test.js` で `setTimeout` を検証している箇所を全網羅確認:
+- T1 静的 assertion: `setTimeout(_flushDiffBuffer, 0)` 文字列照合 → `requestAnimationFrame` に追従
+- T6 静的 assertion: `clearTimeout(_flushTimer)` 文字列照合 → `cancelAnimationFrame` に追従
+- buildBufferSandbox の vm context: `setTimeout/clearTimeout` のみ → `requestAnimationFrame: (cb) => setTimeout(cb, 0)` + `cancelAnimationFrame: clearTimeout` の stub を追加
+- T3 / T4 / T5 / T8 / T9 の動的待機 `await new Promise(r => setTimeout(r, 10))` は stub 経由で発火 → 既存 logic ほぼそのまま動作
 
-### C. 致命バグ保護 5 件 cross-check（個別影響評価）
+**v220 T7 への波及**: v2.1.8 で追加した v220 T7 が `clearTimeout(_flushTimer)` を文字列照合していたため、v2.1.9 で `cancelAnimationFrame` に追従更新（v220 T7 の cleanup 経路存在検証は維持）。
+
+### C. v2.1.7 dual-sync 主要シンボル維持確認
+
+`DIFF_BUFFER_MAX` / `_diffBuffer` / `_isFlushing` / `_applyDiffToState` / `_flushDiffBuffer` / `_bufferDiff` のシンボル本体・呼出経路は完全無変更。変更は `_bufferDiff` 内 1 行（setTimeout → rAF）+ beforeunload listener 内 1 行（clearTimeout → cancelAnimationFrame）の 2 点のみ。dedup ロジック / 上限機構 / 例外耐性 / 再帰防止はすべて完全維持。
+
+### D. v2.1.6 preStartState / v2.1.8 hall ガードとの両立確認
+
+- v2.1.6: 修正対象は dual-sync.js のみ。preStartState 専用 broadcast kind / IPC handler / handler 拡張はすべて touch なし → 完全両立
+- v2.1.8: 修正対象は dual-sync.js + style.css のみ。`handleAudioOnTick` / `handleAudioOnPreStartTick` / `playSound` の hall ガードはすべて touch なし → 完全両立
+
+### E. 致命バグ保護 5 件 cross-check
 
 | 保護 | 関連箇所 | 影響評価 | 根拠 |
 |---|---|---|---|
-| C.2.7-A `resetBlindProgressOnly` | renderer.js | **影響なし** | 修正対象は handleAudioOnTick / handleAudioOnPreStartTick / playSound / .clock CSS のみ、resetBlindProgressOnly に touch なし |
+| C.2.7-A `resetBlindProgressOnly` | renderer.js | **影響なし** | dual-sync.js + style.css のみ修正、renderer.js の operator ロジック touch なし |
 | C.2.7-D `timerState` destructure 除外 | main.js | **影響なし** | main.js 完全無変更 |
-| C.1-A2 `ensureEditorEditableState` 4 重防御 | renderer.js | **影響なし** | 修正対象に operator 編集モード経路は含まれない |
-| C.1.7 AudioContext resume in `_play()` | audio.js | **影響なし** | playSound 冒頭の hall ガードは `_play()` の手前で hall を切るだけ。operator 側の `_play()` 経路は完全不変、`audioContext.state === 'suspended'` の resume 経路も維持 |
-| C.1.8 runtime 永続化 8 箇所 | main.js | **影響なし** | main.js 完全無変更 |
+| C.1-A2 `ensureEditorEditableState` | renderer.js | **影響なし** | 編集モード経路は本修正範囲外 |
+| C.1.7 AudioContext resume | audio.js | **影響なし** | audio.js 完全無変更 |
+| C.1.8 runtime 永続化 | main.js | **影響なし** | main.js 完全無変更 |
 
-→ **5 件すべて完全無傷**（v220 T6 で静的検証）。
-
-### D. v2.1.7 dual-sync buffer 機構との両立確認
-
-修正対象は audio / CSS / 音発火経路のみで `src/renderer/dual-sync.js` には一切 touch なし。subscribeStateSync → `_bufferDiff` → `_flushDiffBuffer` → `_applyDiffToState` の経路は完全不変。preStartState broadcast も buffer 経由の atomic update を維持。v220 T7 で静的検証。
-
-### E. バグ B の発生メカニズム（前原さん「0.2 秒ズレ」の正体）
-
-v2.1.7 以前: operator / hall 両 window で `playSound('countdown-tick')` がほぼ同時に発火 → 0〜数 ms 程度のズレで重なって人間の耳には「ポン 1 音」に聞こえていた可能性が高い。
-
-v2.1.7 以降: hall 側の subscribeStateSync callback が `_bufferDiff` 経由で `setTimeout(0)` macrotask に予約 → 50〜200ms 遅延 → operator の音と hall の音が「ズレた 2 音」として人間に認識される。
-
-→ v2.1.7 buffer は本リリースで根治対象の症状（バグ B）の**顕在化原因**だが、buffer 自体は B 系構造的根治のために必要な機構なので維持。バグ B は本来の真因（両 window での音発火）を hall ガードで塞いで根治。
+→ **5 件すべて完全無傷**（v220 T6 + v221 既存検証で再確認）。
 
 ---
 
 ## §3 各 Fix の実装内容（diff 要点）
 
-### Fix 1: `src/renderer/renderer.js` `handleAudioOnTick` 冒頭に hall ガード
+### Fix 1: `src/renderer/dual-sync.js` `_bufferDiff` の flush 予約を rAF に変更
 
 ```diff
- function handleAudioOnTick(remainingMs, currentLevelIndex) {
-+  // v2.1.8 バグ B 根治: hall 側では音を鳴らさない。... (説明コメント)
-+  if (typeof window !== 'undefined' && window.appRole === 'hall') return;
-   const remainingSec = Math.ceil(remainingMs / 1000);
+   _diffBuffer.push(diff);
+-  if (_flushTimer === null) {
+-    _flushTimer = setTimeout(_flushDiffBuffer, 0);
+-  }
++  if (_flushTimer === null) {
++    // v2.1.9: setTimeout(0) は macrotask boundary で 50〜200ms 遅延が発生し、
++    //   音と表示のタイミングがズレる症状（前原さん「会場モニターが 0.2 秒遅れる」）
++    //   の原因だった。requestAnimationFrame に切替えで次フレーム（16〜50ms）で
++    //   flush され、描画パイプと自然に同期する。atomic update 効果は維持。
++    _flushTimer = requestAnimationFrame(() => {
++      _flushTimer = null;
++      _flushDiffBuffer();
++    });
++  }
 ```
 
-### Fix 2: `src/renderer/renderer.js` `handleAudioOnPreStartTick` 冒頭に hall ガード
+`_flushDiffBuffer()` 冒頭の `_flushTimer = null` も既存のまま残置（rAF callback 内代入と二重だが冗長として許容、_flushDiffBuffer() を直接呼ぶ既存経路の保護用）。
+
+### Fix 2: `src/renderer/dual-sync.js` beforeunload cleanup を cancelAnimationFrame に変更
 
 ```diff
- function handleAudioOnPreStartTick(remainingMs) {
-+  // v2.1.8 バグ B 根治: hall 側では音を鳴らさない（Fix 1 と同じ理由）
-+  if (typeof window !== 'undefined' && window.appRole === 'hall') return;
-   const remainingSec = Math.ceil(remainingMs / 1000);
+   window.addEventListener('beforeunload', () => {
+     if (_flushTimer !== null) {
+-      clearTimeout(_flushTimer);
++      cancelAnimationFrame(_flushTimer);
+       _flushTimer = null;
+     }
+     _diffBuffer.length = 0;
+   }, { once: true });
 ```
 
-### Fix 3: `src/renderer/audio.js` `playSound` 冒頭に hall ガード（多層防御の最終段）
+### Fix 3: `tests/v219-hall-atomic-update.test.js` 追従更新
+
+- T1 の静的 assertion: `setTimeout(_flushDiffBuffer, 0)` → `requestAnimationFrame(...)` 文字列照合
+- T6 の静的 assertion: `clearTimeout(_flushTimer)` → `cancelAnimationFrame(_flushTimer)` 文字列照合
+- buildBufferSandbox の vm context: `requestAnimationFrame: (cb) => setTimeout(cb, 0)` + `cancelAnimationFrame: clearTimeout` の stub 追加（既存動的テスト T2/T3/T4/T5/T8/T9 はそのまま動作）
+
+→ v219 全 9 件 PASS で確認済。
+
+### Fix 4: `src/renderer/style.css` の hall pip-action-btn ルール削除
 
 ```diff
- export function playSound(soundId) {
-+  // v2.1.8 バグ B 根治（多層防御の最終段）: hall 側では音を鳴らさない。
-+  // playSoundForce は試聴用（設定画面、operator のみで呼ばれる経路）のため対象外。
-+  if (typeof window !== 'undefined' && window.appRole === 'hall') return;
-   if (!enabledMap[soundId]) return;
-   _play(soundId);
- }
+-/* PIP の操作ボタン（タイマー / スライドショー切替）はホール側でも触らせない */
+-[data-role="hall"] .pip-action-btn {
+-  display: none !important;
+-}
++/* v2.1.9 緊急差し込み根治: hall（会場モニター）でも .pip-action-btn を表示する。
++   旧コメント「ホール側でも触らせない」前提を撤回。... */
++/* （旧 [data-role="hall"] .pip-action-btn { display: none !important; } ルールを削除） */
 ```
 
-`playSoundForce` には**追加せず**（試聴用、operator のみ呼出経路、T3 で static 確認）。
-
-### Fix 4: `src/renderer/style.css` `.clock` だけ opacity 切替に分離
-
-```diff
- /* スライドショー中は通常 UI を非表示 */
--:root[data-slideshow="active"] .clock,
- :root[data-slideshow="active"] .bottom-bar,
- :root[data-slideshow="active"] .marquee,
- :root[data-slideshow="active"] .event-header {
-   display: none;
- }
-+/* v2.1.8 バグ A 根治: .clock のみ display: none ではなく opacity + pointer-events で隠す。
-+   display: none → display: block 切替は reflow が重く、スライドショー終了時に
-+   PRE_START カウントダウンの DOM 更新と visual 反映にタイミングずれが生じる。
-+   opacity + pointer-events で DOM レイアウトを維持したまま視覚的に隠す。
-+   他のセレクタは既存挙動維持のため display: none のまま。 */
-+:root[data-slideshow="active"] .clock {
-+  opacity: 0;
-+  pointer-events: none;
-+}
-```
+`[data-role="operator"] ... .pip-action-btn ...` 側のルールは**完全維持**（手元 PC は引き続き非表示）。
 
 ### Fix 5: `package.json` バージョン bump
 
 ```diff
-- "version": "2.1.7",
-+ "version": "2.1.8",
+- "version": "2.1.8",
++ "version": "2.1.9",
 ```
-+ `scripts.test` 末尾に `&& node tests/v220-prestart-audio-hall-guard.test.js` 追加。
++ `scripts.test` 末尾に `&& node tests/v221-rAF-flush.test.js` 追加。
 
-### Fix 6: `CHANGELOG.md` に [2.1.8] セクション追加
+### Fix 6: `CHANGELOG.md` に [2.1.9] セクション追加
 
-[2.1.7] の上に挿入。Fixed / Internal / Tests / Compatibility / Known Limitations 構成。
+[2.1.8] の上に挿入。Fixed / Internal / Tests / Compatibility / Known Limitations 構成。
 
-### Fix 7: 既存テスト 31 ファイルの version assertion を `2.1.7` → `2.1.8`
+### Fix 7: 既存テスト 32 ファイルの version assertion を `2.1.8` → `2.1.9`
 
-Node 一括スクリプトで 5 パターン（`'2.1.7'` / `期待 2.1.7` / `version は 2.1.7` / `version が 2.1.7` / `version 2.1.7 + scripts.test`）置換。歴史的コメントは不変。合計 49 箇所更新。
+Node 一括スクリプトで 5 パターン置換。歴史的コメントは不変。合計 **53 箇所**更新（v220 含む）。
 
-### Fix 8: 新規テスト `tests/v220-prestart-audio-hall-guard.test.js`（8 件）
+### Fix 8: 新規テスト `tests/v221-rAF-flush.test.js`（8 件）
 
 | # | テスト名 | 種別 |
 |---|---|---|
-| T1 | handleAudioOnTick 冒頭に hall ガード（早期 return） | 静的 |
-| T2 | handleAudioOnPreStartTick 冒頭に hall ガード（早期 return） | 静的 |
-| T3 | audio.js playSound 冒頭に hall ガード + playSoundForce には追加しない | 静的 |
-| T4 | `:root[data-slideshow="active"] .clock` が opacity: 0 + pointer-events: none | 静的 |
-| T5 | regression: `.clock` 単独ルールに display: none が含まれない + 他セレクタは display: none 維持 | 静的 |
-| T6 | 致命バグ保護 5 件すべて維持 | 静的 |
-| T7 | v2.1.7 dual-sync buffer 機構（DIFF_BUFFER_MAX / _bufferDiff / _flushDiffBuffer / subscribeStateSync 経路 / beforeunload cleanup）が無変更で残る | 静的 |
-| T8 | package.json version 2.1.8 + scripts.test に v220 登録 | 静的 |
+| T1 | `_bufferDiff` 内で `requestAnimationFrame` で flush が予約 | 静的（balanced-brace 関数本体抽出 + regex） |
+| T2 | `_bufferDiff` 内で `setTimeout` が使われていない（regression） | 静的（コメント剥がし後の検査） |
+| T3 | beforeunload listener 内で `cancelAnimationFrame` + clearTimeout 残存なし | 静的 |
+| T4 | rAF callback 内で `_flushTimer = null` 代入 + `_flushDiffBuffer()` 呼出 | 静的 |
+| T5 | `[data-role="hall"] .pip-action-btn { display: none ... }` ルール削除（regression、CSS コメント剥がし） | 静的 |
+| T6 | `[data-role="operator"] ... .pip-action-btn ...` セクション維持 | 静的 |
+| T7 | `handlePipShowTimer` / `handlePipShowSlideshow` に hall 早期 return ガードなし（hall クリック動作保証） | 静的 |
+| T8 | package.json version 2.1.9 + scripts.test に v221 登録 | 静的 |
 
 ---
 
 ## §4 テスト結果
 
 ```
-PASS: 867 / FAIL: 0
-内訳: v2.1.7 時点 859 件 + 新規 v220 = 8 件
+PASS: 875 / FAIL: 0
+内訳: v2.1.8 時点 867 件 + 新規 v221 = 8 件
 ```
 
 `grep -cE "^PASS:"` で実測。
@@ -160,63 +168,71 @@ PASS: 867 / FAIL: 0
 
 | 評価軸 | 結果 |
 |---|---|
-| 単画面モード（operator-solo）の挙動 | **完全不変**（appRole === 'hall' でのみ早期 return、operator-solo は通常通り音再生） |
-| operator 側の挙動（2 画面モード） | **完全不変**（hall 側だけが音を鳴らさず、operator 側は従来通り） |
-| バグ A 修正の副作用 | **`.clock` のみ単独ルール化、他のセレクタ（.bottom-bar / .marquee / .event-header）は既存 display: none 維持** で過剰修正回避（T5 regression テストで保護） |
-| バグ B 修正の多層防御の妥当性 | 3 箇所（handleAudioOnTick / handleAudioOnPreStartTick / playSound）に置くことで、将来の新規 playSound 呼出箇所が漏れても最終段の audio.js でブロック |
-| v2.1.7 dual-sync buffer との両立 | **完全両立**（dual-sync.js touch なし、T7 で 5 主要シンボル維持を静的検証） |
-| 致命バグ保護 C.2.7-A | 影響なし（resetBlindProgressOnly touch なし） |
-| 致命バグ保護 C.2.7-D | 影響なし（main.js 完全無変更） |
-| 致命バグ保護 C.1-A2 | 影響なし（編集モード経路は本修正範囲外） |
-| 致命バグ保護 C.1.7 | 影響なし（playSound 冒頭の hall ガードは _play() の手前、operator 側の resume 経路は不変） |
-| 致命バグ保護 C.1.8 | 影響なし（main.js 完全無変更） |
+| 単画面モード（operator-solo）の挙動 | **完全不変**（subscribeStateSync 登録なし、buffer 機構を経由しない） |
+| 単画面モードのスライドショー切替ボタン | **完全不変**（[data-role="hall"] / [data-role="operator"] セレクタが当たらない） |
+| 2 画面モード手元 PC（operator）のボタン | **完全不変**（[data-role="operator"] セクション維持で引き続き非表示） |
+| v2.1.6 preStartState 機構 | **完全両立**（dual-sync.js + style.css のみ修正、preStartState handler / IPC は touch なし） |
+| v2.1.7 dual-sync buffer の dedup / 上限 / 例外耐性 / 再帰防止 | **完全維持**（変更は flush 予約 1 行 + cleanup 1 行のみ） |
+| v2.1.8 hall 音ガード / .clock 表示制御 | **完全両立**（renderer.js / audio.js touch なし、style.css は別ルールに分離済） |
+| 致命バグ保護 C.2.7-A | 影響なし |
+| 致命バグ保護 C.2.7-D | 影響なし |
+| 致命バグ保護 C.1-A2 | 影響なし |
+| 致命バグ保護 C.1.7 | 影響なし |
+| 致命バグ保護 C.1.8 | 影響なし |
+| フレームスキップ時の遅延 | hall window CPU 高負荷時に 50ms 超になる可能性あり、v2.1.10 で監視（Known Limitations 参照） |
 
 ---
 
 ## §6 試験項目別の前原さん確認手順
 
-| # | 操作 | 期待結果 | 対応 |
-|---|---|---|---|
-| 1 | 2 画面モードで RUNNING 中、5 秒前カウントダウン音 | **「ポン」1 音だけ**（2 重再生「ポンポン」が消える） | バグ B 根治 |
-| 2 | 2 画面モードで PRE_START 中、5 秒前カウントダウン音 | 同上、1 音のみ | バグ B 根治 |
-| 3 | 2 画面モードで PRE_START 起動（開始時刻 100 分以上先） | 会場画面にスライドショー表示 | v2.1.6 機構維持 |
-| 4 | 上記状態で開始 1 分前にスライドショーが終了 | **会場画面にメインタイマー PRE_START カウントダウンが即時表示される**（level 1 固定時間で固まらない） | バグ A 根治 |
-| 5 | 単画面モード（hall なし）での通常運用 | 音が正常に鳴る（hall ガードで operator 側まで止まらないこと） | 後方互換 |
-| 6 | 2 画面モードで「30 秒進める」+「人数変更」を 1 秒以内に同時操作 | v2.1.7 同様、会場画面で 2 つの変更が同フレームで反映 | v2.1.7 機構維持 |
-| 7 | HDMI 抜き差し（rc12 / rc23 経路） | 致命バグ保護 5 件すべて維持 | 既存保護 |
+| # | 操作 | 期待結果 |
+|---|---|---|
+| 1 | 2 画面モード RUNNING 中、5 秒前カウントダウン音と画面表示 | **音と表示がほぼ同時**（0.2 秒のズレが消える） |
+| 2 | 2 画面モード PRE_START 中、5 秒前カウントダウン音と画面表示 | 同上、ほぼ同時 |
+| 3 | 2 画面モードで PAUSED 中に「30 秒進める」連打 | v2.1.7 同様、会場画面が連打追従、最終値に集約 |
+| 4 | 2 画面モードでトーナメント切替 | v2.1.7 同様、チラつかず一発で切替 |
+| 5 | 2 画面モード PRE_START + スライドショー終了 → カウントダウン表示 | v2.1.8 同様、即時表示復帰 |
+| 6 | 2 画面モード 5 秒前カウントダウン音 | v2.1.8 同様、「ポン」1 音だけ |
+| 7 | 単画面モード（hall なし）の通常運用 | 完全に従来挙動（subscribeStateSync 登録なし） |
+| 8 | HDMI 抜き差し | 致命バグ保護 5 件すべて維持 |
+| 9 | **2 画面モードでブレイク中スライドショー時、会場モニターに「タイマー画面に戻す」「スライドショーに戻る」ボタンが表示される** | **左下と左中央に表示**（緊急差し込み根治確認） |
+| 10 | **会場モニターのボタンをマウスでクリック** | **クリックでスライドショー / タイマー切替が動作**（1 画面モードと同等の動作） |
+| 11 | 単画面モードでのスライドショー切替ボタン | 既存通り表示 + 動作（v2.1.8 と完全同一、後方互換確認） |
+| 12 | 2 画面モード手元 PC でのスライドショー切替ボタン | 引き続き非表示（操作画面なので不要、既存挙動維持） |
 
 ---
 
-## §7 Known Limitations（v2.1.9 候補）
+## §7 Known Limitations（v2.1.10 候補）
 
-- **hall 側で timer loop が独立に rAF 回転する CPU 無駄**: 本リリースでは音発火経路のみ塞ぎ、timer loop 自体は hall でも回り続ける。`applyTimerStateToTimer` への hall ガード追加は副作用リスク（hall 側通常 timerState 反映が壊れる可能性）があるためスコープ外。将来の最適化として v2.1.9 以降で別途検討
-- **B3 ブレイク終了 pauseAfterBreak 反映漏れ**: timer.js の追加調査が必要、確度低、v2.1.9 候補
-- **v2.1.7 由来の B1 / B7 ⑤ debounce 残課題**: `schedulePersistTimerState` / `setRuntime` の 500ms debounce 遅延、v2.1.7 試験結果次第で v2.1.9 で対応
+- **フレームスキップ（hall window CPU 高負荷時）で遅延が一時的に 50ms 超**: 前原さん試験で頻発するようなら v2.1.10 で案 1（queueMicrotask、1〜5ms）or 案 4（main 側 atomic snapshot、3〜10ms）への切替を検討
+- **hall 側 timer loop 独立 rAF 回転 CPU 無駄**: 引き続きスコープ外、`applyTimerStateToTimer` の hall ガードは副作用リスク高
+- **B3 ブレイク終了 pauseAfterBreak 反映漏れ**: 引き続き v2.1.10 候補
 
 ---
 
 ## §8 並列 sub-agent / Task 数報告
 
-**0 体**（直接実行、cc-operation-pitfalls §1.1 / 4.2 準拠）。本 STEP は 4 ファイルの集中修正 + テスト追加のみで、修正範囲が明確（音発火 3 箇所 + CSS 1 箇所）、並列化のメリットが小さいため直接実行を選択。
+**0 体**（直接実行、cc-operation-pitfalls §1.1 / 4.2 準拠）。本 STEP は 2 ファイル（dual-sync.js + style.css）の小規模修正 + テスト追加（v219/v220 追従 + v221 新規）のみで、修正範囲が明確、並列化のメリットが小さいため直接実行を選択。
 
 ---
 
 ## §9 ビルド成果物確認（リリース工程）
 
-- ✅ ブランチ: `feature/v2.1.8-prestart-audio-and-clock-fix` → main へ `--no-ff` マージ済（マージコミット d753849）
-- ✅ タグ: `v2.1.8` 作成済 + push 済
-- ✅ ビルド: `dist/pokertimerplus-setup-2.1.8.exe` (82,995,856 bytes / 82.99 MB) + `dist/latest.yml` (version: 2.1.8、sha512 計算済)
-- ✅ push: main + v2.1.8 タグを origin へ push 完了
-- 直近コミット: b9e9329（feature commit）→ d753849（merge commit）
+- ✅ ブランチ: `feature/v2.1.9-rAF-flush` → main へ `--no-ff` マージ予定
+- ✅ タグ: `v2.1.9` 作成予定
+- ✅ ビルド: `dist/pokertimerplus-setup-2.1.9.exe` + `dist/latest.yml` (version: 2.1.9) 予定
+- ✅ push: main + v2.1.9 タグを origin へ push 予定
+
+→ 詳細は本レポート末尾に追記。
 
 ---
 
 ## §10 オーナー向け確認依頼
 
-1. 2 画面モードでカウントダウン音（5 秒前など）が「ポン」1 音だけ鳴るか（「ポンポン」2 重再生が消えたか）
-2. 開始前カウントダウン（PRE_START）でスライドショーが終わった瞬間、会場画面にカウントダウンが即座に表示されるか
-3. 単画面（HDMI なし）の店舗で、音が今まで通り正常に鳴るか
-4. v2.1.7 の構造的根治（トーナメント切替・連打追従）が引き続き効いているか
-5. HDMI 抜き差しの動作が v2.1.7 と完全同一か
+1. 2 画面モードで 5 秒前カウントダウンの音と画面表示が「ほぼ同時」になったか（0.2 秒ズレが消えたか）
+2. 2 画面モードでブレイク中スライドショーの際、会場モニターに「タイマー画面に戻す」「スライドショーに戻る」ボタンが表示されるか
+3. 上記ボタンをマウスでクリックしたとき、1 画面モードと同等にスライドショー / タイマー切替が動作するか
+4. 単画面モードと 2 画面モード手元 PC のスライドショー切替ボタンの挙動が v2.1.8 と完全同一か
+5. v2.1.7 の構造的根治（トーナメント切替・連打追従）/ v2.1.8 の根治（音 1 音 / スライドショー終了表示）が引き続き効いているか
 
-**実装終了**。v2.1.8 タグ + .exe + latest.yml 準備完了予定、前原さんの GitHub Releases 公開待ち。本リリースは PRE_START 関連 2 件のバグ根治 hot-fix で、4 箇所の最小侵襲修正（音発火 3 + CSS 1）。operator 側挙動完全不変、致命バグ保護 5 件すべて完全無傷、v2.1.7 dual-sync buffer 機構と完全両立。
+**実装終了**。v2.1.9 タグ + .exe + latest.yml 準備完了予定、前原さんの GitHub Releases 公開待ち。本リリースは hall 表示遅延 0.2 秒の根治（rAF 化、3 行）+ 緊急差し込み（hall ボタン表示、1 ルール削除）。operator 側挙動完全不変、致命バグ保護 5 件すべて完全無傷、v2.1.6 / v2.1.7 / v2.1.8 機構と完全両立。

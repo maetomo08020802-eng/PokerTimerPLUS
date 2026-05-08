@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.9] - 2026-05-08
+
+PokerTimerPLUS+ v2.1.9 hall 表示遅延 0.2 秒の根治 + 会場モニターのスライドショー切替ボタン表示根治リリース。
+
+### Fixed
+
+- **2 画面モードで会場モニターの表示が音より約 0.2 秒遅れる症状を根治**（前原さん発見、v2.1.8 試験中）。真因 = v2.1.7 で導入した dual-sync buffer の flush 予約が `setTimeout(0)` で macrotask boundary に予約され、Electron renderer 仕様で 50〜200ms の遅延が発生していた。修正 = `setTimeout(0)` を `requestAnimationFrame` に変更。次フレーム（16〜50ms）で flush され、描画パイプと自然に同期。人間の知覚閾値内（60fps 1 フレーム = 16.7ms）に収まり「ほぼ同時」感を実現。
+- **2 画面モードのブレイク中スライドショー時、会場モニターに「タイマー画面に戻す」「スライドショーに戻る」ボタンが消えていた症状を根治**（前原さん発見、緊急差し込み）。真因 = `style.css:3791-3793` の `[data-role="hall"] .pip-action-btn { display: none !important; }` ルールが hall window で強制非表示にしていた。1 画面モード（`data-role="operator-solo"`）では本セレクタが当たらないためボタン表示、2 画面モードの hall でのみ非表示という挙動だった。修正 = 当該 CSS ルールを削除。前原さん運用上、会場モニターはマウス操作可能で、1 画面モードと同等の操作性を実現。
+
+### Internal
+
+- `src/renderer/dual-sync.js` `_bufferDiff` の flush 予約を `setTimeout(0)` → `requestAnimationFrame` に変更
+- beforeunload cleanup を `clearTimeout` → `cancelAnimationFrame` に変更
+- `src/renderer/style.css` の hall pip-action-btn 強制非表示ルールを削除
+- クリックハンドラ `handlePipShowTimer` / `handlePipShowSlideshow` は appRole ガードなしで hall でも素直に動作（既存実装、touch なし）
+- `slideshowState` は hall window 内 local 変数のため hall ローカルで完結（broadcast 不要）
+- v2.1.7 hall atomic update 機構の atomic update 効果（同一 kind dedup + 異なる kind 受信順保持）は完全維持
+- 致命バグ保護 5 件すべて完全無傷
+
+### Tests
+
+- 既存 v219 テストの assertion を `setTimeout` → `requestAnimationFrame` に追従更新（vm context に rAF/cAF stub 追加）
+- 新規テスト 8 件 (v221): rAF 登録 / setTimeout regression / cancelAnimationFrame / rAF callback 内 _flushTimer = null / hall pip-action-btn ルール削除 / operator pip-action-btn 維持 / クリックハンドラ appRole ガードなし / version
+- 既存テスト 867 件全 PASS 維持
+
+### Compatibility (v2.1.9)
+
+- v2.1.8 以前の通常運用（単画面 / 2 画面 / PRE_START 非使用）は完全同一の挙動
+- 単画面モード（hall window なし）では subscribeStateSync が登録されないため影響なし
+- 単画面モード（`data-role="operator-solo"`）でのスライドショー切替ボタンは既存通り表示
+- 2 画面モード手元 PC（`data-role="operator"`）でのスライドショー切替ボタンは既存通り非表示（操作画面なので不要）
+- v2.1.7 で根治した B 系 6 件（B1 / B2 / B4 / B7 ⑤⑥②）は引き続き根治状態を維持
+- v2.1.8 で根治した PRE_START 関連 2 件は引き続き根治状態を維持
+- 致命バグ保護 5 件すべて完全無傷
+- v2.1.8 → v2.1.9 自動更新で配信
+
+### Known Limitations
+
+- フレームスキップ（hall window CPU 高負荷時）で遅延が一時的に 50ms 超になる可能性。前原さん試験で頻発するようなら v2.1.10 で案 1（queueMicrotask、1〜5ms）or 案 4（main 側 atomic snapshot）への切替を検討
+- hall 側で timer loop が独立に rAF 回転する CPU 無駄は引き続きスコープ外（applyTimerStateToTimer の hall ガードは副作用リスク高、v2.1.10 以降）
+- B3 ブレイク終了 pauseAfterBreak 反映漏れは引き続き v2.1.10 候補
+
+---
+
 ## [2.1.8] - 2026-05-08
 
 PokerTimerPLUS+ v2.1.8 PRE_START 関連 2 件のバグ根治リリース。

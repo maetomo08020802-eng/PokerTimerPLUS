@@ -94,9 +94,17 @@ function _bufferDiff(diff) {
   _diffBuffer.push(diff);
   // 既にタイマー登録済なら何もしない（buffer に積むだけ）
   // 再入中（_isFlushing）の場合も「タイマー未登録」状態なので、ここで再登録される
-  // → 次の macrotask で flush 実行（再帰防止 + 取りこぼしなし）
+  // → 次のフレームで flush 実行（再帰防止 + 取りこぼしなし）
   if (_flushTimer === null) {
-    _flushTimer = setTimeout(_flushDiffBuffer, 0);
+    // v2.1.9: setTimeout(0) は macrotask boundary で 50〜200ms 遅延が発生し、
+    //   音と表示のタイミングがズレる症状（前原さん「会場モニターが 0.2 秒遅れる」）
+    //   の原因だった。requestAnimationFrame に切替えることで次フレーム（16〜50ms）
+    //   で flush され、描画パイプと自然に同期する。atomic update 効果は維持
+    //   （rAF boundary 内で複数 diff を集約、dedup + 受信順保持はそのまま）。
+    _flushTimer = requestAnimationFrame(() => {
+      _flushTimer = null;
+      _flushDiffBuffer();
+    });
   }
 }
 
@@ -130,12 +138,13 @@ function _flushDiffBuffer() {
   }
 }
 
-// hall window 破棄時の cleanup（buffer + timer リーク防止）。
+// hall window 破棄時の cleanup（buffer + rAF handle リーク防止）。
 //   beforeunload は once: true で 1 回のみ発火、再 register 不要。
+//   v2.1.9: setTimeout → requestAnimationFrame 切替に伴い、cancelAnimationFrame に変更。
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('beforeunload', () => {
     if (_flushTimer !== null) {
-      clearTimeout(_flushTimer);
+      cancelAnimationFrame(_flushTimer);
       _flushTimer = null;
     }
     _diffBuffer.length = 0;
