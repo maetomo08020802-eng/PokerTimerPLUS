@@ -1,7 +1,7 @@
 // PokerTimerPLUS+ レンダラエントリポイント
 // 役割: 各モジュール（state / blinds / timer / marquee）を組み立て、UI と入力を接続する。
 
-import { States, getState, subscribe } from './state.js';
+import { States, getState, setState, subscribe } from './state.js';
 import {
   loadPreset,
   getLevel,
@@ -1375,23 +1375,42 @@ async function getCachedLevels(presetId) {
 //              opts.silent: true なら復元直後の音再生（5,4,3,2,1 等）をスキップ
 function applyTimerStateToTimer(ts, levels, opts = {}) {
   // v2.0.4 E-1 fix: idle / 不正値復元時も clock--timer-finished オーバーレイを解除する。
-  //   旧実装では running/paused/break への遷移時のみ class を消していたため、
-  //   終了済みトーナメントから別 t に切替（idle 復元）すると overlay が残るバグがあった。
+  // v2.1.10: hall では timer.js 関数呼出のみ skip（DOM/setState は続行、独立 rAF を抑止）。
+  const isHallApply = (typeof window !== 'undefined' && window.appRole === 'hall');
+  if (isHallApply) {
+    try { window.api?.log?.write?.('hall:applyTimerStateToTimer:enter', { status: ts && ts.status, ts: Date.now() }); } catch (_) {}
+  }
   if (!ts || typeof ts !== 'object') {
     el.clock?.classList.remove('clock--timer-finished');
-    timerReset();
+    if (!isHallApply) timerReset();
     return;
   }
   if (ts.status === 'idle') {
     el.clock?.classList.remove('clock--timer-finished');
-    timerReset();
+    if (!isHallApply) timerReset();
+    else {
+      try {
+        const lvCount0 = getLevelCount();
+        if (lvCount0 > 0) {
+          const lvl0 = getLevel(0);
+          const totalMs0 = (lvl0?.durationMinutes || 0) * 60 * 1000;
+          setState({ status: States.IDLE, currentLevelIndex: 0, remainingMs: totalMs0, totalMs: totalMs0 });
+        } else {
+          setState({ status: States.IDLE, currentLevelIndex: 0, remainingMs: 0, totalMs: 0 });
+        }
+      } catch (_) {}
+    }
     return;
   }
   // STEP 10 フェーズC.1.2 Fix 2: 'finished' 状態は idle 同様タイマー再開しない（完走表示のみ）。
   //   ユーザーが「タイマーリセット」を押すと idle に戻り、新規エントリーで再開可能。
   //   メイン画面に「トーナメント終了」オーバーレイを表示（緑系、playersRemaining=0 とは別経路）。
   if (ts.status === 'finished') {
-    timerReset();
+    if (!isHallApply) timerReset();
+    else {
+      // hall: 終了表示用に setState で IDLE + remainingMs=0 を反映
+      try { setState({ status: States.IDLE, remainingMs: 0 }); } catch (_) {}
+    }
     el.clock?.classList.add('clock--timer-finished');
     return;
   }
@@ -1402,14 +1421,33 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
     ? computeLiveTimerState(ts, levels)
     : ts;
   const levelCount = getLevelCount();
-  if (levelCount === 0) { timerReset(); return; }
+  if (levelCount === 0) {
+    if (!isHallApply) timerReset();
+    return;
+  }
   const idx = Math.max(0, Math.min(levelCount - 1, (live.currentLevel || 1) - 1));
-  // 該当レベルから即時開始 → RUNNING / BREAK
-  timerStartAtLevel(idx);
-  // 経過秒ぶん進める（advanceTimeBy は負値で時間を進める）
   const elapsedMs = Math.max(0, Math.floor(live.elapsedSecondsInLevel || 0)) * 1000;
-  if (elapsedMs > 0) timerAdvanceBy(-elapsedMs);
-  if (live.status === 'paused') timerPause();
+  if (!isHallApply) {
+    // operator: 既存経路通り timer.js 関数呼出 → 内部で startLoop / setState 発火
+    // 該当レベルから即時開始 → RUNNING / BREAK
+    timerStartAtLevel(idx);
+    // 経過秒ぶん進める（advanceTimeBy は負値で時間を進める）
+    if (elapsedMs > 0) timerAdvanceBy(-elapsedMs);
+    if (live.status === 'paused') timerPause();
+  } else {
+    // v2.1.10 hall: timer.js を介さず setState を直接呼出 → subscribe 経由で DOM 更新。
+    //   独立 rAF ループ（startLoop / startPreStartLoop）が起動しないため、hall の rAF 競合を解消。
+    try {
+      const lvl = getLevel(idx);
+      const totalMs = (lvl?.durationMinutes || 0) * 60 * 1000;
+      const remainingMs = Math.max(0, totalMs - elapsedMs);
+      let status;
+      if (live.status === 'paused') status = States.PAUSED;
+      else if (typeof isBreakLevel === 'function' && isBreakLevel(idx)) status = States.BREAK;
+      else status = States.RUNNING;
+      setState({ currentLevelIndex: idx, remainingMs, totalMs, status });
+    } catch (err) { console.warn('[v2.1.10 hall] setState 経由の状態反映失敗:', err); }
+  }
   // STEP 6.21.4.1: 復元直後の音抑止は明示的な one-shot フラグで実装。
   // 旧設計（lastAudioTriggerSec を直接書換え）は onLevelChange 経路と競合して
   // 継続的に音が鳴らなくなる可能性があったため、フラグ方式に変更。
@@ -2522,11 +2560,20 @@ function isSlideshowEligibleStatus(status) {
 // v2.1.6: hall 側 PRE_START 状態適用ハンドラ。operator から broadcast された preStartState を受信して
 //   メインタイマーカウントダウン + スライドショー連動を駆動する。
 //   payload 形: { isActive: bool, totalMs?: number, remainingMs?: number, startAtMs?: number }
+//
+// v2.1.10: hall 側の独立 rAF ループ（renderHallPreStartTick）を廃止し、broadcast 受信時に
+//   即時 DOM 更新するだけの設計に変更（案 6）。operator は 1 秒間引きで broadcast しているため、
+//   hall は 1 秒に 1 回受信 → 1 秒粒度で DOM 更新 → PRE_START 表示単位は分:秒なので十分滑らか。
+//   独立 rAF を廃止することで、hall の rAF 競合（PRE_START 中 4 個同時 → 1 個のみ）を解消し、
+//   累積 1 秒の遅延と「アプリが重い」体感を構造的に消す。
 function applyHallPreStartState(payload) {
   // operator 側では本関数は呼ばれない（receiver は hall ブロック内でのみ登録される）
   if (window.appRole !== 'hall') return;
+  // v2.1.10 計測: hall window でのみ applyHallPreStartState 入口時刻を rolling-log に記録
+  try { window.api?.log?.write?.('hall:applyHallPreStartState:enter', { isActive: !!payload?.isActive, remainingMs: payload?.remainingMs, ts: Date.now() }); } catch (_) { /* never throw from logging */ }
   const isActive = !!payload.isActive;
-  // 既存 rAF を必ず止める（再起動時 / 解除時 ともに必須）
+  // v2.1.10: 旧 rAF 廃止により rafId は使用しないが、defense-in-depth で残存ハンドルがあれば cancel。
+  //   beforeunload ハンドラ等で cancelAnimationFrame が呼ばれる経路は維持する。
   if (hallPreStartState.rafId !== null) {
     cancelAnimationFrame(hallPreStartState.rafId);
     hallPreStartState.rafId = null;
@@ -2541,8 +2588,9 @@ function applyHallPreStartState(payload) {
       // startAtMs 無指定なら remainingMs から推定（now + remainingMs）
       hallPreStartState.startAtMs = Date.now() + Math.floor(payload.remainingMs);
     }
-    // hall 側 1 秒間隔の表示補間（operator の broadcast tick が 1 秒に 1 回しか来ないため、
-    // hall 側で局所 rAF を回して滑らかに表示。operator が tick を送るたび startAtMs が補正される）
+    // v2.1.10: 独立 rAF 廃止、broadcast 受信時に即時 DOM 更新するだけ（1 秒粒度）。
+    //   operator 側は 1 秒に 1 回 broadcast を送信（renderer.js:1962 の throttle 経路）。
+    //   PRE_START 表示単位は分:秒なので秒粒度で十分。rAF を回す必要なし。
     renderHallPreStartTick();
   } else {
     // 解除: PRE_START 表示要素をクリア → 通常 idle 表示に戻す（getState() は idle のまま）
@@ -2557,7 +2605,10 @@ function applyHallPreStartState(payload) {
   }
 }
 
-// v2.1.6: hall 側 PRE_START カウントダウンの rAF 駆動（1 秒未満の補間）
+// v2.1.6: hall 側 PRE_START カウントダウンの DOM 更新。
+// v2.1.10: 旧 rAF 駆動部分を廃止し、broadcast 受信ごとに 1 回呼出される設計に変更。
+//   operator から 1 秒間隔で broadcast → hall で 1 秒粒度の表示更新 → 表示単位は分:秒なので十分。
+//   関数名は v2.1.6 から維持（既存テスト互換）、ただし内部の rAF 再帰は削除済。
 function renderHallPreStartTick() {
   if (!hallPreStartState.isActive) return;
   const now = Date.now();
@@ -2579,11 +2630,10 @@ function renderHallPreStartTick() {
   // 0 になったら自動解除（operator から isActive=false が来るのを待たずに表示解除、フェイルセーフ）
   if (remainingMs <= 0) {
     hallPreStartState.isActive = false;
-    hallPreStartState.rafId = null;
     return;
   }
-  // 次フレームへ
-  hallPreStartState.rafId = requestAnimationFrame(renderHallPreStartTick);
+  // v2.1.10: 旧 `hallPreStartState.rafId = requestAnimationFrame(...)` の再帰 rAF を廃止。
+  //   次の broadcast 受信時に再度この関数が呼ばれる経路に変更（applyHallPreStartState 経由）。
 }
 
 function applyPipSize(value) {

@@ -277,7 +277,7 @@ test('operator-solo 互換: rc8 で追加した [data-role="operator-solo"] 用 
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.9',
+  assert.equal(pkg.version, '2.1.10',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 

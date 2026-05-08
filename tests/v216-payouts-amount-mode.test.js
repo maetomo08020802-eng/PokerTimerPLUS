@@ -238,11 +238,11 @@ test('T8 (保護): 致命バグ保護 5 件すべて維持', () => {
 });
 
 // ============================================================
-// T9: package.json version は 2.1.9
+// T9: package.json version は 2.1.10
 // ============================================================
-test('T9: package.json version は 2.1.9', () => {
-  assert.equal(PKG.version, '2.1.9',
-    `package.json version が ${PKG.version}（期待 2.1.9）`);
+test('T9: package.json version は 2.1.10', () => {
+  assert.equal(PKG.version, '2.1.10',
+    `package.json version が ${PKG.version}（期待 2.1.10）`);
 });
 
 test('T10: scripts.test に v216-payouts-amount-mode.test.js が登録', () => {
