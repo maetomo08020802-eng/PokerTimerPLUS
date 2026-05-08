@@ -3265,11 +3265,21 @@ body:not(.has-marquee) .marquee { display: none; }
   pointer-events: auto;
 }
 /* スライドショー中は通常 UI を非表示 */
-:root[data-slideshow="active"] .clock,
 :root[data-slideshow="active"] .bottom-bar,
 :root[data-slideshow="active"] .marquee,
 :root[data-slideshow="active"] .event-header {
   display: none;
+}
+/* v2.1.8 バグ A 根治: .clock のみ display: none ではなく opacity + pointer-events で隠す。
+   display: none → display: block 切替は reflow が重く、スライドショー終了時に
+   PRE_START カウントダウンの DOM 更新と visual 反映にタイミングずれが生じて
+   level 1 の固定時間表示のままになる症状の根治。
+   opacity + pointer-events で DOM レイアウトを維持したまま視覚的に隠す
+   （reflow 待ちなしで即時表示復帰）。他のセレクタ（.bottom-bar / .marquee /
+   .event-header）は既存挙動維持のため display: none のまま。 */
+:root[data-slideshow="active"] .clock {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ===== STEP 10 フェーズC.1.4: PIP（右下の縮小タイマー） =====

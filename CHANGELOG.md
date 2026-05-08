@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.8] - 2026-05-08
+
+PokerTimerPLUS+ v2.1.8 PRE_START 関連 2 件のバグ根治リリース。
+
+### Fixed
+
+- **2 画面モードで 5 秒前カウントダウン音が「ポンポン」と 2 重に聞こえる症状を根治**（前原さん発見）。真因 = operator window と hall window が同じ renderer.js を実行し、両方で timer loop が独立に rAF 回転して `playSound` が発火していた（appRole ガード欠落）。v2.1.7 で導入した dual-sync buffer の setTimeout(0) macrotask 遅延（約 50〜200ms）が、それまで重なって 1 音に聞こえていたのを「0.2 秒ズレた 2 音」に分離して顕在化させた。修正 = `handleAudioOnTick` / `handleAudioOnPreStartTick` / `playSound` の 3 箇所に `appRole === 'hall'` ガードを追加し、音発火経路を二重防御で確実に塞ぐ。
+- **PRE_START 中、開始 1 分前にスライドショーが終了した際、会場ディスプレイのメインタイマー領域に PRE_START カウントダウンが表示されない症状を根治**（前原さん発見）。真因 = `style.css` の `:root[data-slideshow="active"] .clock { display: none }` で `display: none` → `display: block` 切替時の reflow タイミングずれ。修正 = `.clock` のみ `opacity: 0; pointer-events: none` に変更し、DOM レイアウトを維持したまま視覚的に隠す（reflow 待ちなしで即時表示復帰）。`.bottom-bar` / `.marquee` / `.event-header` は既存挙動維持のため `display: none` のまま。
+
+### Internal
+
+- `src/renderer/renderer.js` `handleAudioOnTick` / `handleAudioOnPreStartTick` 冒頭に hall ガード追加
+- `src/renderer/audio.js` `playSound` 冒頭に hall ガード追加（多層防御）
+- `src/renderer/style.css` `:root[data-slideshow="active"] .clock` を opacity / pointer-events 制御に分離（他のセレクタは既存維持）
+- 致命バグ保護 5 件すべて完全無傷
+- v2.1.7 hall atomic update 機構（diff buffer）と完全両立
+
+### Tests
+
+- 新規テスト 8 件 (v220): hall ガード 3 箇所 / CSS rule opacity 切替 / display: none regression / 致命バグ保護 / v2.1.7 機構維持 / version
+- 既存テスト 859 件全 PASS 維持
+
+### Compatibility (v2.1.8)
+
+- v2.1.7 以前の通常運用（単画面 / 2 画面 / PRE_START 非使用）は完全同一の挙動
+- 致命バグ保護 5 件すべて完全無傷
+- v2.1.7 → v2.1.8 自動更新で配信
+
+### Known Limitations
+
+- hall 側で timer loop が独立に rAF 回転し続ける CPU 無駄は本リリースのスコープ外（applyTimerStateToTimer の hall ガードは副作用リスクがあるため見送り）。将来の最適化として v2.1.9 以降で別途検討
+- B3 ブレイク終了 pauseAfterBreak 反映漏れは引き続き v2.1.9 候補（追加調査必要、確度低）
+
+---
+
 ## [2.1.7] - 2026-05-08
 
 PokerTimerPLUS+ v2.1.7 hall 側 atomic update 実装リリース（B 系構造的根治）。

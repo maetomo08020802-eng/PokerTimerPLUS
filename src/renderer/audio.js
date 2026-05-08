@@ -541,6 +541,13 @@ function _play(soundId) {
 // ============================================================
 
 export function playSound(soundId) {
+  // v2.1.8 バグ B 根治（多層防御の最終段）: hall 側では音を鳴らさない。
+  //   operator window と hall window が同じ renderer.js を実行し、両方で playSound が
+  //   発火することによる二重再生症状の根治。Fix 1 / Fix 2 で handleAudioOnTick /
+  //   handleAudioOnPreStartTick に hall ガードを置いたが、本関数にも置くことで
+  //   将来の新規 playSound 呼出箇所が hall ガード漏れで再発するのを防ぐ。
+  //   playSoundForce は試聴用（設定画面）で operator のみで呼ばれる経路のため対象外。
+  if (typeof window !== 'undefined' && window.appRole === 'hall') return;
   if (!enabledMap[soundId]) return;
   _play(soundId);
 }
