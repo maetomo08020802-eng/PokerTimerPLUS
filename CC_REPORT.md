@@ -203,12 +203,11 @@ PASS: 867 / FAIL: 0
 
 ## §9 ビルド成果物確認（リリース工程）
 
-- ✅ ブランチ: `feature/v2.1.8-prestart-audio-and-clock-fix` → main へ `--no-ff` マージ予定
-- ✅ タグ: `v2.1.8` 作成予定
-- ✅ ビルド: `dist/pokertimerplus-setup-2.1.8.exe` + `dist/latest.yml` (version: 2.1.8) 予定
-- ✅ push: main + v2.1.8 タグを origin へ push 予定
-
-→ 詳細は本レポート末尾に追記。
+- ✅ ブランチ: `feature/v2.1.8-prestart-audio-and-clock-fix` → main へ `--no-ff` マージ済（マージコミット d753849）
+- ✅ タグ: `v2.1.8` 作成済 + push 済
+- ✅ ビルド: `dist/pokertimerplus-setup-2.1.8.exe` (82,995,856 bytes / 82.99 MB) + `dist/latest.yml` (version: 2.1.8、sha512 計算済)
+- ✅ push: main + v2.1.8 タグを origin へ push 完了
+- 直近コミット: b9e9329（feature commit）→ d753849（merge commit）
 
 ---
 
