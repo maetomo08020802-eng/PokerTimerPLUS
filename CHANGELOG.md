@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.10] - 2026-05-08
+
+PokerTimerPLUS+ v2.1.10 hall 表示遅延 1 秒の根治 + 計測機構同梱リリース。
+
+### Fixed
+
+- **2 画面モードで会場モニターの表示が音より約 1 秒遅れる + アプリ全体が重く感じる症状を根治**（前原さん発見、v2.1.9 試験中）。真因 = hall window で 3〜4 個の独立 rAF ループ（timer.js tick / timer.js preStartTick / renderHallPreStartTick / dual-sync flush）が同時回転し、1 フレーム予算（16.7ms）を超過 → frame skip → 累積遅延 1 秒。修正 = (1) `applyTimerStateToTimer` で hall の場合 timer.js 関数呼出のみ skip（DOM 描画は維持、案 3 細分化）、(2) hall 専用 `renderHallPreStartTick` 独立 rAF 廃止、broadcast 受信時の即時 DOM 更新で代替（案 6）。PRE_START 中の同時 rAF: 4 → 1、RUNNING 中: 2 → 1 に削減。
+
+### Internal
+
+- `src/renderer/renderer.js` `applyTimerStateToTimer` 内の timer.js 関数呼出（startAtLevel / pause / advanceBy / reset）を hall ガードで囲み、hall では skip
+- DOM 更新（renderTime / renderNextBreak / renderCurrentLevel / setState）は hall でも続行（hall の表示は dual-sync 経由で更新される）
+- hall 経路では timer.js を介さず `setState` を直接呼出 → subscribe 経由で `renderTime` / `renderNextBreak` / `renderCurrentLevel` が発火 → 独立 rAF を起動せず DOM 更新のみ実施
+- `src/renderer/renderer.js` `renderHallPreStartTick` 独立 rAF 廃止、`renderHallPreStartFrame` に renamed（broadcast 受信時に 1 回限りの DOM 更新、再帰 rAF なし）
+- `applyHallPreStartState` で broadcast 受信時に即時 DOM 更新（operator は 1 秒間引き broadcast → hall は 1 秒粒度で更新、PRE_START 表示単位 = 分:秒なので十分滑らか）
+- `src/renderer/dual-sync.js` の v2.1.9 で導入した `requestAnimationFrame` flush は変更なし（hall 単独で動く環境になり、frame skip 解消想定）
+- 計測機構を hall window に同梱: IPC 受信タイミング / dual-sync flush 所要時間 + 適用件数 / frame skip 検出（25ms 超）/ DOM 更新タイミング（applyTimerStateToTimer / applyHallPreStartState 入口）を rolling-log に記録（保険、operator では計測しない）
+- `src/renderer/state.js` `setState` を renderer.js から import（既存の export を利用、新規エクスポート追加なし）
+- 致命バグ保護 5 件すべて完全無傷
+
+### Tests
+
+- 新規テスト 7 件 (v222): `applyTimerStateToTimer` の timer.js 関数呼出 hall ガード網羅 / DOM 更新コードに hall ガードがない（RUNNING/PAUSED/IDLE すべての経路で setState は続く）/ `renderHallPreStartTick` の rAF 駆動部分削除 / `applyHallPreStartState` での broadcast 即時 DOM 更新ロジック / 計測機構の hall ガード / package.json version
+- 既存テスト 875 件全 PASS 維持
+
+### Compatibility (v2.1.10)
+
+- 単画面モード（hall window なし）は完全同一の挙動
+- v2.1.6 で根治した PRE_START hall 同期の機能は維持（broadcast 経路で即時 DOM 更新、表示は秒粒度で十分）
+- v2.1.7 で根治した B 系 6 件は引き続き維持
+- v2.1.8 で根治した PRE_START 関連 2 件は引き続き維持
+- v2.1.9 で根治した 2 件（hall 表示遅延 0.2 秒 + ボタン表示）は引き続き維持
+- 致命バグ保護 5 件すべて完全無傷
+- v2.1.9 → v2.1.10 自動更新で配信
+
+### Known Limitations
+
+- B3 ブレイク終了 pauseAfterBreak 反映漏れは引き続き v2.1.11 候補
+- 計測機構は本リリースで保険として同梱、試験で問題なければ次バージョンで削除判断
+
+---
+
 ## [2.1.9] - 2026-05-08
 
 PokerTimerPLUS+ v2.1.9 hall 表示遅延 0.2 秒の根治 + 会場モニターのスライドショー切替ボタン表示根治リリース。

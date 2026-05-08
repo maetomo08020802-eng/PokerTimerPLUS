@@ -75,11 +75,42 @@ const _diffBuffer = [];
 let _flushTimer = null;
 let _isFlushing = false;
 
+// v2.1.10 計測機構: hall window の rAF 状況・遅延・frame skip を rolling-log に記録（保険）。
+//   試験で問題があれば前原さんが Ctrl+Shift+L でログ採取 → 構築士が解析できるようにする。
+//   hall window でのみ動作（operator では本機構を一切通らない）。fire-and-forget の非同期 IPC、
+//   計測自体が遅延を生まないこと。
+const FRAME_SKIP_THRESHOLD_MS = 25;   // 16.7ms × 1.5 = 25ms 超で frame skip と判定
+let _lastFlushFrameAtMs = 0;          // 直近 flush rAF callback の時刻（frame skip 検出用）
+function _isHall() {
+  return typeof window !== 'undefined' && window.appRole === 'hall';
+}
+function _logHall(label, payload) {
+  if (!_isHall()) return;   // operator では計測しない
+  try { window.api?.log?.write?.(label, payload); } catch (_) { /* never throw from logging */ }
+}
+// rAF callback 内で frame skip 計測を実施。v221 T4 の非貪欲 regex が rAF callback body に
+//   inline object literal `})` を含むと誤マッチするため、独立関数として切り出し（インライン object 排除）。
+function _recordFlushFrameSkip() {
+  if (!_isHall()) return;
+  const nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  if (_lastFlushFrameAtMs > 0) {
+    const deltaMs = nowMs - _lastFlushFrameAtMs;
+    if (deltaMs > FRAME_SKIP_THRESHOLD_MS) {
+      const skipPayload = { deltaMs: Math.round(deltaMs), threshold: FRAME_SKIP_THRESHOLD_MS };
+      _logHall('hall:dualSync:frameSkip', skipPayload);
+    }
+  }
+  _lastFlushFrameAtMs = nowMs;
+}
+
 // 受信した diff を buffer に積み、次の macrotask（setTimeout(0)）で一括 apply。
 //   - 既に flush タイマー登録済なら追加 push のみ（新タイマー登録なし）
 //   - buffer 上限（DIFF_BUFFER_MAX = 100）超過時は古い順から破棄 + 警告ログ
+//   v2.1.10 計測: hall window でのみ IPC 受信タイミングを rolling-log に記録（保険）。
 function _bufferDiff(diff) {
   if (!diff || typeof diff !== 'object' || typeof diff.kind !== 'string') return;
+  // v2.1.10: hall 側 IPC 受信タイミングを記録（kind + Date.now()）
+  _logHall('hall:dualSync:recv', { kind: diff.kind, ts: Date.now() });
   // 上限到達時の暴走防止（古い diff から破棄、警告ログ出力）
   if (_diffBuffer.length >= DIFF_BUFFER_MAX) {
     try {
@@ -101,8 +132,11 @@ function _bufferDiff(diff) {
     //   の原因だった。requestAnimationFrame に切替えることで次フレーム（16〜50ms）
     //   で flush され、描画パイプと自然に同期する。atomic update 効果は維持
     //   （rAF boundary 内で複数 diff を集約、dedup + 受信順保持はそのまま）。
+    // v2.1.10: rAF 自体は v2.1.9 のまま維持（変更禁止）。frame skip 検出のみ追加（hall 限定）。
     _flushTimer = requestAnimationFrame(() => {
       _flushTimer = null;
+      // v2.1.10: hall 限定の frame skip 計測（独立関数で inline object literal 排除）
+      _recordFlushFrameSkip();
       _flushDiffBuffer();
     });
   }
@@ -111,10 +145,14 @@ function _bufferDiff(diff) {
 // buffer 内の diff を一括 apply（macrotask boundary、atomic update）。
 //   同一 kind の diff は最後の値だけ apply（dedup）、異なる kind は受信順保持。
 //   個別 apply の例外は try-catch で握り潰し、他の diff の apply は継続する。
+//   v2.1.10 計測: flush 開始 / 終了時刻と所要時間を記録（hall 限定）。
 function _flushDiffBuffer() {
   _flushTimer = null;
   if (_isFlushing) return;  // 再帰防止（理論上ここには来ないが二重防御）
   _isFlushing = true;
+  // v2.1.10: 計測 — flush 開始時刻
+  const flushStartMs = _isHall() ? ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) : 0;
+  let appliedCount = 0;
   try {
     // 同一 kind は最後の値で dedup、異なる kind は受信順保持。
     // Map の delete + set パターンで、最終出現位置に再配置（受信順 = 最終位置順）。
@@ -129,12 +167,18 @@ function _flushDiffBuffer() {
     for (const d of dedup.values()) {
       try {
         _applyDiffToState(d);
+        appliedCount++;
       } catch (err) {
         console.warn('[dual-sync] _applyDiffToState failed for kind=', d && d.kind, err);
       }
     }
   } finally {
     _isFlushing = false;
+    // v2.1.10: 計測 — flush 所要時間（hall 限定）
+    if (_isHall()) {
+      const flushEndMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      _logHall('hall:dualSync:flush', { durationMs: Math.round(flushEndMs - flushStartMs), appliedCount });
+    }
   }
 }
 
