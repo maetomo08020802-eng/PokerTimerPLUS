@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.14] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.14 BREAK 中スライドショー不発の構造同期 2 穴 + ログ過剰の根治リリース（3 ファイル / 約 30 行）。
+
+### Fixed
+
+- **BREAK 中スライドショー自動起動が不発する退行を根治**（前原さん発見、v2.1.13 配布後 2 画面実機）。症状 = BREAK 10 分設定、開始 30 秒以上経過してもスライドショーが起動しない。真因 = hall 側 `isBreakLevel(idx) === false` 確定の構造同期 2 穴。穴 1（起動時）= `_dualStateCache.structure` の初期値 null、`dual:state-sync-init` ハンドラ (main.js) は timerState / displaySettings / marqueeSettings / tournamentRuntime / tournamentBasics / audioSettings / venueName / logoUrl は active から補完するが **structure だけ補完がない** → hall 起動時 snapshot.structure === null → setStructure(null) → currentStructure = null → isBreakLevel(idx) === false 確定。穴 2（切替時）= `tournaments:setActive` ハンドラが **structure broadcast なし** → tournamentBasics 受信 → hall 側 loadPresetById async fallback (renderer.js:7137-7146) の遅延の間 structure 更新が遅延。修正 = `tournaments:setActive` で `_publishDualState('structure', preset)` 追加、`dual:state-sync-init` snapshot に structure 補完追加（active.blindPresetId 経由 userPresets / BUILTIN_PRESETS 二段検索 + Array.isArray(preset.levels) 型ガード）。
+- **hall 側 `render:tick:hall` ログ過剰発火による IPC 負荷を削減**（前原さんログ 1412 件 / 20 秒 ≒ 70Hz 観測、副次真因 = 「アプリ重い」体感の一因）。真因 = v2.1.11 hall 自前 60fps tick (`renderHallTickFrame`) が毎フレーム `setState({remainingMs})` を発火する設計の副作用で、subscribe → 当ログが 60Hz 近く発火 → IPC 経由で main に流れて hall ウィンドウ重さの一因。修正 = `state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex` の条件付き発火に変更、frequency を数 Hz に圧縮、IPC 負荷削減 + アプリ重さ改善。
+
+### Internal
+
+- `src/main.js` `tournaments:setActive` ハンドラに `_publishDualState('structure', preset)` 追加（穴 2 根治、約 11 行）
+- `src/main.js` `dual:state-sync-init` ハンドラに `snapshot.structure === null` ガード付きの structure 補完追加（穴 1 根治、約 13 行）
+- `src/renderer/renderer.js` `render:tick:hall` ログを `state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex` の条件付き発火に変更（副次真因削減、appRole === 'hall' ガードの内側に追加 if ネスト）
+- 既存 fallback 経路（renderer.js:7137-7146 の loadPresetById）は無傷で残置（保険）
+- timer.js / dual-sync.js / state.js / preload.js / audio.js すべて完全無変更
+- v2.1.6〜v2.1.13 機構（PRE_START broadcast / hall atomic update / hall 60fps tick / userOverride リセット / `data-status` セット）はすべて完全保持
+- 致命バグ保護 5 件すべて完全無傷
+
+### Tests
+
+- 新規テスト 10 件 (v226): T1〜T3（Fix 1 = tournaments:setActive structure broadcast 経路 + userPresets/BUILTIN_PRESETS or フォールバック + Array.isArray 型ガード）/ T4〜T5（Fix 2 = dual:state-sync-init snapshot.structure null ガード + 二段検索 + 型ガード）/ T6〜T7（Fix 3 = status/level 変化時の条件付き発火 + appRole='hall' ガード内ネスト）/ T8（package.json version 2.1.14）/ T9（致命バグ保護 5 件 cross-check）/ T10（v2.1.6〜v2.1.13 機構 touch なし）
+- 既存テスト 908 件（v2.1.13 時点）+ 新規 v226 10 件 = 想定 918 件全 PASS 維持
+- 既存 36 ファイルの version assertion を `2.1.13` → `2.1.14` に更新
+
+### Compatibility (v2.1.14)
+
+- 単画面モード（hall window なし）は完全同一の挙動（hall 専用経路 + IPC ハンドラ修正のみ、operator-solo モードでは `dual:state-sync-init` が呼ばれない）
+- v2.1.13 で確立した hall PRE_START data-status セット経路は完全保持
+- v2.1.6〜v2.1.13 機構すべて維持
+- 致命バグ保護 5 件すべて完全無傷
+- 既存 fallback 経路（renderer.js:7137-7146 の loadPresetById）は保険として残置（structure broadcast と二重実行になるが setStructure は冪等で副作用なし）
+- v2.1.13 → v2.1.14 自動更新で配信
+
+### Known Limitations
+
+- B3 ブレイク終了 pauseAfterBreak 反映漏れは引き続き v2.1.15 以降候補
+- 計測機構は本リリースでも保険として保持（render:tick:hall の頻度減で hall ウィンドウのログ採取が読みやすくなる）
+
+---
+
 ## [2.1.13] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.13 hall 側 PRE_START の `data-status` セット漏れ根治リリース（4 行修正）。

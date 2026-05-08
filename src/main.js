@@ -2126,6 +2126,21 @@ function registerIpcHandlers() {
     if (found.displaySettings)   _publishDualState('displaySettings',    found.displaySettings);
     if (found.marqueeSettings)   _publishDualState('marqueeSettings',    found.marqueeSettings);
     if (found.runtime)           _publishDualState('tournamentRuntime',  found.runtime);
+    // v2.1.14 Fix R1（穴 2 根治）: トーナメント切替時にも構造を hall に broadcast。
+    //   hall 側 renderer.js:7137-7146 の `loadPresetById` fallback は無傷で残置（保険）。
+    //   structure broadcast は冪等なので race による副作用なし
+    //   （setStructure が同データで 2 回呼ばれても結果同じ、blinds.js:20-26）。
+    //   前原さん判断 ③ c により、進行中レベルの残り時間には影響しない（hall 側 setStructure のみ、timer.js 不変）。
+    if (typeof found.blindPresetId === 'string' && found.blindPresetId) {
+      try {
+        const userPresets = store.get('userPresets') || [];
+        const preset = userPresets.find((p) => p.id === found.blindPresetId)
+          || BUILTIN_PRESETS.find((p) => p.id === found.blindPresetId);
+        if (preset && Array.isArray(preset.levels)) {
+          _publishDualState('structure', preset);
+        }
+      } catch (_) { /* never throw from broadcast */ }
+    }
     return { ...found, title: found.name };
   });
 
@@ -2595,6 +2610,24 @@ function registerIpcHandlers() {
         id: active.id, name: active.name, subtitle: active.subtitle,
         titleColor: active.titleColor, blindPresetId: active.blindPresetId
       };
+      // v2.1.14 Fix R-init（穴 1 根治、BREAK 中スライドショー不発の本丸）:
+      //   hall 起動時に structure を補完して snapshot に同梱。
+      //   _dualStateCache.structure は presets:saveUser 時のみセットされる設計（main.js:1803）のため、
+      //   起動直後 snapshot.structure === null となり hall 側 isBreakLevel が常に false →
+      //   ブレイク挿入が反映されず BREAK 中スライドショーが起動しない真因となっていた。
+      //   active.blindPresetId から store の userPresets / BUILTIN_PRESETS を引いて補完する。
+      //   null のままでも renderer.js:7117-7149 の tournamentBasics 経由 loadPresetById fallback で
+      //   間接取得は可能だが、初期化を確実にするため明示補完。
+      if (snapshot.structure === null && typeof active.blindPresetId === 'string' && active.blindPresetId) {
+        try {
+          const userPresets = store.get('userPresets') || [];
+          const preset = userPresets.find((p) => p.id === active.blindPresetId)
+            || BUILTIN_PRESETS.find((p) => p.id === active.blindPresetId);
+          if (preset && Array.isArray(preset.levels)) {
+            snapshot.structure = preset;
+          }
+        } catch (_) { /* never throw from snapshot init */ }
+      }
     }
     if (snapshot.audioSettings === null) snapshot.audioSettings = store.get('audio') || null;
     if (snapshot.venueName     === null) snapshot.venueName     = store.get('venueName') || '';

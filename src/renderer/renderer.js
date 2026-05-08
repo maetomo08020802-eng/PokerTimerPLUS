@@ -1720,8 +1720,16 @@ subscribe((state, prev) => {
     } catch (err) { console.warn('pauseAfterBreak 処理失敗:', err); }
   }
   // v2.0.4-rc17: 常時 3 ラベル rolling ログ #3（hall 描画 ts）
+  // v2.1.14 Fix R-log: status / level 変化時のみ発火に条件付け。
+  //   v2.1.11 hall 自前 60fps tick (`renderHallTickFrame`) が毎フレーム setState({remainingMs}) を発火
+  //   する設計の副作用で、subscribe → 当ログが 60Hz 近く発火（1412 件 / 20 秒 ≒ 70Hz） →
+  //   IPC 経由で main に流れて hall 重さの一因。状態変化（status / level）時のみに絞り、
+  //   frequency を数件に圧縮、IPC 負荷削減 + アプリ重さ改善。
+  //   trace 用途は status / level 変化時で十分（remainingMs 推移は別ラベルで十分追える）。
   if (typeof window !== 'undefined' && window.appRole === 'hall') {
-    try { window.api?.log?.write?.('render:tick:hall', { status: state.status, level: state.currentLevelIndex, remainingMs: state.remainingMs }); } catch (_) { /* never throw from logging */ }
+    if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex) {
+      try { window.api?.log?.write?.('render:tick:hall', { status: state.status, level: state.currentLevelIndex, remainingMs: state.remainingMs }); } catch (_) { /* never throw from logging */ }
+    }
   }
   renderTime(state.remainingMs);
   renderNextBreak(state.remainingMs, state.currentLevelIndex);
