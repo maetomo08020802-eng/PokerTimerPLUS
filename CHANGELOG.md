@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.16] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.16 v2.1.15 残課題根治リリース。① PRE_START 一時停止 hall 同期の不完全根治（time-adjust で isPaused 上書きされる設計ミス）+ ③ 根治で顕在化した試験 4 既存潜伏バグ（PAUSED 中スライドショー復帰不可）を一括根治。
+
+### Fixed
+- **① PRE_START 一時停止が hall に届かない（v2.1.15 では time-adjust で上書きされていた残課題）**: `onPreStartAdjust` / `onPreStartTick` で `isPaused` 現状値を維持して送信、hall 側 `applyHallPreStartState` で `isPaused` フィールド未指定時は現状値維持の防御二重化
+- **試験 4 退行根治: BREAK / PRE_START 中の PAUSED 状態でスライドショー復帰ボタンが効かない**: `isSlideshowEligibleStatus` を拡張し、PAUSED 中でも BREAK 行 / PRE_START active ならスライドショー継続を許可（v2.1.15 の ③ 根治で BREAK 検出が機能して初めて顕在化した既存潜伏バグ）
+
+### Internal
+- 修正 1 ファイル（renderer.js）+ package.json + CHANGELOG + 新規テスト v228（10 件）
+- v2.1.15 で実装した onPreStartPause / onPreStartResume / hallPreStartState.isPaused / dataset.prestartPaused 機構はそのまま完全保持
+
+### Compatibility
+- v2.1.14 / v2.1.15 機能完全互換、致命バグ保護 5 件無傷
+- v2.1.6〜v2.1.15 機構すべて完全保持
+- 単画面モード完全同一
+
+---
+
 ## [2.1.15] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.15 ①②③ 統合根治リリース。2 画面運用初日 (2026-05-09) に発覚した未解決 3 件を rc1 観測ビルド経由で真因確定し、本リリースで一括根治。
