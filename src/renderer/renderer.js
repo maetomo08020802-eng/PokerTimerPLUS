@@ -1855,6 +1855,13 @@ let lastAudioTriggerSec = -1;
 let audioSuppressOnce = false;
 
 function handleAudioOnTick(remainingMs, currentLevelIndex) {
+  // v2.1.8 バグ B 根治: hall 側では音を鳴らさない。
+  //   operator window と hall window が同じ index.html を読み込み、両方で renderer.js
+  //   の timer loop が独立に rAF 回転している。これまで「ほぼ同時で 1 音に聞こえた」のが
+  //   v2.1.7 で導入した dual-sync buffer の setTimeout(0) macrotask 遅延（50〜200ms）で
+  //   「0.2 秒ズレた 2 音」に分離して顕在化。
+  //   修正方針: 音発火経路に hall ガードを置き、operator 側だけで音を鳴らす（多層防御の一段目）。
+  if (typeof window !== 'undefined' && window.appRole === 'hall') return;
   const remainingSec = Math.ceil(remainingMs / 1000);
   if (remainingSec === lastAudioTriggerSec) return;
   lastAudioTriggerSec = remainingSec;
@@ -1891,6 +1898,8 @@ function handleAudioOnTick(remainingMs, currentLevelIndex) {
 // PRE_START 中の音発火: 残り 5,4,3,2,1 秒で countdown-tick を1回ずつ。
 // 0 秒は onPreStartEnd で start を鳴らす（onPreStartTick の remainingSec===0 検出は不確実）
 function handleAudioOnPreStartTick(remainingMs) {
+  // v2.1.8 バグ B 根治: hall 側では音を鳴らさない（Fix 1 と同じ理由、PRE_START 中も二重再生防止）
+  if (typeof window !== 'undefined' && window.appRole === 'hall') return;
   const remainingSec = Math.ceil(remainingMs / 1000);
   if (remainingSec === lastAudioTriggerSec) return;
   lastAudioTriggerSec = remainingSec;
