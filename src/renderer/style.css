@@ -4101,22 +4101,17 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
   display: none !important;
 }
 
-/* v2.1.15-rc1: 計測モードバッジ（operator 画面のみ、-rcN サフィックスを検出して renderer.js が hidden 属性を解除）。
-   hidden 属性が付いている場合は HTML5 標準で display:none 相当、JS で属性削除すると表示される。 */
-.measurement-mode-badge {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  background: #d32f2f;
-  color: #fff;
-  padding: 4px 10px;
-  border-radius: 4px;
+/* v2.1.15 ① 根治: PRE_START 一時停止中の hall 側ラベル表示。
+   pause() 中は applyHallPreStartState が dataset.prestartPaused="true" を付与し、
+   resume() で属性を削除する。 hall ロールでのみ表示（operator / operator-solo は CSS の data-role 制限で出ない）。 */
+[data-role="hall"] .clock[data-prestart-paused="true"]::after {
+  content: '一時停止中';
+  display: block;
+  text-align: center;
+  font-size: 1.2rem;
   font-weight: bold;
-  font-size: 14px;
-  z-index: 9999;
-  pointer-events: none;
-}
-[data-role="hall"] .measurement-mode-badge {
-  display: none !important;
+  color: #ffaa00;
+  margin-top: 0.5rem;
+  letter-spacing: 0.1em;
 }
 

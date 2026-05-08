@@ -11,6 +11,7 @@ import {
   setStructure,
   cloneStructure,
   validateStructure,
+  isBreakLevel,
   checkStructureSoftWarnings,
   exportToJSON,
   importFromJSON,
@@ -469,6 +470,7 @@ const breakImagesState = { images: [], intervalSec: 10, pipSize: 'medium' };
 //   operator 側では更新されない（broadcast 送信側のため）、判定は hallPreStartState.isActive のみ。
 const hallPreStartState = {
   isActive: false,
+  isPaused: false,      // v2.1.15 ① 根治: PRE_START 一時停止フラグ（true 時は rAF 停止 + 「一時停止中」ラベル表示）
   totalMs: 0,
   remainingMs: 0,
   startAtMs: 0,         // Date.now() 基準の終了予定時刻（hall 側 rAF カウントダウン用）
@@ -1469,27 +1471,8 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
       const remainingMs = Math.max(0, totalMs - elapsedMs);
       let status;
       if (live.status === 'paused') status = States.PAUSED;
-      else {
-        const isBreakResult = (typeof isBreakLevel === 'function') ? isBreakLevel(idx) : false;
-        // v2.1.15-rc1 計測ログ C: hall 側 isBreakLevel 結果と currentStructure の状態を観測
-        if (window.appRole === 'hall') {
-          try {
-            const struct = (typeof getStructure === 'function') ? getStructure() : null;
-            const lvAtIdx = struct?.levels?.[idx];
-            window.api?.log?.write?.('meas:isBreakLevel:check', {
-              idx,
-              isBreakResult,
-              lvAtIdx_isBreak: lvAtIdx?.isBreak,
-              lvAtIdx_isBreakType: typeof lvAtIdx?.isBreak,
-              lvAtIdx_duration: lvAtIdx?.durationMinutes,
-              lvAtIdx_hasIsBreakKey: lvAtIdx && Object.prototype.hasOwnProperty.call(lvAtIdx, 'isBreak'),
-              structLevelsCount: struct?.levels?.length || 0
-            });
-          } catch (_) { /* never throw from logging */ }
-        }
-        if (isBreakResult) status = States.BREAK;
-        else status = States.RUNNING;
-      }
+      else if (typeof isBreakLevel === 'function' && isBreakLevel(idx)) status = States.BREAK;
+      else status = States.RUNNING;
       // 初回 setState（subscribe → renderTime 経由で初期表示反映）
       setState({ currentLevelIndex: idx, remainingMs, totalMs, status });
       // hallTickState seed 更新（毎フレーム Date.now() との差で remainingMs を算出するため）
@@ -1827,6 +1810,33 @@ function _refreshDisplayAfterStructureChange() {
   } catch (_) { /* never throw from display refresh */ }
 }
 
+// v2.1.15: BREAK 行を考慮したヘッダーレベル表示計算。
+//   - 通常レベル: BREAK 行を除いた連番（例: LV1, LV2, BREAK, LV3 → LV3 は表示「3」）
+//   - BREAK 行: 次の通常レベル番号を取得して「次のレベル: Lv N」形式で返す
+//   - 末尾 BREAK で次がない / 構造未ロード時は fallback（「BREAK」表示）
+function computeHeaderLevelText(currentLevelIndex) {
+  const idx = currentLevelIndex || 0;
+  const struct = (typeof getStructure === 'function') ? getStructure() : null;
+  const levels = struct?.levels;
+  if (!Array.isArray(levels) || levels.length === 0) return String(idx + 1);
+  const curLv = levels[idx];
+  if (curLv?.isBreak) {
+    // BREAK 行: 次の通常レベル番号を探す（複数 BREAK が連続しても次の !isBreak まで進む）
+    let regularCount = 0;
+    for (let i = 0; i <= idx; i += 1) if (!levels[i]?.isBreak) regularCount += 1;
+    // 次の通常レベルは「現在までの通常レベル数 + 1」
+    const nextRegularNumber = regularCount + 1;
+    // 構造に次の通常レベルが存在するか確認（末尾 BREAK 防御）
+    let hasNext = false;
+    for (let i = idx + 1; i < levels.length; i += 1) if (!levels[i]?.isBreak) { hasNext = true; break; }
+    return hasNext ? `次のレベル: Lv${nextRegularNumber}` : 'BREAK';
+  }
+  // 通常レベル: 0〜idx の中で !isBreak の件数を数える
+  let regularCount = 0;
+  for (let i = 0; i <= idx; i += 1) if (!levels[i]?.isBreak) regularCount += 1;
+  return String(regularCount);
+}
+
 // v2.0.0 STEP 3: operator モード（PC 側）専用のミニ状態バー更新。
 //   既存 subscribe からのみ呼ばれるため tick ごとの再計算ではなく差分更新になる。
 //   hall / operator-solo では DOM 自体が hidden なので早期 return（DOM 操作も省略）。
@@ -1836,22 +1846,8 @@ function updateOperatorStatusBar(state) {
   const timeEl  = document.getElementById('js-operator-status-time');
   const stateEl = document.getElementById('js-operator-status-state');
   if (!levelEl || !timeEl || !stateEl) return;
-  // Level: 1-indexed 表示（getLevel は 0-indexed）
-  // v2.1.15-rc1 計測ログ E: ヘッダーレベル表示時の現状値観測（② 真因特定用）
-  try {
-    const idx = state.currentLevelIndex || 0;
-    const lv = (typeof getLevel === 'function') ? getLevel(idx) : null;
-    const isBr = (typeof isBreakLevel === 'function') ? isBreakLevel(idx) : false;
-    window.api?.log?.write?.('meas:headerLevel:render', {
-      idx,
-      displayedNumber: idx + 1,
-      lv_isBreak: lv?.isBreak,
-      lv_durationMinutes: lv?.durationMinutes,
-      isBreakLevelResult: isBr,
-      role: typeof window !== 'undefined' ? window.appRole : null
-    });
-  } catch (_) { /* never throw from logging */ }
-  levelEl.textContent = String((state.currentLevelIndex || 0) + 1);
+  // v2.1.15: BREAK 行を考慮したヘッダー表示
+  levelEl.textContent = computeHeaderLevelText(state.currentLevelIndex);
   // Time: MM:SS 表示（既存 renderTime と同じ formatter を再利用したいが、最小実装のため自前計算）
   const ms = Math.max(0, state.remainingMs || 0);
   const totalSec = Math.ceil(ms / 1000);
@@ -2107,6 +2103,14 @@ setHandlers({
   },
   onPreStartCancel: () => {
     publishPreStartIfOperator({ isActive: false });
+  },
+  // v2.1.15 ① 根治: PRE_START 一時停止 → hall に isPaused=true 通知（カウントダウン固定表示用）
+  onPreStartPause: ({ remainingMs }) => {
+    publishPreStartIfOperator({ isActive: true, isPaused: true, remainingMs: Math.max(0, Math.floor(remainingMs)) });
+  },
+  // v2.1.15 ① 根治: PRE_START 再開 → hall に isPaused=false 通知（カウントダウン再開用）
+  onPreStartResume: ({ remainingMs }) => {
+    publishPreStartIfOperator({ isActive: true, isPaused: false, remainingMs: Math.max(0, Math.floor(remainingMs)) });
   },
   onPreStartAdjust: ({ remainingMs }) => {
     publishPreStartIfOperator({ isActive: true, remainingMs: Math.max(0, Math.floor(remainingMs)) });
@@ -2665,6 +2669,7 @@ function applyHallPreStartState(payload) {
   // v2.1.10 計測: hall window でのみ applyHallPreStartState 入口時刻を rolling-log に記録
   try { window.api?.log?.write?.('hall:applyHallPreStartState:enter', { isActive: !!payload?.isActive, remainingMs: payload?.remainingMs, ts: Date.now() }); } catch (_) { /* never throw from logging */ }
   const isActive = !!payload.isActive;
+  const isPaused = !!payload.isPaused;   // v2.1.15 ① 根治: 一時停止フラグ
   // v2.1.10: 旧 rAF 廃止により rafId は使用しないが、defense-in-depth で残存ハンドルがあれば cancel。
   //   beforeunload ハンドラ等で cancelAnimationFrame が呼ばれる経路は維持する。
   if (hallPreStartState.rafId !== null) {
@@ -2672,6 +2677,7 @@ function applyHallPreStartState(payload) {
     hallPreStartState.rafId = null;
   }
   hallPreStartState.isActive = isActive;
+  hallPreStartState.isPaused = isPaused;
   if (isActive) {
     if (Number.isFinite(payload.totalMs))     hallPreStartState.totalMs     = Math.floor(payload.totalMs);
     if (Number.isFinite(payload.remainingMs)) hallPreStartState.remainingMs = Math.floor(payload.remainingMs);
@@ -2681,21 +2687,38 @@ function applyHallPreStartState(payload) {
       // startAtMs 無指定なら remainingMs から推定（now + remainingMs）
       hallPreStartState.startAtMs = Date.now() + Math.floor(payload.remainingMs);
     }
-    // v2.1.10: 独立 rAF 廃止、broadcast 受信時に即時 DOM 更新するだけ（1 秒粒度）。
-    //   operator 側は 1 秒に 1 回 broadcast を送信（renderer.js:1962 の throttle 経路）。
-    //   PRE_START 表示単位は分:秒なので秒粒度で十分。rAF を回す必要なし。
-    renderHallPreStartTick();
+    // v2.1.15 ① 根治: 一時停止中は rAF を起動せず remainingMs を固定表示 + 「一時停止中」ラベル
+    if (isPaused) {
+      // remainingMs を固定表示（startAtMs ベースの再計算はしない）
+      if (el.time && typeof formatPreStartTime === 'function') {
+        el.time.textContent = formatPreStartTime(hallPreStartState.remainingMs);
+      }
+      if (el.clock) {
+        el.clock.dataset.status = 'PRE_START';
+        el.clock.dataset.prestartFormat = hallPreStartState.remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
+        el.clock.dataset.prestartPaused = 'true';   // CSS で「一時停止中」ラベル表示用
+      }
+    } else {
+      // 通常進行（既存挙動）
+      if (el.clock) delete el.clock.dataset.prestartPaused;
+      // v2.1.10: 独立 rAF 廃止、broadcast 受信時に即時 DOM 更新するだけ（1 秒粒度）。
+      //   operator 側は 1 秒に 1 回 broadcast を送信（renderer.js:1962 の throttle 経路）。
+      //   PRE_START 表示単位は分:秒なので秒粒度で十分。rAF を回す必要なし。
+      renderHallPreStartTick();
+    }
   } else {
     // 解除: PRE_START 表示要素をクリア → 通常 idle 表示に戻す（getState() は idle のまま）
     hallPreStartState.totalMs = 0;
     hallPreStartState.remainingMs = 0;
     hallPreStartState.startAtMs = 0;
+    hallPreStartState.isPaused = false;
     // v2.1.13 Fix: data-status を IDLE に戻す + prestartFormat 属性をクリア。
     //   Fix 1 で renderHallPreStartTick が毎フレーム 'PRE_START' に書いていた分の解除。
     //   その後、subscribe 経由の renderControls / 通常 timerState 受信で上書きされる。
     if (el.clock) {
       el.clock.dataset.status = 'IDLE';
       delete el.clock.dataset.prestartFormat;
+      delete el.clock.dataset.prestartPaused;   // v2.1.15 ① 根治: 一時停止ラベル属性もクリア
     }
     // メインタイマーは applyTimerStateToTimer の 'idle' 経路で timerReset 済みのはず。
     //   念のため renderTime で表示を上書き（idle 復帰直後の残り時間表示）。
@@ -2717,7 +2740,8 @@ function applyHallPreStartState(payload) {
 //   IDLE 起動時の Lv1 duration 値で固まったまま、スライドショーが上に乗っているため気付かれず
 //   スライドショー解除（「タイマー画面にもどす」）で固まった表示が露見していた。typo 修正。
 function renderHallPreStartTick() {
-  if (!hallPreStartState.isActive) return;
+  // v2.1.15 ① 根治: 一時停止中は rAF ループに乗せない（applyHallPreStartState で固定表示済）
+  if (!hallPreStartState.isActive || hallPreStartState.isPaused) return;
   const now = Date.now();
   const remainingMs = Math.max(0, hallPreStartState.startAtMs - now);
   hallPreStartState.remainingMs = remainingMs;
@@ -6960,13 +6984,6 @@ async function loadAppVersion() {
     try {
       const version = await window.api.app.getVersion();
       el.appVersion.textContent = version;
-      // v2.1.15-rc1: 計測モード（-rcN サフィックス）かつ operator 画面のみ赤バッジを表示。
-      //   hall は CSS [data-role="hall"] で display:none、operator-solo は appRole 判定で hidden 属性のまま。
-      try {
-        if (typeof window !== 'undefined' && window.appRole !== 'hall' && /-rc\d+/.test(version || '')) {
-          document.getElementById('measurement-mode-badge')?.removeAttribute('hidden');
-        }
-      } catch (_) { /* never throw from badge toggle */ }
     } catch (err) {
       console.warn('バージョン取得に失敗:', err);
       el.appVersion.textContent = '0.1.0';
@@ -7216,21 +7233,6 @@ if (__appRole === 'hall') {
         // setStructure で blinds.js の currentStructure を更新 → 次レベル切替時に新 duration が効く。
         // timer.js の targetTime は意図的に再計算しない（現レベル末端まで古い duration で継続、③ c 厳守）。
         try {
-          // v2.1.15-rc1 計測ログ B: hall setStructure 直前、value.levels の isBreak フィールド観測
-          try {
-            window.api?.log?.write?.('meas:structure:recv', {
-              levelsCount: value?.levels?.length || 0,
-              levels: (value?.levels || []).map((lv, idx) => ({
-                idx,
-                isBreak: lv?.isBreak,
-                isBreakType: typeof lv?.isBreak,
-                durationMinutes: lv?.durationMinutes,
-                hasIsBreakKey: lv && Object.prototype.hasOwnProperty.call(lv, 'isBreak')
-              })),
-              role: window.appRole,
-              valueKeys: value && typeof value === 'object' ? Object.keys(value) : null
-            });
-          } catch (_) { /* never throw from logging */ }
           setStructure(value);
           const { currentLevelIndex } = getState();
           renderCurrentLevel(currentLevelIndex);
