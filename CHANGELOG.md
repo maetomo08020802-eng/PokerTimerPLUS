@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.13] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.13 hall 側 PRE_START の `data-status` セット漏れ根治リリース（4 行修正）。
+
+### Fixed
+
+- **hall 側 PRE_START 中の「トーナメントスタートまで」ラベル + 時間フォーマット切替の不発火を根治**（前原さん発見、v2.1.12 配布後実機）。症状 = 「タイマー開始前のカウントダウンなのに『タイマースタートまで』という文字が無くなっており、なにかもうトーナメントが始まったかのような表示になっている」。真因 = CSS の `.clock[data-status="PRE_START"] .clock__pre-start-label` 表示と `.clock[data-status="PRE_START"][data-prestart-format="hms|ms"] .clock__time` フォーマット切替が `el.clock` 要素に `data-status="PRE_START"` 属性が付いた時のみ発火する設計だが、v2.0.3「PRE_START は永続化しない」設計のため hall 側 `state.status` は IDLE のまま → subscribe 経由の `renderControls(IDLE)` しか呼ばれず `el.clock.dataset.status = 'IDLE'` で固定 → CSS の表示制御が**全部発火しない**（v2.1.6 から潜伏）。修正 = `renderHallPreStartTick` 内で毎フレーム `el.clock.dataset.status = 'PRE_START'` を idempotent にセット、`applyHallPreStartState` の解除経路で `el.clock.dataset.status = 'IDLE'` + `delete el.clock.dataset.prestartFormat` で復元。
+
+### Internal
+
+- `src/renderer/renderer.js` `renderHallPreStartTick` の `el.time` 書込ブロック内、`el.clock.dataset.prestartFormat` セット直前に `el.clock.dataset.status = 'PRE_START'` の 1 行追加（毎フレーム idempotent 書込、CSS 副作用なし）
+- `src/renderer/renderer.js` `applyHallPreStartState` の `isActive=false` 解除経路に `el.clock.dataset.status = 'IDLE'` + `delete el.clock.dataset.prestartFormat` の 3 行追加（解除明示、subscribe → renderControls との race 排除）
+- timer.js / dual-sync.js / state.js / main.js / audio.js すべて完全無変更
+- v2.1.11 hallTickState / renderHallTickFrame / renderHallPreStartTick rAF 自己再帰経路は完全保持
+- v2.1.12 で確立した `el.time.textContent = formatPreStartTime(...)` 経路 + subscribe 内 `userOverride='auto'` リセット経路は完全保持
+- 致命バグ保護 5 件すべて完全無傷
+
+### Tests
+
+- 新規テスト 7 件 (v225): renderHallPreStartTick 内の data-status="PRE_START" セット存在 / セット位置（el.time 書込同ブロック内 + prestartFormat 直前隣接）/ applyHallPreStartState 解除経路の data-status="IDLE" 復元 / 同経路の delete prestartFormat / package.json version 2.1.13 / 致命バグ保護 5 件 cross-check / v2.1.11 機構（hallPreStartState・hallTickState・renderHallTickFrame）touch なし
+- 既存テスト 901 件（v2.1.12 時点）+ 新規 v225 7 件 = 想定 908 件全 PASS 維持
+- 既存 36 ファイルの version assertion を `2.1.12` → `2.1.13` に更新
+
+### Compatibility (v2.1.13)
+
+- 単画面モード（hall window なし）は完全同一の挙動（hall 専用関数の修正のみ、operator-solo / operator では実行されない）
+- v2.1.12 で typo 修正された hall PRE_START 時間表示は本リリースでも完全動作（Fix 1 は同ブロック内の隣接追加で経路非破壊）
+- v2.1.6 / v2.1.7 / v2.1.8 / v2.1.9 / v2.1.10 / v2.1.11 / v2.1.12 機構すべて維持
+- 致命バグ保護 5 件すべて完全無傷
+- v2.1.12 → v2.1.13 自動更新で配信
+
+### Known Limitations
+
+- B3 ブレイク終了 pauseAfterBreak 反映漏れは引き続き v2.1.14 以降候補
+- 計測機構は本リリースでも保険として保持
+
+---
+
 ## [2.1.12] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.12 退行 2 件のピンポイント根治リリース。
