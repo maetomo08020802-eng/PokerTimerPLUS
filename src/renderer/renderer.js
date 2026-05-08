@@ -2088,7 +2088,9 @@ setHandlers({
     const now = performance.now();
     if (now - _preStartTickLastSentAt >= 1000) {
       _preStartTickLastSentAt = now;
-      publishPreStartIfOperator({ isActive: true, remainingMs: Math.max(0, Math.floor(remainingMs)) });
+      // v2.1.16 ① 根治: PRE_START 通常進行中は isPaused:false を明示送信
+      //   （PAUSED 中は startPreStartLoop が止まっているため通常 onPreStartTick は呼ばれないが、防御）
+      publishPreStartIfOperator({ isActive: true, isPaused: false, remainingMs: Math.max(0, Math.floor(remainingMs)) });
     }
   },
   onPreStartEnd: () => {
@@ -2113,7 +2115,12 @@ setHandlers({
     publishPreStartIfOperator({ isActive: true, isPaused: false, remainingMs: Math.max(0, Math.floor(remainingMs)) });
   },
   onPreStartAdjust: ({ remainingMs }) => {
-    publishPreStartIfOperator({ isActive: true, remainingMs: Math.max(0, Math.floor(remainingMs)) });
+    // v2.1.16 ① 根治: PRE_START PAUSED 中の時間調整時も isPaused フラグを維持して送信。
+    //   これがないと hall 側で isPaused=false に上書きされ rAF 再開 → カウントダウン進行（v2.1.15 不具合）
+    const curState = getState();
+    const isPaused = (typeof isPreStartActive === 'function' && isPreStartActive())
+      && curState.status === States.PAUSED;
+    publishPreStartIfOperator({ isActive: true, isPaused, remainingMs: Math.max(0, Math.floor(remainingMs)) });
   }
 });
 
@@ -2651,7 +2658,18 @@ function isSlideshowEligibleStatus(status) {
   //   operator 側では hallPreStartState.isActive は常に false（broadcast 送信側）→ 影響なし。
   //   v2.0.3 Fix L で PRE_START → 'idle' 化されているため、hall 側は status='idle' で受け取る。
   //   そこで hallPreStartState.isActive を OR に追加することで、hall 側でもスライドショーが回る。
-  return status === States.BREAK || status === States.PRE_START || (window.appRole === 'hall' && hallPreStartState.isActive);
+  // v2.1.16 試験 4 退行根治: BREAK 中 / PRE_START 中の PAUSED 状態でもスライドショー継続を許可。
+  //   v2.1.15 で isBreakLevel import 追加により BREAK 検出が機能 → BREAK 中 PAUSE → 復帰経路で
+  //   handlePipShowSlideshow 内の isSlideshowEligibleStatus(PAUSED) が false で activateSlideshow が
+  //   skip されていた既存潜伏バグの根治。通常レベル中の PAUSED は引き続き対象外（既存挙動維持）。
+  if (status === States.BREAK || status === States.PRE_START) return true;
+  if (window.appRole === 'hall' && hallPreStartState.isActive) return true;
+  if (status === States.PAUSED) {
+    const { currentLevelIndex } = getState();
+    if (typeof isBreakLevel === 'function' && isBreakLevel(currentLevelIndex)) return true;
+    if (window.appRole === 'hall' && hallPreStartState.isActive) return true;
+  }
+  return false;
 }
 
 // v2.1.6: hall 側 PRE_START 状態適用ハンドラ。operator から broadcast された preStartState を受信して
@@ -2669,7 +2687,12 @@ function applyHallPreStartState(payload) {
   // v2.1.10 計測: hall window でのみ applyHallPreStartState 入口時刻を rolling-log に記録
   try { window.api?.log?.write?.('hall:applyHallPreStartState:enter', { isActive: !!payload?.isActive, remainingMs: payload?.remainingMs, ts: Date.now() }); } catch (_) { /* never throw from logging */ }
   const isActive = !!payload.isActive;
-  const isPaused = !!payload.isPaused;   // v2.1.15 ① 根治: 一時停止フラグ
+  // v2.1.16 ① 根治防御二重化: isPaused フィールドが payload に**含まれない**場合は現状値を維持。
+  //   operator 側 publishPreStartIfOperator で isPaused フィールドを必ず付けるよう Fix 1/2 で対応済だが、
+  //   将来の broadcast 経路追加で isPaused 付け忘れた場合の defense-in-depth。
+  const isPaused = Object.prototype.hasOwnProperty.call(payload, 'isPaused')
+    ? !!payload.isPaused
+    : hallPreStartState.isPaused;
   // v2.1.10: 旧 rAF 廃止により rafId は使用しないが、defense-in-depth で残存ハンドルがあれば cancel。
   //   beforeunload ハンドラ等で cancelAnimationFrame が呼ばれる経路は維持する。
   if (hallPreStartState.rafId !== null) {
