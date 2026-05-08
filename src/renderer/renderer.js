@@ -2649,6 +2649,13 @@ function applyHallPreStartState(payload) {
     hallPreStartState.totalMs = 0;
     hallPreStartState.remainingMs = 0;
     hallPreStartState.startAtMs = 0;
+    // v2.1.13 Fix: data-status を IDLE に戻す + prestartFormat 属性をクリア。
+    //   Fix 1 で renderHallPreStartTick が毎フレーム 'PRE_START' に書いていた分の解除。
+    //   その後、subscribe 経由の renderControls / 通常 timerState 受信で上書きされる。
+    if (el.clock) {
+      el.clock.dataset.status = 'IDLE';
+      delete el.clock.dataset.prestartFormat;
+    }
     // メインタイマーは applyTimerStateToTimer の 'idle' 経路で timerReset 済みのはず。
     //   念のため renderTime で表示を上書き（idle 復帰直後の残り時間表示）。
     if (typeof renderTime === 'function') renderTime(0);
@@ -2681,6 +2688,11 @@ function renderHallPreStartTick() {
     el.time.textContent = formatPreStartTime(remainingMs);
     // PRE_START 60 分跨ぎで桁数切替（既存 prestartFormat 属性パターンと整合）
     if (el.clock) {
+      // v2.1.13 Fix: hall 側 CSS 表示条件 `[data-status="PRE_START"]` を満たすため明示セット。
+      //   v2.0.3「PRE_START は永続化しない」設計のため state.status は IDLE のまま →
+      //   renderControls 経由では data-status が PRE_START にならない。CSS のラベル
+      //   `.clock__pre-start-label` 表示 + 時間フォーマット切替のため毎フレーム idempotent セット。
+      el.clock.dataset.status = 'PRE_START';
       el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
     }
   }
