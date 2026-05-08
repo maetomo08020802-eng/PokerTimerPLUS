@@ -74,6 +74,18 @@ export function startAtLevel(index) {
 
 // 一時停止
 export function pause() {
+  // v2.1.15-rc1 計測ログ F: pause 関数呼出時の現状値観測（① 真因特定用）
+  try {
+    const _curStatus = getState()?.status;
+    if (typeof window !== 'undefined' && window.api?.log?.write) {
+      window.api.log.write('meas:timer:pause:enter', {
+        status: _curStatus,
+        isPreStart,
+        hasOnPreStartCancel: typeof handlers.onPreStartCancel === 'function',
+        role: window.appRole
+      });
+    }
+  } catch (_) { /* never throw from logging */ }
   const { status } = getState();
   // PRE_START / RUNNING / BREAK のいずれからでも PAUSED へ
   if (status !== States.RUNNING && status !== States.BREAK && status !== States.PRE_START) return;

@@ -1762,6 +1762,20 @@ function registerIpcHandlers() {
 
   // ユーザープリセット保存（同 id があれば更新、なければ追加）
   ipcMain.handle('presets:saveUser', (_event, preset) => {
+    // v2.1.15-rc1 計測ログ D: operator から main への保存リクエスト受信時、preset.levels の isBreak フィールド観測
+    try {
+      rollingLog('meas:preset:save', {
+        presetId: preset?.id,
+        levelsCount: preset?.levels?.length || 0,
+        levels: (preset?.levels || []).map((lv, idx) => ({
+          idx,
+          isBreak: lv?.isBreak,
+          isBreakType: typeof lv?.isBreak,
+          durationMinutes: lv?.durationMinutes,
+          hasIsBreakKey: lv && Object.prototype.hasOwnProperty.call(lv, 'isBreak')
+        }))
+      });
+    } catch (_) { /* never throw from logging */ }
     if (!isValidPreset(preset)) {
       return { ok: false, error: 'invalid-preset' };
     }
@@ -1800,6 +1814,20 @@ function registerIpcHandlers() {
       const tournaments = store.get('tournaments') || [];
       const activeT = tournaments.find((x) => x && x.id === activeId);
       if (activeT && activeT.blindPresetId === id) {
+        // v2.1.15-rc1 計測ログ A: operator → main の structure 送信時、levels の isBreak フィールド観測
+        try {
+          rollingLog('meas:structure:publish', {
+            presetId: id,
+            levelsCount: sanitized?.levels?.length || 0,
+            levels: (sanitized?.levels || []).map((lv, idx) => ({
+              idx,
+              isBreak: lv?.isBreak,
+              isBreakType: typeof lv?.isBreak,
+              durationMinutes: lv?.durationMinutes,
+              hasIsBreakKey: lv && Object.prototype.hasOwnProperty.call(lv, 'isBreak')
+            }))
+          });
+        } catch (_) { /* never throw from logging */ }
         _publishDualState('structure', sanitized);
         // v2.0.4-rc20 タスク 3: 配布版常時記録ラベル（rc18 第 1 弾の 4 ラベルと同パターン）
         try {
