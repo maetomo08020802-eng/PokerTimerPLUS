@@ -20,7 +20,9 @@ const handlers = {
   onPreStartEnd: () => {},
   onPreStartStart: () => {},   // v2.1.6: PRE_START 起動時 → payload {totalMs, remainingMs, startAtMs}
   onPreStartCancel: () => {},  // v2.1.6: cancelPreStart / reset 経由 → no payload
-  onPreStartAdjust: () => {}   // v2.1.6: ±1 分操作で残り時間調整 → payload {remainingMs}
+  onPreStartAdjust: () => {},  // v2.1.6: ±1 分操作で残り時間調整 → payload {remainingMs}
+  onPreStartPause: () => {},   // v2.1.15 ① 根治: PRE_START 中の pause → payload {remainingMs}
+  onPreStartResume: () => {}   // v2.1.15 ① 根治: PRE_START 中の resume → payload {remainingMs}
 };
 
 // 内部タイマー状態（DOM・state.js とは別、低レベル管理）
@@ -31,7 +33,7 @@ let isPreStart = false;    // PRE_START 中（PAUSED に遷移しても true を
 let preStartTotalMs = 0;   // プレスタート選択値（renderer のフォーマット決定にも使われる）
 
 // イベントハンドラ登録
-export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick, onPreStartEnd, onPreStartStart, onPreStartCancel, onPreStartAdjust }) {
+export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick, onPreStartEnd, onPreStartStart, onPreStartCancel, onPreStartAdjust, onPreStartPause, onPreStartResume }) {
   if (onTick) handlers.onTick = onTick;
   if (onLevelChange) handlers.onLevelChange = onLevelChange;
   if (onLevelEnd) handlers.onLevelEnd = onLevelEnd;
@@ -41,6 +43,9 @@ export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick,
   if (onPreStartStart) handlers.onPreStartStart = onPreStartStart;
   if (onPreStartCancel) handlers.onPreStartCancel = onPreStartCancel;
   if (onPreStartAdjust) handlers.onPreStartAdjust = onPreStartAdjust;
+  // v2.1.15 ① 根治: PRE_START 一時停止 / 再開を hall に通知するための新 handler
+  if (onPreStartPause) handlers.onPreStartPause = onPreStartPause;
+  if (onPreStartResume) handlers.onPreStartResume = onPreStartResume;
 }
 
 // PRE_START 中かを問い合わせる（renderer の表示判定で使う）
@@ -74,34 +79,31 @@ export function startAtLevel(index) {
 
 // 一時停止
 export function pause() {
-  // v2.1.15-rc1 計測ログ F: pause 関数呼出時の現状値観測（① 真因特定用）
-  try {
-    const _curStatus = getState()?.status;
-    if (typeof window !== 'undefined' && window.api?.log?.write) {
-      window.api.log.write('meas:timer:pause:enter', {
-        status: _curStatus,
-        isPreStart,
-        hasOnPreStartCancel: typeof handlers.onPreStartCancel === 'function',
-        role: window.appRole
-      });
-    }
-  } catch (_) { /* never throw from logging */ }
   const { status } = getState();
   // PRE_START / RUNNING / BREAK のいずれからでも PAUSED へ
   if (status !== States.RUNNING && status !== States.BREAK && status !== States.PRE_START) return;
   pausedRemainingMs = Math.max(0, targetTime - performance.now());
   stopLoop();
   setState({ status: States.PAUSED, remainingMs: pausedRemainingMs });
+  // v2.1.15 ① 根治: PRE_START 中の pause は hall に「一時停止中」状態を通知（カウントダウン固定表示）。
+  //   onPreStartCancel ではなく専用 onPreStartPause を呼ぶ理由: cancel は「PRE_START 終了」、
+  //   pause は「PRE_START 一時停止」で意味が異なる。hall 側は isPaused=true を受信して自前 rAF を停止 + remainingMs 固定表示。
+  if (isPreStart) {
+    try { handlers.onPreStartPause({ remainingMs: pausedRemainingMs }); } catch (_) { /* never throw */ }
+  }
 }
 
 // 再開
 export function resume() {
   if (getState().status !== States.PAUSED) return;
   targetTime = performance.now() + pausedRemainingMs;
+  const resumedRemainingMs = pausedRemainingMs;
   pausedRemainingMs = 0;
   if (isPreStart) {
     setState({ status: States.PRE_START });
     startPreStartLoop();
+    // v2.1.15 ① 根治: PRE_START 再開時に hall へ「一時停止解除（再開）」通知
+    try { handlers.onPreStartResume({ remainingMs: resumedRemainingMs }); } catch (_) { /* never throw */ }
     return;
   }
   const { currentLevelIndex } = getState();

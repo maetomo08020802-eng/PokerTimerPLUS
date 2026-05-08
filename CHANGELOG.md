@@ -7,21 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.1.15-rc1] - 2026-05-09 (観測ビルド、GitHub Releases 未公開)
+## [2.1.15] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.15 ①②③ 統合根治リリース。2 画面運用初日 (2026-05-09) に発覚した未解決 3 件を rc1 観測ビルド経由で真因確定し、本リリースで一括根治。
+
+### Fixed
+- **③ BREAK 中スライドショー自動起動しない**: renderer.js の import 文に `isBreakLevel` が含まれていなかったため `typeof isBreakLevel === 'function'` ガードで silent fail し、BREAK 検出が常に false を返していた潜伏バグを根治。import 追加 1 行で根治、副作用なし
+- **② BREAK 中 operator ヘッダー「レベル：N」表示異常**: ③ と同じ `isBreakLevel` 未 import + `updateOperatorStatusBar` のヘッダー表示ロジックが BREAK 行を考慮していなかった問題を根治。新規ヘルパー `computeHeaderLevelText` で BREAK 行は「次のレベル: Lv N」表示、通常レベルは BREAK 行を除いた連番表示に変更
+- **① PRE_START 中の一時停止が hall に届かない**: timer.js `pause()` / `resume()` 関数に `handlers.onPreStartPause` / `onPreStartResume` 通知を追加。preStartState broadcast に `isPaused` フィールドを拡張、hall 側で受信時に rAF 停止 + 「一時停止中」ラベル表示
 
 ### Internal
-- v2.1.14 配布後 2 画面運用で発覚した未解決 3 件（① PRE_START 一時停止 hall 不到達 / ② BREAK 中ヘッダーレベル表示異常 / ③ BREAK スライドショー自動起動しない）の真因特定用計測ログ 6 か所追加
-  - meas:structure:publish (main.js): operator → main の structure 送信時、levels の isBreak フィールド観測
-  - meas:structure:recv (renderer.js): hall setStructure 直前、value.levels の isBreak フィールド観測
-  - meas:isBreakLevel:check (renderer.js): hall 側 isBreakLevel 結果と currentStructure の状態を観測
-  - meas:preset:save (main.js): presets:saveUser 受信時、preset.levels の isBreak フィールド観測
-  - meas:headerLevel:render (renderer.js): ヘッダーレベル表示時の現状値観測
-  - meas:timer:pause:enter (timer.js): pause 関数呼出時の現状値観測
-- 計測モードバッジ追加（operator 画面のみ、起動時表示）
-- 修正ロジックは一切なし、ログ追加のみ
+- v2.1.15-rc1 観測ビルドで追加した計測ログ 6 か所（meas:〜 ラベル）を完全撤去
+- v2.1.15-rc1 計測モードバッジ（赤背景表示）を撤去
+- 既存テスト 918 件 + v227 新規テスト（①②③ 根治確認）追加
 
 ### Compatibility
-- v2.1.14 完全互換、全機構保持、致命バグ保護 5 件無傷
+- v2.1.14 機能完全互換、致命バグ保護 5 件無傷
+- v2.1.6〜v2.1.14 機構すべて完全保持
+- 単画面モード完全同一
 
 ---
 
