@@ -474,6 +474,30 @@ const hallPreStartState = {
   startAtMs: 0,         // Date.now() 基準の終了予定時刻（hall 側 rAF カウントダウン用）
   rafId: null           // hall 側 rAF タイマ ID（operator の tick broadcast を補間する 1 秒未満の表示更新用）
 };
+
+// v2.1.11: hall 側 RUNNING / BREAK 用の 60fps 自前 tick 状態。
+//   v2.1.10 で hall の自前 60fps 描画ループを全停止 → 描画は operator の broadcast 受信時
+//   のみ（RUNNING/BREAK は実質 5 秒粒度の periodicPersistAllRunning に依存）→ BREAK カクカク
+//   症状の真因。v2.1.11 で再導入: applyTimerStateToTimer の hall 経路で seed を更新し、
+//   renderHallTickFrame の自己再帰 rAF が Date.now() から remainingMs を毎フレーム計算して
+//   setState({ remainingMs }) → subscribe → renderTime / renderNextBreak が 60fps で発火する。
+//   operator 側 timer.js は hall で起動しないので（v2.1.10 Fix 1 の hall ガード保持）、
+//   hall window の rAF は本機構（1 個）+ dual-sync flush（1 個）= 同時 2 個に収まる。
+const hallTickState = {
+  isActive: false,
+  status: 0,            // States.RUNNING / States.BREAK（PAUSED / IDLE は isActive=false で停止）
+  currentLevelIndex: 0,
+  totalMs: 0,
+  startedAtMs: 0,       // Date.now() 基準の終了予定時刻（残り時間を Date.now() との差で算出）
+  rafId: null
+};
+function stopHallTickFrame() {
+  if (hallTickState.rafId !== null) {
+    cancelAnimationFrame(hallTickState.rafId);
+    hallTickState.rafId = null;
+  }
+  hallTickState.isActive = false;
+}
 // スライドショー状態管理
 //   active: 現在スライドショー表示中か
 //   currentIndex: 表示中の画像インデックス
@@ -1375,7 +1399,7 @@ async function getCachedLevels(presetId) {
 //              opts.silent: true なら復元直後の音再生（5,4,3,2,1 等）をスキップ
 function applyTimerStateToTimer(ts, levels, opts = {}) {
   // v2.0.4 E-1 fix: idle / 不正値復元時も clock--timer-finished オーバーレイを解除する。
-  // v2.1.10: hall では timer.js 関数呼出のみ skip（DOM/setState は続行、独立 rAF を抑止）。
+  // v2.1.10/v2.1.11: hall では timer.js を skip + 自前 60fps tick で描画（renderHallTickFrame）。
   const isHallApply = (typeof window !== 'undefined' && window.appRole === 'hall');
   if (isHallApply) {
     try { window.api?.log?.write?.('hall:applyTimerStateToTimer:enter', { status: ts && ts.status, ts: Date.now() }); } catch (_) {}
@@ -1383,21 +1407,18 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   if (!ts || typeof ts !== 'object') {
     el.clock?.classList.remove('clock--timer-finished');
     if (!isHallApply) timerReset();
+    else stopHallTickFrame();
     return;
   }
   if (ts.status === 'idle') {
     el.clock?.classList.remove('clock--timer-finished');
     if (!isHallApply) timerReset();
     else {
+      stopHallTickFrame();
       try {
-        const lvCount0 = getLevelCount();
-        if (lvCount0 > 0) {
-          const lvl0 = getLevel(0);
-          const totalMs0 = (lvl0?.durationMinutes || 0) * 60 * 1000;
-          setState({ status: States.IDLE, currentLevelIndex: 0, remainingMs: totalMs0, totalMs: totalMs0 });
-        } else {
-          setState({ status: States.IDLE, currentLevelIndex: 0, remainingMs: 0, totalMs: 0 });
-        }
+        const lvl0 = (getLevelCount() > 0) ? getLevel(0) : null;
+        const totalMs0 = (lvl0?.durationMinutes || 0) * 60 * 1000;
+        setState({ status: States.IDLE, currentLevelIndex: 0, remainingMs: totalMs0, totalMs: totalMs0 });
       } catch (_) {}
     }
     return;
@@ -1408,6 +1429,7 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   if (ts.status === 'finished') {
     if (!isHallApply) timerReset();
     else {
+      stopHallTickFrame();
       // hall: 終了表示用に setState で IDLE + remainingMs=0 を反映
       try { setState({ status: States.IDLE, remainingMs: 0 }); } catch (_) {}
     }
@@ -1423,6 +1445,7 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   const levelCount = getLevelCount();
   if (levelCount === 0) {
     if (!isHallApply) timerReset();
+    else stopHallTickFrame();
     return;
   }
   const idx = Math.max(0, Math.min(levelCount - 1, (live.currentLevel || 1) - 1));
@@ -1435,8 +1458,11 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
     if (elapsedMs > 0) timerAdvanceBy(-elapsedMs);
     if (live.status === 'paused') timerPause();
   } else {
-    // v2.1.10 hall: timer.js を介さず setState を直接呼出 → subscribe 経由で DOM 更新。
-    //   独立 rAF ループ（startLoop / startPreStartLoop）が起動しないため、hall の rAF 競合を解消。
+    // v2.1.11 hall: timer.js を介さず setState を直接呼出 → subscribe 経由で初回 DOM 更新。
+    //   その後 hallTickState の seed を更新し、renderHallTickFrame の自前 60fps rAF を起動して
+    //   毎フレーム Date.now() から remainingMs を計算 → setState({ remainingMs }) → subscribe →
+    //   renderTime / renderNextBreak で滑らかに描画される。
+    //   PAUSED は rAF 停止（静止表示）、RUNNING/BREAK は rAF 起動。
     try {
       const lvl = getLevel(idx);
       const totalMs = (lvl?.durationMinutes || 0) * 60 * 1000;
@@ -1445,8 +1471,26 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
       if (live.status === 'paused') status = States.PAUSED;
       else if (typeof isBreakLevel === 'function' && isBreakLevel(idx)) status = States.BREAK;
       else status = States.RUNNING;
+      // 初回 setState（subscribe → renderTime 経由で初期表示反映）
       setState({ currentLevelIndex: idx, remainingMs, totalMs, status });
-    } catch (err) { console.warn('[v2.1.10 hall] setState 経由の状態反映失敗:', err); }
+      // hallTickState seed 更新（毎フレーム Date.now() との差で remainingMs を算出するため）
+      hallTickState.status = status;
+      hallTickState.currentLevelIndex = idx;
+      hallTickState.totalMs = totalMs;
+      hallTickState.startedAtMs = Date.now() + remainingMs;   // 終了予定時刻
+      if (status === States.RUNNING || status === States.BREAK) {
+        // 既存 rAF をクリーンアップしてから新規起動
+        if (hallTickState.rafId !== null) {
+          cancelAnimationFrame(hallTickState.rafId);
+          hallTickState.rafId = null;
+        }
+        hallTickState.isActive = true;
+        renderHallTickFrame();
+      } else {
+        // PAUSED: rAF 停止、上の setState で残り時間が固定表示される
+        stopHallTickFrame();
+      }
+    } catch (err) { console.warn('[v2.1.11 hall] tick state seed 更新失敗:', err); }
   }
   // STEP 6.21.4.1: 復元直後の音抑止は明示的な one-shot フラグで実装。
   // 旧設計（lastAudioTriggerSec を直接書換え）は onLevelChange 経路と競合して
@@ -2605,10 +2649,11 @@ function applyHallPreStartState(payload) {
   }
 }
 
-// v2.1.6: hall 側 PRE_START カウントダウンの DOM 更新。
-// v2.1.10: 旧 rAF 駆動部分を廃止し、broadcast 受信ごとに 1 回呼出される設計に変更。
-//   operator から 1 秒間隔で broadcast → hall で 1 秒粒度の表示更新 → 表示単位は分:秒なので十分。
-//   関数名は v2.1.6 から維持（既存テスト互換）、ただし内部の rAF 再帰は削除済。
+// v2.1.6: hall 側 PRE_START カウントダウンの 60fps 自前 rAF 駆動。
+// v2.1.10: 旧 rAF 駆動部分を廃止し broadcast 受信時のみ更新する設計に変更したが、
+//   broadcast 頻度（1 秒間引き）の物理限界で「カウントダウンが進まない」症状が顕在化。
+// v2.1.11: v2.1.6 同等の自己再帰 rAF を復活（rAF 同時 2 個 = 本機構 + dual-sync flush）。
+//   毎フレーム Date.now() から remainingMs を計算 → 直書きで el.clockTime を更新 → 60fps 描画。
 function renderHallPreStartTick() {
   if (!hallPreStartState.isActive) return;
   const now = Date.now();
@@ -2630,10 +2675,45 @@ function renderHallPreStartTick() {
   // 0 になったら自動解除（operator から isActive=false が来るのを待たずに表示解除、フェイルセーフ）
   if (remainingMs <= 0) {
     hallPreStartState.isActive = false;
+    hallPreStartState.rafId = null;
     return;
   }
-  // v2.1.10: 旧 `hallPreStartState.rafId = requestAnimationFrame(...)` の再帰 rAF を廃止。
-  //   次の broadcast 受信時に再度この関数が呼ばれる経路に変更（applyHallPreStartState 経由）。
+  // v2.1.11: 自己再帰 rAF で次フレームへ（v2.1.6 同等）
+  hallPreStartState.rafId = requestAnimationFrame(renderHallPreStartTick);
+}
+
+// v2.1.11: hall 側 RUNNING / BREAK 用の 60fps 自前 tick rAF（自己再帰）。
+//   applyTimerStateToTimer の hall 経路で seed（startedAtMs / status / totalMs）を更新後、
+//   本関数を起動して毎フレーム Date.now() から remainingMs を計算 →
+//   setState({ remainingMs }) → subscribe → renderTime / renderNextBreak が 60fps 発火。
+//
+//   v2.1.10 で hall の自前 60fps loop を全停止したため BREAK カクカク症状が出た真因に対する
+//   構造的根治。operator 側 timer.js の rAF は hall で起動しない（v2.1.10 Fix 1 hall ガード保持）
+//   ので、hall window の rAF は本機構（1 個）+ dual-sync flush（1 個）= 同時 2 個に収まる。
+//
+//   PRE_START は別系統（renderHallPreStartTick + hallPreStartState）。本関数は RUNNING/BREAK のみ。
+function renderHallTickFrame() {
+  if (typeof window === 'undefined' || window.appRole !== 'hall') return;
+  if (!hallTickState.isActive) return;
+  // status が RUNNING/BREAK 以外（PAUSED/IDLE 等）に遷移した場合は rAF 停止
+  if (hallTickState.status !== States.RUNNING && hallTickState.status !== States.BREAK) {
+    hallTickState.isActive = false;
+    hallTickState.rafId = null;
+    return;
+  }
+  const now = Date.now();
+  const remainingMs = Math.max(0, hallTickState.startedAtMs - now);
+  // setState({ remainingMs }) で subscribe 経由 → renderTime / renderNextBreak が DOM 更新
+  try { setState({ remainingMs }); } catch (_) { /* defensive */ }
+  if (remainingMs <= 0) {
+    // 0 到達時は自動遷移を operator broadcast に委ねる（hall 側で次レベル進行はしない）。
+    // 0 表示の状態で rAF を停止して待機。次の operator broadcast で seed 更新されたら再起動される。
+    hallTickState.isActive = false;
+    hallTickState.rafId = null;
+    return;
+  }
+  // 自己再帰で次フレームへ
+  hallTickState.rafId = requestAnimationFrame(renderHallTickFrame);
 }
 
 function applyPipSize(value) {
