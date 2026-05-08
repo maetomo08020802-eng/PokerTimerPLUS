@@ -226,12 +226,11 @@ PASS: 859 / FAIL: 0
 
 ## §9 ビルド成果物確認（リリース工程）
 
-- ブランチ: `feature/v2.1.7-hall-atomic-update` → main へ `--no-ff` マージ予定
-- タグ: `v2.1.7` 作成予定
-- ビルド: `dist/pokertimerplus-setup-2.1.7.exe` + `dist/latest.yml` (version: 2.1.7)
-- push: main + v2.1.7 タグを origin へ push 予定
-
-→ 詳細は本レポート末尾に追記。
+- ✅ ブランチ: `feature/v2.1.7-hall-atomic-update` → main へ `--no-ff` マージ済（マージコミット 1a19ca4）
+- ✅ タグ: `v2.1.7` 作成済 + push 済
+- ✅ ビルド: `dist/pokertimerplus-setup-2.1.7.exe` (82,995,883 bytes / 82.99 MB) + `dist/latest.yml` (version: 2.1.7、sha512 計算済)
+- ✅ push: main + v2.1.7 タグを origin へ push 完了
+- 直近コミット: 2637083（feature commit）→ 1a19ca4（merge commit）
 
 ---
 
