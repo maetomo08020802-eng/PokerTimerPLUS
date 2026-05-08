@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.12] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.12 退行 2 件のピンポイント根治リリース。
+
+### Fixed
+
+- **症状 B 根治**: BREAK 中のスライドショーが起動しなくなる退行（前原さん発見、v2.1.11 試験中）。真因 = `handlePipShowTimer`（「タイマー画面にもどす」ボタン）が `slideshowState.userOverride = 'force-timer'` をセット → リセット経路が `syncSlideshowFromState` 内の `!eligibleStatus` 経路（status RUNNING 等）のみで、BREAK 突入後も hall 側で毎フレーム `setState({remainingMs})` 経由で subscribe → syncSlideshowFromState が発火 → `userOverride === 'force-timer'` early return が継続発火 → BREAK 中も activateSlideshow が呼ばれない。修正 = subscribe コールバック内で status 変化時に `slideshowState.userOverride = 'auto'` を自動リセット（autoEndedAt クリアと同位置）。
+- **症状 A 根治（ケース δ）**: PRE_START 中スライドショー → 「タイマー画面にもどす」押下後、会場モニターのタイマーが Level 1 表示のまま固まる退行。真因 = `renderHallPreStartTick` が参照する `el.clockTime` プロパティが **`el` オブジェクトに定義されていない**（HTML の id は `js-time`、`el.time` としてのみ定義済、`el.clockTime` は undefined）→ if 条件 false で DOM 書込ブロックが**常にスキップ**されており v2.1.6 から hall 側の PRE_START メイン画面更新は無効化されていた。スライドショーが画面上に乗っている間は気付かれず、解除で IDLE 起動時の Lv1 duration が露見。修正 = `el.clockTime` を `el.time` に変更（typo 修正）。
+
+### Internal
+
+- `src/renderer/renderer.js` subscribe コールバック内で `state.status !== prev.status` 分岐に `slideshowState.userOverride = 'auto'` の 1 行追加（autoEndedAt クリア直後）
+- `src/renderer/renderer.js` `renderHallPreStartTick` 内 1 箇所の `el.clockTime` を `el.time` に修正（プロパティ名 typo）
+- `slideshowState.userOverride = 'force-timer'` を `handlePipShowTimer` でセットする経路は維持（即時効果は変わらない、status 変化で自動リセットされる）
+- timer.js / dual-sync.js / state.js / main.js / audio.js すべて完全無変更
+- v2.1.11 hallTickState / renderHallTickFrame / renderHallPreStartTick rAF 自己再帰経路は完全保持
+- 致命バグ保護 5 件すべて完全無傷
+
+### Tests
+
+- 新規テスト 8 件 (v224): subscribe 内の userOverride='auto' リセットコード存在 / リセット位置（autoEndedAt 直後）/ status 変化時のリセットトリガ / handlePipShowTimer の force-timer セットは維持 / renderHallPreStartTick の el.time 書込（el.clockTime 不在確認）/ package.json version / 致命バグ保護 5 件 cross-check / hallPreStartState・hallTickState 共存
+- 既存テスト 893 件（v2.1.11 時点）+ 新規 v224 8 件 = 想定 901 件全 PASS 維持
+- 既存 33 ファイルの version assertion を `2.1.11` → `2.1.12` に更新
+
+### Compatibility (v2.1.12)
+
+- 単画面モード（hall window なし）は完全同一の挙動
+- v2.1.6 で追加された hall PRE_START カウントダウン経路が **本リリースで初めて実際に DOM に反映**される（typo 修正の効果）
+- v2.1.7 / v2.1.8 / v2.1.9 / v2.1.10 / v2.1.11 機構すべて維持
+- 致命バグ保護 5 件すべて完全無傷
+- v2.1.11 → v2.1.12 自動更新で配信
+
+### Known Limitations
+
+- B3 ブレイク終了 pauseAfterBreak 反映漏れは引き続き v2.1.13 候補
+- 計測機構は本リリースでも保険として保持
+- 「BREAK 中もタイマーのまま見続けたい」場合は BREAK 進入後に再度「タイマー画面にもどす」ボタン押下で対応（status 変化での自動リセットを許容、UX 設計判断）
+
+---
+
 ## [2.1.11] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.11 hall 自前 60fps tick 再導入リリース（v2.1.10 設計ミスの構造的根治）。

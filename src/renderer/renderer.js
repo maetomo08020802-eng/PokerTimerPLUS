@@ -1743,6 +1743,14 @@ subscribe((state, prev) => {
     // STEP 10 フェーズC.1.4: 状態が変わったら autoEndedAt をクリア（次回 BREAK で再判定可能に）
     if (state.status !== prev.status) {
       slideshowState.autoEndedAt = null;
+      // v2.1.12 Fix 1（症状 B 根治）: status 変化時に userOverride を 'auto' にリセット。
+      //   handlePipShowTimer で 'force-timer' にセットされた状態が永続化し、次フェーズ（BREAK）
+      //   突入後もスライドショーが起動しなくなる退行を根治。次の status 遷移はフェーズ変化なので
+      //   ユーザー意図としても自動リセットが妥当（BREAK 中もタイマーのまま見たい場合は再度ボタン押下）。
+      //   v2.1.11 で hall 側 renderHallTickFrame が毎フレーム setState({remainingMs}) を発火するため
+      //   syncSlideshowFromState が継続発火 → userOverride='force-timer' early return が永続的に hit
+      //   する構造になった。本リセットでこの構造的副作用を解消。
+      slideshowState.userOverride = 'auto';
       // STEP 10 フェーズC.1.4-fix2 Fix 1: BREAK 突入で開始時刻を記録、抜けたら null
       if (state.status === States.BREAK && prev.status !== States.BREAK) {
         slideshowState.breakStartedAt = Date.now();
@@ -2653,18 +2661,24 @@ function applyHallPreStartState(payload) {
 // v2.1.10: 旧 rAF 駆動部分を廃止し broadcast 受信時のみ更新する設計に変更したが、
 //   broadcast 頻度（1 秒間引き）の物理限界で「カウントダウンが進まない」症状が顕在化。
 // v2.1.11: v2.1.6 同等の自己再帰 rAF を復活（rAF 同時 2 個 = 本機構 + dual-sync flush）。
-//   毎フレーム Date.now() から remainingMs を計算 → 直書きで el.clockTime を更新 → 60fps 描画。
+//   毎フレーム Date.now() から remainingMs を計算 → 直書きで el.time を更新 → 60fps 描画。
+// v2.1.12 Fix 2（症状 A 根治、ケース δ）: v2.1.6 から `el.clockTime` という存在しない
+//   プロパティを参照していた dead code バグを修正。HTML の id は `js-time` で、`el.time`
+//   としてのみ定義済（renderer.js:201）。`el.clockTime` は undefined のため if 条件 false
+//   で書込ブロックが**常にスキップ**されており、hall 側の PRE_START メイン画面表示は
+//   IDLE 起動時の Lv1 duration 値で固まったまま、スライドショーが上に乗っているため気付かれず
+//   スライドショー解除（「タイマー画面にもどす」）で固まった表示が露見していた。typo 修正。
 function renderHallPreStartTick() {
   if (!hallPreStartState.isActive) return;
   const now = Date.now();
   const remainingMs = Math.max(0, hallPreStartState.startAtMs - now);
   hallPreStartState.remainingMs = remainingMs;
   // メインタイマー領域に PRE_START カウントダウン表示
-  //   formatPreStartTime + el.clockTime に直接書込（operator 側 renderTime が PRE_START 中に
+  //   formatPreStartTime + el.time に直接書込（operator 側 renderTime が PRE_START 中に
   //   行う処理を hall 側でも実行）。getState().status は idle のままなので renderTime 経由ではなく
   //   直接書く（renderTime は status を参照して PRE_START 判定するが hall では false になる）。
-  if (el.clockTime && typeof formatPreStartTime === 'function') {
-    el.clockTime.textContent = formatPreStartTime(remainingMs);
+  if (el.time && typeof formatPreStartTime === 'function') {
+    el.time.textContent = formatPreStartTime(remainingMs);
     // PRE_START 60 分跨ぎで桁数切替（既存 prestartFormat 属性パターンと整合）
     if (el.clock) {
       el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
