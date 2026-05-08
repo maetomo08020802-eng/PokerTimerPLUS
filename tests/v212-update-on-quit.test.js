@@ -164,11 +164,11 @@ test('T10 (保護): rollingLog 関数 + Ctrl+Shift+L 救済経路維持', () => 
 });
 
 // ============================================================
-// T11: package.json version は 2.1.6
+// T11: package.json version は 2.1.7
 // ============================================================
-test('T11: package.json version は 2.1.6', () => {
-  assert.equal(PKG.version, '2.1.6',
-    `package.json version が ${PKG.version}（期待 2.1.6）`);
+test('T11: package.json version は 2.1.7', () => {
+  assert.equal(PKG.version, '2.1.7',
+    `package.json version が ${PKG.version}（期待 2.1.7）`);
 });
 
 test('T12: scripts.test に v212-update-on-quit.test.js が登録', () => {

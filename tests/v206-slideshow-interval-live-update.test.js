@@ -121,7 +121,7 @@ test('再起動時新値反映: activateSlideshow が breakImagesState.intervalS
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.6',
+  assert.equal(pkg.version, '2.1.7',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 

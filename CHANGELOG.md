@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.7] - 2026-05-08
+
+PokerTimerPLUS+ v2.1.7 hall 側 atomic update 実装リリース（B 系構造的根治）。
+
+### Fixed
+
+- **2 画面モードで複数の状態変更が短時間に発生した際、会場ディスプレイで kind ごとの受信順がバラバラになり中間状態が表示される race condition を構造的に根治**。真因 = (1) main 側で複数 broadcast kind を逐次送信時の IPC 順序保証欠如、(2) hall 側 receiver の atomic update 不在。修正方針 = hall 側で diff を microbuffer に溜めて setTimeout(0) で一括 apply、同一 kind は最後の値で dedup、異なる kind は受信順保持。
+- 解決した B 系バグ群:
+  - B1 PAUSED 中の人数変更・時間 shift が hall に届かない症状（一部、debounce 遅延残課題は v2.1.8 候補）
+  - B2 トーナメント切替時に hall が古い tournament のまま固まる症状
+  - B4 「30 秒進める」+「人数変更」同時実行時の hall 一瞬の古い状態
+  - B7 ⑤ PAUSED 中エントリー追加で hall に反映されず restart で一気に更新される症状
+  - B7 ⑥ 新規トーナメント保存時、operator 側「レギュラー」だが hall は違うブラインド構造表示
+  - B7 ② 2 画面で何かが遅れる系の既存認知バグ（v2.1.6 副次効果と合わせて構造的根治）
+
+### Internal
+
+- `src/renderer/dual-sync.js` に `_diffBuffer` + `_flushTimer` + `_flushDiffBuffer` 機構を新設
+- 同一 kind dedup（最後の値）+ 異なる kind 受信順保持
+- buffer サイズ上限 100 件 + hall window destroy 時 cleanup（beforeunload で clearTimeout + 配列クリア）
+- 個別 apply の例外は try-catch で握り潰し、他の diff の apply を継続
+- 初期同期は即時 apply 経路維持（startup race なし、initialize() 順序保護）、ランタイム broadcast のみ buffer 経由
+- operator / operator-solo は subscribeStateSync を登録しない経路設計のため buffer 機構を一切通らない（即時 apply 経路維持）
+- 致命バグ保護 5 件すべて完全無傷
+
+### Tests
+
+- 新規テスト 9 件 (v219): buffer 動作 / dedup / flush / 例外耐性 / cleanup / operator バイパス / preStartState 両立 / 上限暴走防止
+- 既存テスト 850 件全 PASS 維持
+
+### Known Limitations (v2.1.7)
+
+- B1 / B7 ⑤ の `schedulePersistTimerState` / `setRuntime` の debounce 500ms による broadcast 遅延は本リリースのスコープ外（v2.1.7 試験で残存有無を判定 → 必要なら v2.1.8 で対応）
+- B3 ブレイク終了時の pauseAfterBreak 反映漏れは追加調査が必要（v2.1.8 候補）
+
+### Compatibility (v2.1.7)
+
+- v2.1.6 以前の通常運用は完全同一の挙動（hall への atomic update が透過的に効く）
+- operator 側の挙動は完全不変
+- 致命バグ保護 5 件すべて完全無傷
+- v2.1.6 → v2.1.7 自動更新で配信
+
+---
+
 ## [2.1.6] - 2026-05-08
 
 PokerTimerPLUS+ v2.1.6 PRE_START 2 画面同期根治リリース。
