@@ -106,6 +106,10 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
     },
     fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
+    // v2.1.6: PRE_START の hall 同期。operator 側から send で broadcast を要求、main 側で
+    //   _publishDualState('preStartState', payload) を呼ぶ。payload 形:
+    //   { isActive: bool, totalMs?: number, remainingMs?: number, startAtMs?: number }
+    publishPreStartState: (payload) => ipcRenderer.send('dual:publish-pre-start-state', payload),
     // v2.0.4-rc4: hall 側 before-input-event で捕捉した操作系キーを operator 側に IPC 転送する受信口。
     //   旧実装（rc3）の sendInputEvent 方式は letter キーで event.code が空文字になる Electron 31 系の
     //   構造的制約により、R / Ctrl+E / S 等 13 キーが無反応だった。論理キーオブジェクトを直接送る

@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.6] - 2026-05-08
+
+PokerTimerPLUS+ v2.1.6 PRE_START 2 画面同期根治リリース。
+
+### Fixed
+
+- **2 画面モードで開始時刻を未来に設定（PRE_START）した際、会場ディスプレイがスライドショー表示にならず、level 1 ブラインドが表示されたまま固まる症状を根治**。真因は PRE_START 状態が hall window に届いていないこと（5 層の断絶: capture → normalize → init sync → applyTimerState → 駆動ループ）。修正方針: 専用 broadcast kind `preStartState` を新設し、operator から hall へ session state として通知。v2.0.3 Fix L（PRE_START を永続化しない設計）との整合性は維持。
+- PRE_START 関連の同期漏れを網羅修正: cancelPreStart / ±1 分操作 / PRE_START → PAUSED 復帰 / reset 経路すべてで hall 側通知を追加（B6 系）。
+- 既存 broadcast kind の hall 側受信ハンドラに残存していた `marqueeSettings` value 内フィールド null guard 不備を修正（B5 系）。
+
+### Internal
+
+- `src/main.js` に新 broadcast kind `preStartState` 追加 + 専用 IPC ハンドラ `dual:publish-pre-start-state`（VALID_TIMER_STATUS は変更せず）
+- `src/preload.js` に `dual.publishPreStartState(payload)` API 公開
+- `src/renderer/timer.js` に新 handler `onPreStartStart` / `onPreStartCancel` / `onPreStartAdjust` 追加（既存 handler と後方互換）、PRE_START 経路 5 箇所（startPreStart / cancelPreStart / reset / advancePreStartBy / preStartTick 自動遷移）に handler 発火を配置
+- `src/renderer/renderer.js` に hall 側 `preStartState` receiver + カウントダウン rAF 駆動 + スライドショー連動ロジック追加（rAF tick は 1 秒間引きで IPC flood 防止）
+- 致命バグ保護 5 件すべて完全無傷
+
+### Tests
+
+- 新規テスト 13 件 (v218): preStartState kind 定義 / IPC handler / timer.js handlers 拡張 / operator broadcast 呼出 / hall receiver / スライドショー活性化条件 / B5 marqueeSettings null guard
+- 既存テスト 837 件全 PASS 維持
+
+### Compatibility (v2.1.6)
+
+- v2.1.5 以前の % モード / 通常タイマー駆動は挙動完全同一
+- PRE_START を使わない運用は影響なし
+- 致命バグ保護 5 件すべて完全無傷
+- v2.1.5 → v2.1.6 自動更新で配信
+
+---
+
 ## [2.1.5] - 2026-05-06
 
 PokerTimerPLUS+ v2.1.5 自動更新ダイアログ文言改善リリース（v2.1.4 PRIZE 金額モード誤差修正を同梱）。

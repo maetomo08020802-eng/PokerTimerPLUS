@@ -462,6 +462,18 @@ const IMAGE_SIZE_WARNING_THRESHOLD_BYTES = 150 * 1024 * 1024;
 let imageSizeWarningShownInSession = false;
 // breakImages / 切替間隔 / pipSize の現在値（applyTournament で同期）
 const breakImagesState = { images: [], intervalSec: 10, pipSize: 'medium' };
+
+// v2.1.6: hall 側専用、operator から broadcast された PRE_START セッション状態を保持。
+//   isActive: true の間、hall のメインタイマー領域に PRE_START カウントダウンを描画 +
+//   スライドショー活性化条件に PRE_START を含める。
+//   operator 側では更新されない（broadcast 送信側のため）、判定は hallPreStartState.isActive のみ。
+const hallPreStartState = {
+  isActive: false,
+  totalMs: 0,
+  remainingMs: 0,
+  startAtMs: 0,         // Date.now() 基準の終了予定時刻（hall 側 rAF カウントダウン用）
+  rafId: null           // hall 側 rAF タイマ ID（operator の tick broadcast を補間する 1 秒未満の表示更新用）
+};
 // スライドショー状態管理
 //   active: 現在スライドショー表示中か
 //   currentIndex: 表示中の画像インデックス
@@ -1890,6 +1902,17 @@ function handleAudioOnPreStartTick(remainingMs) {
   if (remainingSec >= 1 && remainingSec <= 5) playSound('countdown-tick');
 }
 
+// v2.1.6: PRE_START の hall broadcast 用ヘルパ（rAF tick の 1 秒間引き付き）。
+//   operator 役割の時のみ broadcast 発火、hall 役割では no-op（hall は受信側）。
+//   edge イベント（start / cancel / adjust / end）は間引きせず即時送信。
+//   tick だけは 1 秒に 1 回（前回送信から 1000ms 経過時のみ）→ IPC flood 防止。
+let _preStartTickLastSentAt = 0;
+function publishPreStartIfOperator(payload) {
+  if (window.appRole === 'hall') return;
+  if (!window.api?.dual?.publishPreStartState) return;
+  try { window.api.dual.publishPreStartState(payload); } catch (_) { /* ignore */ }
+}
+
 setHandlers({
   onTick: (remainingMs) => {
     renderTime(remainingMs);
@@ -1925,11 +1948,28 @@ setHandlers({
     // renderTime は subscribe 側で発火するので、ここでは音のみ
     handleAudioOnPreStartTick(remainingMs);
     // STEP 10 フェーズC.1.4-fix1 Fix 2: スライドショー / PIP 同期は subscribe 経由（PRE_START 中も同様）
+    // v2.1.6: hall に PRE_START 残り時間を broadcast（1 秒間引き、IPC flood 防止）
+    const now = performance.now();
+    if (now - _preStartTickLastSentAt >= 1000) {
+      _preStartTickLastSentAt = now;
+      publishPreStartIfOperator({ isActive: true, remainingMs: Math.max(0, Math.floor(remainingMs)) });
+    }
   },
   onPreStartEnd: () => {
     // PRE_START 残り 0 → start 音 → 直後に startAtLevel(0) が呼ばれる
     playSound('start');
     lastAudioTriggerSec = -1;
+  },
+  // v2.1.6: PRE_START の edge イベント → hall に session state として broadcast（間引きなし）
+  onPreStartStart: ({ totalMs, remainingMs, startAtMs }) => {
+    _preStartTickLastSentAt = 0;   // tick 間引き計測リセット（次 tick で必ず送信）
+    publishPreStartIfOperator({ isActive: true, totalMs, remainingMs, startAtMs });
+  },
+  onPreStartCancel: () => {
+    publishPreStartIfOperator({ isActive: false });
+  },
+  onPreStartAdjust: ({ remainingMs }) => {
+    publishPreStartIfOperator({ isActive: true, remainingMs: Math.max(0, Math.floor(remainingMs)) });
   }
 });
 
@@ -2463,7 +2503,78 @@ async function handleBgImageOverlayChange(value) {
 // userOverride='force-timer' のときは active=false、「スライドショーに戻る」ボタンを表示。
 
 function isSlideshowEligibleStatus(status) {
-  return status === States.BREAK || status === States.PRE_START;
+  // v2.1.6: hall 側で PRE_START broadcast 受信中もスライドショーを活性化対象にする。
+  //   operator 側では hallPreStartState.isActive は常に false（broadcast 送信側）→ 影響なし。
+  //   v2.0.3 Fix L で PRE_START → 'idle' 化されているため、hall 側は status='idle' で受け取る。
+  //   そこで hallPreStartState.isActive を OR に追加することで、hall 側でもスライドショーが回る。
+  return status === States.BREAK || status === States.PRE_START || (window.appRole === 'hall' && hallPreStartState.isActive);
+}
+
+// v2.1.6: hall 側 PRE_START 状態適用ハンドラ。operator から broadcast された preStartState を受信して
+//   メインタイマーカウントダウン + スライドショー連動を駆動する。
+//   payload 形: { isActive: bool, totalMs?: number, remainingMs?: number, startAtMs?: number }
+function applyHallPreStartState(payload) {
+  // operator 側では本関数は呼ばれない（receiver は hall ブロック内でのみ登録される）
+  if (window.appRole !== 'hall') return;
+  const isActive = !!payload.isActive;
+  // 既存 rAF を必ず止める（再起動時 / 解除時 ともに必須）
+  if (hallPreStartState.rafId !== null) {
+    cancelAnimationFrame(hallPreStartState.rafId);
+    hallPreStartState.rafId = null;
+  }
+  hallPreStartState.isActive = isActive;
+  if (isActive) {
+    if (Number.isFinite(payload.totalMs))     hallPreStartState.totalMs     = Math.floor(payload.totalMs);
+    if (Number.isFinite(payload.remainingMs)) hallPreStartState.remainingMs = Math.floor(payload.remainingMs);
+    if (Number.isFinite(payload.startAtMs)) {
+      hallPreStartState.startAtMs = Math.floor(payload.startAtMs);
+    } else if (Number.isFinite(payload.remainingMs)) {
+      // startAtMs 無指定なら remainingMs から推定（now + remainingMs）
+      hallPreStartState.startAtMs = Date.now() + Math.floor(payload.remainingMs);
+    }
+    // hall 側 1 秒間隔の表示補間（operator の broadcast tick が 1 秒に 1 回しか来ないため、
+    // hall 側で局所 rAF を回して滑らかに表示。operator が tick を送るたび startAtMs が補正される）
+    renderHallPreStartTick();
+  } else {
+    // 解除: PRE_START 表示要素をクリア → 通常 idle 表示に戻す（getState() は idle のまま）
+    hallPreStartState.totalMs = 0;
+    hallPreStartState.remainingMs = 0;
+    hallPreStartState.startAtMs = 0;
+    // メインタイマーは applyTimerStateToTimer の 'idle' 経路で timerReset 済みのはず。
+    //   念のため renderTime で表示を上書き（idle 復帰直後の残り時間表示）。
+    if (typeof renderTime === 'function') renderTime(0);
+    // スライドショー判定を再評価（PRE_START → idle で deactivate）
+    if (typeof syncSlideshowFromState === 'function') syncSlideshowFromState(0);
+  }
+}
+
+// v2.1.6: hall 側 PRE_START カウントダウンの rAF 駆動（1 秒未満の補間）
+function renderHallPreStartTick() {
+  if (!hallPreStartState.isActive) return;
+  const now = Date.now();
+  const remainingMs = Math.max(0, hallPreStartState.startAtMs - now);
+  hallPreStartState.remainingMs = remainingMs;
+  // メインタイマー領域に PRE_START カウントダウン表示
+  //   formatPreStartTime + el.clockTime に直接書込（operator 側 renderTime が PRE_START 中に
+  //   行う処理を hall 側でも実行）。getState().status は idle のままなので renderTime 経由ではなく
+  //   直接書く（renderTime は status を参照して PRE_START 判定するが hall では false になる）。
+  if (el.clockTime && typeof formatPreStartTime === 'function') {
+    el.clockTime.textContent = formatPreStartTime(remainingMs);
+    // PRE_START 60 分跨ぎで桁数切替（既存 prestartFormat 属性パターンと整合）
+    if (el.clock) {
+      el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
+    }
+  }
+  // スライドショー判定を再評価（hallPreStartState.isActive=true で eligible → 活性化）
+  if (typeof syncSlideshowFromState === 'function') syncSlideshowFromState(remainingMs);
+  // 0 になったら自動解除（operator から isActive=false が来るのを待たずに表示解除、フェイルセーフ）
+  if (remainingMs <= 0) {
+    hallPreStartState.isActive = false;
+    hallPreStartState.rafId = null;
+    return;
+  }
+  // 次フレームへ
+  hallPreStartState.rafId = requestAnimationFrame(renderHallPreStartTick);
 }
 
 function applyPipSize(value) {
@@ -6780,8 +6891,17 @@ if (__appRole === 'hall') {
     if (!diff || typeof diff.kind !== 'string') return;
     const { kind, value } = diff;
     try {
-      if (kind === 'marqueeSettings' && value) {
-        applyMarquee(value);
+      if (kind === 'marqueeSettings' && value && typeof value === 'object') {
+        // v2.1.6 Fix 6 (B5 audit): value 内フィールドの型 / null guard を追加。
+        //   旧実装は applyMarquee に raw value を直接渡しており、enabled/text/speed が
+        //   undefined や非 string の場合に想定外動作（cleanText(undefined) 等）を起こす可能性があった。
+        //   防御的に必要フィールドのみを正規化してから渡す（既存 applyMarquee の仕様変更なし）。
+        const sanitized = {
+          enabled: !!value.enabled,
+          text: typeof value.text === 'string' ? value.text : '',
+          speed: typeof value.speed === 'string' ? value.speed : 'normal'
+        };
+        applyMarquee(sanitized);
       } else if (kind === 'displaySettings' && value) {
         // 背景プリセット / フォント / 背景画像 / overlay / breakImages / interval / pipSize の反映
         if (typeof value.background === 'string') applyBackground(value.background);
@@ -6869,6 +6989,14 @@ if (__appRole === 'hall') {
           const levels = (typeof getStructure === 'function') ? getStructure() : null;
           applyTimerStateToTimer(value, levels, { silent: true });
         } catch (err) { console.warn('[dual-sync] timerState 適用失敗:', err); }
+      } else if (kind === 'preStartState' && value && typeof value === 'object') {
+        // v2.1.6: PRE_START 専用 broadcast の hall 側受信。
+        //   isActive=true: hall ローカル状態を更新 + メインタイマーに PRE_START カウントダウン描画
+        //                  + スライドショー活性化（isSlideshowEligibleStatus が true を返す）
+        //   isActive=false: 表示クリア → 通常 idle 状態の描画に戻す（applyTimerStateToTimer 経由）
+        try {
+          applyHallPreStartState(value);
+        } catch (err) { console.warn('[dual-sync] preStartState 適用失敗:', err); }
       } else if (kind === 'structure' && value && Array.isArray(value.levels)) {
         // v2.0.4-rc20 タスク 1（案 A、問題 ⑥ 根治）:
         // ブラインド構造の即時 hall 同期。前原さん判断 ③ c により、進行中レベルの残り時間には影響しない設計。

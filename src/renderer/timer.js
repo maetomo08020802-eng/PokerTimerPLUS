@@ -9,12 +9,18 @@ import { States, getState, setState } from './state.js';
 import { getLevel, getLevelCount, isBreakLevel } from './blinds.js';
 
 // イベントハンドラ
+// v2.1.6: PRE_START の hall 同期用に onPreStartStart / onPreStartCancel / onPreStartAdjust を追加。
+//   timer.js は IPC API を直接持たないため、各 PRE_START 経路の edge を handler で notify し、
+//   renderer.js 側で broadcast 呼出に橋渡しする（既存 handler パターン踏襲）。
 const handlers = {
   onTick: () => {},
   onLevelChange: () => {},
   onLevelEnd: () => {},
   onPreStartTick: () => {},
-  onPreStartEnd: () => {}
+  onPreStartEnd: () => {},
+  onPreStartStart: () => {},   // v2.1.6: PRE_START 起動時 → payload {totalMs, remainingMs, startAtMs}
+  onPreStartCancel: () => {},  // v2.1.6: cancelPreStart / reset 経由 → no payload
+  onPreStartAdjust: () => {}   // v2.1.6: ±1 分操作で残り時間調整 → payload {remainingMs}
 };
 
 // 内部タイマー状態（DOM・state.js とは別、低レベル管理）
@@ -25,12 +31,16 @@ let isPreStart = false;    // PRE_START 中（PAUSED に遷移しても true を
 let preStartTotalMs = 0;   // プレスタート選択値（renderer のフォーマット決定にも使われる）
 
 // イベントハンドラ登録
-export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick, onPreStartEnd }) {
+export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick, onPreStartEnd, onPreStartStart, onPreStartCancel, onPreStartAdjust }) {
   if (onTick) handlers.onTick = onTick;
   if (onLevelChange) handlers.onLevelChange = onLevelChange;
   if (onLevelEnd) handlers.onLevelEnd = onLevelEnd;
   if (onPreStartTick) handlers.onPreStartTick = onPreStartTick;
   if (onPreStartEnd) handlers.onPreStartEnd = onPreStartEnd;
+  // v2.1.6 新 handler 群（既存 handler との後方互換: undefined なら no-op のまま）
+  if (onPreStartStart) handlers.onPreStartStart = onPreStartStart;
+  if (onPreStartCancel) handlers.onPreStartCancel = onPreStartCancel;
+  if (onPreStartAdjust) handlers.onPreStartAdjust = onPreStartAdjust;
 }
 
 // PRE_START 中かを問い合わせる（renderer の表示判定で使う）
@@ -94,6 +104,8 @@ export function reset() {
   stopLoop();
   pausedRemainingMs = 0;
   targetTime = 0;
+  // v2.1.6: PRE_START 中の reset 経由 → hall に解除通知（cancelPreStart 経由は重複発火するが冪等）
+  const wasPreStart = isPreStart;
   isPreStart = false;
   preStartTotalMs = 0;
   const firstLevel = getLevel(0);
@@ -105,6 +117,10 @@ export function reset() {
     totalMs
   });
   handlers.onLevelChange(0);
+  // v2.1.6: hall 側 PRE_START 表示を解除（cancelPreStart からの場合は重複だが冪等で無害）
+  if (wasPreStart) {
+    try { handlers.onPreStartCancel(); } catch (_) {}
+  }
 }
 
 // IDLE状態からの初回スタート（レベル0から即時開始）
@@ -133,12 +149,16 @@ export function startPreStart(minutes) {
   });
   // Lv1 情報を事前表示できるよう onLevelChange も発火（renderer 側で BLINDS / NEXT を更新）
   handlers.onLevelChange(0);
+  // v2.1.6: hall に PRE_START 起動を通知（renderer 側で broadcast 経由）
+  try { handlers.onPreStartStart({ totalMs, remainingMs: totalMs, startAtMs: Date.now() + totalMs }); } catch (_) {}
   startPreStartLoop();
 }
 
 // プレスタートを中断して IDLE に戻す（resetボタンと等価だが onPreStartEnd は鳴らさない）
 export function cancelPreStart() {
   if (!isPreStart) return;
+  // v2.1.6: hall 側に PRE_START キャンセルを通知（reset() 内で isPreStart=false にされる前に発火）
+  try { handlers.onPreStartCancel(); } catch (_) {}
   reset();
 }
 
@@ -254,6 +274,8 @@ function advancePreStartBy(deltaMs) {
     preStartTotalMs = 0;
     stopLoop();
     handlers.onPreStartEnd();
+    // v2.1.6: PRE_START → RUNNING 自動遷移時は hall 側 PRE_START 表示を解除（onPreStartEnd の延長線）
+    try { handlers.onPreStartCancel(); } catch (_) {}
     startAtLevel(0);
     return;
   }
@@ -265,6 +287,8 @@ function advancePreStartBy(deltaMs) {
     targetTime = performance.now() + newRem;
     setState({ remainingMs: newRem });
   }
+  // v2.1.6: ±1 分操作後の残り時間を hall に通知（edge イベント、間引きなし）
+  try { handlers.onPreStartAdjust({ remainingMs: newRem }); } catch (_) {}
 }
 
 // rAFループ開始
@@ -287,6 +311,8 @@ function preStartTick() {
     isPreStart = false;
     preStartTotalMs = 0;
     handlers.onPreStartEnd();
+    // v2.1.6: PRE_START → RUNNING 自動遷移時に hall 側 PRE_START 表示を解除
+    try { handlers.onPreStartCancel(); } catch (_) {}
     // RUNNING へ自動遷移（startAtLevel は内部で setState + startLoop を行う）
     startAtLevel(0);
     return;
