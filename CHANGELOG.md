@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.11] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.11 hall 自前 60fps tick 再導入リリース（v2.1.10 設計ミスの構造的根治）。
+
+### Fixed
+
+- **2 画面モードで会場モニターのカウントダウンが進まない / BREAK 中のタイマーがカクカク症状を根治**（前原さん発見、v2.1.10 試験中）。真因 = v2.1.10 で hall 側の自前 60fps 描画ループを全停止した結果、表示更新が「operator から 1 秒間引きで送ってくる broadcast」に 100% 依存。RUNNING/BREAK の broadcast は実質 5 秒粒度（`periodicPersistAllRunning`）でしか走らないため、BREAK 中はカクカク、PRE_START は事実上進まなくなった。修正 = hall 側に **時刻計算ベース 60fps 自前 tick を再導入**。`applyTimerStateToTimer` の hall 経路で `hallTickState` の seed（startedAtMs / status / totalMs）を更新し、`renderHallTickFrame` の自己再帰 rAF が毎フレーム `Date.now()` から remainingMs を計算 → `setState({ remainingMs })` → subscribe → `renderTime` が DOM 更新する経路に変更。PRE_START 側も `renderHallPreStartTick` の rAF 自己再帰を v2.1.6 同等に復活。
+
+### Internal
+
+- `src/renderer/renderer.js` `hallTickState` 状態オブジェクト + `stopHallTickFrame()` 新規追加（RUNNING / BREAK 専用、isActive / status / currentLevelIndex / totalMs / startedAtMs / rafId）
+- `src/renderer/renderer.js` `renderHallTickFrame()` 関数新規追加（自己再帰 rAF、毎フレーム Date.now() から remainingMs 計算 → setState 経由で DOM 更新）
+- `src/renderer/renderer.js` `applyTimerStateToTimer` の hall 経路で setState 1 回呼出 + hallTickState seed 更新 + renderHallTickFrame 起動。PAUSED は rAF 停止（静止表示）、RUNNING / BREAK は rAF 起動
+- `src/renderer/renderer.js` IDLE / FINISHED / `levelCount === 0` / `!ts` の各経路で `stopHallTickFrame()` を呼出（rAF cleanup 網羅）
+- `src/renderer/renderer.js` `renderHallPreStartTick` の rAF 自己再帰（`hallPreStartState.rafId = requestAnimationFrame(renderHallPreStartTick)`）を v2.1.6 同等に復活、v2.1.10 で削除した部分を撤回
+- v2.1.10 Fix 1（timer.js 関数呼出の hall ガード `!isHallApply`）は **完全保持**（hall は独立 timer loop を持たない設計の中核）
+- v2.1.10 Fix 3（計測機構 `hall:dualSync:*` ログ）は **完全保持**（保険、operator では計測しない）
+- operator 側 broadcast の `_preStartTickLastSentAt >= 1000` 1 秒間引き throttle は **変更なし**（hall が自前計算するため IPC 負荷削減で十分）
+- timer.js / dual-sync.js / main.js / audio.js すべて完全無変更
+- 致命バグ保護 5 件すべて完全無傷
+
+### Tests
+
+- 新規テスト 12 件 (v223): hallTickState 定義 / applyTimerStateToTimer の hall 経路 seed 更新 + renderHallTickFrame 起動 / renderHallTickFrame 関数定義 + 自己再帰 / Date.now ベース remainingMs 計算 / PRE_START 経路（renderHallPreStartTick rAF 自己再帰復活）/ stopHallTickFrame 関数 / IDLE/FINISHED/PAUSED 経路で stopHallTickFrame 呼出 / timer.js 関数呼出の hall ガード保持 / operator throttle 保持 / package.json version / 致命バグ保護 / hallPreStartState と hallTickState 共存
+- v222 T4（v2.1.10 で「rAF 駆動部分削除」を検証していた assertion）は v2.1.11 で撤回したためコメント化（履歴保持）
+- 既存テスト 875 件（v2.1.10 時点 882 - v222 7 件含む = 875 + v222 7 件）+ 新規 v223 12 件 = 想定 894 件全 PASS 維持
+- 既存 33 ファイルの version assertion を `2.1.10` → `2.1.11` に更新
+
+### Compatibility (v2.1.11)
+
+- 単画面モード（hall window なし）は完全同一の挙動（hallTickState は appRole !== 'hall' で `renderHallTickFrame` 早期 return）
+- v2.1.6 で根治した PRE_START hall 同期は 60fps 駆動に復帰
+- v2.1.7 で根治した B 系 6 件は引き続き維持
+- v2.1.8 で根治した PRE_START 関連 2 件は引き続き維持
+- v2.1.9 で根治した 0.2 秒遅延 + ボタン表示 2 件は引き続き維持
+- v2.1.10 設計ミスは v2.1.11 で構造的根治（Fix 1 の hall ガード + Fix 3 計測機構は保持、Fix 2 の rAF 廃止のみ撤回）
+- 致命バグ保護 5 件すべて完全無傷
+- v2.1.10 → v2.1.11 自動更新で配信
+- hall window の同時 rAF 数: PRE_START 中 2 個（renderHallPreStartTick + dual-sync flush）、RUNNING/BREAK 中 2 個（renderHallTickFrame + dual-sync flush）= v2.1.10 設計目標「同時 2 個」を達成
+
+### Known Limitations
+
+- B3 ブレイク終了 pauseAfterBreak 反映漏れは引き続き v2.1.12 候補
+- 計測機構は本リリースでも保険として同梱、試験で問題なければ次バージョンで削除判断
+- hall 側の startedAtMs は IPC 受信時の Date.now() ベース → operator との時刻ドリフトは IPC レイテンシ（数十 ms）+ periodicPersistAllRunning の 5 秒粒度補正で許容範囲
+
+---
+
 ## [2.1.10] - 2026-05-08
 
 PokerTimerPLUS+ v2.1.10 hall 表示遅延 1 秒の根治 + 計測機構同梱リリース。
