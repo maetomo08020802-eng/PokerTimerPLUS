@@ -999,7 +999,12 @@ const _dualStateCache = {
   // v2.0.4-rc10 Fix 1-A: Ctrl+E（特別スタック ±1）が hall に反映されない 3 重断絶を解消。
   //   _publishDualState は hasOwnProperty チェックで未登録 kind を早期 return するため、
   //   このキー追加が無いと publish が完全 no-op になる（rc10 事前調査 §2.3 確定真因）。
-  specialStack: null
+  specialStack: null,
+  // v2.1.6: PRE_START（開始前カウントダウン）の hall 同期用 session state。
+  //   v2.0.3 Fix L で PRE_START は永続化対象外（renderer.js:1271 で 'idle' 化）のため、
+  //   timerState では届かない。専用 kind で session state として broadcast する。
+  //   payload 形: { isActive: bool, totalMs?: number, remainingMs?: number, startAtMs?: number }
+  preStartState: null
 };
 function _broadcastDualState(channel, payload) {
   if (!hallWindow || hallWindow.isDestroyed()) return;
@@ -2629,6 +2634,28 @@ function registerIpcHandlers() {
   ipcMain.on('dual:broadcast-bottombar-state', (_event, hidden) => {
     if (hallWindow && !hallWindow.isDestroyed()) {
       try { hallWindow.webContents.send('dual:bottombar-state-changed', !!hidden); } catch (_) { /* ignore */ }
+    }
+  });
+
+  // v2.1.6: PRE_START（開始前カウントダウン）の hall 同期。
+  //   v2.0.3 Fix L で PRE_START は永続化対象外（renderer.js:1271 で 'idle' 化）のため、
+  //   timerState では届かない。本ハンドラで _publishDualState('preStartState', ...) 経由で
+  //   hall に session state として broadcast し、hall 側でカウントダウン + スライドショー連動。
+  //   payload 形: { isActive: bool, totalMs?: number, remainingMs?: number, startAtMs?: number }
+  //   不正 payload は no-op（rolling log のみ）。
+  ipcMain.on('dual:publish-pre-start-state', (_event, payload) => {
+    try {
+      if (!payload || typeof payload !== 'object') return;
+      const isActive = !!payload.isActive;
+      const sanitized = { isActive };
+      if (isActive) {
+        if (Number.isFinite(payload.totalMs)     && payload.totalMs     >= 0) sanitized.totalMs     = Math.floor(payload.totalMs);
+        if (Number.isFinite(payload.remainingMs) && payload.remainingMs >= 0) sanitized.remainingMs = Math.floor(payload.remainingMs);
+        if (Number.isFinite(payload.startAtMs)   && payload.startAtMs   >= 0) sanitized.startAtMs   = Math.floor(payload.startAtMs);
+      }
+      _publishDualState('preStartState', sanitized);
+    } catch (err) {
+      try { rollingLog('preStart:publish-error', { message: err && err.message }); } catch (_) {}
     }
   });
 
