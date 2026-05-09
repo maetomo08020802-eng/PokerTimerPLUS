@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.18-meas1] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.18-meas1 計測ビルド（前原さん実機 1 日集中観測専用、配布なし）。v2.1.18 本番ベースにパフォーマンス系 6 ラベル + バグ発見系 9 ラベル合計 15 個の計測ログを追加、Ctrl+Shift+L で操作ごとのログを別ファイル保存する機構を整備。画面右下に「計測ビルド」識別バッジ常時表示。1 日集中運用後、v2.1.19 改善版を別途構築士が設計予定。
+
+### Added
+- 計測ビルド識別バッジ（画面右下、本番版では非表示）
+- パフォーマンス系 6 ラベル（perf:render:duration / perf:ipc:roundtrip / perf:tick:fps / perf:memory:rss / perf:state:notify / perf:dom:rebuild）
+- バグ発見系新規 4 ラベル + 既存 try/catch 主要 10 箇所の error:caught:* + ui:keypress / ui:click:major
+- Ctrl+Shift+L で `op-{NN}-{timestamp}.log` 形式の操作別ログ保存機構（既存「ログフォルダを開く」動作に追加で操作別スナップショット保存を実装）
+
+### Compatibility
+- v2.1.18 本番機構完全保持、致命バグ保護 5 件無傷
+- 単画面モード完全同一
+- すべての rollingLog 呼出は try/catch で握り潰し、本体動作に副作用なし
+- 配布なし、前原さん PC 専用、main / tag / Release 未実施
+
+---
+
 ## [2.1.18] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.18 PRE_START 一時停止時の hall 表示破綻を真の根治 + トーナメント終了演出新規実装。v2.1.17 / v2.1.18-rc1 で 2 連続失敗していた hall 側 dual-sync `setState({dual_*})` が subscribe を無条件 notify する経路を、subscribe 内 gate 4 行追加で根治。最終レベル時間切れ時に「トーナメント終了 / TOURNAMENT COMPLETE」オレンジ枠永続表示を新規追加。

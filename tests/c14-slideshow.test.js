@@ -177,7 +177,8 @@ test('T10: CSS の data-slideshow="active" + PIP サイズ切替 + Barlow Conden
 // T11: preload.js に selectBreakImages ブリッジ
 // ============================================================
 test('T11: preload.js の display.selectBreakImages bridge', () => {
-  assert.match(PRELOAD, /selectBreakImages\s*:\s*\(\)\s*=>\s*ipcRenderer\.invoke\(\s*['"]display:selectBreakImages['"]/,
+  // v2.1.18-meas1: preload.js は perf:ipc:roundtrip 計測のため `_measuredInvoke` ラッパ経由（チャンネル名は維持）。
+  assert.match(PRELOAD, /selectBreakImages\s*:\s*\(\)\s*=>\s*(?:ipcRenderer\.invoke|_measuredInvoke)\(\s*['"]display:selectBreakImages['"]/,
     'preload.js の display.selectBreakImages bridge がない');
   assert.match(MAIN, /ipcMain\.handle\(\s*['"]display:selectBreakImages['"]/,
     'main.js の display:selectBreakImages handler がない');

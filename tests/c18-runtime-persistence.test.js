@@ -103,7 +103,8 @@ test('T46: adjustReentry / adjustAddOn / initTournamentRuntime / resetTournament
   assert.match(MAIN, /ipcMain\.handle\(\s*['"]tournaments:setRuntime['"]/,
     'main.js に tournaments:setRuntime IPC handler がない');
   // preload bridge
-  assert.match(PRELOAD, /setRuntime:\s*\(.*\)\s*=>\s*ipcRenderer\.invoke\(\s*['"]tournaments:setRuntime['"]/,
+  // v2.1.18-meas1: preload.js は perf:ipc:roundtrip 計測のため `_measuredInvoke` ラッパ経由（チャンネル名は維持）。
+  assert.match(PRELOAD, /setRuntime:\s*\(.*\)\s*=>\s*(?:ipcRenderer\.invoke|_measuredInvoke)\(\s*['"]tournaments:setRuntime['"]/,
     'preload.js に setRuntime bridge がない');
 });
 

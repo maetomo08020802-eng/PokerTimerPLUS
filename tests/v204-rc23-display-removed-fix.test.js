@@ -272,13 +272,28 @@ test('rc22 ⑩-A: registerShortcuts 内に CommandOrControl+Shift+L 登録が維
   assert.ok(body, 'registerShortcuts 関数本体が見つからない');
   assert.match(body, /globalShortcut\.register\s*\(\s*['"]CommandOrControl\+Shift\+L['"]/,
     'registerShortcuts 内に CommandOrControl+Shift+L 登録が見つからない（rc22 修正消失）');
-  // ハンドラ内 await _flushRollingLog() + shell.openPath 維持
-  const ctrlBlockRe = /globalShortcut\.register\s*\(\s*['"]CommandOrControl\+Shift\+L['"][\s\S]*?\}\s*\)\s*;/;
-  const m = body.match(ctrlBlockRe);
-  assert.ok(m, 'CommandOrControl+Shift+L 登録ブロック全体が抽出できない');
-  assert.match(m[0], /await\s+_flushRollingLog\s*\(\s*\)/,
+  // v2.1.18-meas1: meas:capture スナップショット保存ロジックが追加されたため balanced-brace 抽出が必要。
+  //   非貪欲 `[\s\S]*?\}\s*\)\s*;` regex は handler 冒頭の rollingLog 呼出で早期マッチしてしまう。
+  function _extractBlock(src) {
+    const startRe = /globalShortcut\.register\s*\(\s*['"]CommandOrControl\+Shift\+L['"]\s*,\s*async\s*\(\s*\)\s*=>\s*\{/;
+    const sm = src.match(startRe);
+    if (!sm) return null;
+    const startIdx = sm.index;
+    const openBraceIdx = startIdx + sm[0].length - 1;
+    let depth = 1, i = openBraceIdx + 1;
+    while (i < src.length && depth > 0) {
+      if (src[i] === '{') depth++; else if (src[i] === '}') depth--;
+      i++;
+    }
+    if (depth !== 0) return null;
+    const endIdx = src.indexOf(';', i);
+    return src.slice(startIdx, endIdx + 1);
+  }
+  const block = _extractBlock(body);
+  assert.ok(block, 'CommandOrControl+Shift+L 登録ブロック全体が抽出できない');
+  assert.match(block, /await\s+_flushRollingLog\s*\(\s*\)/,
     'CommandOrControl+Shift+L ハンドラ内 await _flushRollingLog() 消失');
-  assert.match(m[0], /shell\.openPath\s*\(/,
+  assert.match(block, /shell\.openPath\s*\(/,
     'CommandOrControl+Shift+L ハンドラ内 shell.openPath 消失');
 });
 
@@ -299,7 +314,7 @@ test('rc22 ⑩-D: _initRollingLog 内に fs.readFileSync 経路が維持され�
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.18',
+  assert.equal(pkg.version, '2.1.18-meas1',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 
