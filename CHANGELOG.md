@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.18-rc2] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.18-rc2 試験ビルド（前原さん実機専用）。v2.1.18-rc1 で A+B 二重防御を入れたにもかかわらず PRE_START 一時停止時の hall 表示破綻が「全く同じ」のまま再発。構築士エージェント再調査で真因再特定 = hall 側 dual-sync `_applyDiffToState` の `setState({dual_*})` が subscribe を無条件 notify、その経路で `renderTime(state.remainingMs)` が PRE_START 表示を上書きしていた二段経路。本リリースで案 B（subscribe で gate）4 行追加により真の根治、計測ログ 4 個保険を同時投入。
+
+### Fixed
+- **PRE_START 一時停止時の hall 表示破綻（v2.1.17 / v2.1.18-rc1 で 2 連続失敗の真因確定）**: hall 側 subscribe (`renderer.js:1715`) で `renderTime(state.remainingMs)` が `dual-sync._applyDiffToState` の `setState({dual_timerState})` 経路で無条件発火し、hall 起動時 `applyTimerStateToTimer` idle 経路でセットされた `state.remainingMs`（= Lv1 duration）が PRE_START 表示を上書きしていた真因を、subscribe 内で `if (!(window.appRole === 'hall' && hallPreStartState.isActive))` gate を 4 行追加することで根治
+
+### Internal
+- **計測ログ 4 個追加**（保険、rc2 で効かなかった場合の真因再特定用、rc3 で撤去予定）:
+  - `hall:subscribe:fire` — hall subscribe 発火時の prevStatus/status/prevRem/rem/hallPreStartActive
+  - `hall:renderTime:enter` — hall renderTime 入口の remainingMs/status/datasetStatus/datasetPrestartFormat
+  - `hall:setState:dual` — hall dual-sync setState({dual_*}) 直前の kind/willTriggerSubscribe
+  - `hall:dataset:status:write` — hall el.clock.dataset.status 書き換え 4 箇所すべての prev/new/caller（caller 識別子: renderControls / applyHallPreStartState:paused / applyHallPreStartState:inactive / renderHallPreStartTick）
+
+### Compatibility
+- v2.1.6〜v2.1.18-rc1 機構すべて完全保持、致命バグ保護 5 件無傷
+- 単画面モード完全同一
+- Fix 1 / Fix 2（rc1 の A+B 防御）は二重防御として保持
+- トーナメント終了演出（rc1 Fix 3）も完全保持
+
+---
+
 ## [2.1.18-rc1] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.18-rc1 試験ビルド（前原さん実機専用）。v2.1.17 で残存していた「PRE_START 一時停止時の hall タイマー上書き」を A+B 二重防御で根治、加えて最終レベル到達時の「トーナメント終了」オーバーレイを新規実装。

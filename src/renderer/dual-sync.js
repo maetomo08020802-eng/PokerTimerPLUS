@@ -45,6 +45,10 @@ function _applyDiffToState(diff) {
   if (kind === 'tournamentBasics') {
     try { window.api?.log?.write?.('blindPreset:state:recv:hall', { presetId: value?.blindPresetId, presetName: value?.name, structureLength: value?.structure?.levels?.length || 0, role: window.appRole }); } catch (_) { /* never throw from logging */ }
   }
+  // v2.1.18-rc2 計測ログ: dual_* setState 発火直前の記録（hall 側のみ、subscribe を無条件 notify する経路の特定）
+  if (typeof window !== 'undefined' && window.appRole === 'hall') {
+    try { window.api?.log?.write?.('hall:setState:dual', { kind, willTriggerSubscribe: true }); } catch (_) { /* never throw from logging */ }
+  }
   // 1. state.js への記録（後方互換、debug 用）
   setState({ [`dual_${kind}`]: value });
   // 2. hall 側 renderer の動的反映（registerDualDiffHandler で登録済の場合のみ）

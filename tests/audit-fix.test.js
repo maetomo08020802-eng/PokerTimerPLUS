@@ -70,10 +70,22 @@ test('T3: preload.js に power.preventDisplaySleep / allowDisplaySleep が公開
 // ============================================================
 test('T4: renderer.js の subscribe 内で syncPowerSaveBlocker が呼ばれる', () => {
   assert.match(RENDERER, /function\s+syncPowerSaveBlocker\s*\(/, 'syncPowerSaveBlocker 関数が定義されていない');
-  // subscribe 内に呼び出しがあるか
-  const subscribeBlock = RENDERER.match(/subscribe\(\(state, prev\) => \{[\s\S]+?\}\);/);
-  assert.ok(subscribeBlock, 'subscribe ブロックが見つからない');
-  assert.match(subscribeBlock[0], /syncPowerSaveBlocker\s*\(/, 'subscribe 内で syncPowerSaveBlocker が呼ばれていない');
+  // v2.1.18-rc2: subscribe 内に Fix 2-A の hall:subscribe:fire ログ + nested 閉じ括弧が増えたため、
+  //   旧 naive regex `[\s\S]+?\}\);` は最初の `});` で打ち切られる。balanced-brace で正確抽出。
+  const startMarker = 'subscribe((state, prev) => {';
+  const startIdx = RENDERER.indexOf(startMarker);
+  assert.ok(startIdx >= 0, 'subscribe((state, prev) => { 開始位置が見つからない');
+  const openBraceIdx = startIdx + startMarker.length - 1;
+  let depth = 0;
+  let endIdx = -1;
+  for (let i = openBraceIdx; i < RENDERER.length; i++) {
+    const c = RENDERER[i];
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) { endIdx = i; break; } }
+  }
+  assert.ok(endIdx > 0, 'subscribe ブロックの終端 } が見つからない');
+  const subscribeBody = RENDERER.slice(startIdx, endIdx + 1);
+  assert.match(subscribeBody, /syncPowerSaveBlocker\s*\(/, 'subscribe 内で syncPowerSaveBlocker が呼ばれていない');
 });
 
 // ============================================================
