@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.17-rc2] - 2026-05-09 (観測ビルド第 2 弾、GitHub Releases 未公開)
+
+### Internal
+- rc1 検証で operator 側 isPaused:true broadcast 完璧動作確認、しかし会場モニター側カウントダウン継続の真因が hall 側にあると判明
+- hall 側追加観測ログ 4 か所追加: `meas:hall:applyPreStart:detail` / `meas:hall:applyPreStart:pausedBranch` / `meas:hall:applyPreStart:activeBranch` / `meas:hall:renderPreStartTick:enter` / `meas:hall:applyTimerState:hallPreStartConflict`
+- rc1 で追加した operator 側観測ログ 7 ラベルは継続維持（撤去しない）
+- 試験 5 修正（handlePipShowSlideshow で breakStartedAt = null）も rc1 から継続採用
+
+### Compatibility
+- v2.1.17-rc1 完全互換、致命バグ保護 5 件無傷、v2.1.6〜v2.1.16 機構保持
+
+---
+
 ## [2.1.17-rc1] - 2026-05-09 (観測ビルド、GitHub Releases 未公開)
 
 ### Internal
