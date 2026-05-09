@@ -796,15 +796,6 @@ function formatPreStartTime(ms) {
 
 // タイマーは単一要素テキストで更新（モノスペースフォントが桁幅を保証する）
 function renderTime(remainingMs) {
-  // v2.1.18-rc2 計測ログ: hall 側 renderTime 入口の状態を記録（保険、rc3 で撤去予定）
-  if (typeof window !== 'undefined' && window.appRole === 'hall') {
-    try { window.api?.log?.write?.('hall:renderTime:enter', {
-      remainingMs, status: getState()?.status,
-      datasetStatus: el.clock?.dataset?.status,
-      datasetPrestartFormat: el.clock?.dataset?.prestartFormat,
-      hallPreStartActive: hallPreStartState?.isActive
-    }); } catch (_) { /* never throw from logging */ }
-  }
   const { status } = getState();
   if (status === States.PRE_START) {
     el.time.textContent = formatPreStartTime(remainingMs);
@@ -877,13 +868,6 @@ function renderNextBreak(remainingMs, currentIndex) {
 }
 
 function renderControls(status) {
-  // v2.1.18-rc2 計測ログ: hall 側 dataset.status 書き換え記録（保険、rc3 で撤去予定）
-  if (typeof window !== 'undefined' && window.appRole === 'hall') {
-    try { window.api?.log?.write?.('hall:dataset:status:write', {
-      newValue: status, prevValue: el.clock?.dataset?.status,
-      caller: 'renderControls'
-    }); } catch (_) { /* never throw from logging */ }
-  }
   el.clock.dataset.status = status;
   switch (status) {
     case States.IDLE:
@@ -1729,15 +1713,6 @@ function syncPowerSaveBlocker(status) {
 let _lastTimerStateForRoleSwitch = null;
 
 subscribe((state, prev) => {
-  // v2.1.18-rc2 計測ログ: hall 側 subscribe 発火時の状態を記録（保険、rc3 で撤去予定）
-  if (typeof window !== 'undefined' && window.appRole === 'hall') {
-    try { window.api?.log?.write?.('hall:subscribe:fire', {
-      prevStatus: prev?.status, status: state?.status,
-      prevRem: prev?.remainingMs, rem: state?.remainingMs,
-      hallPreStartActive: hallPreStartState?.isActive,
-      hallPreStartPaused: hallPreStartState?.isPaused
-    }); } catch (_) { /* never throw from logging */ }
-  }
   _lastTimerStateForRoleSwitch = state;
   if (state.status !== prev.status) {
     renderControls(state.status);
@@ -2773,13 +2748,6 @@ function applyHallPreStartState(payload) {
         el.time.textContent = formatPreStartTime(hallPreStartState.remainingMs);
       }
       if (el.clock) {
-        // v2.1.18-rc2 計測ログ: hall 側 dataset.status 書き換え記録（保険、rc3 で撤去予定）
-        if (typeof window !== 'undefined' && window.appRole === 'hall') {
-          try { window.api?.log?.write?.('hall:dataset:status:write', {
-            newValue: 'PRE_START', prevValue: el.clock?.dataset?.status,
-            caller: 'applyHallPreStartState:paused'
-          }); } catch (_) { /* never throw from logging */ }
-        }
         el.clock.dataset.status = 'PRE_START';
         el.clock.dataset.prestartFormat = hallPreStartState.remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
         el.clock.dataset.prestartPaused = 'true';   // CSS で「一時停止中」ラベル表示用
@@ -2802,13 +2770,6 @@ function applyHallPreStartState(payload) {
     //   Fix 1 で renderHallPreStartTick が毎フレーム 'PRE_START' に書いていた分の解除。
     //   その後、subscribe 経由の renderControls / 通常 timerState 受信で上書きされる。
     if (el.clock) {
-      // v2.1.18-rc2 計測ログ: hall 側 dataset.status 書き換え記録（保険、rc3 で撤去予定）
-      if (typeof window !== 'undefined' && window.appRole === 'hall') {
-        try { window.api?.log?.write?.('hall:dataset:status:write', {
-          newValue: 'IDLE', prevValue: el.clock?.dataset?.status,
-          caller: 'applyHallPreStartState:inactive'
-        }); } catch (_) { /* never throw from logging */ }
-      }
       el.clock.dataset.status = 'IDLE';
       delete el.clock.dataset.prestartFormat;
       delete el.clock.dataset.prestartPaused;   // v2.1.15 ① 根治: 一時停止ラベル属性もクリア
@@ -2846,13 +2807,6 @@ function renderHallPreStartTick() {
     el.time.textContent = formatPreStartTime(remainingMs);
     // PRE_START 60 分跨ぎで桁数切替（既存 prestartFormat 属性パターンと整合）
     if (el.clock) {
-      // v2.1.18-rc2 計測ログ: hall 側 dataset.status 書き換え記録（保険、rc3 で撤去予定）
-      if (typeof window !== 'undefined' && window.appRole === 'hall') {
-        try { window.api?.log?.write?.('hall:dataset:status:write', {
-          newValue: 'PRE_START', prevValue: el.clock?.dataset?.status,
-          caller: 'renderHallPreStartTick'
-        }); } catch (_) { /* never throw from logging */ }
-      }
       // v2.1.13 Fix: hall 側 CSS 表示条件 `[data-status="PRE_START"]` を満たすため明示セット。
       //   v2.0.3「PRE_START は永続化しない」設計のため state.status は IDLE のまま →
       //   renderControls 経由では data-status が PRE_START にならない。CSS のラベル

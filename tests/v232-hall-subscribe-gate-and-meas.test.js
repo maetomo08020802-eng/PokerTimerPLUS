@@ -56,18 +56,19 @@ test('T2 (Fix 1): subscribe の renderNextBreak 呼出が同 gate 配下', () =>
 });
 
 // ============================================================
-// T3 (Fix 2-A): subscribe 冒頭に hall:subscribe:fire 呼出 + window.appRole === 'hall' ガード
+// T3〜T6: rc2 計測ログ 4 個 — 本番（v2.1.18 以降）では撤去済、-rcN ビルドでのみ存在検証。
+//   v2.1.18 本番では v233 が「撤去確認」を実施するため、ここでは rc-build のみ存在を検証する。
 // ============================================================
-test('T3 (Fix 2-A): subscribe 冒頭に hall:subscribe:fire ログ + hall ガード', () => {
-  // subscribe((state, prev) => { ... 直後に if (window.appRole === 'hall') { ... hall:subscribe:fire ... }
+test('T3 (Fix 2-A): subscribe 冒頭に hall:subscribe:fire ログ — 本番では撤去、rc では存在', () => {
+  const isRc = /-rc\d+/.test(PKG.version || '');
+  if (!isRc) return;   // 本番ビルドでは v233 で撤去確認、ここはスキップ
   assert.match(RENDERER, /subscribe\s*\(\s*\(\s*state\s*,\s*prev\s*\)\s*=>\s*\{[\s\S]{0,500}?window\.appRole\s*===\s*['"]hall['"][\s\S]{0,200}?hall:subscribe:fire/,
     'subscribe 冒頭に hall:subscribe:fire ログ + hall ガードがない（Fix 2-A 未実装）');
 });
 
-// ============================================================
-// T4 (Fix 2-B): renderTime 関数冒頭に hall:renderTime:enter 呼出 + hall ガード
-// ============================================================
-test('T4 (Fix 2-B): renderTime 冒頭に hall:renderTime:enter ログ + hall ガード', () => {
+test('T4 (Fix 2-B): renderTime 冒頭に hall:renderTime:enter ログ — 本番では撤去、rc では存在', () => {
+  const isRc = /-rc\d+/.test(PKG.version || '');
+  if (!isRc) return;
   const fnMatch = RENDERER.match(/function\s+renderTime\s*\(\s*remainingMs\s*\)\s*\{([\s\S]{0,800})/);
   assert.ok(fnMatch, 'renderTime 関数本体が見当たらない');
   const earlyBody = fnMatch[1];
@@ -75,14 +76,11 @@ test('T4 (Fix 2-B): renderTime 冒頭に hall:renderTime:enter ログ + hall ガ
     'renderTime 冒頭に hall:renderTime:enter ログ + hall ガードがない（Fix 2-B 未実装）');
 });
 
-// ============================================================
-// T5 (Fix 2-C): dual-sync.js _applyDiffToState 内 setState({dual_*}) 直前に hall:setState:dual ログ
-// ============================================================
-test('T5 (Fix 2-C): dual-sync.js setState({dual_*}) 直前に hall:setState:dual ログ', () => {
-  // hall:setState:dual 呼出が setState({[`dual_${kind}`]: value}) より前に存在
+test('T5 (Fix 2-C): dual-sync.js setState({dual_*}) 直前に hall:setState:dual ログ — 本番では撤去、rc では存在', () => {
+  const isRc = /-rc\d+/.test(PKG.version || '');
+  if (!isRc) return;
   const setStateIdx = DUAL_SYNC.indexOf('setState({ [`dual_');
   assert.ok(setStateIdx > 0, 'dual-sync.js の setState({dual_*}) 呼出が見当たらない');
-  // 直前 500 文字以内に hall:setState:dual + window.appRole === 'hall'
   const before = DUAL_SYNC.slice(Math.max(0, setStateIdx - 500), setStateIdx);
   assert.match(before, /hall:setState:dual/,
     'setState({dual_*}) 直前に hall:setState:dual ログがない（Fix 2-C 未実装）');
@@ -90,14 +88,11 @@ test('T5 (Fix 2-C): dual-sync.js setState({dual_*}) 直前に hall:setState:dual
     'hall:setState:dual ログに window.appRole === "hall" ガードがない');
 });
 
-// ============================================================
-// T6 (Fix 2-D): el.clock.dataset.status 書き換え 4 箇所すべてに hall:dataset:status:write 直前ログ + caller 識別子 4 種
-// ============================================================
-test('T6 (Fix 2-D): hall:dataset:status:write 4 箇所 + caller 4 種すべて存在', () => {
-  // hall:dataset:status:write の総出現件数 = 4 件
+test('T6 (Fix 2-D): hall:dataset:status:write 4 箇所 + caller 4 種すべて存在 — 本番では撤去、rc では存在', () => {
+  const isRc = /-rc\d+/.test(PKG.version || '');
+  if (!isRc) return;
   const labelCount = (RENDERER.match(/hall:dataset:status:write/g) || []).length;
   assert.equal(labelCount, 4, `hall:dataset:status:write の出現件数が ${labelCount} (4 件必須)`);
-  // 4 種の caller 識別子すべて存在
   const callers = ['renderControls', 'applyHallPreStartState:paused', 'applyHallPreStartState:inactive', 'renderHallPreStartTick'];
   for (const c of callers) {
     assert.match(RENDERER, new RegExp(`caller:\\s*['"]${c.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}['"]`),

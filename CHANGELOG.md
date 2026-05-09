@@ -7,45 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.1.18-rc2] - 2026-05-09
+## [2.1.18] - 2026-05-09
 
-PokerTimerPLUS+ v2.1.18-rc2 試験ビルド（前原さん実機専用）。v2.1.18-rc1 で A+B 二重防御を入れたにもかかわらず PRE_START 一時停止時の hall 表示破綻が「全く同じ」のまま再発。構築士エージェント再調査で真因再特定 = hall 側 dual-sync `_applyDiffToState` の `setState({dual_*})` が subscribe を無条件 notify、その経路で `renderTime(state.remainingMs)` が PRE_START 表示を上書きしていた二段経路。本リリースで案 B（subscribe で gate）4 行追加により真の根治、計測ログ 4 個保険を同時投入。
-
-### Fixed
-- **PRE_START 一時停止時の hall 表示破綻（v2.1.17 / v2.1.18-rc1 で 2 連続失敗の真因確定）**: hall 側 subscribe (`renderer.js:1715`) で `renderTime(state.remainingMs)` が `dual-sync._applyDiffToState` の `setState({dual_timerState})` 経路で無条件発火し、hall 起動時 `applyTimerStateToTimer` idle 経路でセットされた `state.remainingMs`（= Lv1 duration）が PRE_START 表示を上書きしていた真因を、subscribe 内で `if (!(window.appRole === 'hall' && hallPreStartState.isActive))` gate を 4 行追加することで根治
-
-### Internal
-- **計測ログ 4 個追加**（保険、rc2 で効かなかった場合の真因再特定用、rc3 で撤去予定）:
-  - `hall:subscribe:fire` — hall subscribe 発火時の prevStatus/status/prevRem/rem/hallPreStartActive
-  - `hall:renderTime:enter` — hall renderTime 入口の remainingMs/status/datasetStatus/datasetPrestartFormat
-  - `hall:setState:dual` — hall dual-sync setState({dual_*}) 直前の kind/willTriggerSubscribe
-  - `hall:dataset:status:write` — hall el.clock.dataset.status 書き換え 4 箇所すべての prev/new/caller（caller 識別子: renderControls / applyHallPreStartState:paused / applyHallPreStartState:inactive / renderHallPreStartTick）
-
-### Compatibility
-- v2.1.6〜v2.1.18-rc1 機構すべて完全保持、致命バグ保護 5 件無傷
-- 単画面モード完全同一
-- Fix 1 / Fix 2（rc1 の A+B 防御）は二重防御として保持
-- トーナメント終了演出（rc1 Fix 3）も完全保持
-
----
-
-## [2.1.18-rc1] - 2026-05-09
-
-PokerTimerPLUS+ v2.1.18-rc1 試験ビルド（前原さん実機専用）。v2.1.17 で残存していた「PRE_START 一時停止時の hall タイマー上書き」を A+B 二重防御で根治、加えて最終レベル到達時の「トーナメント終了」オーバーレイを新規実装。
+PokerTimerPLUS+ v2.1.18 PRE_START 一時停止時の hall 表示破綻を真の根治 + トーナメント終了演出新規実装。v2.1.17 / v2.1.18-rc1 で 2 連続失敗していた hall 側 dual-sync `setState({dual_*})` が subscribe を無条件 notify する経路を、subscribe 内 gate 4 行追加で根治。最終レベル時間切れ時に「トーナメント終了 / TOURNAMENT COMPLETE」オレンジ枠永続表示を新規追加。
 
 ### Fixed
-- **PRE_START 一時停止時の hall 表示破綻**（v2.1.17 残存、前原さん実機証言）: hall 側で「トーナメントスタートまで」ラベル消失 + 残り時間が実 Lv1 残り時間（例: Lv1=1 分なら 00:50）に上書きされる症状を、A+B 二重防御で根治
-  - A: hall 受信側に `hallPreStartState.isActive` gate 追加（renderer.js dual-sync timerState 分岐）
-  - B: 送信側で PRE_START 経由 PAUSED を idle 化（renderer.js captureCurrentTimerState の `isPreStartActive()` 拡張）
+- **PRE_START 一時停止時の hall 表示破綻（v2.1.17 / v2.1.18-rc1 で 2 連続失敗の真因確定）**: hall 側 subscribe (`renderer.js`) で `renderTime(state.remainingMs)` が `dual-sync._applyDiffToState` の `setState({dual_timerState})` 経路で無条件発火し、hall 起動時 `applyTimerStateToTimer` idle 経路でセットされた `state.remainingMs`（= Lv1 duration）が PRE_START 表示を上書きしていた真因を、subscribe 内で `if (!(window.appRole === 'hall' && hallPreStartState.isActive))` gate を 4 行追加することで根治
+- **二重防御保持**: rc1 で投入した A+B 二重防御（hall 受信側 `applyTimerStateToTimer` gate + 送信側 `captureCurrentTimerState` の `isPreStartActive()` 拡張）も完全保持、将来の経路追加時の防御として有効
 
 ### Added
-- **トーナメント終了オーバーレイ**: 最終レベル時間切れ時に hall 中央へ「トーナメント終了 / TOURNAMENT COMPLETE」をオレンジ枠 (#FF8C1A) で永続表示（リセット / 新規トーナメント / タイマー画面復帰で解除）
-  - `clamp()` / `vw` で自動縮小 + max-width 90vw + 十分な padding ではみ出し防止
-  - timer.js advanceToNextLevel で `onTournamentComplete` 発火、operator local + 既存 dual-sync timerState 経由で hall 同期（既存 normalizeTimerState の VALID_TIMER_STATUS に 'finished' は既に含まれているため新規 IPC 不要）
+- **トーナメント終了オーバーレイ**: 最終レベル時間切れ時に hall 中央へ「トーナメント終了 / TOURNAMENT COMPLETE」をオレンジ枠（#FF8C1A、一時停止表示と同等）で永続表示。リセット / 新規トーナメント / `resetBlindProgressOnly` で解除。`timer.js` `advanceToNextLevel` の最終レベル完走検知 → `onTournamentComplete` handler 経由で hall + operator 同時に `clock--timer-finished` クラス付与、既存 `normalizeTimerState` の `'finished'` 経路を再利用（新規 IPC 追加なし）
+
+### Internal
+- v2.1.18-rc2 で投入した計測ログ 4 個（hall:subscribe:fire / hall:renderTime:enter / hall:setState:dual / hall:dataset:status:write）を完全撤去
+- 既存テスト 2 件（audit-fix T4 / v204-rc8 Fix 4）を robust 化済（balanced-brace 抽出 + 1500 文字ウィンドウ拡大、本質意図維持）
 
 ### Compatibility
 - v2.1.6〜v2.1.17 機構完全互換、致命バグ保護 5 件無傷
 - 単画面モード完全同一
+- 自動更新で v2.1.16 / v2.1.17 / v2.1.18-rc1 / rc2 端末から取得可能
 
 ---
 
