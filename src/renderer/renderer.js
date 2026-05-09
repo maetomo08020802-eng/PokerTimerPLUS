@@ -1475,6 +1475,19 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
       else status = States.RUNNING;
       // 初回 setState（subscribe → renderTime 経由で初期表示反映）
       setState({ currentLevelIndex: idx, remainingMs, totalMs, status });
+      // v2.1.17-rc2 計測ログ: hall 側 applyTimerStateToTimer 経路で hallPreStartState の状態観測
+      //   PRE_START 一時停止中に LV1 状態が同時に届いた時の競合確認
+      try {
+        window.api?.log?.write?.('meas:hall:applyTimerState:hallPreStartConflict', {
+          appliedStatus: status,
+          appliedRemainingMs: remainingMs,
+          appliedLevel: idx,
+          hallPreStartIsActive: hallPreStartState.isActive,
+          hallPreStartIsPaused: hallPreStartState.isPaused,
+          hallPreStartRemainingMs: hallPreStartState.remainingMs,
+          role: window.appRole
+        });
+      } catch (_) { /* never throw from logging */ }
       // hallTickState seed 更新（毎フレーム Date.now() との差で remainingMs を算出するため）
       hallTickState.status = status;
       hallTickState.currentLevelIndex = idx;
@@ -2729,6 +2742,17 @@ function applyHallPreStartState(payload) {
   const isPaused = Object.prototype.hasOwnProperty.call(payload, 'isPaused')
     ? !!payload.isPaused
     : hallPreStartState.isPaused;
+  // v2.1.17-rc2 計測ログ: hall 側 isPaused 受信時の詳細観測（試験 3 hall 側真因特定用）
+  try {
+    window.api?.log?.write?.('meas:hall:applyPreStart:detail', {
+      isActive, isPaused,
+      payloadHasIsPausedKey: Object.prototype.hasOwnProperty.call(payload, 'isPaused'),
+      payloadIsPausedRaw: payload?.isPaused,
+      existingIsPaused: hallPreStartState.isPaused,
+      existingIsActive: hallPreStartState.isActive,
+      role: window.appRole
+    });
+  } catch (_) { /* never throw from logging */ }
   // v2.1.10: 旧 rAF 廃止により rafId は使用しないが、defense-in-depth で残存ハンドルがあれば cancel。
   //   beforeunload ハンドラ等で cancelAnimationFrame が呼ばれる経路は維持する。
   if (hallPreStartState.rafId !== null) {
@@ -2748,6 +2772,8 @@ function applyHallPreStartState(payload) {
     }
     // v2.1.15 ① 根治: 一時停止中は rAF を起動せず remainingMs を固定表示 + 「一時停止中」ラベル
     if (isPaused) {
+      // v2.1.17-rc2 計測ログ: isPaused=true 経路に入った（rAF 起動しない、固定表示）
+      try { window.api?.log?.write?.('meas:hall:applyPreStart:pausedBranch', { remainingMs: hallPreStartState.remainingMs, role: window.appRole }); } catch (_) { /* never throw from logging */ }
       // remainingMs を固定表示（startAtMs ベースの再計算はしない）
       if (el.time && typeof formatPreStartTime === 'function') {
         el.time.textContent = formatPreStartTime(hallPreStartState.remainingMs);
@@ -2758,6 +2784,8 @@ function applyHallPreStartState(payload) {
         el.clock.dataset.prestartPaused = 'true';   // CSS で「一時停止中」ラベル表示用
       }
     } else {
+      // v2.1.17-rc2 計測ログ: isPaused=false 経路に入った（rAF 起動）
+      try { window.api?.log?.write?.('meas:hall:applyPreStart:activeBranch', { remainingMs: hallPreStartState.remainingMs, role: window.appRole }); } catch (_) { /* never throw from logging */ }
       // 通常進行（既存挙動）
       if (el.clock) delete el.clock.dataset.prestartPaused;
       // v2.1.10: 独立 rAF 廃止、broadcast 受信時に即時 DOM 更新するだけ（1 秒粒度）。
@@ -2799,6 +2827,16 @@ function applyHallPreStartState(payload) {
 //   IDLE 起動時の Lv1 duration 値で固まったまま、スライドショーが上に乗っているため気付かれず
 //   スライドショー解除（「タイマー画面にもどす」）で固まった表示が露見していた。typo 修正。
 function renderHallPreStartTick() {
+  // v2.1.17-rc2 計測ログ: rAF 駆動経路の入口観測（rc2 真因特定用、isPaused で止まったか / それ以外で進行したか確認）
+  try {
+    window.api?.log?.write?.('meas:hall:renderPreStartTick:enter', {
+      isActive: hallPreStartState.isActive,
+      isPaused: hallPreStartState.isPaused,
+      willEarlyReturn: !hallPreStartState.isActive || hallPreStartState.isPaused,
+      remainingMs: hallPreStartState.remainingMs,
+      role: window.appRole
+    });
+  } catch (_) { /* never throw from logging */ }
   // v2.1.15 ① 根治: 一時停止中は rAF ループに乗せない（applyHallPreStartState で固定表示済）
   if (!hallPreStartState.isActive || hallPreStartState.isPaused) return;
   const now = Date.now();
