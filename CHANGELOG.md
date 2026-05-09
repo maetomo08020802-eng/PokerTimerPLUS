@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.17-rc1] - 2026-05-09 (観測ビルド、GitHub Releases 未公開)
+
+### Internal
+- 試験 3 ① PRE_START 一時停止 hall 同期未根治の真因特定用計測ログ追加（meas:pause:preStartCheck / meas:pause:onPreStartPause:call / meas:pause:onPreStartPause:skipped / meas:onPreStartPause:invoked / meas:publishPreStart:enter / meas:publishPreStart:exit:ok / meas:publishPreStart:exit:err）
+- v2.1.15 → v2.1.16 で 2 連続失敗のため rc12 教訓に従い計測ビルド化、1 検証で真因確定 → v2.1.17 本番で根治予定
+- 計測モードバッジ復活（v2.1.15 撤去分、rc1 識別）
+
+### Fixed
+- **試験 5 残課題（コードから真因確定済、観測ビルドに本番修正同梱）**: BREAK 中 PAUSE → 再開で `slideshowState.breakStartedAt` が再セットされ、「スライドショーに戻る」直後の `syncSlideshowFromState` で 30 秒未満判定 → deactivate されていた既存潜伏バグを `handlePipShowSlideshow` 内で `breakStartedAt = null` リセットで根治
+
+### Compatibility
+- v2.1.16 完全互換、致命バグ保護 5 件無傷、v2.1.6〜v2.1.16 機構保持
+
+---
+
 ## [2.1.16] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.16 v2.1.15 残課題根治リリース。① PRE_START 一時停止 hall 同期の不完全根治（time-adjust で isPaused 上書きされる設計ミス）+ ③ 根治で顕在化した試験 4 既存潜伏バグ（PAUSED 中スライドショー復帰不可）を一括根治。

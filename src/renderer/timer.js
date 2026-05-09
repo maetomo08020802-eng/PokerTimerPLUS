@@ -84,12 +84,43 @@ export function pause() {
   if (status !== States.RUNNING && status !== States.BREAK && status !== States.PRE_START) return;
   pausedRemainingMs = Math.max(0, targetTime - performance.now());
   stopLoop();
+  // v2.1.17-rc1 計測ログ: setState 前後の isPreStart 値を比較観測（subscribe 経由 silent reset の検証）
+  const _wasPreStartBeforeSetState = isPreStart;
   setState({ status: States.PAUSED, remainingMs: pausedRemainingMs });
+  const _isPreStartAfterSetState = isPreStart;
+  try {
+    if (typeof window !== 'undefined' && window.api?.log?.write) {
+      window.api.log.write('meas:pause:preStartCheck', {
+        wasPreStartBeforeSetState: _wasPreStartBeforeSetState,
+        isPreStartAfterSetState: _isPreStartAfterSetState,
+        statusBefore: status,
+        hasOnPreStartPauseHandler: typeof handlers.onPreStartPause === 'function',
+        role: window.appRole
+      });
+    }
+  } catch (_) { /* never throw from logging */ }
   // v2.1.15 ① 根治: PRE_START 中の pause は hall に「一時停止中」状態を通知（カウントダウン固定表示）。
   //   onPreStartCancel ではなく専用 onPreStartPause を呼ぶ理由: cancel は「PRE_START 終了」、
   //   pause は「PRE_START 一時停止」で意味が異なる。hall 側は isPaused=true を受信して自前 rAF を停止 + remainingMs 固定表示。
   if (isPreStart) {
+    // v2.1.17-rc1 計測ログ: onPreStartPause を呼ぶ直前の trace
+    try {
+      if (typeof window !== 'undefined' && window.api?.log?.write) {
+        window.api.log.write('meas:pause:onPreStartPause:call', {
+          remainingMs: pausedRemainingMs, role: window.appRole
+        });
+      }
+    } catch (_) { /* never throw from logging */ }
     try { handlers.onPreStartPause({ remainingMs: pausedRemainingMs }); } catch (_) { /* never throw */ }
+  } else {
+    // v2.1.17-rc1 計測ログ: isPreStart=false で onPreStartPause が呼ばれなかった場合（試験 3 真因の決定的証拠）
+    try {
+      if (typeof window !== 'undefined' && window.api?.log?.write) {
+        window.api.log.write('meas:pause:onPreStartPause:skipped', {
+          isPreStart, role: window.appRole
+        });
+      }
+    } catch (_) { /* never throw from logging */ }
   }
 }
 

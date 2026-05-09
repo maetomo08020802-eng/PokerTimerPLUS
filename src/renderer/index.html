@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- v2.1.17-rc1: 計測モードバッジ復活（v2.1.15 撤去分、operator 画面のみ起動時表示、-rcN サフィックス検出）。
+       hall / operator-solo では JS 側で removeAttribute('hidden') が呼ばれない。 -->
+  <div id="measurement-mode-badge" class="measurement-mode-badge" hidden>計測モード</div>
   <!-- STEP 10 フェーズC.1.3: 背景画像 overlay レイヤー（data-bg="image" 時のみ表示）。
        既存 body::before（菱形格子）/ body::after（4隅スート）の z-index: 0 と同階層、
        .clock 配下（z-index: 2）の背面に固定配置。pointer-events: none で操作素通し。 -->
