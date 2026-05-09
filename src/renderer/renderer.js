@@ -1475,19 +1475,6 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
       else status = States.RUNNING;
       // 初回 setState（subscribe → renderTime 経由で初期表示反映）
       setState({ currentLevelIndex: idx, remainingMs, totalMs, status });
-      // v2.1.17-rc2 計測ログ: hall 側 applyTimerStateToTimer 経路で hallPreStartState の状態観測
-      //   PRE_START 一時停止中に LV1 状態が同時に届いた時の競合確認
-      try {
-        window.api?.log?.write?.('meas:hall:applyTimerState:hallPreStartConflict', {
-          appliedStatus: status,
-          appliedRemainingMs: remainingMs,
-          appliedLevel: idx,
-          hallPreStartIsActive: hallPreStartState.isActive,
-          hallPreStartIsPaused: hallPreStartState.isPaused,
-          hallPreStartRemainingMs: hallPreStartState.remainingMs,
-          role: window.appRole
-        });
-      } catch (_) { /* never throw from logging */ }
       // hallTickState seed 更新（毎フレーム Date.now() との差で remainingMs を算出するため）
       hallTickState.status = status;
       hallTickState.currentLevelIndex = idx;
@@ -2057,37 +2044,9 @@ function handleAudioOnPreStartTick(remainingMs) {
 //   tick だけは 1 秒に 1 回（前回送信から 1000ms 経過時のみ）→ IPC flood 防止。
 let _preStartTickLastSentAt = 0;
 function publishPreStartIfOperator(payload) {
-  // v2.1.17-rc1 計測ログ: publish 経路の入口 trace（試験 3 真因特定用）
-  try {
-    if (window.api?.log?.write) {
-      window.api.log.write('meas:publishPreStart:enter', {
-        payload,
-        role: window.appRole,
-        hasApi: !!(window.api?.dual?.publishPreStartState),
-        isHallSkip: window.appRole === 'hall'
-      });
-    }
-  } catch (_) { /* never throw from logging */ }
   if (window.appRole === 'hall') return;
   if (!window.api?.dual?.publishPreStartState) return;
-  try {
-    window.api.dual.publishPreStartState(payload);
-    // v2.1.17-rc1 計測ログ: publish 成功
-    try {
-      if (window.api?.log?.write) {
-        window.api.log.write('meas:publishPreStart:exit:ok', { role: window.appRole });
-      }
-    } catch (_) { /* never throw from logging */ }
-  } catch (e) {
-    // v2.1.17-rc1 計測ログ: 例外発生時（silent fail 検出）
-    try {
-      if (window.api?.log?.write) {
-        window.api.log.write('meas:publishPreStart:exit:err', {
-          error: String(e), role: window.appRole
-        });
-      }
-    } catch (_) { /* never throw from logging */ }
-  }
+  try { window.api.dual.publishPreStartState(payload); } catch (_) { /* ignore */ }
 }
 
 setHandlers({
@@ -2149,14 +2108,6 @@ setHandlers({
   },
   // v2.1.15 ① 根治: PRE_START 一時停止 → hall に isPaused=true 通知（カウントダウン固定表示用）
   onPreStartPause: ({ remainingMs }) => {
-    // v2.1.17-rc1 計測ログ: onPreStartPause が呼ばれたかの観測（試験 3 真因特定用）
-    try {
-      if (window.api?.log?.write) {
-        window.api.log.write('meas:onPreStartPause:invoked', {
-          remainingMs, role: window.appRole
-        });
-      }
-    } catch (_) { /* never throw from logging */ }
     publishPreStartIfOperator({ isActive: true, isPaused: true, remainingMs: Math.max(0, Math.floor(remainingMs)) });
   },
   // v2.1.15 ① 根治: PRE_START 再開 → hall に isPaused=false 通知（カウントダウン再開用）
@@ -2742,17 +2693,6 @@ function applyHallPreStartState(payload) {
   const isPaused = Object.prototype.hasOwnProperty.call(payload, 'isPaused')
     ? !!payload.isPaused
     : hallPreStartState.isPaused;
-  // v2.1.17-rc2 計測ログ: hall 側 isPaused 受信時の詳細観測（試験 3 hall 側真因特定用）
-  try {
-    window.api?.log?.write?.('meas:hall:applyPreStart:detail', {
-      isActive, isPaused,
-      payloadHasIsPausedKey: Object.prototype.hasOwnProperty.call(payload, 'isPaused'),
-      payloadIsPausedRaw: payload?.isPaused,
-      existingIsPaused: hallPreStartState.isPaused,
-      existingIsActive: hallPreStartState.isActive,
-      role: window.appRole
-    });
-  } catch (_) { /* never throw from logging */ }
   // v2.1.10: 旧 rAF 廃止により rafId は使用しないが、defense-in-depth で残存ハンドルがあれば cancel。
   //   beforeunload ハンドラ等で cancelAnimationFrame が呼ばれる経路は維持する。
   if (hallPreStartState.rafId !== null) {
@@ -2772,8 +2712,6 @@ function applyHallPreStartState(payload) {
     }
     // v2.1.15 ① 根治: 一時停止中は rAF を起動せず remainingMs を固定表示 + 「一時停止中」ラベル
     if (isPaused) {
-      // v2.1.17-rc2 計測ログ: isPaused=true 経路に入った（rAF 起動しない、固定表示）
-      try { window.api?.log?.write?.('meas:hall:applyPreStart:pausedBranch', { remainingMs: hallPreStartState.remainingMs, role: window.appRole }); } catch (_) { /* never throw from logging */ }
       // remainingMs を固定表示（startAtMs ベースの再計算はしない）
       if (el.time && typeof formatPreStartTime === 'function') {
         el.time.textContent = formatPreStartTime(hallPreStartState.remainingMs);
@@ -2784,8 +2722,6 @@ function applyHallPreStartState(payload) {
         el.clock.dataset.prestartPaused = 'true';   // CSS で「一時停止中」ラベル表示用
       }
     } else {
-      // v2.1.17-rc2 計測ログ: isPaused=false 経路に入った（rAF 起動）
-      try { window.api?.log?.write?.('meas:hall:applyPreStart:activeBranch', { remainingMs: hallPreStartState.remainingMs, role: window.appRole }); } catch (_) { /* never throw from logging */ }
       // 通常進行（既存挙動）
       if (el.clock) delete el.clock.dataset.prestartPaused;
       // v2.1.10: 独立 rAF 廃止、broadcast 受信時に即時 DOM 更新するだけ（1 秒粒度）。
@@ -2827,16 +2763,6 @@ function applyHallPreStartState(payload) {
 //   IDLE 起動時の Lv1 duration 値で固まったまま、スライドショーが上に乗っているため気付かれず
 //   スライドショー解除（「タイマー画面にもどす」）で固まった表示が露見していた。typo 修正。
 function renderHallPreStartTick() {
-  // v2.1.17-rc2 計測ログ: rAF 駆動経路の入口観測（rc2 真因特定用、isPaused で止まったか / それ以外で進行したか確認）
-  try {
-    window.api?.log?.write?.('meas:hall:renderPreStartTick:enter', {
-      isActive: hallPreStartState.isActive,
-      isPaused: hallPreStartState.isPaused,
-      willEarlyReturn: !hallPreStartState.isActive || hallPreStartState.isPaused,
-      remainingMs: hallPreStartState.remainingMs,
-      role: window.appRole
-    });
-  } catch (_) { /* never throw from logging */ }
   // v2.1.15 ① 根治: 一時停止中は rAF ループに乗せない（applyHallPreStartState で固定表示済）
   if (!hallPreStartState.isActive || hallPreStartState.isPaused) return;
   const now = Date.now();
@@ -7086,13 +7012,6 @@ async function loadAppVersion() {
     try {
       const version = await window.api.app.getVersion();
       el.appVersion.textContent = version;
-      // v2.1.17-rc1: 計測モード（-rcN サフィックス）かつ operator 画面のみ赤バッジを表示（v2.1.15-rc1 と同実装）。
-      //   hall は CSS [data-role="hall"] で display:none、operator-solo は appRole 判定で hidden 属性のまま。
-      try {
-        if (typeof window !== 'undefined' && window.appRole !== 'hall' && /-rc\d+/.test(version || '')) {
-          document.getElementById('measurement-mode-badge')?.removeAttribute('hidden');
-        }
-      } catch (_) { /* never throw from badge toggle */ }
     } catch (err) {
       console.warn('バージョン取得に失敗:', err);
       el.appVersion.textContent = '0.1.0';

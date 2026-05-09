@@ -301,7 +301,7 @@ test('rc13 維持: _handleTournamentDuplicateImpl 内で ensureEditorEditableSta
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.17-rc2',
+  assert.equal(pkg.version, '2.1.17',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 
