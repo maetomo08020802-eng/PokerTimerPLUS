@@ -1306,8 +1306,24 @@ function captureCurrentTimerState() {
   //   旧実装では PRE_START の totalMs（例 5 分）が「Level 1 の経過秒」として保存され、
   //   スリープ復帰時の computeLiveTimerState が Level 1 の長さで判定してレベル繰上げを起こしていた。
   //   PRE_START → idle 化により、スリープ復帰時はユーザーが再度プレスタートを開始する経路に戻る（安全側）。
-  if (s.status === States.PRE_START) {
+  // v2.1.18 ① B: PRE_START 経由の PAUSED でも idle 扱いにする（PAUSED 遷移時に
+  //   isPreStart フラグは内部維持される設計のため、isPreStartActive() で判定する）。
+  //   これがないと PRE_START 中の Space 一時停止 → 500ms 後に setTimerState IPC で
+  //   通常 timerState が hall に broadcast され、Fix 1 の gate を抜けても将来的な経路で
+  //   trailing publish が発生しうる。送信源を絶つ二重防御。
+  const isPreStartLikely = (s.status === States.PRE_START) ||
+    (typeof isPreStartActive === 'function' && isPreStartActive());
+  if (isPreStartLikely) {
     return { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
+  }
+  // v2.1.18 ②: 最終レベル完走（IDLE + remainingMs=0 + currentLevelIndex=最終インデックス）時は 'finished' で同期。
+  //   hall 側 applyTimerStateToTimer の 'finished' 経路（既存）で clock--timer-finished クラス付与 → オレンジオーバーレイ表示。
+  //   既存 normalizeTimerState (main.js:493) の VALID_TIMER_STATUS に 'finished' が含まれているため新規 IPC 不要。
+  const lastLevelIndex = (typeof getLevelCount === 'function') ? getLevelCount() - 1 : -1;
+  if (s.status === States.IDLE && (s.remainingMs === 0) && lastLevelIndex >= 0 && (s.currentLevelIndex || 0) === lastLevelIndex) {
+    const lastLevel = (typeof getLevel === 'function') ? getLevel(lastLevelIndex) : null;
+    const lastDur = lastLevel ? Math.max(0, Math.floor((lastLevel.durationMinutes || 0) * 60)) : 0;
+    return { status: 'finished', currentLevel: lastLevelIndex + 1, elapsedSecondsInLevel: lastDur, startedAt: null, pausedAt: null };
   }
   const status = mapStateToStorageStatus(s.status);
   const totalSec = Math.max(0, Math.round((s.totalMs || 0) / 1000));
@@ -2121,6 +2137,13 @@ setHandlers({
     const isPaused = (typeof isPreStartActive === 'function' && isPreStartActive())
       && curState.status === States.PAUSED;
     publishPreStartIfOperator({ isActive: true, isPaused, remainingMs: Math.max(0, Math.floor(remainingMs)) });
+  },
+  // v2.1.18 ②: 最終レベル完走時にオレンジオーバーレイ「トーナメント終了 / TOURNAMENT COMPLETE」を表示。
+  //   operator 側ではローカルで el.clock.classList.add('clock--timer-finished') を実行。
+  //   hall 側へは captureCurrentTimerState の 'finished' status 返却 + 既存 dual-sync timerState 経路で同期
+  //   （新規 IPC 不要、既存 normalizeTimerState の VALID_TIMER_STATUS に 'finished' は既に含まれる）。
+  onTournamentComplete: () => {
+    el.clock?.classList.add('clock--timer-finished');
   }
 });
 
@@ -7240,7 +7263,10 @@ if (__appRole === 'hall') {
             }
           }).catch(() => { /* ignore */ });
         }
-      } else if (kind === 'timerState' && value) {
+      } else if (kind === 'timerState' && value && !hallPreStartState.isActive) {
+        // v2.1.18 ① A: PRE_START 中は通常 timerState を受け取らない（hallPreStartState.isActive が true の間は
+        //   PRE_START 専用 broadcast (preStartState) のみが正解。timerState を適用すると実 Lv1 残り時間に
+        //   上書きされて「トーナメントスタートまで」ラベル消失 + 数値破綻が発生する）。
         // timerState 同期は applyTimerStateToTimer に委譲（既存経路、silent で音二重発火防止）
         // levels は現在の構造から取得（getStructure or active トーナメントの blindPresetId 経由）
         try {

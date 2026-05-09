@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.18-rc1] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.18-rc1 試験ビルド（前原さん実機専用）。v2.1.17 で残存していた「PRE_START 一時停止時の hall タイマー上書き」を A+B 二重防御で根治、加えて最終レベル到達時の「トーナメント終了」オーバーレイを新規実装。
+
+### Fixed
+- **PRE_START 一時停止時の hall 表示破綻**（v2.1.17 残存、前原さん実機証言）: hall 側で「トーナメントスタートまで」ラベル消失 + 残り時間が実 Lv1 残り時間（例: Lv1=1 分なら 00:50）に上書きされる症状を、A+B 二重防御で根治
+  - A: hall 受信側に `hallPreStartState.isActive` gate 追加（renderer.js dual-sync timerState 分岐）
+  - B: 送信側で PRE_START 経由 PAUSED を idle 化（renderer.js captureCurrentTimerState の `isPreStartActive()` 拡張）
+
+### Added
+- **トーナメント終了オーバーレイ**: 最終レベル時間切れ時に hall 中央へ「トーナメント終了 / TOURNAMENT COMPLETE」をオレンジ枠 (#FF8C1A) で永続表示（リセット / 新規トーナメント / タイマー画面復帰で解除）
+  - `clamp()` / `vw` で自動縮小 + max-width 90vw + 十分な padding ではみ出し防止
+  - timer.js advanceToNextLevel で `onTournamentComplete` 発火、operator local + 既存 dual-sync timerState 経由で hall 同期（既存 normalizeTimerState の VALID_TIMER_STATUS に 'finished' は既に含まれているため新規 IPC 不要）
+
+### Compatibility
+- v2.1.6〜v2.1.17 機構完全互換、致命バグ保護 5 件無傷
+- 単画面モード完全同一
+
+---
+
 ## [2.1.17] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.17 ① PRE_START 一時停止 hall 同期の真の根治リリース。v2.1.15/v2.1.16 で 2 連続失敗していた真因を rc1/rc2 観測ビルドで完全特定（main.js sanitization で isPaused フィールドがフィルタアウトされていた）→ 本リリースで 1 行修正により完全根治。

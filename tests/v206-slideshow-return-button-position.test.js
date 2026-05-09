@@ -98,7 +98,7 @@ test('ロゴ領域非干渉: .clock__logo-img の max-width/max-height が想定
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.17',
+  assert.equal(pkg.version, '2.1.18-rc1',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 
