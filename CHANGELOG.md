@@ -7,31 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.1.17-rc2] - 2026-05-09 (観測ビルド第 2 弾、GitHub Releases 未公開)
+## [2.1.17] - 2026-05-09
 
-### Internal
-- rc1 検証で operator 側 isPaused:true broadcast 完璧動作確認、しかし会場モニター側カウントダウン継続の真因が hall 側にあると判明
-- hall 側追加観測ログ 4 か所追加: `meas:hall:applyPreStart:detail` / `meas:hall:applyPreStart:pausedBranch` / `meas:hall:applyPreStart:activeBranch` / `meas:hall:renderPreStartTick:enter` / `meas:hall:applyTimerState:hallPreStartConflict`
-- rc1 で追加した operator 側観測ログ 7 ラベルは継続維持（撤去しない）
-- 試験 5 修正（handlePipShowSlideshow で breakStartedAt = null）も rc1 から継続採用
-
-### Compatibility
-- v2.1.17-rc1 完全互換、致命バグ保護 5 件無傷、v2.1.6〜v2.1.16 機構保持
-
----
-
-## [2.1.17-rc1] - 2026-05-09 (観測ビルド、GitHub Releases 未公開)
-
-### Internal
-- 試験 3 ① PRE_START 一時停止 hall 同期未根治の真因特定用計測ログ追加（meas:pause:preStartCheck / meas:pause:onPreStartPause:call / meas:pause:onPreStartPause:skipped / meas:onPreStartPause:invoked / meas:publishPreStart:enter / meas:publishPreStart:exit:ok / meas:publishPreStart:exit:err）
-- v2.1.15 → v2.1.16 で 2 連続失敗のため rc12 教訓に従い計測ビルド化、1 検証で真因確定 → v2.1.17 本番で根治予定
-- 計測モードバッジ復活（v2.1.15 撤去分、rc1 識別）
+PokerTimerPLUS+ v2.1.17 ① PRE_START 一時停止 hall 同期の真の根治リリース。v2.1.15/v2.1.16 で 2 連続失敗していた真因を rc1/rc2 観測ビルドで完全特定（main.js sanitization で isPaused フィールドがフィルタアウトされていた）→ 本リリースで 1 行修正により完全根治。
 
 ### Fixed
-- **試験 5 残課題（コードから真因確定済、観測ビルドに本番修正同梱）**: BREAK 中 PAUSE → 再開で `slideshowState.breakStartedAt` が再セットされ、「スライドショーに戻る」直後の `syncSlideshowFromState` で 30 秒未満判定 → deactivate されていた既存潜伏バグを `handlePipShowSlideshow` 内で `breakStartedAt = null` リセットで根治
+- **① PRE_START 一時停止が hall に届かない（v2.1.15/v2.1.16 で 2 連続失敗の真因確定）**: `main.js` の `dual:publish-pre-start-state` IPC ハンドラの payload sanitization で `isPaused` フィールドが転送されておらず（v2.1.6 ハンドラ新設時に v2.1.15 で追加された機構を見落とし）、operator 側で `{isActive:true, isPaused:true}` を送信しても hall 側で常に `isPaused` が undefined → false 化していた真因を、`if (typeof payload.isPaused === 'boolean') sanitized.isPaused = payload.isPaused;` 1 行追加で根治
+- **試験 5 修正継続**: rc1 で追加した `handlePipShowSlideshow` 内の `slideshowState.breakStartedAt = null` リセットは引き続き有効
+
+### Internal
+- v2.1.17-rc1 / v2.1.17-rc2 で追加した計測ログ 12 ラベル（meas:pause:preStartCheck / meas:pause:onPreStartPause:call / :skipped / meas:onPreStartPause:invoked / meas:publishPreStart:enter / :exit:ok / :exit:err / meas:hall:applyPreStart:detail / :pausedBranch / :activeBranch / meas:hall:renderPreStartTick:enter / meas:hall:applyTimerState:hallPreStartConflict）を完全撤去
+- v2.1.17-rc1/rc2 計測モードバッジを完全撤去
+- v2.1.15 / v2.1.16 で実装した onPreStartPause / onPreStartResume / hallPreStartState.isPaused / dataset.prestartPaused / Object.prototype.hasOwnProperty.call defensive はすべて完全保持（main.js 真因とは独立した防御として有効）
 
 ### Compatibility
-- v2.1.16 完全互換、致命バグ保護 5 件無傷、v2.1.6〜v2.1.16 機構保持
+- v2.1.14 / v2.1.15 / v2.1.16 機能完全互換、致命バグ保護 5 件無傷
+- v2.1.6〜v2.1.16 機構すべて完全保持
+- 単画面モード完全同一
 
 ---
 

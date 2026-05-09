@@ -2685,6 +2685,10 @@ function registerIpcHandlers() {
         if (Number.isFinite(payload.totalMs)     && payload.totalMs     >= 0) sanitized.totalMs     = Math.floor(payload.totalMs);
         if (Number.isFinite(payload.remainingMs) && payload.remainingMs >= 0) sanitized.remainingMs = Math.floor(payload.remainingMs);
         if (Number.isFinite(payload.startAtMs)   && payload.startAtMs   >= 0) sanitized.startAtMs   = Math.floor(payload.startAtMs);
+        // v2.1.17 ① 真の根治: isPaused フィールドを sanitization で転送（v2.1.15/v2.1.16 で追加された renderer 側機構が
+        //   ここで落とされて hall に届かないため、PRE_START 一時停止が hall に反映されない真因。
+        //   payload.isPaused が boolean 型のときのみ転送（型安全 + 既存 sanitization パターンと整合）。
+        if (typeof payload.isPaused === 'boolean') sanitized.isPaused = payload.isPaused;
       }
       _publishDualState('preStartState', sanitized);
     } catch (err) {
