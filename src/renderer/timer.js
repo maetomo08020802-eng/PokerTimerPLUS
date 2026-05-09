@@ -22,7 +22,8 @@ const handlers = {
   onPreStartCancel: () => {},  // v2.1.6: cancelPreStart / reset 経由 → no payload
   onPreStartAdjust: () => {},  // v2.1.6: ±1 分操作で残り時間調整 → payload {remainingMs}
   onPreStartPause: () => {},   // v2.1.15 ① 根治: PRE_START 中の pause → payload {remainingMs}
-  onPreStartResume: () => {}   // v2.1.15 ① 根治: PRE_START 中の resume → payload {remainingMs}
+  onPreStartResume: () => {},  // v2.1.15 ① 根治: PRE_START 中の resume → payload {remainingMs}
+  onTournamentComplete: () => {}  // v2.1.18 ②: 最終レベル完走時 → no payload（renderer 側でオーバーレイ表示）
 };
 
 // 内部タイマー状態（DOM・state.js とは別、低レベル管理）
@@ -33,7 +34,7 @@ let isPreStart = false;    // PRE_START 中（PAUSED に遷移しても true を
 let preStartTotalMs = 0;   // プレスタート選択値（renderer のフォーマット決定にも使われる）
 
 // イベントハンドラ登録
-export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick, onPreStartEnd, onPreStartStart, onPreStartCancel, onPreStartAdjust, onPreStartPause, onPreStartResume }) {
+export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick, onPreStartEnd, onPreStartStart, onPreStartCancel, onPreStartAdjust, onPreStartPause, onPreStartResume, onTournamentComplete }) {
   if (onTick) handlers.onTick = onTick;
   if (onLevelChange) handlers.onLevelChange = onLevelChange;
   if (onLevelEnd) handlers.onLevelEnd = onLevelEnd;
@@ -46,6 +47,8 @@ export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick,
   // v2.1.15 ① 根治: PRE_START 一時停止 / 再開を hall に通知するための新 handler
   if (onPreStartPause) handlers.onPreStartPause = onPreStartPause;
   if (onPreStartResume) handlers.onPreStartResume = onPreStartResume;
+  // v2.1.18 ②: 最終レベル完走時のトーナメント終了演出用 handler
+  if (onTournamentComplete) handlers.onTournamentComplete = onTournamentComplete;
 }
 
 // PRE_START 中かを問い合わせる（renderer の表示判定で使う）
@@ -368,6 +371,8 @@ function advanceToNextLevel() {
   const target = currentLevelIndex + 1;
   if (target >= getLevelCount()) {
     setState({ status: States.IDLE, remainingMs: 0 });
+    // v2.1.18 ②: 最終レベル完走 → renderer 側でオーバーレイ表示用に通知（IDLE 移行直後）
+    try { handlers.onTournamentComplete(); } catch (_) { /* never throw */ }
     return;
   }
   startAtLevel(target);

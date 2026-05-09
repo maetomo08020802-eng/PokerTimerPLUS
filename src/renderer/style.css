@@ -852,8 +852,9 @@ img {
   opacity: 0.25;
 }
 
-/* STEP 10 フェーズC.1.2 Fix 2: 全レベル完走オーバーレイ（緑系で完了感）。
-   .clock__finished-overlay と同じレイアウトだが色違い。日本語表記。 */
+/* STEP 10 フェーズC.1.2 Fix 2: 全レベル完走オーバーレイ（v2.1.18 でオレンジ枠 + 2 行構成に再設計）。
+   v2.1.18 ②: メイン「トーナメント終了」+ サブ「TOURNAMENT COMPLETE」をオレンジ枠 (#FF8C1A) で hall 中央表示。
+   一時停止表示と同等の枠太さ、永続表示（リセットまで消えない）。clamp()/vw 自動縮小ではみ出し防止。 */
 .clock__timer-finished-overlay {
   position: absolute;
   top: 50%;
@@ -861,18 +862,37 @@ img {
   transform: translate(-50%, -50%);
   opacity: 0;
   pointer-events: none;
-  font-family: var(--font-label);
-  font-weight: 900;
-  font-size: 4vw;
-  letter-spacing: 0.15em;
-  color: var(--success);   /* 緑系（既存トークン #4ade80）*/
-  white-space: nowrap;
-  text-shadow:
-    0 0 2vw rgba(74, 222, 128, 0.55),
-    0 0 4vw rgba(74, 222, 128, 0.30),
-    0 0 8vw rgba(74, 222, 128, 0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1vh;
+  background-color: #0a0a0a;   /* hall 背景同色、不透明 */
+  border: 6px solid #FF8C1A;   /* オレンジ枠（一時停止と同等の太さ）*/
+  border-radius: 1.2vw;
+  padding: 4vh 6vw;            /* 文字列が枠内に確実に収まる十分な padding */
+  max-width: 90vw;             /* はみ出し防止 */
   transition: opacity 0.4s ease-out;
   z-index: 5;
+}
+.clock__timer-finished-main {
+  font-family: 'Noto Sans JP', 'BIZ UDPGothic', var(--font-label), sans-serif;
+  font-weight: 900;
+  font-size: clamp(48px, 7vw, 96px);   /* hall 1080p で約 84px、自動縮小対応 */
+  letter-spacing: 0.12em;
+  color: #FF8C1A;              /* メインはオレンジ枠と同色 */
+  white-space: nowrap;
+  line-height: 1.1;
+}
+.clock__timer-finished-sub {
+  font-family: 'Barlow Condensed', var(--font-label), sans-serif;
+  font-weight: 700;
+  font-size: clamp(24px, 3.6vw, 52px);   /* hall 1080p で約 44px、自動縮小対応 */
+  letter-spacing: 0.18em;
+  color: #FFA94D;              /* 明るめオレンジ */
+  white-space: nowrap;
+  line-height: 1.1;
+  text-transform: uppercase;
 }
 .clock--timer-finished .clock__timer-finished-overlay {
   opacity: 1;

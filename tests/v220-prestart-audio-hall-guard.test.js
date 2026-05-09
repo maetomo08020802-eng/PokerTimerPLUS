@@ -170,8 +170,8 @@ test('T7: v2.1.7 dual-sync buffer 機構が touch されていない', () => {
 // T8: package.json version 2.1.12 + scripts.test に v220 登録
 // ============================================================
 test('T8: package.json version は 2.1.12 + scripts.test に v220 登録', () => {
-  assert.equal(PKG.version, '2.1.17',
-    `package.json version が ${PKG.version}（期待 2.1.17）`);
+  assert.equal(PKG.version, '2.1.18',
+    `package.json version が ${PKG.version}（期待 2.1.18）`);
   assert.match(PKG.scripts.test, /v220-prestart-audio-hall-guard\.test\.js/,
     'scripts.test に v220-prestart-audio-hall-guard.test.js が登録されていない');
 });

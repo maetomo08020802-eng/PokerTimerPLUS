@@ -143,8 +143,8 @@ test('保護: main.js の rolling log / Ctrl+Shift+L / display-removed 経路に
 
 test('version: package.json は 2.1.2', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.17',
-    `package.json version が ${pkg.version}（期待 2.1.17）`);
+  assert.equal(pkg.version, '2.1.18',
+    `package.json version が ${pkg.version}（期待 2.1.18）`);
 });
 
 test('version: scripts.test に v208-auto-updater-fix.test.js が含まれる', () => {

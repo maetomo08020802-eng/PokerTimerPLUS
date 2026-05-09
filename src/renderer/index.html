@@ -189,7 +189,12 @@
         <!-- STEP 6.5: トーナメント終了オーバーレイ（playersRemaining=0 で表示） -->
         <div class="clock__finished-overlay" id="js-finished-overlay">TOURNAMENT FINISHED</div>
         <!-- STEP 10 フェーズC.1.2 Fix 2: タイマー完走オーバーレイ（全レベル完走で finished 状態時に表示） -->
-        <div class="clock__timer-finished-overlay" id="js-timer-finished-overlay">トーナメント終了</div>
+        <!-- v2.1.18 ②: hall 中央に「トーナメント終了 / TOURNAMENT COMPLETE」をオレンジ枠で永続表示。
+             メイン (日本語) + サブ (英大文字) の 2 行構成、リセット / 新規トーナメント作成で解除。 -->
+        <div class="clock__timer-finished-overlay" id="js-timer-finished-overlay">
+          <span class="clock__timer-finished-main">トーナメント終了</span>
+          <span class="clock__timer-finished-sub">TOURNAMENT COMPLETE</span>
+        </div>
       </div>
 
       <div class="card-stack">
