@@ -2044,9 +2044,37 @@ function handleAudioOnPreStartTick(remainingMs) {
 //   tick だけは 1 秒に 1 回（前回送信から 1000ms 経過時のみ）→ IPC flood 防止。
 let _preStartTickLastSentAt = 0;
 function publishPreStartIfOperator(payload) {
+  // v2.1.17-rc1 計測ログ: publish 経路の入口 trace（試験 3 真因特定用）
+  try {
+    if (window.api?.log?.write) {
+      window.api.log.write('meas:publishPreStart:enter', {
+        payload,
+        role: window.appRole,
+        hasApi: !!(window.api?.dual?.publishPreStartState),
+        isHallSkip: window.appRole === 'hall'
+      });
+    }
+  } catch (_) { /* never throw from logging */ }
   if (window.appRole === 'hall') return;
   if (!window.api?.dual?.publishPreStartState) return;
-  try { window.api.dual.publishPreStartState(payload); } catch (_) { /* ignore */ }
+  try {
+    window.api.dual.publishPreStartState(payload);
+    // v2.1.17-rc1 計測ログ: publish 成功
+    try {
+      if (window.api?.log?.write) {
+        window.api.log.write('meas:publishPreStart:exit:ok', { role: window.appRole });
+      }
+    } catch (_) { /* never throw from logging */ }
+  } catch (e) {
+    // v2.1.17-rc1 計測ログ: 例外発生時（silent fail 検出）
+    try {
+      if (window.api?.log?.write) {
+        window.api.log.write('meas:publishPreStart:exit:err', {
+          error: String(e), role: window.appRole
+        });
+      }
+    } catch (_) { /* never throw from logging */ }
+  }
 }
 
 setHandlers({
@@ -2108,6 +2136,14 @@ setHandlers({
   },
   // v2.1.15 ① 根治: PRE_START 一時停止 → hall に isPaused=true 通知（カウントダウン固定表示用）
   onPreStartPause: ({ remainingMs }) => {
+    // v2.1.17-rc1 計測ログ: onPreStartPause が呼ばれたかの観測（試験 3 真因特定用）
+    try {
+      if (window.api?.log?.write) {
+        window.api.log.write('meas:onPreStartPause:invoked', {
+          remainingMs, role: window.appRole
+        });
+      }
+    } catch (_) { /* never throw from logging */ }
     publishPreStartIfOperator({ isActive: true, isPaused: true, remainingMs: Math.max(0, Math.floor(remainingMs)) });
   },
   // v2.1.15 ① 根治: PRE_START 再開 → hall に isPaused=false 通知（カウントダウン再開用）
@@ -3015,6 +3051,11 @@ function handlePipShowSlideshow() {
   const { status, remainingMs } = getState();
   if (remainingMs <= SLIDESHOW_AUTO_END_MS) return;
   slideshowState.userOverride = 'auto';
+  // v2.1.17 試験 5 残課題根治: ユーザー手動操作なので 30 秒 BREAK 待機を無効化。
+  //   PAUSE → 再開で breakStartedAt が再セットされ、復帰直後の syncSlideshowFromState で
+  //   30 秒未満判定 → deactivate されていた既存潜伏バグの根治。
+  //   v2.1.15 ③ 根治で BREAK 検出が機能して初めて顕在化（v2.1.16 試験 5「ほぼ OK」報告の真因）。
+  slideshowState.breakStartedAt = null;
   if (isSlideshowEligibleStatus(status) && breakImagesState.images.length > 0) {
     activateSlideshow();
   }
@@ -7007,6 +7048,13 @@ async function loadAppVersion() {
     try {
       const version = await window.api.app.getVersion();
       el.appVersion.textContent = version;
+      // v2.1.17-rc1: 計測モード（-rcN サフィックス）かつ operator 画面のみ赤バッジを表示（v2.1.15-rc1 と同実装）。
+      //   hall は CSS [data-role="hall"] で display:none、operator-solo は appRole 判定で hidden 属性のまま。
+      try {
+        if (typeof window !== 'undefined' && window.appRole !== 'hall' && /-rc\d+/.test(version || '')) {
+          document.getElementById('measurement-mode-badge')?.removeAttribute('hidden');
+        }
+      } catch (_) { /* never throw from badge toggle */ }
     } catch (err) {
       console.warn('バージョン取得に失敗:', err);
       el.appVersion.textContent = '0.1.0';

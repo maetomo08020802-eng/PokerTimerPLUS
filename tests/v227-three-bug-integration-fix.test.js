@@ -195,22 +195,29 @@ test('T12 (Fix 6): rc1 計測ログ 6 ラベルすべて 0 件（main.js / rende
 });
 
 // ============================================================
-// T13 (Fix 6): rc1 計測モードバッジが index.html / style.css / renderer.js から削除
+// T13 (Fix 6): rc1 計測モードバッジ — 本番ビルドでは削除、-rcN ビルドでは復活許容
+//   v2.1.15 で撤去、v2.1.17-rc1 で復活（観測ビルド用）、v2.1.17 本番で再撤去予定。
+//   PKG.version に -rcN サフィックスがあればバッジ存在許容、無ければ撤去状態を強制。
 // ============================================================
-test('T13 (Fix 6): 計測モードバッジ要素 (measurement-mode-badge) が全ファイルから削除', () => {
+test('T13 (Fix 6): 計測モードバッジ要素 (measurement-mode-badge) — 本番では削除、rc では復活許容', () => {
+  const isRc = /-rc\d+/.test(PKG.version || '');
+  if (isRc) {
+    // -rcN ビルドではバッジが存在することを許容（観測ビルド用、v2.1.15-rc1 / v2.1.17-rc1 のパターン）
+    return;
+  }
   assert.ok(!INDEX_HTML.includes('measurement-mode-badge'),
-    'index.html に measurement-mode-badge が残存（Fix 6 未完了）');
+    'index.html に measurement-mode-badge が残存（本番ビルドでは Fix 6 未完了）');
   assert.ok(!STYLE_CSS.includes('measurement-mode-badge'),
-    'style.css に measurement-mode-badge が残存（Fix 6 未完了）');
+    'style.css に measurement-mode-badge が残存（本番ビルドでは Fix 6 未完了）');
   assert.ok(!RENDERER.includes('measurement-mode-badge'),
-    'renderer.js に measurement-mode-badge が残存（Fix 6 未完了）');
+    'renderer.js に measurement-mode-badge が残存（本番ビルドでは Fix 6 未完了）');
 });
 
 // ============================================================
-// T14 (Fix 7): package.json version が 2.1.16（rc1 サフィックスなし）
+// T14 (Fix 7): package.json version が 2.1.17-rc1（rc1 サフィックスなし）
 // ============================================================
 test('T14 (Fix 7): package.json version が 2.1.15', () => {
-  assert.equal(PKG.version, '2.1.16', `package.json version が 2.1.15 ではない（実際: ${PKG.version}）`);
+  assert.equal(PKG.version, '2.1.17-rc1', `package.json version が 2.1.15 ではない（実際: ${PKG.version}）`);
 });
 
 // ============================================================

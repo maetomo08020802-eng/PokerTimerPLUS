@@ -4115,3 +4115,22 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
   letter-spacing: 0.1em;
 }
 
+/* v2.1.17-rc1: 計測モードバッジ（v2.1.15 撤去分の復活、operator 画面のみ、-rcN サフィックスを検出して renderer.js が hidden 属性を解除）。
+   hidden 属性が付いている場合は HTML5 標準で display:none 相当、JS で属性削除すると表示される。 */
+.measurement-mode-badge {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: #d32f2f;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 14px;
+  z-index: 9999;
+  pointer-events: none;
+}
+[data-role="hall"] .measurement-mode-badge {
+  display: none !important;
+}
+
