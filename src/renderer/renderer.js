@@ -812,8 +812,6 @@ function formatPreStartTime(ms) {
 
 // タイマーは単一要素テキストで更新（モノスペースフォントが桁幅を保証する）
 function renderTime(remainingMs) {
-  // v2.1.18-meas1 perf:render:duration: 入口で performance.now() を取得、出口で経過時間を rolling-log に記録。
-  const _t0 = performance.now();
   const { status } = getState();
   if (status === States.PRE_START) {
     el.time.textContent = formatPreStartTime(remainingMs);
@@ -821,7 +819,6 @@ function renderTime(remainingMs) {
     el.clock.dataset.timerState = remainingMs > 0 && remainingMs <= DANGER_THRESHOLD_MS ? 'danger' : 'normal';
     // フォーマット属性: 残り時間が 60 分以上は HH:MM:SS（hms）、未満は MM:SS（ms）→ CSS が font-size を切替
     el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
-    try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderTime', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
     return;
   }
   // PAUSED 中も PRE_START 由来なら同じフォーマットを維持
@@ -829,14 +826,12 @@ function renderTime(remainingMs) {
     el.time.textContent = formatPreStartTime(remainingMs);
     el.clock.dataset.timerState = 'normal';
     el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
-    try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderTime', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
     return;
   }
   // PRE_START 終了 / RUNNING / IDLE / etc → 属性をクリア
   if ('prestartFormat' in el.clock.dataset) delete el.clock.dataset.prestartFormat;
   el.time.textContent = formatTime(remainingMs);
   el.clock.dataset.timerState = status === States.BREAK ? 'normal' : classifyTimerState(remainingMs);
-  try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderTime', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
 }
 
 function computeNextBreakMs(remainingMs, currentIndex) {
@@ -889,8 +884,6 @@ function renderNextBreak(remainingMs, currentIndex) {
 }
 
 function renderControls(status) {
-  // v2.1.18-meas1 perf:render:duration: renderControls の処理時間を記録
-  const _t0 = performance.now();
   el.clock.dataset.status = status;
   switch (status) {
     case States.IDLE:
@@ -920,7 +913,6 @@ function renderControls(status) {
     default:
       break;
   }
-  try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderControls', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
 }
 
 // STEP 6: 動的計算ヘルパ（STEP 6.5: GTD 対応）
@@ -2272,8 +2264,6 @@ function readPreStartMinutes() {
 }
 
 el.btnStart.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: スタート押下
-  try { window.api?.log?.write?.('ui:click:major', { id: 'btnStart' }); } catch (_) {}
   // v2.0.0 STEP 3: ホール側ではボタン自体が hidden だが多重防御
   if (window.appRole === 'hall') return;
   // 初回スタート時に AudioContext を resume（ブラウザ自動再生ポリシー対策）
@@ -2284,14 +2274,8 @@ el.btnStart.addEventListener('click', () => {
   if (getState().status === States.IDLE) openPreStartDialog();
 });
 
-el.prestartCancel?.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: PRE_START ダイアログのキャンセル
-  try { window.api?.log?.write?.('ui:click:major', { id: 'prestartCancel' }); } catch (_) {}
-  el.prestartDialog?.close();
-});
+el.prestartCancel?.addEventListener('click', () => el.prestartDialog?.close());
 el.prestartOk?.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: PRE_START ダイアログの開始確定
-  try { window.api?.log?.write?.('ui:click:major', { id: 'prestartOk' }); } catch (_) {}
   const minutes = readPreStartMinutes();
   const players = readPreStartPlayers();
   el.prestartDialog?.close();
@@ -2310,28 +2294,18 @@ el.prestartCustomMin?.addEventListener('focus', () => {
   if (customRadio) customRadio.checked = true;
 });
 el.btnPause.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: 一時停止 / 再開ボタン
-  try { window.api?.log?.write?.('ui:click:major', { id: 'btnPause' }); } catch (_) {}
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: 多重防御
   ensureAudioReady();
   // v2.0.2 cleanup: notifyOperatorActionIfNeeded 呼出撤去（dual:operator-action がデッドコード）。
   handleStartPauseToggle();
 });
 el.btnReset.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: リセットボタン
-  try { window.api?.log?.write?.('ui:click:major', { id: 'btnReset' }); } catch (_) {}
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: 多重防御
   ensureAudioReady();
   openResetDialog();
 });
-el.resetCancel.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: リセット確認ダイアログのキャンセル
-  try { window.api?.log?.write?.('ui:click:major', { id: 'resetCancel' }); } catch (_) {}
-  el.resetDialog.close();
-});
+el.resetCancel.addEventListener('click', () => el.resetDialog.close());
 el.resetOk.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: リセット確認ダイアログの実行
-  try { window.api?.log?.write?.('ui:click:major', { id: 'resetOk' }); } catch (_) {}
   el.resetDialog.close();
   handleReset();   // STEP 6.6: tournamentRuntime もクリア → FINISHED 解除
 });
@@ -2405,18 +2379,12 @@ async function handleVenueSave() {
     // STEP 6.22.1.fix: 成功フィードバック（緑字 2.5 秒）
     _venueHintSuccess('保存しました');
   } catch (err) {
-    // v2.1.18-meas1 error:caught:handleVenueSave
-    try { window.api?.log?.write?.('error:caught:handleVenueSave', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('venueName 保存失敗:', err);
     _venueHintError('保存に失敗しました: ' + (err.message || err));
   }
 }
 
-el.venueSaveBtn?.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: 店舗名保存ボタン
-  try { window.api?.log?.write?.('ui:click:major', { id: 'venueSaveBtn' }); } catch (_) {}
-  handleVenueSave();
-});
+el.venueSaveBtn?.addEventListener('click', handleVenueSave);
 
 // ===== STEP 6.23: PC間データ移行（エクスポート / インポート） =====
 
@@ -2582,22 +2550,10 @@ async function handleImportClipboard() {
   }
 }
 
-el.exportSingleFileBtn?.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: 単一トーナメントエクスポート（ファイル）
-  try { window.api?.log?.write?.('ui:click:major', { id: 'exportSingleFileBtn' }); } catch (_) {}
-  handleExportSingleFile();
-});
+el.exportSingleFileBtn?.addEventListener('click', handleExportSingleFile);
 el.exportSingleClipboardBtn?.addEventListener('click', handleExportSingleClipboard);
-el.exportBulkFileBtn?.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: 全件エクスポート（ファイル）
-  try { window.api?.log?.write?.('ui:click:major', { id: 'exportBulkFileBtn' }); } catch (_) {}
-  handleExportBulkFile();
-});
-el.importFileBtn?.addEventListener('click', () => {
-  // v2.1.18-meas1 ui:click:major: インポート（ファイル）
-  try { window.api?.log?.write?.('ui:click:major', { id: 'importFileBtn' }); } catch (_) {}
-  handleImportFile();
-});
+el.exportBulkFileBtn?.addEventListener('click', handleExportBulkFile);
+el.importFileBtn?.addEventListener('click', handleImportFile);
 el.importClipboardBtn?.addEventListener('click', handleImportClipboard);
 
 function applyBackground(value) {
@@ -2916,28 +2872,9 @@ function renderHallPreStartTick() {
 //   ので、hall window の rAF は本機構（1 個）+ dual-sync flush（1 個）= 同時 2 個に収まる。
 //
 //   PRE_START は別系統（renderHallPreStartTick + hallPreStartState）。本関数は RUNNING/BREAK のみ。
-// v2.1.18-meas1 perf:tick:fps: hall RAF の実 fps を 1 秒ごとに集計して rolling-log に記録。
-//   _fpsLastSampleAt が 0（初回）は 1 秒分のサンプルが揃っていないので skip、2 秒目以降を記録。
-//   hall 限定（window.appRole === 'hall' で gate）、operator では何もしない。
-let _fpsFrameCount = 0;
-let _fpsLastSampleAt = 0;
-function _samplePerfTickFps() {
-  _fpsFrameCount++;
-  const now = performance.now();
-  if (now - _fpsLastSampleAt >= 1000) {
-    if (window.appRole === 'hall' && _fpsLastSampleAt > 0) {
-      try { window.api?.log?.write?.('perf:tick:fps', { fps: _fpsFrameCount, sample_ms: now - _fpsLastSampleAt }); } catch (_) {}
-    }
-    _fpsFrameCount = 0;
-    _fpsLastSampleAt = now;
-  }
-}
-
 function renderHallTickFrame() {
   if (typeof window === 'undefined' || window.appRole !== 'hall') return;
   if (!hallTickState.isActive) return;
-  // v2.1.18-meas1: 実 fps 集計（hall 限定）
-  _samplePerfTickFps();
   // status が RUNNING/BREAK 以外（PAUSED/IDLE 等）に遷移した場合は rAF 停止
   if (hallTickState.status !== States.RUNNING && hallTickState.status !== States.BREAK) {
     hallTickState.isActive = false;
@@ -3375,8 +3312,6 @@ async function handleFontThumbClick(value) {
     try {
       await window.api.tournaments.setDisplaySettings(tournamentState.id, { timerFont: value });
     } catch (err) {
-      // v2.1.18-meas1 error:caught:handleFontThumbClick
-      try { window.api?.log?.write?.('error:caught:handleFontThumbClick', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('フォント設定の保存に失敗:', err);
     }
   }
@@ -3398,8 +3333,6 @@ async function toggleBottomBar() {
     try {
       await window.api.settings.setDisplay({ bottomBarHidden });
     } catch (err) {
-      // v2.1.18-meas1 error:caught:toggleBottomBar
-      try { window.api?.log?.write?.('error:caught:toggleBottomBar', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('ボトムバー表示状態の保存に失敗:', err);
     }
   }
@@ -3650,8 +3583,6 @@ async function handleTournamentGameTypeChange(newGameType) {
       }
     }
   } catch (err) {
-    // v2.1.18-meas1 error:caught:structureTypeChange
-    try { window.api?.log?.write?.('error:caught:structureTypeChange', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('構造型変更時のフォーマットロード失敗:', err);
   }
 
@@ -4036,8 +3967,6 @@ function ensureTournamentListDelegation() {
 }
 
 async function renderTournamentList(prefetched) {
-  // v2.1.18-meas1 perf:dom:rebuild: トーナメントリスト再構築の処理時間を記録
-  const _t0 = performance.now();
   if (!el.tournamentList) return;
   // STEP 6.21.4.2 / STEP 10 フェーズB.fix9: 入力中スキップ。統一ヘルパに置換。
   // 1秒ごとの自動再描画で focus/打鍵イベントが奪われる現象を原理的に防止。
@@ -4066,8 +3995,6 @@ async function renderTournamentList(prefetched) {
     // STEP 7.x ③-e: list.length を渡して、最後の1件は🗑ボタンを disabled に
     el.tournamentList.appendChild(buildTournamentListItem(t, ts, isActive, list.length));
   }
-  // v2.1.18-meas1 perf:dom:rebuild: トーナメントリスト全件描画完了
-  try { window.api?.log?.write?.('perf:dom:rebuild', { fn: 'renderTournamentList', ms: performance.now() - _t0, rows: list.length }); } catch (_) {}
 }
 
 function buildTournamentListItem(t, ts, isActive, listLength = 99) {
@@ -4260,8 +4187,6 @@ async function handleTournamentSelectChange() {
     const prevTimerState = captureCurrentTimerState();
     await window.api.tournaments.setTimerState(prevId, prevTimerState);
   } catch (err) {
-    // v2.1.18-meas1 error:caught:switchActive.preserveTimerState
-    try { window.api?.log?.write?.('error:caught:switchActive.preserveTimerState', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('切替前 timerState 保存失敗:', err);
   }
 
@@ -4271,8 +4196,6 @@ async function handleTournamentSelectChange() {
     current.id = prevId;
     await window.api.tournaments.save(current);
   } catch (err) {
-    // v2.1.18-meas1 error:caught:switchActive.preserveForm
-    try { window.api?.log?.write?.('error:caught:switchActive.preserveForm', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('切替前の自動保存に失敗:', err);
   }
 
@@ -4310,8 +4233,6 @@ async function restoreActiveTimerStateFromStore(id, opts = {}) {
     }
     applyTimerStateToTimer(found.timerState, levels, { silent: !!opts.silent });
   } catch (err) {
-    // v2.1.18-meas1 error:caught:restoreActiveTimerStateFromStore
-    try { window.api?.log?.write?.('error:caught:restoreActiveTimerStateFromStore', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('timerState 復元失敗:', err);
   }
 }
@@ -5366,8 +5287,6 @@ function getMixUnionFields() {
 //   ヘルパは text/number/textarea/contentEditable のみ true（checkbox/radio/button は除外、
 //   ブレイクチェックボックス change → 再描画 skip バグの fix8 修正を踏襲）。
 function renderBlindsTable() {
-  // v2.1.18-meas1 perf:dom:rebuild: ブラインド表全体を rebuild する処理時間を rolling-log に記録
-  const _t0 = performance.now();
   if (!el.blindsTbody || !blindsEditor.draft) return;
   if (isUserTypingInInput() && el.settingsDialog?.contains?.(document.activeElement)) {
     return;
@@ -5389,8 +5308,6 @@ function renderBlindsTable() {
   // STEP 10 フェーズB.fix6: 再描画後に readonly 状態を反映（新規生成された input/button にも disabled 伝播）
   const isBuiltin = !blindsEditor.meta || blindsEditor.meta.builtin;
   setBlindsTableReadonly(isBuiltin);
-  // v2.1.18-meas1 perf:dom:rebuild: 出口で経過時間を記録
-  try { window.api?.log?.write?.('perf:dom:rebuild', { fn: 'renderBlindsTable', ms: performance.now() - _t0, rows: blindsEditor.draft.levels.length }); } catch (_) {}
 }
 
 // 1行分の <tr> を生成（構造型のフィールドリストで列を動的に）
@@ -6734,8 +6651,6 @@ window.addEventListener('keydown', (event) => {
     target.tagName === 'SELECT' ||
     target.isContentEditable
   )) return;
-  // v2.1.18-meas1 ui:keypress: ローカル keydown を rolling-log に記録（renderer 側、operator/operator-solo 経路）
-  try { window.api?.log?.write?.('ui:keypress', { key: event.key, code: event.code, ctrl: !!event.ctrlKey, shift: !!event.shiftKey, ctx: 'renderer:local-keydown', role: window.appRole }); } catch (_) {}
   dispatchClockShortcut(event);
 });
 
@@ -6747,8 +6662,6 @@ window.addEventListener('keydown', (event) => {
 if (typeof window !== 'undefined' && window.appRole === 'operator') {
   window.api?.dual?.onHallForwardedKey?.((data) => {
     if (!data || typeof data.code !== 'string') return;
-    // v2.1.18-meas1 ui:keypress: hall から IPC 経由で転送されたキー（operator が処理する系統）
-    try { window.api?.log?.write?.('ui:keypress', { key: data.key, code: data.code, ctrl: !!data.control, shift: !!data.shift, ctx: 'renderer:hall-forwarded', role: window.appRole }); } catch (_) {}
     dispatchClockShortcut({
       code: data.code,
       key: data.key,
@@ -7161,31 +7074,17 @@ async function loadInitialSettings() {
 //   IPC 経路（preload.js: getVersion → main.js: ipcMain.handle('app:getVersion', ...)）は
 //   既に正常実装済のため、renderer 側の関数切り出しと initialize() からの呼出のみで根治。
 async function loadAppVersion() {
-  let _versionForBadge = '';
   if (el.appVersion && window.api?.app?.getVersion) {
     try {
       const version = await window.api.app.getVersion();
-      _versionForBadge = version || '';
       el.appVersion.textContent = version;
     } catch (err) {
-      try { window.api?.log?.write?.('error:caught:loadAppVersion', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('バージョン取得に失敗:', err);
       el.appVersion.textContent = '0.1.0';
     }
   } else if (el.appVersion) {
     el.appVersion.textContent = '0.1.0';
   }
-  // v2.1.18-meas1: 計測ビルド識別バッジ。version が `-meas` / `-rc` のいずれも含まない（本番版）なら非表示。
-  //   `-meas1` / `-meas2` 等の連番にも対応するため `-meas\d*$` で末尾マッチ。
-  //   v2.1.19-rc1: 試験ビルド（rc）でも計測機構を完全保持するため `-rc\d+$` を OR で許容（前原さん向け
-  //   試験ビルドの可視識別目的、本番版 `2.1.19` 等には影響なし）。
-  try {
-    const _v = _versionForBadge || '';
-    if (!(/-meas\d*$/.test(_v) || /-rc\d+$/.test(_v))) {
-      const badge = document.getElementById('meas-build-badge');
-      if (badge) badge.style.display = 'none';
-    }
-  } catch (_) { /* never throw */ }
 }
 
 async function initialize() {

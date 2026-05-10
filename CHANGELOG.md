@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.19-rc2] - 2026-05-10
+
+PokerTimerPLUS+ v2.1.19-rc2 試験ビルド（前原さん実機確認用、配布なし）。v2.1.19-rc1 の重さ根治機構を完全保持しつつ、v2.1.18-meas1 で追加した計測機構（バッジ + 15 ラベル + Ctrl+Shift+L 拡張）を全撤去。本番 v2.1.19 リリース直前の最終形態。
+
+### Removed
+- 計測ビルド黄色バッジ（HTML + CSS + 表示分岐）
+- 計測ラベル 15 個（perf:* / state:transition / dual-sync:apply / meas:session:start / meas:capture / error:caught:* / ui:keypress / ui:click:major のうち meas1 追加分）
+- Ctrl+Shift+L 拡張（op 連番 + フォルダ自動表示）
+- preload.js の `_measuredInvoke` ラッパ（perf:ipc:roundtrip 計測用）
+- main.js の 30 秒間隔 `perf:memory:rss` setInterval
+
+### Maintained
+- v2.1.19-rc1 重さ根治機構（setInterval 撤廃 + Promise dedup）完全保持
+- 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構すべて完全保持
+- Ctrl+Shift+L の基本ログ保存機能（v2.0 系基本機能）維持
+- 単画面モード完全互換
+
+---
+
 ## [2.1.19-rc1] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.19-rc1 試験ビルド（前原さん実機専用、配布なし）。v2.1.18-meas1 計測ビルドで Op 1〜6 観測 → tournaments:list IPC 暴走（1.5〜28.8 回/秒）の真因特定 → setInterval 主犯撤廃 + Promise dedup の最小修正で 90% 改善見込みを実装。計測機構 (バッジ + 15 ラベル + Ctrl+Shift+L 保存) は効果計測のため完全保持。

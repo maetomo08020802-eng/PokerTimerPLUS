@@ -53,33 +53,13 @@ export function subscribe(listener) {
 
 function notify(prev) {
   const snapshot = getState();
-  // v2.1.18-meas1 perf:state:notify: 全購読者通知ループの所要時間を rolling-log に記録（hall / operator / main 共通）
-  const _t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
   for (const listener of subscribers) {
     try {
       listener(snapshot, prev);
     } catch (err) {
-      // v2.1.18-meas1 error:caught:state.notify: subscriber 内 throw を rolling-log に記録
-      try {
-        if (typeof window !== 'undefined' && window.api?.log?.write) {
-          window.api.log.write('error:caught:state.notify', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] });
-        }
-      } catch (_) {}
       console.warn('状態購読者でエラー発生:', err);
     }
   }
-  try {
-    if (typeof window !== 'undefined' && window.api?.log?.write) {
-      const _ms = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : 0) - _t0;
-      window.api.log.write('perf:state:notify', { ms: _ms, count: subscribers.size, role: window.appRole || 'main' });
-    }
-  } catch (_) {}
-  // v2.1.18-meas1 state:transition: status 変化を edge イベントとして rolling-log に記録
-  try {
-    if (prev && prev.status !== snapshot.status && typeof window !== 'undefined' && window.api?.log?.write) {
-      window.api.log.write('state:transition', { from: prev.status, to: snapshot.status, levelIdx: snapshot.currentLevelIndex });
-    }
-  } catch (_) {}
 }
 
 function isValidStatus(status) {

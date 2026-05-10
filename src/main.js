@@ -33,10 +33,6 @@ const WINDOW_TITLE = 'PokerTimerPLUS+ — presented by Yu Shitamachi';
 
 const isDev = process.env.NODE_ENV === 'development';
 
-// v2.1.18-meas1 Fix 4: Ctrl+Shift+L で rolling-current.log のスナップショットを別ファイル保存する際の連番カウンタ。
-//   app セッション開始時 0、押下のたびに increment して `op-{NN}-{timestamp}.log` のファイル名を生成。
-let _measOpCounter = 0;
-
 // ============================================================
 // v2.0.4-rc15 タスク 2: 5 分 rolling ログ機構（案 A 単一ファイル + 30s 切捨）
 // ============================================================
@@ -1534,55 +1530,17 @@ function toggleDevTools() {
 }
 
 function registerShortcuts() {
-  // v2.1.18-meas1 ui:keypress: globalShortcut のキー押下を rolling-log に記録（main プロセス）
-  globalShortcut.register('F11', () => {
-    try { rollingLog('ui:keypress', { key: 'F11', ctx: 'main:globalShortcut' }); } catch (_) {}
-    toggleFullScreen();
-  });
-  globalShortcut.register('CommandOrControl+Q', () => {
-    try { rollingLog('ui:keypress', { key: 'CommandOrControl+Q', ctx: 'main:globalShortcut' }); } catch (_) {}
-    confirmQuit();
-  });
+  globalShortcut.register('F11', toggleFullScreen);
+  globalShortcut.register('CommandOrControl+Q', confirmQuit);
   // STEP 6.21: 配布版（isDev=false）でも F12 で DevTools を開けるよう常時登録
   // before-input-event 側にもフォールバックを置いてあるので二重登録だが副作用なし
-  globalShortcut.register('F12', () => {
-    try { rollingLog('ui:keypress', { key: 'F12', ctx: 'main:globalShortcut' }); } catch (_) {}
-    toggleDevTools();
-  });
+  globalShortcut.register('F12', toggleDevTools);
   // v2.0.4-rc22 タスク 2（問題 ⑩ 案 ⑩-A）:
   //   タイマー画面消失時にも UI 不要でログフォルダを開けるようにする救済策。
   //   _flushRollingLog で in-memory buffer を確実にディスクに反映してから shell.openPath。
   //   rc18 第 1 弾の I/O 順序保証維持のため、必ず await で待つ。
-  // v2.1.18-meas1 Fix 4: 既存 Ctrl+Shift+L 機構を「拡張」。flush + フォルダオープンに加えて、
-  //   押下時点の rolling-current.log のスナップショットを `op-{NN}-{ISO timestamp}.log` 形式で別保存する。
-  //   保存仕様:
-  //     - `_measOpCounter` は app セッション開始時 0、押下のたびに increment（1, 2, 3, ...）
-  //     - ファイル名: `op-{counter:02d}-{ISO}.log`（ISO は : と . と Z を除去）
-  //     - ヘッダ行: `# captured at ISO / op N / version vX.Y.Z` を先頭に付与
-  //     - rollingLog('meas:capture') で保存先パスを記録（テスト・分析用）
-  //   既存の「フォルダを開く」動作は維持（前原さんが保存した op-NN ファイルをすぐ確認できるよう）。
   globalShortcut.register('CommandOrControl+Shift+L', async () => {
-    try { rollingLog('ui:keypress', { key: 'CommandOrControl+Shift+L', ctx: 'main:globalShortcut' }); } catch (_) {}
     try { await _flushRollingLog(); } catch (_) { /* never throw from logging */ }
-    // v2.1.18-meas1: スナップショット保存
-    try {
-      _measOpCounter++;
-      const isoRaw = new Date().toISOString();
-      const isoForName = isoRaw.replace(/[:.]/g, '').replace(/Z$/, '');
-      const fname = `op-${String(_measOpCounter).padStart(2, '0')}-${isoForName}.log`;
-      const logsDir = _resolveLogsDir();
-      if (logsDir) {
-        const dst = path.join(logsDir, fname);
-        const src = path.join(logsDir, 'rolling-current.log');
-        const header = `# captured at ${isoRaw} / op ${_measOpCounter} / version ${app.getVersion()}\n`;
-        const content = await fs.promises.readFile(src, 'utf8').catch(() => '');
-        await fs.promises.writeFile(dst, header + content);
-        rollingLog('meas:capture', { op: _measOpCounter, file: fname });
-      }
-    } catch (e) {
-      // v2.1.18-meas1 error:caught:meas:capture
-      try { rollingLog('error:caught:meas:capture', { message: e?.message }); } catch (_) {}
-    }
     try {
       const dir = _resolveLogsDir();
       if (dir) shell.openPath(dir);
@@ -2735,8 +2693,6 @@ function registerIpcHandlers() {
       _publishDualState('preStartState', sanitized);
     } catch (err) {
       try { rollingLog('preStart:publish-error', { message: err && err.message }); } catch (_) {}
-      // v2.1.18-meas1 error:caught:main.dual.publishPreStartState
-      try { rollingLog('error:caught:main.dual.publishPreStartState', { message: err && err.message, stack_top: (err && err.stack || '').split('\n')[1] }); } catch (_) {}
     }
   });
 
@@ -2799,30 +2755,6 @@ app.whenReady().then(async () => {
   // v2.0.4-rc15 タスク 2: rolling ログ初期化 + app:ready 記録（最初のイベント）
   _initRollingLog();
   rollingLog('app:ready', { version: app.getVersion(), isPackaged: app.isPackaged });
-
-  // v2.1.18-meas1 meas:session:start: セッション情報（version / electron / displays）を 1 回だけ記録
-  try {
-    rollingLog('meas:session:start', {
-      version: app.getVersion(),
-      electronVersion: process.versions.electron,
-      nodeVersion: process.versions.node,
-      platform: process.platform,
-      arch: process.arch,
-      displays: screen.getAllDisplays().map((d) => ({ id: d.id, bounds: d.bounds, scaleFactor: d.scaleFactor }))
-    });
-  } catch (_) {}
-
-  // v2.1.18-meas1 perf:memory:rss: 30 秒間隔で main プロセスメモリ使用量を記録（メモリリーク観測）
-  const _memoryRssTimer = setInterval(() => {
-    try {
-      const m = process.memoryUsage();
-      rollingLog('perf:memory:rss', {
-        rss_mb: Math.round(m.rss / 1024 / 1024),
-        heap_mb: Math.round(m.heapUsed / 1024 / 1024)
-      });
-    } catch (_) {}
-  }, 30000);
-  if (typeof _memoryRssTimer.unref === 'function') _memoryRssTimer.unref();
 
   if (!isDev) {
     Menu.setApplicationMenu(null);

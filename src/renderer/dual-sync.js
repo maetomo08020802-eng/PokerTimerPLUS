@@ -34,8 +34,6 @@ function _applyDiffToState(diff) {
   if (!diff || typeof diff !== 'object' || typeof diff.kind !== 'string') return;
   const { kind, value } = diff;
   if (value === undefined) return;
-  // v2.1.18-meas1 dual-sync:apply: kind 別 apply を rolling-log に記録（hall / operator 共通）
-  try { window.api?.log?.write?.('dual-sync:apply', { kind, role: typeof window !== 'undefined' ? window.appRole : 'main' }); } catch (_) {}
   // v2.0.4-rc17: 常時 3 ラベル rolling ログ #2（hall 受信 ts、timerState のみ）
   if (kind === 'timerState') {
     try { window.api?.log?.write?.('timer:state:recv:hall', { status: value?.status, level: value?.currentLevel, elapsed: value?.elapsedSecondsInLevel, role: window.appRole }); } catch (_) { /* never throw from logging */ }
@@ -52,11 +50,7 @@ function _applyDiffToState(diff) {
   // 2. hall 側 renderer の動的反映（registerDualDiffHandler で登録済の場合のみ）
   if (_diffHandler) {
     try { _diffHandler(diff); }
-    catch (err) {
-      // v2.1.18-meas1 error:caught:dual-sync.diffHandler
-      try { window.api?.log?.write?.('error:caught:dual-sync.diffHandler', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
-      console.warn('[dual-sync] diff handler error:', err);
-    }
+    catch (err) { console.warn('[dual-sync] diff handler error:', err); }
   }
 }
 
@@ -215,8 +209,6 @@ export async function initDualSyncForHall() {
   try {
     initial = await dual.fetchInitialState();
   } catch (err) {
-    // v2.1.18-meas1 error:caught:dual-sync.fetchInitialState
-    try { window.api?.log?.write?.('error:caught:dual-sync.fetchInitialState', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('[dual-sync] 初期状態取得に失敗:', err);
     initial = null;
   }

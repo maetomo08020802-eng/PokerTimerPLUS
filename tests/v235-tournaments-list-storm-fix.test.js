@@ -36,7 +36,7 @@ function test(name, fn) {
 // version assertion
 // ============================================================
 test('version: package.json の version が 2.1.19-rc1', () => {
-  assert.equal(PKG.version, '2.1.19-rc1', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.1.19-rc2', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -123,40 +123,42 @@ test('T5: _tournamentsListDedup が _tournamentsListInFlight チェック + fina
 });
 
 // ============================================================
-// T6: v2.1.18-meas1 計測機構（バッジ + 15 ラベル + Ctrl+Shift+L op-{NN} 保存）すべて完全保持
+// T6: v2.1.19-rc2: v2.1.18-meas1 計測機構の **撤去** 確認（旧 meas1 機構保持 → 撤去 反転）
 // ============================================================
-test('T6: v2.1.18-meas1 計測機構（バッジ + 15 ラベル + Ctrl+Shift+L op-{NN} 保存）完全保持', () => {
-  // バッジ
-  assert.match(INDEX_HTML, /<div\s+id="meas-build-badge">\s*計測ビルド\s*<\/div>/,
-    '計測バッジ <div id="meas-build-badge"> が消失');
-  assert.ok(STYLE_CSS.includes('#meas-build-badge'), '計測バッジ CSS が消失');
-  // パフォーマンス系 6 ラベル
+// 旧 v2.1.19-rc1 時点: 計測機構保持を assert
+// 新 v2.1.19-rc2 以降: 計測機構撤去を assert
+//   meas1 / rc1 ビルドでは保持されているため skip、rc2 / 本番版でのみ撤去 verify
+test('T6: v2.1.18-meas1 計測機構（バッジ + 15 ラベル + Ctrl+Shift+L op-{NN} 保存）すべて撤去', () => {
+  if (/-(meas\d+|rc1)$/.test(PKG.version || '')) return;   // meas1 / rc1 では保持中、skip
+  // バッジ撤去
+  assert.ok(!INDEX_HTML.includes('meas-build-badge'),
+    'index.html に meas-build-badge が残存（撤去未完了）');
+  assert.ok(!STYLE_CSS.includes('#meas-build-badge'), 'style.css に #meas-build-badge セレクタが残存');
+  // パフォーマンス系 6 ラベル撤去
   const perfLabels = ['perf:render:duration', 'perf:ipc:roundtrip', 'perf:tick:fps', 'perf:memory:rss', 'perf:state:notify', 'perf:dom:rebuild'];
   const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
   for (const lbl of perfLabels) {
-    assert.ok(ALL_SRC.includes(lbl), `パフォーマンス系ラベル ${lbl} が消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `パフォーマンス系ラベル ${lbl} が残存（Fix 2 撤去未完了）`);
   }
-  // バグ発見系新規 4 ラベル
+  // バグ発見系新規 4 ラベル撤去
   const bugLabels = ['state:transition', 'dual-sync:apply', 'meas:session:start', 'meas:capture'];
   for (const lbl of bugLabels) {
-    assert.ok(ALL_SRC.includes(lbl), `バグ発見系ラベル ${lbl} が消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `バグ発見系ラベル ${lbl} が残存`);
   }
-  // Ctrl+Shift+L 拡張（_measOpCounter + op-{NN}）
-  assert.match(MAIN_JS, /let\s+_measOpCounter\s*=\s*0/, '_measOpCounter 変数定義が消失');
-  assert.match(MAIN_JS, /op-\$\{String\(_measOpCounter\)\.padStart\(2,\s*['"]0['"]\)\}-/,
-    'op-{NN}-{timestamp}.log 命名パターンが消失');
-  // error:caught:* 10 件以上
+  // Ctrl+Shift+L 拡張（_measOpCounter + op-{NN}）撤去
+  assert.ok(!MAIN_JS.includes('_measOpCounter'),
+    'main.js に _measOpCounter が残存（Fix 3 拡張撤去未完了）');
+  // error:caught:* meas1 追加分すべて撤去（v2.1.18 以前から存在のもの含めゼロ件 — meas1 で全部追加されたため）
   const errCatchMatches = ALL_SRC.match(/['"]error:caught:[a-zA-Z][\w:.-]*['"]/g) || [];
-  assert.ok(errCatchMatches.length >= 10, `error:caught:* が ${errCatchMatches.length} 件（10 件以上必要）`);
-  // ui:keypress 5 件以上
-  const keypressMatches = (RENDERER + MAIN_JS).match(/['"]ui:keypress['"]/g) || [];
-  assert.ok(keypressMatches.length >= 5, `ui:keypress が ${keypressMatches.length} 件（5 件以上必要）`);
-  // ui:click:major 8 件以上
-  const clickMatches = RENDERER.match(/['"]ui:click:major['"]/g) || [];
-  assert.ok(clickMatches.length >= 8, `ui:click:major が ${clickMatches.length} 件（8 件以上必要）`);
-  // バッジ表示分岐: -meas / -rc どちらも許容（rc1 試験ビルドでもバッジを表示）
-  assert.match(RENDERER, /-meas\\d\*\$/, 'loadAppVersion の -meas\\d*$ regex が消失');
-  assert.match(RENDERER, /-rc\\d\+\$/, 'loadAppVersion の -rc\\d+$ regex が消失（試験ビルド可視識別）');
+  assert.equal(errCatchMatches.length, 0, `error:caught:* が ${errCatchMatches.length} 件残存（meas1 追加分撤去未完了）`);
+  // ui:keypress / ui:click:major 撤去
+  const keypressMatches = ALL_SRC.match(/['"]ui:keypress['"]/g) || [];
+  assert.equal(keypressMatches.length, 0, `ui:keypress が ${keypressMatches.length} 件残存`);
+  const clickMatches = ALL_SRC.match(/['"]ui:click:major['"]/g) || [];
+  assert.equal(clickMatches.length, 0, `ui:click:major が ${clickMatches.length} 件残存`);
+  // バッジ表示分岐: -meas / -rc 検出 regex も撤去
+  assert.ok(!/-meas\\d\*\$/.test(RENDERER),
+    'loadAppVersion に -meas\\d*$ regex が残存（バッジ表示分岐の撤去未完了）');
 });
 
 // ============================================================

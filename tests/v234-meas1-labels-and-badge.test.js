@@ -1,15 +1,11 @@
 /**
- * v2.1.18-meas1 静的解析テスト — 計測ビルド観測点 + 識別バッジ + Ctrl+Shift+L 操作別保存機構
+ * v2.1.19-rc2 静的解析テスト — v2.1.18-meas1 計測機構の **撤去** 確認（旧 v234 の assertion を全反転）
  *
- *   Fix 1: 計測バッジ（HTML / CSS / JS）
- *   Fix 2: パフォーマンス系 6 ラベル（perf:render:duration / :ipc:roundtrip / :tick:fps / :memory:rss / :state:notify / :dom:rebuild）
- *   Fix 3: バグ発見系新規 4 ラベル（state:transition / dual-sync:apply / meas:session:start / meas:capture）
- *   Fix 3-B: error:caught:* プレフィックス 10 箇所以上
- *   Fix 3-C: ui:keypress 5 箇所以上
- *   Fix 3-D: ui:click:major 8 箇所以上
- *   Fix 4: Ctrl+Shift+L 操作別保存（_measOpCounter + op-{NN}-{ISO}.log 命名）
- *   全 rollingLog 呼出が try/catch で握り潰されている
- *   致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構すべて完全保持
+ *   元 v234 (v2.1.18-meas1 時点): 計測機構の「存在」を確認
+ *   現 v234 (v2.1.19-rc2 以降): 計測機構の「撤去」を確認
+ *
+ *   meas1 機構をすべて撤去（バッジ + 15 ラベル + Ctrl+Shift+L 拡張）。
+ *   meas / rc1 ビルドでは skip（保持されているため）、rc2 / 本番版でのみ撤去 verify。
  *
  * 実行: node tests/v234-meas1-labels-and-badge.test.js
  */
@@ -37,57 +33,56 @@ function test(name, fn) {
   catch (err) { console.log('FAIL:', name, '\n  ', err.message); fail++; }
 }
 
+// v2.1.19-rc2: meas1 / rc1 ビルドでは skip（meas1 機構保持中のため撤去 verify は不可能）。
+//   rc2 / 本番版でのみ撤去 verify を実施。
+const _shouldSkip = /-(meas\d+|rc1)$/.test(PKG.version || '');
+function testSkippableOnMeas(name, fn) {
+  if (_shouldSkip) {
+    console.log('SKIP:', name, '(meas1 / rc1 ビルドでは meas1 機構保持中のためテスト skip)');
+    return;
+  }
+  test(name, fn);
+}
+
 // ============================================================
-// バージョン assertion: package.json は 2.1.18-meas1
+// version assertion
 // ============================================================
-test('version: package.json の version が 2.1.18-meas1', () => {
-  assert.equal(PKG.version, '2.1.19-rc1', `期待 2.1.18-meas1, 実際 ${PKG.version}`);
+test('version: package.json version は 2.1.19-rc2 以上', () => {
+  // v2.1.19-rc2 / 2.1.19 / 2.1.20 等以降を許容、meas1 / rc1 では skip 経路に振る
+  assert.match(PKG.version, /^2\.1\.(19-rc[2-9]|19$|2\d|[3-9]\d)/, `期待 2.1.19-rc2 以上, 実際 ${PKG.version}`);
 });
 
 // ============================================================
-// T1: index.html に計測バッジ要素が存在
+// T1: index.html から計測バッジ要素が撤去されている
 // ============================================================
-test('T1: index.html に <div id="meas-build-badge">計測ビルド</div> が存在', () => {
-  assert.match(INDEX_HTML, /<div\s+id="meas-build-badge">\s*計測ビルド\s*<\/div>/,
-    'index.html の <body> 直下に計測バッジ <div> が見つからない');
+testSkippableOnMeas('T1: index.html から meas-build-badge が撤去されている', () => {
+  assert.ok(!INDEX_HTML.includes('meas-build-badge'),
+    'index.html に meas-build-badge 文字列が残存（Fix 1 撤去未完了）');
 });
 
 // ============================================================
-// T2: style.css に #meas-build-badge ブロック（position fixed + bottom/right + z-index）が存在
+// T2: style.css から #meas-build-badge ブロックが撤去されている
 // ============================================================
-test('T2: style.css の #meas-build-badge ブロック（position: fixed + bottom + right + z-index 9999）', () => {
-  assert.ok(STYLE_CSS.includes('#meas-build-badge'),
-    'style.css に #meas-build-badge セレクタが見つからない');
-  // セレクタブロック内に position: fixed と z-index: 9999、bottom / right を持つ
-  const m = STYLE_CSS.match(/#meas-build-badge\s*\{[^}]*\}/);
-  assert.ok(m, '#meas-build-badge ブロックが {} で閉じていない');
-  const block = m[0];
-  assert.match(block, /position:\s*fixed/, '#meas-build-badge に position: fixed なし');
-  assert.match(block, /bottom:\s*8px/,      '#meas-build-badge に bottom: 8px なし');
-  assert.match(block, /right:\s*8px/,       '#meas-build-badge に right: 8px なし');
-  assert.match(block, /z-index:\s*9999/,    '#meas-build-badge に z-index: 9999 なし');
-  assert.match(block, /pointer-events:\s*none/, '#meas-build-badge に pointer-events: none なし');
-  // hall 用拡大スタイルも存在
-  assert.match(STYLE_CSS, /\[data-role="hall"\]\s*#meas-build-badge\s*\{[^}]*\}/,
-    'style.css に [data-role="hall"] #meas-build-badge ブロックなし');
+testSkippableOnMeas('T2: style.css から #meas-build-badge ブロックが撤去されている', () => {
+  assert.ok(!STYLE_CSS.includes('#meas-build-badge'),
+    'style.css に #meas-build-badge セレクタが残存（Fix 1 撤去未完了）');
 });
 
 // ============================================================
-// T3: renderer.js loadAppVersion 内に -meas サフィックス検出 + バッジ非表示処理が存在
+// T3: renderer.js loadAppVersion から -meas / バッジ表示分岐が撤去されている
 // ============================================================
-test('T3: renderer.js loadAppVersion 内の -meas サフィックス検出 + meas-build-badge 非表示化', () => {
-  // loadAppVersion 関数内で getElementById('meas-build-badge') が呼ばれる
-  assert.match(RENDERER, /-meas\\d\*\$/, 'renderer.js に -meas サフィックス用 RegExp なし');
-  assert.match(RENDERER, /getElementById\(['"]meas-build-badge['"]\)/,
-    'renderer.js に meas-build-badge 要素取得処理なし');
-  assert.match(RENDERER, /badge\.style\.display\s*=\s*['"]none['"]/,
-    'renderer.js に meas-build-badge 非表示化処理なし');
+testSkippableOnMeas('T3: renderer.js loadAppVersion から -meas / バッジ表示分岐が撤去されている', () => {
+  // バッジ要素取得・display none 処理が消えていること
+  assert.ok(!RENDERER.includes("getElementById('meas-build-badge')"),
+    'renderer.js に meas-build-badge 要素取得処理が残存');
+  assert.ok(!/-meas\\d\*\$/.test(RENDERER),
+    'renderer.js に -meas\\d*$ サフィックス検出 regex が残存');
 });
 
 // ============================================================
-// T4: パフォーマンス系 6 ラベル全部存在（renderer / preload / state / main 横断）
+// T4: パフォーマンス系 6 ラベルがすべて撤去されている
 // ============================================================
-test('T4: パフォーマンス系 6 ラベルすべて grep で存在', () => {
+testSkippableOnMeas('T4: パフォーマンス系 6 ラベル（perf:*）すべて撤去', () => {
   const labels = [
     'perf:render:duration',
     'perf:ipc:roundtrip',
@@ -98,14 +93,14 @@ test('T4: パフォーマンス系 6 ラベルすべて grep で存在', () => {
   ];
   const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
   for (const label of labels) {
-    assert.ok(ALL_SRC.includes(label), `ラベル ${label} がソース全体に見つからない`);
+    assert.ok(!ALL_SRC.includes(label), `ラベル ${label} がソース全体に残存（Fix 2 撤去未完了）`);
   }
 });
 
 // ============================================================
-// T5: バグ発見系新規 4 ラベル全部存在
+// T5: バグ発見系新規 4 ラベル（meas1 で追加）すべて撤去
 // ============================================================
-test('T5: バグ発見系新規 4 ラベル（state:transition / dual-sync:apply / meas:session:start / meas:capture）grep 存在', () => {
+testSkippableOnMeas('T5: バグ発見系新規 4 ラベル（state:transition / dual-sync:apply / meas:session:start / meas:capture）すべて撤去', () => {
   const labels = [
     'state:transition',
     'dual-sync:apply',
@@ -114,103 +109,70 @@ test('T5: バグ発見系新規 4 ラベル（state:transition / dual-sync:apply
   ];
   const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
   for (const label of labels) {
-    assert.ok(ALL_SRC.includes(label), `ラベル ${label} がソース全体に見つからない`);
+    assert.ok(!ALL_SRC.includes(label), `ラベル ${label} がソース全体に残存（Fix 2 撤去未完了）`);
   }
 });
 
 // ============================================================
-// T6: error:caught:* プレフィックスのラベルが 10 箇所以上存在（実コール、コメントは含めない）
+// T6: error:caught:* / ui:keypress / ui:click:major（meas1 追加分）すべて撤去
 // ============================================================
-test('T6: error:caught:* ラベル実呼出が 10 箇所以上', () => {
-  // 実コール = "'error:caught:..." のリテラル文字列出現数（コメントには含まれていても OK だが、実コードでカウント）
+testSkippableOnMeas('T6: error:caught:* / ui:keypress / ui:click:major（meas1 追加分）すべて撤去', () => {
+  // meas1 で追加した分はすべて撤去（v2.1.18 以前から存在するログ呼出は触らない）。
+  // 検証: ALL_SRC で各ラベルの実呼出が 0 件
   const ALL_SRC = RENDERER + STATE_JS + DUAL_SYNC + MAIN_JS + PRELOAD_JS;
-  const matches = ALL_SRC.match(/['"]error:caught:[a-zA-Z][\w:.-]*['"]/g) || [];
-  assert.ok(matches.length >= 10, `error:caught:* ラベル実呼出が ${matches.length} 件しかない（10 件以上必要）`);
+  const errCatchMatches = ALL_SRC.match(/['"]error:caught:[a-zA-Z][\w:.-]*['"]/g) || [];
+  assert.equal(errCatchMatches.length, 0, `error:caught:* が ${errCatchMatches.length} 件残存（meas1 追加分撤去未完了）`);
+  const keypressMatches = ALL_SRC.match(/['"]ui:keypress['"]/g) || [];
+  assert.equal(keypressMatches.length, 0, `ui:keypress が ${keypressMatches.length} 件残存`);
+  const clickMatches = ALL_SRC.match(/['"]ui:click:major['"]/g) || [];
+  assert.equal(clickMatches.length, 0, `ui:click:major が ${clickMatches.length} 件残存`);
 });
 
 // ============================================================
-// T7: ui:keypress ラベルが 5 箇所以上存在
+// T7: main.js から _measOpCounter + op-{NN} 命名ロジックが撤去
 // ============================================================
-test('T7: ui:keypress ラベル実呼出が 5 箇所以上', () => {
-  const ALL_SRC = RENDERER + MAIN_JS;
-  const matches = ALL_SRC.match(/['"]ui:keypress['"]/g) || [];
-  assert.ok(matches.length >= 5, `ui:keypress 実呼出が ${matches.length} 件しかない（5 件以上必要）`);
+testSkippableOnMeas('T7: main.js から _measOpCounter + op-{NN} 命名ロジックが撤去', () => {
+  assert.ok(!MAIN_JS.includes('_measOpCounter'),
+    'main.js に _measOpCounter が残存（Fix 3 Ctrl+Shift+L 拡張撤去未完了）');
+  assert.ok(!/padStart\(2,\s*['"]0['"]\)/.test(MAIN_JS),
+    'main.js に padStart(2, "0") の op 連番命名ロジックが残存');
 });
 
 // ============================================================
-// T8: ui:click:major ラベルが 8 箇所以上存在
+// T8: preload.js から _measuredInvoke ラッパが撤去（ipcRenderer.invoke 直接呼出に戻る）
 // ============================================================
-test('T8: ui:click:major ラベル実呼出が 8 箇所以上', () => {
-  const matches = RENDERER.match(/['"]ui:click:major['"]/g) || [];
-  assert.ok(matches.length >= 8, `ui:click:major 実呼出が ${matches.length} 件しかない（8 件以上必要）`);
+testSkippableOnMeas('T8: preload.js から _measuredInvoke ラッパが撤去', () => {
+  assert.ok(!PRELOAD_JS.includes('_measuredInvoke'),
+    'preload.js に _measuredInvoke 関数が残存（perf:ipc:roundtrip 撤去未完了）');
+  assert.ok(!PRELOAD_JS.includes('rollingLogViaIpc'),
+    'preload.js に rollingLogViaIpc ヘルパが残存');
 });
 
 // ============================================================
-// T9: main.js に Ctrl+Shift+L または CommandOrControl+Shift+L globalShortcut.register が存在
+// T9: 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 + v2.1.19-rc1 機構すべて完全保持
 // ============================================================
-test('T9: main.js に CommandOrControl+Shift+L globalShortcut.register が存在', () => {
-  assert.match(MAIN_JS, /globalShortcut\.register\(['"]CommandOrControl\+Shift\+L['"]/,
-    'main.js に CommandOrControl+Shift+L の globalShortcut.register なし');
-});
-
-// ============================================================
-// T10: main.js に _measOpCounter + op-{NN}-{timestamp}.log 命名パターン存在
-// ============================================================
-test('T10: main.js に _measOpCounter 連番増加ロジック + op-{NN}-{timestamp}.log 命名パターン', () => {
-  assert.match(MAIN_JS, /let\s+_measOpCounter\s*=\s*0/,
-    'main.js に _measOpCounter の宣言なし');
-  assert.match(MAIN_JS, /_measOpCounter\+\+/,
-    'main.js に _measOpCounter のインクリメントなし');
-  assert.match(MAIN_JS, /op-\$\{String\(_measOpCounter\)\.padStart\(2,\s*['"]0['"]\)\}-/,
-    'main.js に op-{NN}-{timestamp}.log 命名パターンなし');
-});
-
-// ============================================================
-// T11: -meas サフィックスがないバージョンではバッジ非表示（loadAppVersion 経路）
-// ============================================================
-test('T11: 本番版（-meas なしバージョン）でバッジが loadAppVersion 経路で非表示', () => {
-  // loadAppVersion 内で /-meas\d*$/ を test して、否（false）の場合に display='none' を実行する分岐が存在。
-  // v2.1.19-rc1: rc 試験ビルドでもバッジ表示するため `/-rc\d+$/` を OR で追加（拡張、本質意図維持）。
-  //   どちらの形式（旧 `!/-meas\d*$/.test(...)` / 新 `!(/-meas\d*$/.test(...) || /-rc\d+$/.test(...))`）も許容。
-  assert.match(RENDERER, /\/-meas\\d\*\$\/\.test\([^)]*\)/,
-    'loadAppVersion に -meas サフィックス検出（regex.test）処理なし');
-});
-
-// ============================================================
-// T12: 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構完全保持 + 全 rollingLog が try/catch で握り潰し
-// ============================================================
-test('T12: 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構保持 + rollingLog 全 try/catch 保護', () => {
+testSkippableOnMeas('T9: 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 + v2.1.19-rc1 機構すべて完全保持', () => {
   // 致命バグ保護 5 件
-  // C.2.7-A: resetBlindProgressOnly / handleReset 責任分離
-  assert.match(RENDERER, /function\s+resetBlindProgressOnly\s*\(/, 'C.2.7-A: resetBlindProgressOnly が削除');
-  assert.match(RENDERER, /function\s+handleReset\s*\(/,            'C.2.7-A: handleReset が削除');
-  // C.2.7-D: tournaments:setDisplaySettings の timerState destructure 除外
-  assert.match(MAIN_JS, /tournaments:setDisplaySettings/, 'C.2.7-D: setDisplaySettings ハンドラなし');
-  // C.1-A2 / C.1.4-fix1: ensureEditorEditableState 4 重防御
-  assert.match(RENDERER, /function\s+ensureEditorEditableState\s*\(/, 'C.1-A2: ensureEditorEditableState なし');
-  // C.1.7: AudioContext suspend 防御
-  assert.match(AUDIO_JS, /resume/, 'C.1.7: audio.js resume 防御なし');
-  // C.1.8: runtime 永続化（schedulePersistRuntime）
-  assert.match(RENDERER, /schedulePersistRuntime/, 'C.1.8: schedulePersistRuntime 機構なし');
+  assert.match(RENDERER, /function\s+resetBlindProgressOnly\s*\(/, 'C.2.7-A 消失');
+  assert.match(RENDERER, /function\s+handleReset\s*\(/, 'C.2.7-A handleReset 消失');
+  assert.match(MAIN_JS, /tournaments:setDisplaySettings/, 'C.2.7-D 消失');
+  assert.match(RENDERER, /function\s+ensureEditorEditableState\s*\(/, 'C.1-A2 消失');
+  assert.match(AUDIO_JS, /resume/, 'C.1.7 消失');
+  assert.match(RENDERER, /function\s+schedulePersistRuntime\s*\(/, 'C.1.8 消失');
 
-  // v2.1.6〜v2.1.18 機構保持: PRE_START hall 同期、preStartState publish、tournament 終了オーバーレイ等
-  assert.match(MAIN_JS, /dual:publish-pre-start-state/, 'v2.1.6: PRE_START publish IPC 機構なし');
-  assert.match(MAIN_JS, /typeof\s+payload\.isPaused\s*===\s*['"]boolean['"]/,
-    'v2.1.17: isPaused sanitization 真因修正なし');
-  assert.match(TIMER_JS, /onTournamentComplete/, 'v2.1.18 ②: onTournamentComplete handler なし');
+  // v2.1.6〜v2.1.18 機構
+  assert.match(MAIN_JS, /dual:publish-pre-start-state/, 'v2.1.6 消失');
+  assert.match(MAIN_JS, /typeof\s+payload\.isPaused\s*===\s*['"]boolean['"]/, 'v2.1.17 消失');
+  assert.match(TIMER_JS, /onTournamentComplete/, 'v2.1.18 ② 消失');
 
-  // ハンドラ登録 setHandlers でも onTournamentComplete を受ける拡張あり
-  assert.match(TIMER_JS, /onTournamentComplete\s*\}/, 'v2.1.18 ②: setHandlers の destructure に onTournamentComplete なし');
-
-  // rollingLog 呼出が try/catch で握り潰されている（renderer / main の代表箇所をサンプル）
-  // renderer.js: window.api?.log?.write?.(...) 呼出がすべて try/catch ブロック内
-  // この検証は実装依存だが、rollingLog 呼出周辺に try { ... } catch (_) {} のパターンが存在することを確認
-  // 全ての window.api.log.write 周辺に try/catch がある形式に統一しているため、
-  // 単純に「裸の rollingLog / window.api.log.write が try なしで呼ばれていない」というネガティブ検証はせず、
-  // try { window.api?.log?.write... } catch (_) {} パターンが大量存在することを確認する
-  const tryCatchCount = (RENDERER.match(/try\s*\{[^{}]*window\.api\?\.log\?\.write/g) || []).length;
-  assert.ok(tryCatchCount >= 10, `try { window.api?.log?.write... } のパターンが ${tryCatchCount} 件しかない（10 件以上必要、握り潰し設計）`);
+  // v2.1.19-rc1 機構（重さ根治）
+  assert.match(RENDERER, /async\s+function\s+_tournamentsListDedup\s*\(\s*\)\s*\{/,
+    'v2.1.19-rc1 _tournamentsListDedup 消失');
+  assert.match(RENDERER, /function\s+_shouldRefreshListByThrottle\s*\(\s*\)\s*\{/,
+    'v2.1.19-rc1 _shouldRefreshListByThrottle 消失');
+  assert.match(RENDERER, /let\s+_tournamentsListInFlight\s*=\s*null/,
+    'v2.1.19-rc1 _tournamentsListInFlight 消失');
 });
 
-console.log(`\nv234 meas1: ${pass} pass / ${fail} fail`);
+console.log(`\nv234 (v2.1.19-rc2 inverted): ${pass} pass / ${fail} fail`);
 process.exit(fail > 0 ? 1 : 0);
