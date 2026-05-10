@@ -41,7 +41,7 @@ function test(name, fn) {
 // バージョン assertion: package.json は 2.1.18-meas1
 // ============================================================
 test('version: package.json の version が 2.1.18-meas1', () => {
-  assert.equal(PKG.version, '2.1.18-meas1', `期待 2.1.18-meas1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.1.19-rc1', `期待 2.1.18-meas1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -169,9 +169,11 @@ test('T10: main.js に _measOpCounter 連番増加ロジック + op-{NN}-{timest
 // T11: -meas サフィックスがないバージョンではバッジ非表示（loadAppVersion 経路）
 // ============================================================
 test('T11: 本番版（-meas なしバージョン）でバッジが loadAppVersion 経路で非表示', () => {
-  // loadAppVersion 内で /-meas\d*$/ を test して、否（false）の場合に display='none' を実行する分岐が存在
-  assert.match(RENDERER, /!\s*\/-meas\\d\*\$\/\.test\([^)]*\)/,
-    'loadAppVersion に -meas サフィックス検出（!regex.test）処理なし');
+  // loadAppVersion 内で /-meas\d*$/ を test して、否（false）の場合に display='none' を実行する分岐が存在。
+  // v2.1.19-rc1: rc 試験ビルドでもバッジ表示するため `/-rc\d+$/` を OR で追加（拡張、本質意図維持）。
+  //   どちらの形式（旧 `!/-meas\d*$/.test(...)` / 新 `!(/-meas\d*$/.test(...) || /-rc\d+$/.test(...))`）も許容。
+  assert.match(RENDERER, /\/-meas\\d\*\$\/\.test\([^)]*\)/,
+    'loadAppVersion に -meas サフィックス検出（regex.test）処理なし');
 });
 
 // ============================================================

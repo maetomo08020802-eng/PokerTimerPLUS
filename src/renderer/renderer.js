@@ -79,6 +79,22 @@ const tournamentRuntime = {
   addOnCount: 0
 };
 
+// v2.1.19-rc1 Promise dedup: 同時に走る tournaments.list 呼出を 1 本化、結果は全呼出元に共有。
+//   v2.1.18-meas1 観測で renderer 内 11+ 箇所の並列呼出が 4ms 差で重複発火し tournaments:list IPC が
+//   1.5〜28.8 Hz で暴走する真因の片翼を担っていた。in-flight Promise を 1 本化して `.finally` で reset、
+//   完了後の次回呼出は通常通り新規 fetch（キャッシュ stale 化リスクなし）。
+//   defensive: window.api.tournaments.list が未注入のケース（preload 失敗 / hall でも呼ばれた等）を
+//   no-op で吸収（既存の optional-chain 呼出経路と整合）。
+let _tournamentsListInFlight = null;
+async function _tournamentsListDedup() {
+  if (_tournamentsListInFlight) return _tournamentsListInFlight;
+  if (!window.api?.tournaments?.list) return [];
+  _tournamentsListInFlight = window.api.tournaments.list().finally(() => {
+    _tournamentsListInFlight = null;
+  });
+  return _tournamentsListInFlight;
+}
+
 // トーナメント基本情報（mutable、トーナメントタブで編集可）
 // electron-store 永続化、起動時 + 保存時に applyTournament で反映
 // STEP 3b 拡張: id を追加（複数保存対応、active トーナメントの参照）
@@ -1533,7 +1549,7 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
 async function fetchTimerState(id) {
   if (!id || !window.api?.tournaments) return null;
   try {
-    const list = await window.api.tournaments.list() || [];
+    const list = await _tournamentsListDedup() || [];
     const found = list.find((t) => t.id === id);
     return found?.timerState || null;
   } catch (_) { return null; }
@@ -1612,7 +1628,7 @@ async function periodicPersistAllRunning() {
   // STEP 10 フェーズC.1.1 Fix 2: トーナメント切替中は skip（active id 切替と periodic の race 防御）
   if (_tournamentSwitching) return;
   let list;
-  try { list = await window.api.tournaments.list() || []; } catch (_) { return; }
+  try { list = await _tournamentsListDedup() || []; } catch (_) { return; }
   for (const t of list) {
     const isActive = (t.id === tournamentState.id);
     let ts;
@@ -1640,18 +1656,30 @@ async function periodicPersistAllRunning() {
 }
 
 // STEP 6.21.2: リスト UI の 1秒ごとリアルタイム再描画（並行進行の経過時間を動的表示）
+// v2.1.19-rc1 主犯 1 撤廃: setInterval(renderTournamentList, 1000) を削除し subscribe 経由のイベント駆動 +
+//   1 秒 throttle に統一（v2.1.18-meas1 観測で tournaments:list IPC 暴走 1.5〜28.8 Hz を特定、setInterval が
+//   ベースライン 1 Hz の主犯と確認）。startListRefreshInterval / stopListRefreshInterval は呼出元互換のため
+//   関数定義を no-op として残す（呼出元の grep + 一括書換を避ける、本体動作に副作用なし）。
 let listRefreshInterval = null;
 function startListRefreshInterval() {
-  if (listRefreshInterval) return;
-  listRefreshInterval = setInterval(() => {
-    renderTournamentList().catch(() => {});
-  }, 1000);
+  // v2.1.19-rc1: no-op（subscribe 経由 + 1 秒 throttle に置換、setInterval は使わない）
 }
 function stopListRefreshInterval() {
+  // v2.1.19-rc1: no-op（setInterval を使わなくなったため clearInterval も不要）
   if (listRefreshInterval) {
     clearInterval(listRefreshInterval);
     listRefreshInterval = null;
   }
+}
+// v2.1.19-rc1 主犯 1 撤廃: subscribe 経由で renderTournamentList を呼ぶ際の 1 秒 throttle gate。
+//   旧 setInterval(renderTournamentList, 1000) の代わりに、subscribe で setState({remainingMs}) が
+//   60Hz で発火する経路上で 1 秒に 1 回だけ renderTournamentList を許可する。status / level 変化時は
+//   throttle を経由せず即時呼出（subscribe 内の独立 if 句で先に呼ばれる）。
+let _lastListRenderAt = 0;
+function _shouldRefreshListByThrottle() {
+  const now = Date.now();
+  if (now - _lastListRenderAt >= 1000) { _lastListRenderAt = now; return true; }
+  return false;
 }
 // v2.0.14 Fix 4（M3 / A-8）: schedulePersistRuntime の 500ms debounce 中に
 //   Alt+F4 / プロセス終了が走ると pending 操作が消失する。pending 時のみ flush 経路を発火。
@@ -1780,8 +1808,9 @@ subscribe((state, prev) => {
     (state.status === States.IDLE && (state.remainingMs !== prev.remainingMs || state.totalMs !== prev.totalMs))
   ) {
     schedulePersistTimerState();
-    // リスト UI も状態反映のため再描画（軽量）
-    renderTournamentList().catch(() => {});
+    // v2.1.19-rc1 主犯 1 撤廃: 旧コードでこのブロック内に renderTournamentList().catch(...) があったが、
+    //   下記の独立 throttle gate（_shouldRefreshListByThrottle）に統合。edge イベント時も throttle gate
+    //   が status/level 変化を検知して即時 renderTournamentList を呼ぶ。
     // STEP 10 フェーズC.1.4: 状態が変わったら autoEndedAt をクリア（次回 BREAK で再判定可能に）
     if (state.status !== prev.status) {
       slideshowState.autoEndedAt = null;
@@ -1807,6 +1836,12 @@ subscribe((state, prev) => {
   updateOperatorStatusBar(state);
   // v2.0.4-rc4: operator モードのみ支援パネル（運用情報）を更新（hall / operator-solo は no-op）
   updateOperatorPane(state);
+  // v2.1.19-rc1 主犯 1 撤廃: subscribe 経由で renderTournamentList を呼ぶ独立 gate。
+  //   status / level 変化時は即時呼出（throttle 経由しない）、それ以外は 1 秒に 1 回だけ許可。
+  //   旧 setInterval(renderTournamentList, 1000) を完全に置換、ベース 1 Hz の強制 fetch を廃止。
+  if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex || _shouldRefreshListByThrottle()) {
+    renderTournamentList().catch(() => {});
+  }
 });
 
 // v2.0.4-rc21 タスク 1（問題 ⑨ 案 ⑨-A）:
@@ -3933,7 +3968,7 @@ async function populateTournamentList() {
   if (!window.api?.tournaments) return;
   let list = [];
   try {
-    list = await window.api.tournaments.list() || [];
+    list = await _tournamentsListDedup() || [];
   } catch (err) {
     console.warn('トーナメント一覧取得失敗:', err);
   }
@@ -4011,7 +4046,7 @@ async function renderTournamentList(prefetched) {
   ensureTournamentListDelegation();
   let list = prefetched;
   if (!Array.isArray(list)) {
-    try { list = await window.api?.tournaments?.list() || []; } catch (_) { list = []; }
+    try { list = await _tournamentsListDedup() || []; } catch (_) { list = []; }
   }
   el.tournamentList.innerHTML = '';
   for (const t of list) {
@@ -4129,7 +4164,7 @@ async function handleTournamentListToggle(id, currentStatus) {
   }
   // 非アクティブ: list から live state を rebase してトグル
   let list = [];
-  try { list = await window.api.tournaments.list() || []; } catch (_) { return; }
+  try { list = await _tournamentsListDedup() || []; } catch (_) { return; }
   const t = list.find((x) => x.id === id);
   if (!t || !t.timerState) return;
   const levels = await getCachedLevels(t.blindPresetId);
@@ -4172,7 +4207,7 @@ async function loadTournamentIntoForm(id) {
   if (!window.api?.tournaments) return;
   let list = [];
   try {
-    list = await window.api.tournaments.list() || [];
+    list = await _tournamentsListDedup() || [];
   } catch (_) { /* ignore */ }
   const found = list.find((t) => t.id === id);
   if (!found) return;
@@ -4260,7 +4295,7 @@ async function handleTournamentSelectChange() {
 // opts.silent: true なら復元直後の音再生を抑止
 async function restoreActiveTimerStateFromStore(id, opts = {}) {
   try {
-    const list = await window.api.tournaments.list() || [];
+    const list = await _tournamentsListDedup() || [];
     const found = list.find((t) => t.id === id);
     if (!found) return;
     // ブラインド構造を切替（必要時）
@@ -4313,7 +4348,7 @@ async function _handleTournamentNewImpl() {
   // 事前に件数チェック + 既存名の取得（連番採番に使う）
   let existingList = [];
   try {
-    existingList = await window.api.tournaments.list() || [];
+    existingList = await _tournamentsListDedup() || [];
     if (existingList.length >= MAX_TOURNAMENTS) {
       window.alert(`トーナメントの保存数が上限（${MAX_TOURNAMENTS} 件）に達しています。\n不要なトーナメントを削除してから新規作成してください。`);
       setTournamentHint('上限到達のため新規作成できません', 'error');
@@ -4392,7 +4427,7 @@ async function handleTournamentDuplicate() {
 }
 async function _handleTournamentDuplicateImpl() {
   try {
-    const list = await window.api.tournaments.list() || [];
+    const list = await _tournamentsListDedup() || [];
     if (list.length >= MAX_TOURNAMENTS) {
       window.alert(`トーナメントの保存数が上限（${MAX_TOURNAMENTS} 件）に達しています。\n不要なトーナメントを削除してから複製してください。`);
       setTournamentHint('上限到達のため複製できません', 'error');
@@ -5039,7 +5074,7 @@ async function refreshPresetList() {
   // STEP 10 フェーズC.2.4 Fix 4: テンプレ ↔ トーナメントの紐づけマップを構築
   //   blindPresetId → tournament.name[] 。option の text に「『〇〇』で使用中」サフィックス付与
   let tournamentList = [];
-  try { tournamentList = await window.api?.tournaments?.list?.() || []; } catch (_) { /* 続行 */ }
+  try { tournamentList = await _tournamentsListDedup() || []; } catch (_) { /* 続行 */ }
   const usageMap = new Map();
   for (const t of tournamentList) {
     if (!t || typeof t.blindPresetId !== 'string') continue;
@@ -5825,7 +5860,7 @@ el.presetDelete?.addEventListener('click', async () => {
   //   ユーザーに削除の影響を明示してから確認を取る。
   let confirmMsg = `テンプレート「${deletedName}」を削除しますか？`;
   try {
-    const tournaments = await window.api.tournaments.list?.() || [];
+    const tournaments = await _tournamentsListDedup() || [];
     const usage = tournaments.filter((t) => t.blindPresetId === deletedId);
     if (usage.length > 0) {
       const names = usage.slice(0, 3).map((t) => `「${t.name || t.title || '(無題)'}」`).join('、');
@@ -7140,10 +7175,13 @@ async function loadAppVersion() {
   } else if (el.appVersion) {
     el.appVersion.textContent = '0.1.0';
   }
-  // v2.1.18-meas1: 計測ビルド識別バッジ。version が `-meas` を含まない（本番版）なら非表示。
+  // v2.1.18-meas1: 計測ビルド識別バッジ。version が `-meas` / `-rc` のいずれも含まない（本番版）なら非表示。
   //   `-meas1` / `-meas2` 等の連番にも対応するため `-meas\d*$` で末尾マッチ。
+  //   v2.1.19-rc1: 試験ビルド（rc）でも計測機構を完全保持するため `-rc\d+$` を OR で許容（前原さん向け
+  //   試験ビルドの可視識別目的、本番版 `2.1.19` 等には影響なし）。
   try {
-    if (!/-meas\d*$/.test(_versionForBadge || '')) {
+    const _v = _versionForBadge || '';
+    if (!(/-meas\d*$/.test(_v) || /-rc\d+$/.test(_v))) {
       const badge = document.getElementById('meas-build-badge');
       if (badge) badge.style.display = 'none';
     }
@@ -7193,7 +7231,7 @@ async function initialize() {
   let restoredFromTimerState = false;
   try {
     if (window.api?.tournaments?.list) {
-      const list = await window.api.tournaments.list() || [];
+      const list = await _tournamentsListDedup() || [];
       const found = list.find((t) => t.id === tournamentState.id);
       if (found && found.timerState && found.timerState.status !== 'idle') {
         const levels = found.blindPresetId ? await getCachedLevels(found.blindPresetId) : null;

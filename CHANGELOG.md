@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.19-rc1] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.19-rc1 試験ビルド（前原さん実機専用、配布なし）。v2.1.18-meas1 計測ビルドで Op 1〜6 観測 → tournaments:list IPC 暴走（1.5〜28.8 回/秒）の真因特定 → setInterval 主犯撤廃 + Promise dedup の最小修正で 90% 改善見込みを実装。計測機構 (バッジ + 15 ラベル + Ctrl+Shift+L 保存) は効果計測のため完全保持。
+
+### Performance
+- **重さの主犯撤廃**: `setInterval(renderTournamentList, 1000)` を削除し subscribe 経由 + 1 秒 throttle のイベント駆動に置換、ベース 1 Hz の強制 fetch を廃止
+- **Promise dedup**: `tournaments.list` の 12 箇所呼出を in-flight 1 本化ラッパ `_tournamentsListDedup()` で統一、4ms 差の重複発火を根絶
+
+### Compatibility
+- v2.1.6〜v2.1.18 機構完全互換、致命バグ保護 5 件無傷
+- v2.1.18-meas1 計測機構完全保持（次フェーズで撤去予定）
+- 計測バッジは `-meas\d*$` に加えて `-rc\d+$` にも反応するよう拡張（試験ビルド可視識別目的、本番版 `2.1.19` 等は影響なし）
+- 単画面モード完全同一
+- 配布なし、前原さん PC 専用、main / tag / Release 未実施
+
+---
+
 ## [2.1.18-meas1] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.18-meas1 計測ビルド（前原さん実機 1 日集中観測専用、配布なし）。v2.1.18 本番ベースにパフォーマンス系 6 ラベル + バグ発見系 9 ラベル合計 15 個の計測ログを追加、Ctrl+Shift+L で操作ごとのログを別ファイル保存する機構を整備。画面右下に「計測ビルド」識別バッジ常時表示。1 日集中運用後、v2.1.19 改善版を別途構築士が設計予定。

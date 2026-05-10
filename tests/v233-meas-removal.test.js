@@ -66,7 +66,10 @@ test('T2: subscribe 冒頭の rc2 Fix 2-A 完全撤去（_lastTimerStateForRoleS
 test('T3: renderTime 関数冒頭の rc2 Fix 2-B 完全撤去', () => {
   // v2.1.18-meas1: 計測ビルドでは perf:render:duration ラベルのため `const _t0 = performance.now();` が
   //   renderTime 冒頭に挿入される。本番版 (`2.1.18` 等) は無挿入。-meas\d+ サフィックスのとき skip。
-  if (/-meas\d+/.test(PKG.version || '')) return;
+  // v2.1.19-rc1: meas1 計測機構は rc 系試験ビルドにも保持される（renderTime に perf:render:duration の
+  //   `_t0 = performance.now()` 行が挿入される）→ 本番版（無サフィックス）でのみ厳格 verify、
+  //   `-meas\d+` または `-rc\d+` サフィックス時は skip。
+  if (/(-meas\d+|-rc\d+)$/.test(PKG.version || '')) return;
   // function renderTime(remainingMs) { 直後 50 文字以内に const { status } = getState();
   assert.match(RENDERER, /function\s+renderTime\s*\(\s*remainingMs\s*\)\s*\{\s*\n\s*const\s*\{\s*status\s*\}\s*=\s*getState\s*\(\s*\)\s*;/,
     'renderTime 冒頭に rc2 Fix 2-B の if ブロックが残存（Fix 1 撤去未完了）');
@@ -93,7 +96,10 @@ test('T5: el.clock.dataset.status 書き換え 4 箇所維持 + rc2 Fix 2-D call
   assert.equal(writeCount, 4, `el.clock.dataset.status 書き換えが ${writeCount} (4 箇所維持必須)`);
   // v2.1.18-meas1: 計測ビルドでは perf:render:duration の payload に `fn: 'renderControls'` 等が含まれるため
   //   caller 文字列の単純 grep は誤検出する。本番版のみで verify、-meas\d+ サフィックスのとき skip。
-  if (/-meas\d+/.test(PKG.version || '')) return;
+  // v2.1.19-rc1: meas1 計測機構は rc 系試験ビルドにも保持される（renderTime に perf:render:duration の
+  //   `_t0 = performance.now()` 行が挿入される）→ 本番版（無サフィックス）でのみ厳格 verify、
+  //   `-meas\d+` または `-rc\d+` サフィックス時は skip。
+  if (/(-meas\d+|-rc\d+)$/.test(PKG.version || '')) return;
   // rc2 Fix 2-D の caller 識別子文字列 4 種すべて 0 件（コメント行なら OK だが文字列リテラルは消えているはず）
   // hall:dataset:status:write は T1 で 0 件確認済、ここでは caller リテラル文字列の grep
   const callers = ["'renderControls'", "'applyHallPreStartState:paused'", "'applyHallPreStartState:inactive'", "'renderHallPreStartTick'"];
@@ -168,7 +174,7 @@ test('T6: rc1 Fix 1/2/3 + rc2 Fix 1 + 致命バグ保護 5 件 + v2.1.6〜v2.1.1
     'v2.1.17 main.js sanitization isPaused 転送 1 行消失');
 
   // package.json version 2.1.18
-  assert.equal(PKG.version, '2.1.18-meas1', `package.json version が 2.1.18 ではない（実際: ${PKG.version}）`);
+  assert.equal(PKG.version, '2.1.19-rc1', `package.json version が 2.1.18 ではない（実際: ${PKG.version}）`);
 });
 
 console.log(`\n結果: ${pass} PASS, ${fail} FAIL`);

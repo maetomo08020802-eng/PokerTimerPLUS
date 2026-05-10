@@ -114,7 +114,10 @@ test('T7: presetDelete ハンドラが tournaments.list で参照中チェック
   const idx = RENDERER.indexOf("el.presetDelete?.addEventListener('click'");
   assert.ok(idx >= 0, 'presetDelete のクリックハンドラが見つからない');
   const slice = stripComments(RENDERER.slice(idx, idx + 2500));
-  assert.match(slice, /tournaments\.list/, '削除前に tournaments.list が呼ばれていない');
+  // v2.1.19-rc1: tournaments.list は _tournamentsListDedup() 経由で呼ばれるようになった（IPC 暴走根治、Promise dedup）
+  //   どちらの形式でも参照中チェックの本質意図（list 取得 → blindPresetId フィルタ → 使用中警告）は維持。
+  assert.match(slice, /tournaments\.list|_tournamentsListDedup\s*\(/,
+    '削除前に tournaments.list（または _tournamentsListDedup() 経由）が呼ばれていない');
   assert.match(slice, /blindPresetId\s*===\s*deletedId/, 'blindPresetId === deletedId のフィルタがない');
   assert.match(slice, /で使用中/, '使用中メッセージが含まれていない');
 });

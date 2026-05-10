@@ -60,15 +60,19 @@ test('T2 (Fix 1): subscribe の renderNextBreak 呼出が同 gate 配下', () =>
 //   v2.1.18 本番では v233 が「撤去確認」を実施するため、ここでは rc-build のみ存在を検証する。
 // ============================================================
 test('T3 (Fix 2-A): subscribe 冒頭に hall:subscribe:fire ログ — 本番では撤去、rc では存在', () => {
-  const isRc = /-rc\d+/.test(PKG.version || '');
-  if (!isRc) return;   // 本番ビルドでは v233 で撤去確認、ここはスキップ
+  // v2.1.19-rc1: 本テストは v2.1.18-rc\d+ 専用（rc2 計測ログ Fix 2-A〜D を検証）。
+  //   v2.1.18 本番 / v2.1.19-rc\d+ 以降では撤去済（v233 で撤去確認）→ 本テストは skip。
+  const isV218Rc = /^2\.1\.18-rc\d+/.test(PKG.version || '');
+  if (!isV218Rc) return;   // 本番ビルドでは v233 で撤去確認、ここはスキップ
   assert.match(RENDERER, /subscribe\s*\(\s*\(\s*state\s*,\s*prev\s*\)\s*=>\s*\{[\s\S]{0,500}?window\.appRole\s*===\s*['"]hall['"][\s\S]{0,200}?hall:subscribe:fire/,
     'subscribe 冒頭に hall:subscribe:fire ログ + hall ガードがない（Fix 2-A 未実装）');
 });
 
 test('T4 (Fix 2-B): renderTime 冒頭に hall:renderTime:enter ログ — 本番では撤去、rc では存在', () => {
-  const isRc = /-rc\d+/.test(PKG.version || '');
-  if (!isRc) return;
+  // v2.1.19-rc1: 本テストは v2.1.18-rc\d+ 専用（rc2 計測ログ Fix 2-A〜D を検証）。
+  //   v2.1.18 本番 / v2.1.19-rc\d+ 以降では撤去済（v233 で撤去確認）→ 本テストは skip。
+  const isV218Rc = /^2\.1\.18-rc\d+/.test(PKG.version || '');
+  if (!isV218Rc) return;
   const fnMatch = RENDERER.match(/function\s+renderTime\s*\(\s*remainingMs\s*\)\s*\{([\s\S]{0,800})/);
   assert.ok(fnMatch, 'renderTime 関数本体が見当たらない');
   const earlyBody = fnMatch[1];
@@ -77,8 +81,10 @@ test('T4 (Fix 2-B): renderTime 冒頭に hall:renderTime:enter ログ — 本番
 });
 
 test('T5 (Fix 2-C): dual-sync.js setState({dual_*}) 直前に hall:setState:dual ログ — 本番では撤去、rc では存在', () => {
-  const isRc = /-rc\d+/.test(PKG.version || '');
-  if (!isRc) return;
+  // v2.1.19-rc1: 本テストは v2.1.18-rc\d+ 専用（rc2 計測ログ Fix 2-A〜D を検証）。
+  //   v2.1.18 本番 / v2.1.19-rc\d+ 以降では撤去済（v233 で撤去確認）→ 本テストは skip。
+  const isV218Rc = /^2\.1\.18-rc\d+/.test(PKG.version || '');
+  if (!isV218Rc) return;
   const setStateIdx = DUAL_SYNC.indexOf('setState({ [`dual_');
   assert.ok(setStateIdx > 0, 'dual-sync.js の setState({dual_*}) 呼出が見当たらない');
   const before = DUAL_SYNC.slice(Math.max(0, setStateIdx - 500), setStateIdx);
@@ -89,8 +95,10 @@ test('T5 (Fix 2-C): dual-sync.js setState({dual_*}) 直前に hall:setState:dual
 });
 
 test('T6 (Fix 2-D): hall:dataset:status:write 4 箇所 + caller 4 種すべて存在 — 本番では撤去、rc では存在', () => {
-  const isRc = /-rc\d+/.test(PKG.version || '');
-  if (!isRc) return;
+  // v2.1.19-rc1: 本テストは v2.1.18-rc\d+ 専用（rc2 計測ログ Fix 2-A〜D を検証）。
+  //   v2.1.18 本番 / v2.1.19-rc\d+ 以降では撤去済（v233 で撤去確認）→ 本テストは skip。
+  const isV218Rc = /^2\.1\.18-rc\d+/.test(PKG.version || '');
+  if (!isV218Rc) return;
   const labelCount = (RENDERER.match(/hall:dataset:status:write/g) || []).length;
   assert.equal(labelCount, 4, `hall:dataset:status:write の出現件数が ${labelCount} (4 件必須)`);
   const callers = ['renderControls', 'applyHallPreStartState:paused', 'applyHallPreStartState:inactive', 'renderHallPreStartTick'];
