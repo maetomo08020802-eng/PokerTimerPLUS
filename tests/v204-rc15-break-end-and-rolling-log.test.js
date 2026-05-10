@@ -149,7 +149,8 @@ test('T8-C: preload.js に window.api.log = { write, openFolder } が公開', ()
   // write は send (一方向)、openFolder は invoke (結果を返す)
   assert.match(PRELOAD, /ipcRenderer\.send\(\s*['"]rolling-log:write['"]/,
     'preload.js の log.write が ipcRenderer.send で実装されていない');
-  assert.match(PRELOAD, /ipcRenderer\.invoke\(\s*['"]logs:openFolder['"]/,
+  // v2.1.18-meas1: invoke 系は perf:ipc:roundtrip 計測のため `_measuredInvoke` ラッパ経由（チャンネル名は維持）。
+  assert.match(PRELOAD, /(?:ipcRenderer\.invoke|_measuredInvoke)\(\s*['"]logs:openFolder['"]/,
     'preload.js の log.openFolder が ipcRenderer.invoke で実装されていない');
 });
 
@@ -301,7 +302,7 @@ test('rc13 維持: _handleTournamentDuplicateImpl 内で ensureEditorEditableSta
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.18',
+  assert.equal(pkg.version, '2.1.19',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 

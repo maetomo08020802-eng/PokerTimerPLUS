@@ -94,7 +94,8 @@ test('T5: preload.js に dual.subscribeStateSync / fetchInitialState（notifyOpe
     'notifyOperatorAction が残存（v2.0.2 で撤去予定）');
   // ipcRenderer.on で dual:state-sync を listen（イベント駆動、ポーリング禁止）
   assert.match(PRELOAD, /ipcRenderer\.on\(\s*['"]dual:state-sync['"]/, 'dual:state-sync を ipcRenderer.on で listen していない');
-  assert.match(PRELOAD, /ipcRenderer\.invoke\(\s*['"]dual:state-sync-init['"]/, 'dual:state-sync-init invoke なし');
+  // v2.1.18-meas1: invoke 系は perf:ipc:roundtrip 計測のため `_measuredInvoke` ラッパ経由（チャンネル名は維持）。
+  assert.match(PRELOAD, /(?:ipcRenderer\.invoke|_measuredInvoke)\(\s*['"]dual:state-sync-init['"]/, 'dual:state-sync-init invoke なし');
 });
 
 // ============================================================

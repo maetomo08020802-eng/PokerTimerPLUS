@@ -76,8 +76,10 @@ test('T3: toggleFullScreen は hall を優先、単画面時は mainWindow に f
 // T4: F11 が引き続き globalShortcut で登録されている（既存挙動維持）
 // ============================================================
 test('T4: globalShortcut.register(\'F11\', toggleFullScreen) が維持されている', () => {
+  // v2.1.18-meas1: ui:keypress 計測のため F11 callback はインライン化（() => { rollingLog; toggleFullScreen(); }）。
+  //   toggleFullScreen 呼出は維持。直接参照 + ラップ呼出のどちらも許容。
   assert.match(MAIN,
-    /globalShortcut\.register\(\s*['"]F11['"]\s*,\s*toggleFullScreen\s*\)/,
+    /globalShortcut\.register\(\s*['"]F11['"]\s*,\s*(?:toggleFullScreen\s*\)|\(\s*\)\s*=>\s*\{[\s\S]*?toggleFullScreen\s*\(\s*\)[\s\S]*?\}\s*\))/,
     'F11 → toggleFullScreen の globalShortcut 登録が消失（既存挙動の互換破壊）');
 });
 

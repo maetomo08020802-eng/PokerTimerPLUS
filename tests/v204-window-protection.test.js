@@ -136,8 +136,10 @@ test('B-2: _toAcceleratorKey ヘルパは rc4 で削除（IPC 化により不要
 // 既存挙動保護
 // ============================================================
 test('既存挙動保護: F11 globalShortcut は維持（rc2 改修）', () => {
+  // v2.1.18-meas1: ui:keypress 計測のため F11 callback はインライン化（() => { rollingLog; toggleFullScreen(); }）。
+  //   toggleFullScreen 呼出は維持。直接参照 + ラップ呼出のどちらも許容。
   assert.match(MAIN,
-    /globalShortcut\.register\(\s*['"]F11['"]\s*,\s*toggleFullScreen\s*\)/,
+    /globalShortcut\.register\(\s*['"]F11['"]\s*,\s*(?:toggleFullScreen\s*\)|\(\s*\)\s*=>\s*\{[\s\S]*?toggleFullScreen\s*\(\s*\)[\s\S]*?\}\s*\))/,
     'F11 → toggleFullScreen の globalShortcut 登録が消失（rc2 互換違反）');
 });
 

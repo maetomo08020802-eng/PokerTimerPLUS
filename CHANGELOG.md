@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.19] - 2026-05-10
+
+PokerTimerPLUS+ v2.1.19 本番リリース。「アプリが重い」体感の主犯（`tournaments:list` IPC の常時暴走発火 1.5〜28.8 回/秒）を、計測ビルド観測 → 真因確定 → 最小修正の 3 段階で根治。設定タブ表示中 90% 減 / 編集モード 80% 減 / 通常進行 80% 減を達成。前原さん実機試験 OK、退行なし、致命バグ保護 5 件・v2.1.6〜v2.1.18 機構すべて完全保持。
+
+### Performance
+- **重さの主犯撤廃**: `setInterval(renderTournamentList, 1000)` を撤去し subscribe 経由 + 1 秒 throttle のイベント駆動に置換、ベース 1 Hz の強制 fetch を廃止
+- **Promise dedup**: `tournaments.list` の 12 箇所呼出を in-flight 1 本化ラッパ `_tournamentsListDedup()` で統一、4ms 差の重複発火を根絶
+
+### Compatibility
+- v2.1.6〜v2.1.18 機構完全互換、致命バグ保護 5 件無傷
+- 単画面モード完全同一
+- v2.1.18-meas1 計測機構（バッジ + 15 ラベル + Ctrl+Shift+L 拡張）は本番版から完全撤去、Ctrl+Shift+L の基本ログ保存機能は維持
+
+### Known Issues
+- 会場モニター（hall）側の PRE_START 一時停止時に「一時停止中」オレンジテロップが出ない既存症状あり（v2.1.18 以前から存在、優先度低、v2.1.20 で対処予定）
+
+---
+
+## [2.1.19-rc2] - 2026-05-10
+
+PokerTimerPLUS+ v2.1.19-rc2 試験ビルド（前原さん実機確認用、配布なし）。v2.1.19-rc1 の重さ根治機構を完全保持しつつ、v2.1.18-meas1 で追加した計測機構（バッジ + 15 ラベル + Ctrl+Shift+L 拡張）を全撤去。本番 v2.1.19 リリース直前の最終形態。
+
+### Removed
+- 計測ビルド黄色バッジ（HTML + CSS + 表示分岐）
+- 計測ラベル 15 個（perf:* / state:transition / dual-sync:apply / meas:session:start / meas:capture / error:caught:* / ui:keypress / ui:click:major のうち meas1 追加分）
+- Ctrl+Shift+L 拡張（op 連番 + フォルダ自動表示）
+- preload.js の `_measuredInvoke` ラッパ（perf:ipc:roundtrip 計測用）
+- main.js の 30 秒間隔 `perf:memory:rss` setInterval
+
+### Maintained
+- v2.1.19-rc1 重さ根治機構（setInterval 撤廃 + Promise dedup）完全保持
+- 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構すべて完全保持
+- Ctrl+Shift+L の基本ログ保存機能（v2.0 系基本機能）維持
+- 単画面モード完全互換
+
+---
+
+## [2.1.19-rc1] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.19-rc1 試験ビルド（前原さん実機専用、配布なし）。v2.1.18-meas1 計測ビルドで Op 1〜6 観測 → tournaments:list IPC 暴走（1.5〜28.8 回/秒）の真因特定 → setInterval 主犯撤廃 + Promise dedup の最小修正で 90% 改善見込みを実装。計測機構 (バッジ + 15 ラベル + Ctrl+Shift+L 保存) は効果計測のため完全保持。
+
+### Performance
+- **重さの主犯撤廃**: `setInterval(renderTournamentList, 1000)` を削除し subscribe 経由 + 1 秒 throttle のイベント駆動に置換、ベース 1 Hz の強制 fetch を廃止
+- **Promise dedup**: `tournaments.list` の 12 箇所呼出を in-flight 1 本化ラッパ `_tournamentsListDedup()` で統一、4ms 差の重複発火を根絶
+
+### Compatibility
+- v2.1.6〜v2.1.18 機構完全互換、致命バグ保護 5 件無傷
+- v2.1.18-meas1 計測機構完全保持（次フェーズで撤去予定）
+- 計測バッジは `-meas\d*$` に加えて `-rc\d+$` にも反応するよう拡張（試験ビルド可視識別目的、本番版 `2.1.19` 等は影響なし）
+- 単画面モード完全同一
+- 配布なし、前原さん PC 専用、main / tag / Release 未実施
+
+---
+
+## [2.1.18-meas1] - 2026-05-09
+
+PokerTimerPLUS+ v2.1.18-meas1 計測ビルド（前原さん実機 1 日集中観測専用、配布なし）。v2.1.18 本番ベースにパフォーマンス系 6 ラベル + バグ発見系 9 ラベル合計 15 個の計測ログを追加、Ctrl+Shift+L で操作ごとのログを別ファイル保存する機構を整備。画面右下に「計測ビルド」識別バッジ常時表示。1 日集中運用後、v2.1.19 改善版を別途構築士が設計予定。
+
+### Added
+- 計測ビルド識別バッジ（画面右下、本番版では非表示）
+- パフォーマンス系 6 ラベル（perf:render:duration / perf:ipc:roundtrip / perf:tick:fps / perf:memory:rss / perf:state:notify / perf:dom:rebuild）
+- バグ発見系新規 4 ラベル + 既存 try/catch 主要 10 箇所の error:caught:* + ui:keypress / ui:click:major
+- Ctrl+Shift+L で `op-{NN}-{timestamp}.log` 形式の操作別ログ保存機構（既存「ログフォルダを開く」動作に追加で操作別スナップショット保存を実装）
+
+### Compatibility
+- v2.1.18 本番機構完全保持、致命バグ保護 5 件無傷
+- 単画面モード完全同一
+- すべての rollingLog 呼出は try/catch で握り潰し、本体動作に副作用なし
+- 配布なし、前原さん PC 専用、main / tag / Release 未実施
+
+---
+
 ## [2.1.18] - 2026-05-09
 
 PokerTimerPLUS+ v2.1.18 PRE_START 一時停止時の hall 表示破綻を真の根治 + トーナメント終了演出新規実装。v2.1.17 / v2.1.18-rc1 で 2 連続失敗していた hall 側 dual-sync `setState({dual_*})` が subscribe を無条件 notify する経路を、subscribe 内 gate 4 行追加で根治。最終レベル時間切れ時に「トーナメント終了 / TOURNAMENT COMPLETE」オレンジ枠永続表示を新規追加。

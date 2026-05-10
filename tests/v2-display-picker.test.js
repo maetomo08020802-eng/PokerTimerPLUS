@@ -113,7 +113,9 @@ test('T5: main.js に display-picker:fetch ハンドラ + dual:select-hall-monit
 // T6: preload.js に dual.fetchDisplays / dual.selectHallMonitor
 // ============================================================
 test('T6: preload.js に dual.fetchDisplays (invoke) / dual.selectHallMonitor (send)', () => {
-  assert.match(PRELOAD, /fetchDisplays:\s*\([^)]*\)\s*=>\s*ipcRenderer\.invoke\(\s*['"]display-picker:fetch['"]/,
+  // v2.1.18-meas1: preload.js は perf:ipc:roundtrip 計測のため invoke 系のみ `_measuredInvoke` ラッパ経由に変更
+  //   （内部で ipcRenderer.invoke を呼ぶ形は維持、チャンネル名・引数は無変更）。send 系は計測対象外で無変更。
+  assert.match(PRELOAD, /fetchDisplays:\s*\([^)]*\)\s*=>\s*(?:ipcRenderer\.invoke|_measuredInvoke)\(\s*['"]display-picker:fetch['"]/,
     'fetchDisplays が ipcRenderer.invoke に紐付いていない');
   assert.match(PRELOAD, /selectHallMonitor:\s*\([^)]*\)\s*=>\s*ipcRenderer\.send\(\s*['"]dual:select-hall-monitor['"]/,
     'selectHallMonitor が ipcRenderer.send に紐付いていない');
