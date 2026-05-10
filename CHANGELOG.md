@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.19] - 2026-05-10
+
+PokerTimerPLUS+ v2.1.19 本番リリース。「アプリが重い」体感の主犯（`tournaments:list` IPC の常時暴走発火 1.5〜28.8 回/秒）を、計測ビルド観測 → 真因確定 → 最小修正の 3 段階で根治。設定タブ表示中 90% 減 / 編集モード 80% 減 / 通常進行 80% 減を達成。前原さん実機試験 OK、退行なし、致命バグ保護 5 件・v2.1.6〜v2.1.18 機構すべて完全保持。
+
+### Performance
+- **重さの主犯撤廃**: `setInterval(renderTournamentList, 1000)` を撤去し subscribe 経由 + 1 秒 throttle のイベント駆動に置換、ベース 1 Hz の強制 fetch を廃止
+- **Promise dedup**: `tournaments.list` の 12 箇所呼出を in-flight 1 本化ラッパ `_tournamentsListDedup()` で統一、4ms 差の重複発火を根絶
+
+### Compatibility
+- v2.1.6〜v2.1.18 機構完全互換、致命バグ保護 5 件無傷
+- 単画面モード完全同一
+- v2.1.18-meas1 計測機構（バッジ + 15 ラベル + Ctrl+Shift+L 拡張）は本番版から完全撤去、Ctrl+Shift+L の基本ログ保存機能は維持
+
+### Known Issues
+- 会場モニター（hall）側の PRE_START 一時停止時に「一時停止中」オレンジテロップが出ない既存症状あり（v2.1.18 以前から存在、優先度低、v2.1.20 で対処予定）
+
+---
+
 ## [2.1.19-rc2] - 2026-05-10
 
 PokerTimerPLUS+ v2.1.19-rc2 試験ビルド（前原さん実機確認用、配布なし）。v2.1.19-rc1 の重さ根治機構を完全保持しつつ、v2.1.18-meas1 で追加した計測機構（バッジ + 15 ラベル + Ctrl+Shift+L 拡張）を全撤去。本番 v2.1.19 リリース直前の最終形態。

@@ -36,7 +36,7 @@ function test(name, fn) {
 // version assertion
 // ============================================================
 test('version: package.json の version が 2.1.19-rc1', () => {
-  assert.equal(PKG.version, '2.1.19-rc2', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.1.19', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
