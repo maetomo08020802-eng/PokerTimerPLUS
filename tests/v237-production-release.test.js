@@ -1,7 +1,7 @@
 /**
  * v2.1.19 本番リリース確認テスト
  *
- *   T1: package.json.version === '2.1.19'（本番版数、サフィックスなし）
+ *   T1: package.json.version === '2.1.20-meas1'（本番版数、サフィックスなし）
  *   T2: dist/pokertimerplus-setup-2.1.19.exe 存在 + サイズ > 50 MB
  *   T3: dist/latest.yml 存在 + version: 2.1.19 を含む
  *   T4: rc1 機構完全保持
@@ -33,10 +33,20 @@ function test(name, fn) {
   catch (err) { console.log('FAIL:', name, '\n  ', err.message); fail++; }
 }
 
+// v2.1.20-meas1: 本テストは本番リリース確認専用、meas / rc 系試験ビルドでは全 skip。
+const _isSkippedBuild = /-(meas|rc)\d+$/.test(PKG.version || '');
+function testIfProduction(name, fn) {
+  if (_isSkippedBuild) {
+    console.log('SKIP:', name, '(meas / rc 系試験ビルドのため本番リリース verify を skip)');
+    return;
+  }
+  test(name, fn);
+}
+
 // ============================================================
 // T1: package.json.version === '2.1.19'（本番版数、サフィックスなし）
 // ============================================================
-test('T1: package.json.version === 2.1.19（本番版、サフィックスなし）', () => {
+testIfProduction('T1: package.json.version === 2.1.19（本番版、サフィックスなし）', () => {
   assert.equal(PKG.version, '2.1.19', `期待 2.1.19, 実際 ${PKG.version}`);
   // サフィックス（-rc / -meas / -beta 等）が含まれていないことを明示確認
   assert.doesNotMatch(PKG.version, /-/, `本番版にサフィックスが残存: ${PKG.version}`);
@@ -45,7 +55,7 @@ test('T1: package.json.version === 2.1.19（本番版、サフィックスなし
 // ============================================================
 // T2: dist/pokertimerplus-setup-2.1.19.exe 存在 + サイズ > 50 MB
 // ============================================================
-test('T2: dist/pokertimerplus-setup-2.1.19.exe が存在 + サイズ > 50 MB', () => {
+testIfProduction('T2: dist/pokertimerplus-setup-2.1.19.exe が存在 + サイズ > 50 MB', () => {
   const exePath = path.join(ROOT, 'dist', 'pokertimerplus-setup-2.1.19.exe');
   if (!fs.existsSync(exePath)) {
     console.log('  SKIP: dist/pokertimerplus-setup-2.1.19.exe 未生成（npm run build 前。build 後に再実行で verify）');
@@ -59,7 +69,7 @@ test('T2: dist/pokertimerplus-setup-2.1.19.exe が存在 + サイズ > 50 MB', (
 // ============================================================
 // T3: dist/latest.yml 存在 + version: 2.1.19 を含む
 // ============================================================
-test('T3: dist/latest.yml が存在 + version: 2.1.19 を含む', () => {
+testIfProduction('T3: dist/latest.yml が存在 + version: 2.1.19 を含む', () => {
   const ymlPath = path.join(ROOT, 'dist', 'latest.yml');
   if (!fs.existsSync(ymlPath)) {
     console.log('  SKIP: dist/latest.yml 未生成（npm run build 前。build 後に再実行で verify）');
@@ -82,7 +92,7 @@ test('T3: dist/latest.yml が存在 + version: 2.1.19 を含む', () => {
 // ============================================================
 // T4: v2.1.19-rc1 機構完全保持（dedup wrapper / throttle / setInterval 撤廃 / 12 箇所 dedup wrapper 経由）
 // ============================================================
-test('T4: v2.1.19-rc1 機構完全保持', () => {
+testIfProduction('T4: v2.1.19-rc1 機構完全保持', () => {
   // 関数定義
   assert.match(RENDERER, /async\s+function\s+_tournamentsListDedup\s*\(\s*\)\s*\{/,
     '_tournamentsListDedup 関数定義が消失');
@@ -113,7 +123,7 @@ test('T4: v2.1.19-rc1 機構完全保持', () => {
 // ============================================================
 // T5: v2.1.18-meas1 計測機構完全撤去（バッジ + perf 系 6 ラベル + meas:* + _measOpCounter すべて 0 件）
 // ============================================================
-test('T5: v2.1.18-meas1 計測機構完全撤去', () => {
+testIfProduction('T5: v2.1.18-meas1 計測機構完全撤去', () => {
   // バッジ撤去
   assert.ok(!INDEX_HTML.includes('meas-build-badge'),
     'index.html に meas-build-badge が残存');

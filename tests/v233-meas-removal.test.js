@@ -56,7 +56,8 @@ test('T1: rc2 計測ログ 4 ラベルすべて 0 件（hall:subscribe:fire / :r
 test('T2: subscribe 冒頭の rc2 Fix 2-A 完全撤去（_lastTimerStateForRoleSwitch 直前 if ブロックなし）', () => {
   // subscribe((state, prev) => { が現れた直後 50 文字以内に _lastTimerStateForRoleSwitch = state が存在
   //   （rc2 Fix 2-A の if (window.appRole === 'hall') ブロックは撤去後はゼロ距離）
-  assert.match(RENDERER, /subscribe\(\(state,\s*prev\)\s*=>\s*\{\s*\n\s*_lastTimerStateForRoleSwitch\s*=\s*state\s*;/,
+  // v2.1.20-meas1: main subscribe が subscribeNamed('subscribe:main-renderer', ...) に変更、両形式許容。
+  assert.match(RENDERER, /subscribe(?:Named)?\(\s*(?:['"][^'"]*['"]\s*,\s*)?\(state,\s*prev\)\s*=>\s*\{\s*\n\s*_lastTimerStateForRoleSwitch\s*=\s*state\s*;/,
     'subscribe 冒頭に rc2 Fix 2-A の if ブロックが残存（Fix 1 撤去未完了）');
 });
 
@@ -174,7 +175,7 @@ test('T6: rc1 Fix 1/2/3 + rc2 Fix 1 + 致命バグ保護 5 件 + v2.1.6〜v2.1.1
     'v2.1.17 main.js sanitization isPaused 転送 1 行消失');
 
   // package.json version 2.1.18
-  assert.equal(PKG.version, '2.1.19', `package.json version が 2.1.18 ではない（実際: ${PKG.version}）`);
+  assert.equal(PKG.version, '2.1.20-meas1', `package.json version が 2.1.18 ではない（実際: ${PKG.version}）`);
 });
 
 console.log(`\n結果: ${pass} PASS, ${fail} FAIL`);

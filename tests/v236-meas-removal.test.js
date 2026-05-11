@@ -30,17 +30,27 @@ function test(name, fn) {
   catch (err) { console.log('FAIL:', name, '\n  ', err.message); fail++; }
 }
 
+// v2.1.20-meas1: meas シリーズでは計測機構が**復活**しているため、本テスト（撤去 verify）は skip。
+const _shouldSkipMeasBuild = /-meas\d+$/.test(PKG.version || '');
+function testSkippableOnMeas(name, fn) {
+  if (_shouldSkipMeasBuild) {
+    console.log('SKIP:', name, '(meas ビルドでは計測機構保持中のため撤去 verify を skip)');
+    return;
+  }
+  test(name, fn);
+}
+
 // ============================================================
-// T1: package.json.version === '2.1.19'
+// version assertion: meas ビルドは別系列、test ではなく skip 経由で許容
 // ============================================================
-test('T1: package.json.version === 2.1.19-rc2', () => {
-  assert.equal(PKG.version, '2.1.19', `期待 2.1.19-rc2, 実際 ${PKG.version}`);
+test('T0 version: package.json.version が現行版数（meas/non-meas どちらも許容）', () => {
+  assert.match(PKG.version, /^2\.\d+\.\d+(-(meas|rc)\d+)?$/, `想定外の version: ${PKG.version}`);
 });
 
 // ============================================================
 // T2: src/renderer/index.html 内 meas-build-badge 出現 0 件
 // ============================================================
-test('T2: index.html 内 meas-build-badge 出現 0 件', () => {
+testSkippableOnMeas('T2: index.html 内 meas-build-badge 出現 0 件', () => {
   assert.ok(!INDEX_HTML.includes('meas-build-badge'),
     'index.html に meas-build-badge 文字列が残存（Fix 1 撤去未完了）');
 });
@@ -48,7 +58,7 @@ test('T2: index.html 内 meas-build-badge 出現 0 件', () => {
 // ============================================================
 // T3: src/renderer/style.css 内 #meas-build-badge 出現 0 件
 // ============================================================
-test('T3: style.css 内 #meas-build-badge 出現 0 件', () => {
+testSkippableOnMeas('T3: style.css 内 #meas-build-badge 出現 0 件', () => {
   assert.ok(!STYLE_CSS.includes('#meas-build-badge'),
     'style.css に #meas-build-badge セレクタが残存（Fix 1 撤去未完了）');
   // バッジ用 CSS ブロック内の特徴的記述 (background: #FFD700) も撤去確認
@@ -59,7 +69,7 @@ test('T3: style.css 内 #meas-build-badge 出現 0 件', () => {
 // ============================================================
 // T4: src/renderer/renderer.js 内 meas-build-badge 出現 0 件
 // ============================================================
-test('T4: renderer.js 内 meas-build-badge 出現 0 件', () => {
+testSkippableOnMeas('T4: renderer.js 内 meas-build-badge 出現 0 件', () => {
   assert.ok(!RENDERER.includes('meas-build-badge'),
     'renderer.js に meas-build-badge 文字列が残存（loadAppVersion バッジ表示分岐撤去未完了）');
 });
@@ -67,7 +77,7 @@ test('T4: renderer.js 内 meas-build-badge 出現 0 件', () => {
 // ============================================================
 // T5: perf 系 6 ラベル全撤去
 // ============================================================
-test('T5: perf 系 6 ラベルすべて 0 件（perf:render:duration / perf:ipc:roundtrip / perf:tick:fps / perf:memory:rss / perf:state:notify / perf:dom:rebuild）', () => {
+testSkippableOnMeas('T5: perf 系 6 ラベルすべて 0 件（perf:render:duration / perf:ipc:roundtrip / perf:tick:fps / perf:memory:rss / perf:state:notify / perf:dom:rebuild）', () => {
   const labels = [
     'perf:render:duration',
     'perf:ipc:roundtrip',
@@ -85,7 +95,7 @@ test('T5: perf 系 6 ラベルすべて 0 件（perf:render:duration / perf:ipc:
 // ============================================================
 // T6: meas:session:start / meas:capture 各 0 件
 // ============================================================
-test('T6: renderer.js / main.js 内 meas:session:start / meas:capture 各 0 件', () => {
+testSkippableOnMeas('T6: renderer.js / main.js 内 meas:session:start / meas:capture 各 0 件', () => {
   const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
   assert.ok(!ALL_SRC.includes('meas:session:start'),
     'meas:session:start が残存（Fix 2-3F 撤去未完了）');
@@ -96,7 +106,7 @@ test('T6: renderer.js / main.js 内 meas:session:start / meas:capture 各 0 件'
 // ============================================================
 // T7: src/main.js 内 _measOpCounter 出現 0 件
 // ============================================================
-test('T7: main.js 内 _measOpCounter 出現 0 件', () => {
+testSkippableOnMeas('T7: main.js 内 _measOpCounter 出現 0 件', () => {
   assert.ok(!MAIN_JS.includes('_measOpCounter'),
     'main.js に _measOpCounter が残存（Fix 3 Ctrl+Shift+L 拡張撤去未完了）');
 });
@@ -104,7 +114,7 @@ test('T7: main.js 内 _measOpCounter 出現 0 件', () => {
 // ============================================================
 // T8: src/main.js 内 padStart(2, '0') 形式の op 連番命名ロジック 0 件
 // ============================================================
-test('T8: main.js 内 padStart(2, "0") の op 連番命名ロジック 0 件', () => {
+testSkippableOnMeas('T8: main.js 内 padStart(2, "0") の op 連番命名ロジック 0 件', () => {
   assert.ok(!/padStart\s*\(\s*2\s*,\s*['"]0['"]\s*\)/.test(MAIN_JS),
     'main.js に padStart(2, "0") の op 連番命名ロジックが残存（Fix 3 Ctrl+Shift+L 拡張撤去未完了）');
   // 念のため `op-${...}` 形式の filename 構築も撤去確認
@@ -115,6 +125,7 @@ test('T8: main.js 内 padStart(2, "0") の op 連番命名ロジック 0 件', (
 // ============================================================
 // T9: rc1 機構完全保持
 // ============================================================
+// v2.1.20-meas1: T9 は rc1 機構保持の verify。meas ビルドでも rc1 機構は保持されるため skip しない。
 test('T9: v2.1.19-rc1 機構完全保持（_tournamentsListDedup / _shouldRefreshListByThrottle / setInterval 撤廃 / 直接 list 呼出 0 件 / dedup 12 件以上）', () => {
   // 関数定義
   assert.match(RENDERER, /async\s+function\s+_tournamentsListDedup\s*\(\s*\)\s*\{/,
@@ -135,8 +146,10 @@ test('T9: v2.1.19-rc1 機構完全保持（_tournamentsListDedup / _shouldRefres
     'setInterval(renderTournamentList, 1000) パターンが残存（rc1 主犯 1 撤廃が破壊された）');
 
   // 主犯 2（永続化用 5 秒 setInterval）は維持
-  assert.match(RENDERER, /setInterval\s*\(\s*periodicPersistAllRunning\s*,\s*5000\s*\)/,
-    '主犯 2 (setInterval(periodicPersistAllRunning, 5000)) が消失（永続化機能、維持必須）');
+  // v2.1.20-meas1: _wrappedSetInterval(_IntervalLabel.PERIODIC_PERSIST, ...) でラップ、両形式許容
+  assert.match(RENDERER,
+    /(?:setInterval\s*\(\s*periodicPersistAllRunning\s*,\s*5000\s*\)|_wrappedSetInterval\s*\(\s*_IntervalLabel\.PERIODIC_PERSIST\s*,\s*periodicPersistAllRunning\s*,\s*5000\s*\))/,
+    '主犯 2 (periodicPersistAllRunning 5 秒 setInterval) が消失（永続化機能、維持必須）');
 
   // 直接 list 呼出 0 件
   const directCalls = RENDERER.match(/await\s+window\.api\??\.?tournaments\??\.?list\??\.?\(\)/g) || [];

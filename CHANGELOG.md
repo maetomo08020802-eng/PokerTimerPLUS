@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-meas1] - 2026-05-10
+
+PokerTimerPLUS+ v2.1.20-meas1 計測ビルド（前原さん実機専用、配布なし）。v2.1.19 本番リリース後の残り重さ網羅観測 + 症状 1/2 真因確証用。
+
+### Added (meas2 新規 6 カテゴリ)
+- カテゴリ A: setInterval 経路網羅（`_wrappedSetInterval` + `perf:interval:fire`）
+- カテゴリ B: requestAnimationFrame 経路網羅（`_wrappedRAF` + `perf:raf:summary` 1 秒集計 + `perf:raf:fire` 単発）
+- カテゴリ C: IPC channel 別カウント（`perf:ipc:summary` 30 秒集計）
+- カテゴリ D: DOM 書き換え頻度サマリ（`perf:dom:summary` 30 秒集計）
+- カテゴリ E: Long Task 検出（PerformanceObserver で 50ms 超ブロッキング検出、`perf:long-task`）
+- カテゴリ F: subscribe 通知頻度サマリ（`perf:subscribe:summary` 30 秒集計、`subscribeNamed` API 追加）
+- カテゴリ G: 症状 1/2 真因確証 4 ラベル（`hall:syncSlideshowFromState:call` / `hall:updatePipTimer:set` / `hall:applyHallPreStartState:apply` / `hall:clock-pause-label:visibility`）
+
+### Restored (meas1 機構を完全復活)
+- 計測バッジ + Ctrl+Shift+L 拡張 + 5 分 rolling + preload `_measuredInvoke` ラッパ
+- meas1 既存 15 ラベル（perf 系 6 + バグ発見系 9）
+
+### Maintained
+- v2.1.19 重さ根治機構（setInterval 撤廃 + Promise dedup）完全保持
+- 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構すべて完全保持
+- 単画面モード完全互換
+
+---
+
 ## [2.1.19] - 2026-05-10
 
 PokerTimerPLUS+ v2.1.19 本番リリース。「アプリが重い」体感の主犯（`tournaments:list` IPC の常時暴走発火 1.5〜28.8 回/秒）を、計測ビルド観測 → 真因確定 → 最小修正の 3 段階で根治。設定タブ表示中 90% 減 / 編集モード 80% 減 / 通常進行 80% 減を達成。前原さん実機試験 OK、退行なし、致命バグ保護 5 件・v2.1.6〜v2.1.18 機構すべて完全保持。

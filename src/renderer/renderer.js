@@ -1,7 +1,7 @@
 // PokerTimerPLUS+ レンダラエントリポイント
 // 役割: 各モジュール（state / blinds / timer / marquee）を組み立て、UI と入力を接続する。
 
-import { States, getState, setState, subscribe } from './state.js';
+import { States, getState, setState, subscribe, subscribeNamed } from './state.js';
 import {
   loadPreset,
   getLevel,
@@ -94,6 +94,119 @@ async function _tournamentsListDedup() {
   });
   return _tournamentsListInFlight;
 }
+
+// =============================================================================
+// v2.1.20-meas1 計測機構（重さ徹底排除観測 + 症状 1/2 真因確証）
+// =============================================================================
+// 6 カテゴリの観測点を一括導入。すべて try/catch 握り潰しで本体動作に副作用なし。
+// 計測機構が無効化される本番版 (`-meas` / `-rc` サフィックスなし) では集計用 setInterval も
+// 軽量で実害なし（30 秒に 1 回 rolling-log に書き込むだけ）。
+
+// カテゴリ A: setInterval 経路網羅。すべての setInterval 呼出を `_wrappedSetInterval` 経由に統一し、
+//   発火のたびに `perf:interval:fire` を rolling-log に記録。label は構築士命名（事前 grep で確定）。
+const _IntervalLabel = {
+  PERIODIC_PERSIST: 'periodic-persist-all-running',      // 5秒永続化（renderer.js:1610）
+  SLIDESHOW_ROTATION: 'slideshow-rotation',              // スライドショー循環（renderer.js:2935）
+  ROLLING_LOG_FLUSH: 'rolling-log-flush',                // 30秒 flush（main.js:80、main プロセス）
+  // v2.1.20-meas1 集計用 setInterval
+  RAF_SUMMARY: 'meas:raf-summary',                       // 1秒 RAF 集計
+  IPC_SUMMARY: 'meas:ipc-summary',                       // 30秒 IPC 集計
+  DOM_SUMMARY: 'meas:dom-summary',                       // 30秒 DOM 集計
+  SUBSCRIBE_SUMMARY: 'meas:subscribe-summary'            // 30秒 subscribe 集計
+};
+function _wrappedSetInterval(label, fn, ms) {
+  return setInterval(() => {
+    try { window.api?.log?.write?.('perf:interval:fire', { label, ms }); } catch (_) {}
+    try { fn(); } catch (e) {
+      try { window.api?.log?.write?.('error:caught:wrappedSetInterval', { label, message: e?.message }); } catch (_) {}
+    }
+  }, ms);
+}
+
+// カテゴリ B: requestAnimationFrame 経路網羅。すべての RAF 呼出を `_wrappedRAF` 経由に統一し、
+//   60Hz の発火を 1 秒ごとに集計して `perf:raf:summary` 出力（個別発火は出力過多のため）。
+const _RafLabel = {
+  HALL_PRE_START_TICK: 'hall-pre-start-tick',            // PRE_START カウントダウン rAF
+  HALL_TICK_FRAME: 'hall-tick-frame',                    // hall 60fps tick
+  DUAL_SYNC_FLUSH: 'dual-sync-flush',                    // dual-sync atomic flush rAF
+  TIMER_TICK: 'timer-tick',                              // timer.js tick (RUNNING/BREAK)
+  TIMER_PRE_START_TICK: 'timer-pre-start-tick',          // timer.js preStartTick
+  RENDERER_MISC: 'renderer-misc'                         // renderer.js その他の RAF（form sync 等）
+};
+let _rafCounter = {};
+function _wrappedRAF(label, fn) {
+  return requestAnimationFrame((t) => {
+    _rafCounter[label] = (_rafCounter[label] || 0) + 1;
+    try { fn(t); } catch (e) {
+      try { window.api?.log?.write?.('error:caught:wrappedRAF', { label, message: e?.message }); } catch (_) {}
+    }
+  });
+}
+
+// カテゴリ C: IPC channel 別カウント（preload.js `_measuredInvoke` 拡張 + ipcRenderer.send は計測対象外）。
+//   30 秒ごとに集計出力。renderer.js 側では preload 経由のため直接 IPC 計測しないが、receive 側で集計可能。
+const _ipcCounter = {};   // channel → { calls: n }
+
+// カテゴリ D: DOM 書き換え頻度サマリ。主要 render 関数の入口・出口で _domCounter 更新。
+//   _recordDomTime ヘルパで一括集計、30 秒ごとに `perf:dom:summary` 出力。
+const _domCounter = {};   // 関数名 → { count: n, totalMs: n }
+function _recordDomTime(fnName, ms) {
+  if (!_domCounter[fnName]) _domCounter[fnName] = { count: 0, totalMs: 0 };
+  _domCounter[fnName].count += 1;
+  _domCounter[fnName].totalMs += ms || 0;
+}
+
+// カテゴリ E: 長い処理（Long Task）検出。PerformanceObserver で 50ms 超のメインスレッドブロッキングを検出。
+//   未対応環境（古い Electron / Chromium）では skip。
+try {
+  if (typeof PerformanceObserver !== 'undefined') {
+    const _longTaskObserver = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.duration >= 50) {
+          try { window.api?.log?.write?.('perf:long-task', { duration: entry.duration, startTime: entry.startTime, name: entry.name }); } catch (_) {}
+        }
+      }
+    });
+    _longTaskObserver.observe({ entryTypes: ['longtask'] });
+  }
+} catch (_) { /* PerformanceObserver longtask 未対応環境では skip */ }
+
+// カテゴリ F: subscribe 通知頻度サマリ。state.js notify ループから呼ばれる listener 名を識別、
+//   呼出回数 + 所要時間を 30 秒ごとに集計。renderer 側で listener 登録時に名前を付与する。
+//   window._subscribeCounter を介して state.js (別モジュール) と共有。
+const _subscribeCounter = {};   // listener 名 → { count: n, totalMs: n }
+try { if (typeof window !== 'undefined') window._subscribeCounter = _subscribeCounter; } catch (_) {}
+
+// 集計タイマー: 1 秒ごとに RAF サマリ、30 秒ごとに IPC / DOM / subscribe サマリ。
+//   `_wrappedSetInterval` 自身ではなく直接 setInterval を使う（自己参照回避 + label は固定で記録）。
+setInterval(() => {
+  try {
+    if (Object.keys(_rafCounter).length > 0) {
+      window.api?.log?.write?.('perf:raf:summary', { ..._rafCounter });
+    }
+    _rafCounter = {};
+  } catch (_) {}
+}, 1000);
+setInterval(() => {
+  try {
+    if (Object.keys(_ipcCounter).length > 0) {
+      window.api?.log?.write?.('perf:ipc:summary', { ..._ipcCounter });
+    }
+    for (const k of Object.keys(_ipcCounter)) delete _ipcCounter[k];
+  } catch (_) {}
+  try {
+    if (Object.keys(_domCounter).length > 0) {
+      window.api?.log?.write?.('perf:dom:summary', { ..._domCounter });
+    }
+    for (const k of Object.keys(_domCounter)) delete _domCounter[k];
+  } catch (_) {}
+  try {
+    if (Object.keys(_subscribeCounter).length > 0) {
+      window.api?.log?.write?.('perf:subscribe:summary', { ..._subscribeCounter });
+    }
+    for (const k of Object.keys(_subscribeCounter)) delete _subscribeCounter[k];
+  } catch (_) {}
+}, 30000);
 
 // トーナメント基本情報（mutable、トーナメントタブで編集可）
 // electron-store 永続化、起動時 + 保存時に applyTournament で反映
@@ -812,6 +925,9 @@ function formatPreStartTime(ms) {
 
 // タイマーは単一要素テキストで更新（モノスペースフォントが桁幅を保証する）
 function renderTime(remainingMs) {
+  // v2.1.18-meas1 perf:render:duration: 入口で performance.now() を取得、出口で経過時間を rolling-log に記録。
+  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計（_recordDomTime ヘルパ経由）。
+  const _t0 = performance.now();
   const { status } = getState();
   if (status === States.PRE_START) {
     el.time.textContent = formatPreStartTime(remainingMs);
@@ -819,6 +935,8 @@ function renderTime(remainingMs) {
     el.clock.dataset.timerState = remainingMs > 0 && remainingMs <= DANGER_THRESHOLD_MS ? 'danger' : 'normal';
     // フォーマット属性: 残り時間が 60 分以上は HH:MM:SS（hms）、未満は MM:SS（ms）→ CSS が font-size を切替
     el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
+    try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderTime', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
+    try { _recordDomTime('renderTime', performance.now() - _t0); } catch (_) {}
     return;
   }
   // PAUSED 中も PRE_START 由来なら同じフォーマットを維持
@@ -826,12 +944,16 @@ function renderTime(remainingMs) {
     el.time.textContent = formatPreStartTime(remainingMs);
     el.clock.dataset.timerState = 'normal';
     el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
+    try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderTime', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
+    try { _recordDomTime('renderTime', performance.now() - _t0); } catch (_) {}
     return;
   }
   // PRE_START 終了 / RUNNING / IDLE / etc → 属性をクリア
   if ('prestartFormat' in el.clock.dataset) delete el.clock.dataset.prestartFormat;
   el.time.textContent = formatTime(remainingMs);
   el.clock.dataset.timerState = status === States.BREAK ? 'normal' : classifyTimerState(remainingMs);
+  try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderTime', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
+  try { _recordDomTime('renderTime', performance.now() - _t0); } catch (_) {}
 }
 
 function computeNextBreakMs(remainingMs, currentIndex) {
@@ -884,6 +1006,8 @@ function renderNextBreak(remainingMs, currentIndex) {
 }
 
 function renderControls(status) {
+  // v2.1.18-meas1 perf:render:duration: renderControls の処理時間を記録
+  const _t0 = performance.now();
   el.clock.dataset.status = status;
   switch (status) {
     case States.IDLE:
@@ -913,6 +1037,20 @@ function renderControls(status) {
     default:
       break;
   }
+  try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderControls', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
+  try { _recordDomTime('renderControls', performance.now() - _t0); } catch (_) {}
+  // v2.1.20-meas1 カテゴリ G: 症状 1 真因確証 — `.clock__pause-label` の opacity 計算後を記録（hall 限定）
+  try {
+    if (window.appRole === 'hall' && el.clock) {
+      const pauseLabel = document.querySelector('.clock__pause-label');
+      const opacity = pauseLabel ? getComputedStyle(pauseLabel).opacity : 'no-element';
+      window.api?.log?.write?.('hall:clock-pause-label:visibility', {
+        opacity,
+        dataStatus: el.clock.dataset.status,
+        dataPrestartPaused: el.clock.dataset.prestartPaused
+      });
+    }
+  } catch (_) {}
 }
 
 // STEP 6: 動的計算ヘルパ（STEP 6.5: GTD 対応）
@@ -1607,7 +1745,8 @@ let timerStatePeriodicInterval = null;
 function startPeriodicTimerStatePersist() {
   if (window.appRole === 'hall') return;  // v2.0.1: hall は purely consumer、逆書込禁止
   if (timerStatePeriodicInterval) return;
-  timerStatePeriodicInterval = setInterval(periodicPersistAllRunning, 5000);
+  // v2.1.20-meas1 カテゴリ A: _wrappedSetInterval 経由で発火を記録
+  timerStatePeriodicInterval = _wrappedSetInterval(_IntervalLabel.PERIODIC_PERSIST, periodicPersistAllRunning, 5000);
 }
 function stopPeriodicTimerStatePersist() {
   if (timerStatePeriodicInterval) {
@@ -1740,7 +1879,8 @@ function syncPowerSaveBlocker(status) {
 //   この変数を使って operator-pane を更新する（rc7 修正漏れの補完）。
 let _lastTimerStateForRoleSwitch = null;
 
-subscribe((state, prev) => {
+// v2.1.20-meas1 カテゴリ F: subscribeNamed で listener 名を付与し、state.js notify ループで集計対象に
+subscribeNamed('subscribe:main-renderer', (state, prev) => {
   _lastTimerStateForRoleSwitch = state;
   if (state.status !== prev.status) {
     renderControls(state.status);
@@ -1823,6 +1963,17 @@ subscribe((state, prev) => {
     }
   }
   // STEP 10 フェーズC.1.4: スライドショー / PIP の状態同期
+  // v2.1.20-meas1 カテゴリ G: 症状 1 真因確証ラベル — syncSlideshowFromState 呼出時の hall PRE_START 状態を記録
+  try {
+    if (window.appRole === 'hall') {
+      window.api?.log?.write?.('hall:syncSlideshowFromState:call', {
+        remainingMs: state.remainingMs,
+        hallPreStartActive: !!(typeof hallPreStartState !== 'undefined' && hallPreStartState.isActive),
+        hallPreStartPaused: !!(typeof hallPreStartState !== 'undefined' && hallPreStartState.isPaused),
+        callerRole: window.appRole
+      });
+    }
+  } catch (_) {}
   syncSlideshowFromState(state.remainingMs);
   // v2.0.0 STEP 3: operator モードのみミニ状態バーを更新（hall / operator-solo は no-op）
   updateOperatorStatusBar(state);
@@ -2264,6 +2415,8 @@ function readPreStartMinutes() {
 }
 
 el.btnStart.addEventListener('click', () => {
+  // v2.1.18-meas1 ui:click:major
+  try { window.api?.log?.write?.('ui:click:major', { id: 'btnStart' }); } catch (_) {}
   // v2.0.0 STEP 3: ホール側ではボタン自体が hidden だが多重防御
   if (window.appRole === 'hall') return;
   // 初回スタート時に AudioContext を resume（ブラウザ自動再生ポリシー対策）
@@ -2274,8 +2427,12 @@ el.btnStart.addEventListener('click', () => {
   if (getState().status === States.IDLE) openPreStartDialog();
 });
 
-el.prestartCancel?.addEventListener('click', () => el.prestartDialog?.close());
+el.prestartCancel?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'prestartCancel' }); } catch (_) {}
+  el.prestartDialog?.close();
+});
 el.prestartOk?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'prestartOk' }); } catch (_) {}
   const minutes = readPreStartMinutes();
   const players = readPreStartPlayers();
   el.prestartDialog?.close();
@@ -2294,18 +2451,24 @@ el.prestartCustomMin?.addEventListener('focus', () => {
   if (customRadio) customRadio.checked = true;
 });
 el.btnPause.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'btnPause' }); } catch (_) {}
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: 多重防御
   ensureAudioReady();
   // v2.0.2 cleanup: notifyOperatorActionIfNeeded 呼出撤去（dual:operator-action がデッドコード）。
   handleStartPauseToggle();
 });
 el.btnReset.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'btnReset' }); } catch (_) {}
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: 多重防御
   ensureAudioReady();
   openResetDialog();
 });
-el.resetCancel.addEventListener('click', () => el.resetDialog.close());
+el.resetCancel.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'resetCancel' }); } catch (_) {}
+  el.resetDialog.close();
+});
 el.resetOk.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'resetOk' }); } catch (_) {}
   el.resetDialog.close();
   handleReset();   // STEP 6.6: tournamentRuntime もクリア → FINISHED 解除
 });
@@ -2379,12 +2542,16 @@ async function handleVenueSave() {
     // STEP 6.22.1.fix: 成功フィードバック（緑字 2.5 秒）
     _venueHintSuccess('保存しました');
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:handleVenueSave', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('venueName 保存失敗:', err);
     _venueHintError('保存に失敗しました: ' + (err.message || err));
   }
 }
 
-el.venueSaveBtn?.addEventListener('click', handleVenueSave);
+el.venueSaveBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'venueSaveBtn' }); } catch (_) {}
+  handleVenueSave();
+});
 
 // ===== STEP 6.23: PC間データ移行（エクスポート / インポート） =====
 
@@ -2550,10 +2717,19 @@ async function handleImportClipboard() {
   }
 }
 
-el.exportSingleFileBtn?.addEventListener('click', handleExportSingleFile);
+el.exportSingleFileBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'exportSingleFileBtn' }); } catch (_) {}
+  handleExportSingleFile();
+});
 el.exportSingleClipboardBtn?.addEventListener('click', handleExportSingleClipboard);
-el.exportBulkFileBtn?.addEventListener('click', handleExportBulkFile);
-el.importFileBtn?.addEventListener('click', handleImportFile);
+el.exportBulkFileBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'exportBulkFileBtn' }); } catch (_) {}
+  handleExportBulkFile();
+});
+el.importFileBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'importFileBtn' }); } catch (_) {}
+  handleImportFile();
+});
 el.importClipboardBtn?.addEventListener('click', handleImportClipboard);
 
 function applyBackground(value) {
@@ -2752,6 +2928,16 @@ function applyHallPreStartState(payload) {
   if (window.appRole !== 'hall') return;
   // v2.1.10 計測: hall window でのみ applyHallPreStartState 入口時刻を rolling-log に記録
   try { window.api?.log?.write?.('hall:applyHallPreStartState:enter', { isActive: !!payload?.isActive, remainingMs: payload?.remainingMs, ts: Date.now() }); } catch (_) { /* never throw from logging */ }
+  // v2.1.20-meas1 カテゴリ G: 症状 1/2 真因確証 — apply 入口で詳細状態を記録（dataset 前後比較用）
+  try {
+    const datasetPrestartPausedBefore = (el.clock && el.clock.dataset) ? el.clock.dataset.prestartPaused : undefined;
+    window.api?.log?.write?.('hall:applyHallPreStartState:apply', {
+      isActive: !!payload?.isActive,
+      isPaused: !!payload?.isPaused,
+      remainingMs: payload?.remainingMs,
+      dataset_prestartPaused_before: datasetPrestartPausedBefore
+    });
+  } catch (_) {}
   const isActive = !!payload.isActive;
   // v2.1.16 ① 根治防御二重化: isPaused フィールドが payload に**含まれない**場合は現状値を維持。
   //   operator 側 publishPreStartIfOperator で isPaused フィールドを必ず付けるよう Fix 1/2 で対応済だが、
@@ -2859,7 +3045,8 @@ function renderHallPreStartTick() {
     return;
   }
   // v2.1.11: 自己再帰 rAF で次フレームへ（v2.1.6 同等）
-  hallPreStartState.rafId = requestAnimationFrame(renderHallPreStartTick);
+  // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で発火回数を 1 秒集計
+  hallPreStartState.rafId = _wrappedRAF(_RafLabel.HALL_PRE_START_TICK, renderHallPreStartTick);
 }
 
 // v2.1.11: hall 側 RUNNING / BREAK 用の 60fps 自前 tick rAF（自己再帰）。
@@ -2872,9 +3059,26 @@ function renderHallPreStartTick() {
 //   ので、hall window の rAF は本機構（1 個）+ dual-sync flush（1 個）= 同時 2 個に収まる。
 //
 //   PRE_START は別系統（renderHallPreStartTick + hallPreStartState）。本関数は RUNNING/BREAK のみ。
+// v2.1.18-meas1 perf:tick:fps: hall RAF の実 fps を 1 秒ごとに集計して rolling-log に記録（hall 限定）
+let _fpsFrameCount = 0;
+let _fpsLastSampleAt = 0;
+function _samplePerfTickFps() {
+  _fpsFrameCount++;
+  const now = performance.now();
+  if (now - _fpsLastSampleAt >= 1000) {
+    if (window.appRole === 'hall' && _fpsLastSampleAt > 0) {
+      try { window.api?.log?.write?.('perf:tick:fps', { fps: _fpsFrameCount, sample_ms: now - _fpsLastSampleAt }); } catch (_) {}
+    }
+    _fpsFrameCount = 0;
+    _fpsLastSampleAt = now;
+  }
+}
+
 function renderHallTickFrame() {
   if (typeof window === 'undefined' || window.appRole !== 'hall') return;
   if (!hallTickState.isActive) return;
+  // v2.1.18-meas1: hall fps 集計
+  _samplePerfTickFps();
   // status が RUNNING/BREAK 以外（PAUSED/IDLE 等）に遷移した場合は rAF 停止
   if (hallTickState.status !== States.RUNNING && hallTickState.status !== States.BREAK) {
     hallTickState.isActive = false;
@@ -2893,7 +3097,8 @@ function renderHallTickFrame() {
     return;
   }
   // 自己再帰で次フレームへ
-  hallTickState.rafId = requestAnimationFrame(renderHallTickFrame);
+  // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で発火回数を 1 秒集計
+  hallTickState.rafId = _wrappedRAF(_RafLabel.HALL_TICK_FRAME, renderHallTickFrame);
 }
 
 function applyPipSize(value) {
@@ -2932,7 +3137,8 @@ function activateSlideshow() {
   // setInterval で循環
   const intervalMs = Math.max(3, breakImagesState.intervalSec) * 1000;
   if (slideshowState.intervalId) clearInterval(slideshowState.intervalId);
-  slideshowState.intervalId = setInterval(() => {
+  // v2.1.20-meas1 カテゴリ A: _wrappedSetInterval 経由で発火を記録
+  slideshowState.intervalId = _wrappedSetInterval(_IntervalLabel.SLIDESHOW_ROTATION, () => {
     if (!slideshowState.active || breakImagesState.images.length === 0) return;
     slideshowState.currentIndex = (slideshowState.currentIndex + 1) % breakImagesState.images.length;
     if (el.slideshowImg) {
@@ -2980,6 +3186,16 @@ function updatePipTimer(remainingMs, status) {
     // PRE_START 終了 / RUNNING / BREAK 等では prestartFormat 属性をクリア
     if (el.pipTimer && 'prestartFormat' in el.pipTimer.dataset) delete el.pipTimer.dataset.prestartFormat;
   }
+  // v2.1.20-meas1 カテゴリ G: 症状 2 真因確証ラベル — pipDigits 書込時の値 / status / hallPreStartActive を記録
+  try {
+    if (window.appRole === 'hall') {
+      window.api?.log?.write?.('hall:updatePipTimer:set', {
+        value: el.pipDigits.textContent,
+        status,
+        hallPreStartActive: !!(typeof hallPreStartState !== 'undefined' && hallPreStartState.isActive)
+      });
+    }
+  } catch (_) {}
 }
 
 // 「スライドショーに戻る」ボタンの disabled 状態を残り時間で更新
@@ -3312,6 +3528,7 @@ async function handleFontThumbClick(value) {
     try {
       await window.api.tournaments.setDisplaySettings(tournamentState.id, { timerFont: value });
     } catch (err) {
+      try { window.api?.log?.write?.('error:caught:handleFontThumbClick', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('フォント設定の保存に失敗:', err);
     }
   }
@@ -3333,6 +3550,7 @@ async function toggleBottomBar() {
     try {
       await window.api.settings.setDisplay({ bottomBarHidden });
     } catch (err) {
+      try { window.api?.log?.write?.('error:caught:toggleBottomBar', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('ボトムバー表示状態の保存に失敗:', err);
     }
   }
@@ -3583,6 +3801,7 @@ async function handleTournamentGameTypeChange(newGameType) {
       }
     }
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:structureTypeChange', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('構造型変更時のフォーマットロード失敗:', err);
   }
 
@@ -3967,6 +4186,9 @@ function ensureTournamentListDelegation() {
 }
 
 async function renderTournamentList(prefetched) {
+  // v2.1.18-meas1 perf:dom:rebuild: トーナメントリスト再構築の処理時間を記録
+  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計
+  const _t0 = performance.now();
   if (!el.tournamentList) return;
   // STEP 6.21.4.2 / STEP 10 フェーズB.fix9: 入力中スキップ。統一ヘルパに置換。
   // 1秒ごとの自動再描画で focus/打鍵イベントが奪われる現象を原理的に防止。
@@ -3995,6 +4217,10 @@ async function renderTournamentList(prefetched) {
     // STEP 7.x ③-e: list.length を渡して、最後の1件は🗑ボタンを disabled に
     el.tournamentList.appendChild(buildTournamentListItem(t, ts, isActive, list.length));
   }
+  // v2.1.18-meas1 perf:dom:rebuild: 出口で経過時間 + rows 数を記録（meas1 形式）
+  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計
+  try { window.api?.log?.write?.('perf:dom:rebuild', { fn: 'renderTournamentList', ms: performance.now() - _t0, rows: list.length }); } catch (_) {}
+  try { _recordDomTime('renderTournamentList', performance.now() - _t0); } catch (_) {}
 }
 
 function buildTournamentListItem(t, ts, isActive, listLength = 99) {
@@ -4187,6 +4413,7 @@ async function handleTournamentSelectChange() {
     const prevTimerState = captureCurrentTimerState();
     await window.api.tournaments.setTimerState(prevId, prevTimerState);
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:switchActive.preserveTimerState', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('切替前 timerState 保存失敗:', err);
   }
 
@@ -4196,6 +4423,7 @@ async function handleTournamentSelectChange() {
     current.id = prevId;
     await window.api.tournaments.save(current);
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:switchActive.preserveForm', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('切替前の自動保存に失敗:', err);
   }
 
@@ -4233,6 +4461,7 @@ async function restoreActiveTimerStateFromStore(id, opts = {}) {
     }
     applyTimerStateToTimer(found.timerState, levels, { silent: !!opts.silent });
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:restoreActiveTimerStateFromStore', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('timerState 復元失敗:', err);
   }
 }
@@ -4316,7 +4545,8 @@ async function _handleTournamentNewImpl() {
   ensureEditorEditableState();
   // 名前欄に focus + select で即座に編集できるように
   if (el.tournamentTitle) {
-    requestAnimationFrame(() => {
+    // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
+    _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
       el.tournamentTitle.focus();
       el.tournamentTitle.select();
       // STEP 10 フェーズC.1.4-fix1 Fix 5: C.1.4 で applyTournament が breakImagesState 反映 +
@@ -4404,7 +4634,8 @@ async function _handleTournamentDuplicateImpl() {
     try { ensureEditorEditableState(); } catch (_) { /* ignore */ }
   }
   if (el.tournamentTitle) {
-    requestAnimationFrame(() => {
+    // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
+    _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
       el.tournamentTitle.focus();
       el.tournamentTitle.select();
       // v2.0.4-rc13 Fix 1: RAF 内でも再保証（applyTournament → renderBreakImagesList 等の race で
@@ -5287,6 +5518,9 @@ function getMixUnionFields() {
 //   ヘルパは text/number/textarea/contentEditable のみ true（checkbox/radio/button は除外、
 //   ブレイクチェックボックス change → 再描画 skip バグの fix8 修正を踏襲）。
 function renderBlindsTable() {
+  // v2.1.18-meas1 perf:dom:rebuild: 入口で performance.now() 取得
+  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計
+  const _t0 = performance.now();
   if (!el.blindsTbody || !blindsEditor.draft) return;
   if (isUserTypingInInput() && el.settingsDialog?.contains?.(document.activeElement)) {
     return;
@@ -5308,6 +5542,10 @@ function renderBlindsTable() {
   // STEP 10 フェーズB.fix6: 再描画後に readonly 状態を反映（新規生成された input/button にも disabled 伝播）
   const isBuiltin = !blindsEditor.meta || blindsEditor.meta.builtin;
   setBlindsTableReadonly(isBuiltin);
+  // v2.1.18-meas1 perf:dom:rebuild: 出口で経過時間 + rows 数を記録
+  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計
+  try { window.api?.log?.write?.('perf:dom:rebuild', { fn: 'renderBlindsTable', ms: performance.now() - _t0, rows: blindsEditor.draft.levels.length }); } catch (_) {}
+  try { _recordDomTime('renderBlindsTable', performance.now() - _t0); } catch (_) {}
 }
 
 // 1行分の <tr> を生成（構造型のフィールドリストで列を動的に）
@@ -5657,7 +5895,8 @@ function insertLevelAfter(idx) {
   setDirty(true);
   renderBlindsTable();
   // STEP 6.9: 挿入直後に flash アニメーションを 0.6s 付与
-  requestAnimationFrame(() => {
+  // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
+  _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
     const tr = el.blindsTbody?.querySelector(`tr[data-index="${insertedAt}"]`);
     if (!tr) return;
     tr.classList.add('level-row--just-inserted');
@@ -5725,7 +5964,8 @@ el.presetNew?.addEventListener('click', async () => {
   // STEP 10 フェーズC.1-A2 Fix: 編集可能状態を強制保証（builtin → user 移行時の readonly 残存対策）
   ensureEditorEditableState();
   if (el.presetName) {
-    requestAnimationFrame(() => {
+    // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
+    _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
       // RAF 内でも再保証（DOM 更新後のタイミング保護）
       ensureEditorEditableState();
       el.presetName.focus();
@@ -5757,8 +5997,9 @@ el.presetDuplicate?.addEventListener('click', async () => {
   ensureEditorEditableState();
   // 複製直後の名前編集を即座に可能にする
   if (el.presetName) {
+    // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
     // 次フレームで focus + select（DOM 更新後でないと focus が外れることがある）+ 再保証
-    requestAnimationFrame(() => {
+    _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
       ensureEditorEditableState();   // RAF 内でも最終保証
       el.presetName.focus();
       el.presetName.select();
@@ -6651,6 +6892,8 @@ window.addEventListener('keydown', (event) => {
     target.tagName === 'SELECT' ||
     target.isContentEditable
   )) return;
+  // v2.1.18-meas1 ui:keypress: ローカル keydown を rolling-log に記録
+  try { window.api?.log?.write?.('ui:keypress', { key: event.key, code: event.code, ctrl: !!event.ctrlKey, shift: !!event.shiftKey, ctx: 'renderer:local-keydown', role: window.appRole }); } catch (_) {}
   dispatchClockShortcut(event);
 });
 
@@ -6662,6 +6905,8 @@ window.addEventListener('keydown', (event) => {
 if (typeof window !== 'undefined' && window.appRole === 'operator') {
   window.api?.dual?.onHallForwardedKey?.((data) => {
     if (!data || typeof data.code !== 'string') return;
+    // v2.1.18-meas1 ui:keypress: hall から IPC 経由で転送されたキー
+    try { window.api?.log?.write?.('ui:keypress', { key: data.key, code: data.code, ctrl: !!data.control, shift: !!data.shift, ctx: 'renderer:hall-forwarded', role: window.appRole }); } catch (_) {}
     dispatchClockShortcut({
       code: data.code,
       key: data.key,
@@ -7074,17 +7319,30 @@ async function loadInitialSettings() {
 //   IPC 経路（preload.js: getVersion → main.js: ipcMain.handle('app:getVersion', ...)）は
 //   既に正常実装済のため、renderer 側の関数切り出しと initialize() からの呼出のみで根治。
 async function loadAppVersion() {
+  let _versionForBadge = '';
   if (el.appVersion && window.api?.app?.getVersion) {
     try {
       const version = await window.api.app.getVersion();
+      _versionForBadge = version || '';
       el.appVersion.textContent = version;
     } catch (err) {
+      try { window.api?.log?.write?.('error:caught:loadAppVersion', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('バージョン取得に失敗:', err);
       el.appVersion.textContent = '0.1.0';
     }
   } else if (el.appVersion) {
     el.appVersion.textContent = '0.1.0';
   }
+  // v2.1.18-meas1: 計測ビルド識別バッジ。version が `-meas` / `-rc` のいずれも含まない（本番版）なら非表示。
+  //   `-meas1` / `-meas2` 等の連番にも対応するため `-meas\d*$` で末尾マッチ。
+  //   v2.1.19-rc1: 試験ビルド（rc）でも計測機構を完全保持するため `-rc\d+$` を OR で許容。
+  try {
+    const _v = _versionForBadge || '';
+    if (!(/-meas\d*$/.test(_v) || /-rc\d+$/.test(_v))) {
+      const badge = document.getElementById('meas-build-badge');
+      if (badge) badge.style.display = 'none';
+    }
+  } catch (_) { /* never throw */ }
 }
 
 async function initialize() {

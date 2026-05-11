@@ -275,9 +275,10 @@ test('T16: #js-pip-show-timer / #js-pip-show-slideshow が left 配置（旧 rig
 test('T17: _handleTournamentNewImpl の RAF 内で ensureEditorEditableState を再呼出（C.1.4-fix1 Fix 5）', () => {
   const body = extractFunctionBody(RENDERER, '_handleTournamentNewImpl');
   assert.ok(body, '_handleTournamentNewImpl 関数本体抽出失敗');
-  // requestAnimationFrame ブロック内に ensureEditorEditableState 呼出
-  const rafMatch = body.match(/requestAnimationFrame\s*\(\s*\(\s*\)\s*=>\s*\{[\s\S]*?\}\s*\)/);
-  assert.ok(rafMatch, 'RAF ブロックが抽出できない');
+  // v2.1.20-meas1: 既存 requestAnimationFrame 呼出は _wrappedRAF(_RafLabel.RENDERER_MISC, () => {...}) に置換。
+  //   両形式（直接 requestAnimationFrame / _wrappedRAF ラッパ）を許容。
+  const rafMatch = body.match(/(?:requestAnimationFrame|_wrappedRAF\s*\([^,]+,)\s*(?:\(\s*\)|)\s*(?:\(\s*\)\s*)?=>\s*\{[\s\S]*?\}\s*\)/);
+  assert.ok(rafMatch, 'RAF ブロック / _wrappedRAF ブロックが抽出できない');
   assert.match(rafMatch[0], /ensureEditorEditableState\s*\(\s*\)/,
     'RAF 内に ensureEditorEditableState 再呼出がない（Fix 5 防御的多重化）');
   // 同期側の呼出も維持（C.1.2-bugfix の効果を残す）

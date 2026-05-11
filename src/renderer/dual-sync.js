@@ -34,6 +34,8 @@ function _applyDiffToState(diff) {
   if (!diff || typeof diff !== 'object' || typeof diff.kind !== 'string') return;
   const { kind, value } = diff;
   if (value === undefined) return;
+  // v2.1.18-meas1 dual-sync:apply: kind 別 apply を rolling-log に記録（hall / operator 共通）
+  try { window.api?.log?.write?.('dual-sync:apply', { kind, role: typeof window !== 'undefined' ? window.appRole : 'main' }); } catch (_) {}
   // v2.0.4-rc17: 常時 3 ラベル rolling ログ #2（hall 受信 ts、timerState のみ）
   if (kind === 'timerState') {
     try { window.api?.log?.write?.('timer:state:recv:hall', { status: value?.status, level: value?.currentLevel, elapsed: value?.elapsedSecondsInLevel, role: window.appRole }); } catch (_) { /* never throw from logging */ }
@@ -50,7 +52,11 @@ function _applyDiffToState(diff) {
   // 2. hall 側 renderer の動的反映（registerDualDiffHandler で登録済の場合のみ）
   if (_diffHandler) {
     try { _diffHandler(diff); }
-    catch (err) { console.warn('[dual-sync] diff handler error:', err); }
+    catch (err) {
+      // v2.1.18-meas1 error:caught:dual-sync.diffHandler
+      try { window.api?.log?.write?.('error:caught:dual-sync.diffHandler', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
+      console.warn('[dual-sync] diff handler error:', err);
+    }
   }
 }
 
@@ -133,7 +139,10 @@ function _bufferDiff(diff) {
     //   で flush され、描画パイプと自然に同期する。atomic update 効果は維持
     //   （rAF boundary 内で複数 diff を集約、dedup + 受信順保持はそのまま）。
     // v2.1.10: rAF 自体は v2.1.9 のまま維持（変更禁止）。frame skip 検出のみ追加（hall 限定）。
+    // v2.1.20-meas1 カテゴリ B: RAF 発火を rolling-log に記録（dual-sync-flush ラベル、1 秒集計対象外、
+    //   イベント駆動のため発火頻度が低く個別ログで十分。renderer.js の _wrappedRAF とは別系統）。
     _flushTimer = requestAnimationFrame(() => {
+      try { window.api?.log?.write?.('perf:raf:fire', { label: 'dual-sync-flush' }); } catch (_) {}
       _flushTimer = null;
       // v2.1.10: hall 限定の frame skip 計測（独立関数で inline object literal 排除）
       _recordFlushFrameSkip();
@@ -209,6 +218,8 @@ export async function initDualSyncForHall() {
   try {
     initial = await dual.fetchInitialState();
   } catch (err) {
+    // v2.1.18-meas1 error:caught:dual-sync.fetchInitialState
+    try { window.api?.log?.write?.('error:caught:dual-sync.fetchInitialState', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('[dual-sync] 初期状態取得に失敗:', err);
     initial = null;
   }
