@@ -1593,14 +1593,31 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   if (!ts || typeof ts !== 'object') {
     el.clock?.classList.remove('clock--timer-finished');
     if (!isHallApply) timerReset();
-    else stopHallTickFrame();
+    else {
+      // v2.1.20-rc2: PAUSED/IDLE/PRE_START 遷移時に hallTickState を明示リセット
+      //   HDMI 抜き差し時に前トーナメントの seed が残存する race を防ぐ（rc1 hall タイマー止まらず根治）
+      stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: 'invalid-ts' }); } catch (_) {}
+    }
     return;
   }
   if (ts.status === 'idle') {
     el.clock?.classList.remove('clock--timer-finished');
     if (!isHallApply) timerReset();
     else {
+      // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
       stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: ts.status }); } catch (_) {}
       try {
         const lvl0 = (getLevelCount() > 0) ? getLevel(0) : null;
         const totalMs0 = (lvl0?.durationMinutes || 0) * 60 * 1000;
@@ -1615,7 +1632,14 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   if (ts.status === 'finished') {
     if (!isHallApply) timerReset();
     else {
+      // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
       stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: ts.status }); } catch (_) {}
       // hall: 終了表示用に setState で IDLE + remainingMs=0 を反映
       try { setState({ status: States.IDLE, remainingMs: 0 }); } catch (_) {}
     }
@@ -1631,7 +1655,16 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   const levelCount = getLevelCount();
   if (levelCount === 0) {
     if (!isHallApply) timerReset();
-    else stopHallTickFrame();
+    else {
+      // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
+      stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: 'no-levels' }); } catch (_) {}
+    }
     return;
   }
   const idx = Math.max(0, Math.min(levelCount - 1, (live.currentLevel || 1) - 1));
@@ -1674,7 +1707,11 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
         renderHallTickFrame();
       } else {
         // PAUSED: rAF 停止、上の setState で残り時間が固定表示される
+        // v2.1.20-rc2: PAUSED 遷移時も defensive hallTickState リセット（前トーナメント seed 残存防止）
+        //   なお totalMs / currentLevelIndex / startedAtMs は直前 setState で適切値が seed されているため上書きしない
         stopHallTickFrame();
+        hallTickState.isActive = false;
+        try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: live.status }); } catch (_) {}
       }
     } catch (err) { console.warn('[v2.1.11 hall] tick state seed 更新失敗:', err); }
   }
@@ -3019,6 +3056,17 @@ function applyHallPreStartState(payload) {
     if (typeof renderTime === 'function') renderTime(0);
     // スライドショー判定を再評価（PRE_START → idle で deactivate）
     if (typeof syncSlideshowFromState === 'function') syncSlideshowFromState(0);
+    // v2.1.20-rc2: PRE_START 解除時に hallTickState も IDLE 正規化
+    //   hallTickState seed が前 RUNNING 値で残存している場合の保険（hall タイマー止まらず根治）
+    if (hallTickState.isActive || hallTickState.status !== 0 || hallTickState.startedAtMs !== 0) {
+      stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyHallPreStartState-inactive' }); } catch (_) {}
+    }
   }
 }
 
@@ -7491,6 +7539,16 @@ if (typeof window !== 'undefined') {
 }
 
 if (__appRole === 'hall') {
+  // v2.1.20-rc2: hall 起動時の defensive init（HDMI 再生成 race 対策）
+  //   hallTickState は変数定義時に default 値だが、明示的に再代入して残存リスクを排除。
+  //   HDMI 抜き差し時の window 再生成シーンで前トーナメント seed が残存する race を根本的に防ぐ。
+  hallTickState.isActive = false;
+  hallTickState.status = 0;
+  hallTickState.currentLevelIndex = 0;
+  hallTickState.totalMs = 0;
+  hallTickState.startedAtMs = 0;
+  hallTickState.rafId = null;
+  try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'hall-window-init' }); } catch (_) {}
   // v2.0.1 #A1: hall 側 dual-sync 差分ハンドラを登録。
   //   main からの broadcast を受信したとき、kind 別に該当する apply* 関数を呼ぶ。
   //   tournamentBasics 受信時は active トーナメント全体を再取得して applyTournament（最も安全）。

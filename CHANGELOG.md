@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc2] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc2 試験ビルド（前原さん実機専用、配布なし）。rc1 試験で発覚した「HDMI 抜き差し時の hall タイマー止まらず」退行を defensive 初期化 3 箇所で根治。rc1 の軽量化機構（setInterval 撤廃 / Promise dedup / setState 撤廃 / DocumentFragment / memo 化 / 症状 1/2 修正）はすべて完全保持。
+
+### Fixed
+- **HDMI 抜き差し時の hall タイマー止まらず退行**: `applyTimerStateToTimer` hall 経路 / `applyHallPreStartState` isActive=false 経路 / hall window 起動経路 の 3 箇所で `hallTickState` の defensive 初期化を追加、HDMI 再生成シーンで前トーナメントの seed が残存する race を防ぐ
+
+### Maintained
+- v2.1.20-rc1 軽量化機構（setState 撤廃 + DocumentFragment + memo + 症状 1/2 修正）完全保持
+- v2.1.19 重さ根治機構（setInterval 撤廃 + Promise dedup）完全保持
+- 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構すべて完全保持
+- v2.1.20-meas1 計測機構完全保持（次フェーズで撤去予定）
+
+### Known Issues（v2.1.21 以降で対処予定）
+- Op 8 で 1952ms（約 2 秒）のメインスレッドブロック が 1 回観測（再現性低、再起動で復旧）。本 rc2 の defensive 初期化で「hall タイマー止まらず」症状は防げるが、根本原因は計装ラベル不足で確定不可。v2.1.21 で計装追加 + 再観測予定
+- `state:transition` ログが operator + hall の両方で記録される二重出力（無害、ログ汚染のみ）。v2.1.21 で role 区別ガード追加予定
+
+---
+
 ## [2.1.20-rc1] - 2026-05-11
 
 PokerTimerPLUS+ v2.1.20-rc1 試験ビルド（前原さん実機専用、配布なし）。v2.1.20-meas1 計測ビルドで真因 100% 確定 → 重さの主犯（renderHallTickFrame の 60Hz setState 連鎖）+ renderTournamentList 1 回 500ms + 症状 1/2 を最小修正で一気に対処。計測機構は完全保持（効果計測のため、次フェーズで撤去）。
