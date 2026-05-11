@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc5] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc5 試験ビルド（前原さん実機専用、配布なし）。rc4 で実装した operator 側 preStartState 受信機構が hall ブロック内の dead code 化していた構造的問題を根治。
+
+### Fixed
+- **operator 側 preStartState 配信経路を構造的に修復**: rc4 で追加した受信機構（`applyOperatorPreStartState` / `restorePreStart` / `handleStartPauseToggle` PRE_START 分岐）はそのまま生かし、配信側（main.js）と購読側（renderer.js operator/operator-solo ブロック）を新規追加することで動作可能化。HDMI 抜き差し後の operator 再生成時に PRE_START カウントダウンが消失して Space キーが「タイマースタートダイアログ」を開く症状を根治
+- main.js `_publishDualState` で `kind === 'preStartState'` のときに operator (mainWindow) にも `dual:state-sync` を送信する経路追加
+- main.js `switchSoloToOperator` で新 operator window load 完了後に cache から preStartState を 1 回送信する経路追加（broadcast race の二重保険）
+- renderer.js operator / operator-solo ブロックに `subscribeStateSync` 経路追加（preStartState だけ拾って `applyOperatorPreStartState` 呼出）
+- 新規ラベル `preStart:operator:send` / `operator:preStartResync:sent`
+
+### Maintained
+- v2.1.20-rc4 (operator 側 PRE_START 復元 API: `restorePreStart` + `applyOperatorPreStartState` + `handleStartPauseToggle` PRE_START 分岐) 完全保持
+- v2.1.20-rc3 (スライドショー始動復活 + renderTournamentList Promise dedup) 完全保持
+- v2.1.20-rc2 (hallTickState reset 3 経路) 完全保持
+- v2.1.20-rc1 (重さ根治 4 件) 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- v2.1.20-meas1 計測機構 完全保持（次フェーズで撤去 → v2.2.1 本番リリース予定）
+
+---
+
 ## [2.1.20-rc4] - 2026-05-11
 
 PokerTimerPLUS+ v2.1.20-rc4 試験ビルド（前原さん実機専用、配布なし）。rc3 試験で発覚した「HDMI 抜き差し後 operator 操作不可」の構造的問題を根治。

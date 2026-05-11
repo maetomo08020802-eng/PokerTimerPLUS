@@ -7736,6 +7736,9 @@ if (__appRole === 'hall') {
       } else if (kind === 'preStartState' && value && typeof value === 'object' && window.appRole !== 'hall') {
         // v2.1.20-rc4: operator / operator-solo 側 preStartState 受信処理（HDMI 抜き差し / 再起動後の復帰用）。
         //   hall 側 applyHallPreStartState とは独立、timer.js の restorePreStart 経由で内部状態を復元。
+        // v2.1.20-rc5 補足: 本分岐は `if (__appRole === 'hall')` ブロック内のため operator 経路から到達しない（dead code 確定）。
+        //   実際の operator 側受信は line 7790 付近の `else if (__appRole === 'operator')` / else (operator-solo) ブロック内
+        //   subscribeStateSync 経路で行う（Fix 3）。本分岐は rc4 履歴保持のためコード削除せず残置。
         try {
           applyOperatorPreStartState(value);
         } catch (err) {
@@ -7788,11 +7791,38 @@ if (__appRole === 'hall') {
   //   await の失敗で initialize が止まらないよう finally でフォールバック。
   initDualSyncForHall().finally(() => initialize());
 } else if (__appRole === 'operator') {
+  // v2.1.20-rc5: operator も preStartState だけは購読する（HDMI 抜き差し後の PRE_START 復元用）。
+  //   既存設計では subscribeStateSync は hall 限定購読だが、main.js Fix 1/Fix 2 で operator にも
+  //   preStartState を送信する経路を作ったため、ここで対応する受信側を追加。
+  //   timerState 等の他 kind は operator 側で既存 IPC 経由で個別取得しているため、本購読では preStartState のみ拾う。
+  try {
+    window.api?.dual?.subscribeStateSync?.((payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      if (payload.kind === 'preStartState' && payload.value && typeof payload.value === 'object') {
+        try { applyOperatorPreStartState(payload.value); }
+        catch (err) {
+          try { window.api?.log?.write?.('error:caught:operator.preStartState.subscribe', { msg: err && err.message }); } catch (_) {}
+        }
+      }
+    });
+  } catch (_) { /* never throw from subscribe registration */ }
   // operator（2 画面の PC 側）: 本 STEP では既存ロジックそのまま。
   //   STEP 3 で表示要素の hidden 化 + main への operator-action 通知へ移行する。
   initialize();
 } else {
   // operator-solo（単画面、デフォルト）: v1.3.0 と完全同等。
+  // v2.1.20-rc5: operator-solo も対称性のため preStartState を購読（hall 不在モードのため発火頻度低、害なし）。
+  try {
+    window.api?.dual?.subscribeStateSync?.((payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      if (payload.kind === 'preStartState' && payload.value && typeof payload.value === 'object') {
+        try { applyOperatorPreStartState(payload.value); }
+        catch (err) {
+          try { window.api?.log?.write?.('error:caught:operator-solo.preStartState.subscribe', { msg: err && err.message }); } catch (_) {}
+        }
+      }
+    });
+  } catch (_) {}
   // v2.0.0 STEP 5: HDMI 抜き差し直後にウィンドウが再生成されるため、
   //   AudioContext が新しい renderer で suspend 状態になっている可能性。
   //   C.1.7 修正で _play() 内 resume が走るが、最初の音発火を待たずに

@@ -1037,6 +1037,16 @@ function _publishDualState(kind, value) {
     try { rollingLog('blindPreset:state:send', { presetId: value?.blindPresetId, presetName: hashPII(value?.name), structureLength: value?.structure?.levels?.length || 0 }); } catch (_) { /* never throw from logging */ }
   }
   _broadcastDualState('dual:state-sync', { kind, value });
+  // v2.1.20-rc5: preStartState だけは operator (mainWindow) にも送信する。
+  //   _broadcastDualState は hall 限定送信のため、HDMI 抜き差し後の operator 再生成時に
+  //   PRE_START 状態が消失して Space キーが IDLE 分岐に振られる（→ タイマースタートダイアログが開く）構造的問題を根治。
+  //   他 kind（timerState 等）は operator 側で個別 IPC 経由で取得しているため対象外、preStartState のみ追加。
+  if (kind === 'preStartState' && mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      mainWindow.webContents.send('dual:state-sync', { kind, value });
+      try { rollingLog('preStart:operator:send', { isActive: value?.isActive, isPaused: !!value?.isPaused }); } catch (_) {}
+    } catch (_) { /* operator may be in transition (reload after HDMI replug), ignore */ }
+  }
 }
 
 // v2.0.0 STEP 1: 共通の webPreferences ベース（operator / hall で同一の Electron セキュリティ設定）。
@@ -1407,6 +1417,26 @@ async function switchSoloToOperator(hallDisplay) {
         mainWindow.webContents.send('dual:role-changed', 'operator');
       }
     } catch (_) { /* ignore */ }
+    // v2.1.20-rc5: 新 operator window load 完了後に PRE_START 状態を 1 回再同期。
+    //   HDMI 挿し直しで operator window が close → 再生成され、renderer.js / timer.js が初期化されるため
+    //   PRE_START 中の state が消失する。cache に保持された preStartState が active なら、
+    //   load 完了タイミングで 1 回 push して applyOperatorPreStartState 経路で復元させる。
+    //   Fix 1 の常時 broadcast と二重保険（cache の値 vs. broadcast タイミングの race どちらにも耐える設計）。
+    if (_dualStateCache.preStartState && _dualStateCache.preStartState.isActive) {
+      const cachedPreStart = _dualStateCache.preStartState;
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.once('did-finish-load', () => {
+            try {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('dual:state-sync', { kind: 'preStartState', value: cachedPreStart });
+                try { rollingLog('operator:preStartResync:sent', { isActive: cachedPreStart.isActive, isPaused: !!cachedPreStart.isPaused, ctx: 'switchSoloToOperator' }); } catch (_) {}
+              }
+            } catch (_) { /* never throw from resync */ }
+          });
+        }
+      } catch (_) { /* never throw from listener registration */ }
+    }
   } finally {
     _isSwitchingMode = false;
     rollingLog('switchSoloToOperator:exit', null);
