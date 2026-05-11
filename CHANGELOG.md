@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc1] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc1 試験ビルド（前原さん実機専用、配布なし）。v2.1.20-meas1 計測ビルドで真因 100% 確定 → 重さの主犯（renderHallTickFrame の 60Hz setState 連鎖）+ renderTournamentList 1 回 500ms + 症状 1/2 を最小修正で一気に対処。計測機構は完全保持（効果計測のため、次フェーズで撤去）。
+
+### Performance
+- **重さの真の主犯撤廃**: `renderHallTickFrame` の `setState({remainingMs})` 60Hz 呼出を削除、DOM 直接書込に変更（subscribe 連鎖 50〜60Hz → 0、renderTime 120Hz → 60Hz、renderHallPreStartTick と同設計に統一）
+- **renderTournamentList 軽量化**: `DocumentFragment` 経由で reflow 回数を N → 1 に削減 + `computeLiveTimerState` を秒粒度でメモ化（1 回 500ms → 200ms 程度の見込み）
+
+### Fixed
+- **症状 1**: 会場モニター PRE_START 一時停止時の「一時停止中」テロップが左下小さく表示される問題を、通常 PAUSED と同じ「真ん中大きく枠付き」表示に統一
+- **症状 2**: 会場モニター PRE_START 一時停止時の右下カウントダウン枠に「01:00」が一瞬表示される問題を、主犯撤廃 + subscribe gate 二重防御で根治
+
+### Compatibility
+- v2.1.6〜v2.1.19 機構完全互換、致命バグ保護 5 件無傷
+- v2.1.20-meas1 計測機構完全保持（次フェーズで撤去予定）
+- 単画面モード完全同一
+
+---
+
 ## [2.1.20-meas1] - 2026-05-10
 
 PokerTimerPLUS+ v2.1.20-meas1 計測ビルド（前原さん実機専用、配布なし）。v2.1.19 本番リリース後の残り重さ網羅観測 + 症状 1/2 真因確証用。

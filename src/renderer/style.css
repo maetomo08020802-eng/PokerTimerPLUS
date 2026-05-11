@@ -4121,18 +4121,19 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
   display: none !important;
 }
 
-/* v2.1.15 ① 根治: PRE_START 一時停止中の hall 側ラベル表示。
-   pause() 中は applyHallPreStartState が dataset.prestartPaused="true" を付与し、
-   resume() で属性を削除する。 hall ロールでのみ表示（operator / operator-solo は CSS の data-role 制限で出ない）。 */
-[data-role="hall"] .clock[data-prestart-paused="true"]::after {
-  content: '一時停止中';
-  display: block;
-  text-align: center;
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: #ffaa00;
-  margin-top: 0.5rem;
-  letter-spacing: 0.1em;
+/* v2.1.20-rc1 症状 1 修正: PRE_START 一時停止時も通常 PAUSED と同じ「真ん中・大きく・枠付き」表示に統一。
+   v2.1.15 で実装した hall ::after の「左下小さい表示」は、構造的に通常 PAUSED と別系統で
+   仕様ミスだったため撤去。data-prestart-paused="true" でも .clock__pause-label を表示する。 */
+.clock[data-prestart-paused="true"] .clock__pause-label {
+  opacity: 1;
+}
+.clock[data-prestart-paused="true"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* v2.1.18-meas1: 計測ビルド識別バッジ（version に -meas を含むときのみ表示、本番では loadAppVersion で display: none）。

@@ -70,7 +70,8 @@ test('T3: renderTime 関数冒頭の rc2 Fix 2-B 完全撤去', () => {
   // v2.1.19-rc2: meas1 計測機構は **撤去** された。本番版 + rc2 では rc2 計測ログ撤去を厳格 verify。
   //   `-meas\d+` サフィックスのみ skip（meas1 段階では計測機構を保持しているため verify 不可能）。
   //   rc2 では meas-removal の verify 側に立つので skip しない（v236 と並行で撤去確認）。
-  if (/-meas\d+$/.test(PKG.version || '')) return;
+  // v2.1.20-rc1: rc 系試験ビルドも meas1 機構保持中なので skip。
+  if (/-(meas|rc)\d+$/.test(PKG.version || '')) return;
   // function renderTime(remainingMs) { 直後 50 文字以内に const { status } = getState();
   assert.match(RENDERER, /function\s+renderTime\s*\(\s*remainingMs\s*\)\s*\{\s*\n\s*const\s*\{\s*status\s*\}\s*=\s*getState\s*\(\s*\)\s*;/,
     'renderTime 冒頭に rc2 Fix 2-B の if ブロックが残存（Fix 1 撤去未完了）');
@@ -100,7 +101,8 @@ test('T5: el.clock.dataset.status 書き換え 4 箇所維持 + rc2 Fix 2-D call
   // v2.1.19-rc2: meas1 計測機構は **撤去** された。本番版 + rc2 では rc2 計測ログ撤去を厳格 verify。
   //   `-meas\d+` サフィックスのみ skip（meas1 段階では計測機構を保持しているため verify 不可能）。
   //   rc2 では meas-removal の verify 側に立つので skip しない（v236 と並行で撤去確認）。
-  if (/-meas\d+$/.test(PKG.version || '')) return;
+  // v2.1.20-rc1: rc 系試験ビルドも meas1 機構保持中なので skip。
+  if (/-(meas|rc)\d+$/.test(PKG.version || '')) return;
   // rc2 Fix 2-D の caller 識別子文字列 4 種すべて 0 件（コメント行なら OK だが文字列リテラルは消えているはず）
   // hall:dataset:status:write は T1 で 0 件確認済、ここでは caller リテラル文字列の grep
   const callers = ["'renderControls'", "'applyHallPreStartState:paused'", "'applyHallPreStartState:inactive'", "'renderHallPreStartTick'"];
@@ -175,7 +177,7 @@ test('T6: rc1 Fix 1/2/3 + rc2 Fix 1 + 致命バグ保護 5 件 + v2.1.6〜v2.1.1
     'v2.1.17 main.js sanitization isPaused 転送 1 行消失');
 
   // package.json version 2.1.18
-  assert.equal(PKG.version, '2.1.20-meas1', `package.json version が 2.1.18 ではない（実際: ${PKG.version}）`);
+  assert.equal(PKG.version, '2.1.20-rc1', `package.json version が 2.1.18 ではない（実際: ${PKG.version}）`);
 });
 
 console.log(`\n結果: ${pass} PASS, ${fail} FAIL`);

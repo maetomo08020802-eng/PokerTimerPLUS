@@ -1553,6 +1553,20 @@ function computeLiveTimerState(ts, levels) {
   return { ...ts, currentLevel: level, elapsedSecondsInLevel: Math.floor(elapsed) };
 }
 
+// v2.1.20-rc1: computeLiveTimerState を秒粒度でメモ化（renderTournamentList 軽量化）。
+//   同じ tournament + 同じ秒なら結果を再利用 → 1 回 400〜570ms → 200ms 程度に圧縮見込み。
+//   WeakMap なので tournament オブジェクトが GC 対象になれば自動解放 = メモリリークなし。
+const _computeLiveTimerStateMemo = new WeakMap();
+function computeLiveTimerStateMemoized(ts, levels) {
+  if (!ts || typeof ts !== 'object') return computeLiveTimerState(ts, levels);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const cached = _computeLiveTimerStateMemo.get(ts);
+  if (cached && cached.nowSec === nowSec && cached.levels === levels) return cached.value;
+  const value = computeLiveTimerState(ts, levels);
+  try { _computeLiveTimerStateMemo.set(ts, { nowSec, levels, value }); } catch (_) {}
+  return value;
+}
+
 // STEP 6.21.2: blindPresetId → levels 配列のキャッシュ
 // renderTournamentList が 1秒ごとに呼ばれるため、毎回 fetch すると重い → 起動時/プリセット変更時のみ load
 const blindPresetCache = new Map();
@@ -1974,7 +1988,12 @@ subscribeNamed('subscribe:main-renderer', (state, prev) => {
       });
     }
   } catch (_) {}
-  syncSlideshowFromState(state.remainingMs);
+  // v2.1.20-rc1: Fix 3（症状 2 保険ガード）— hall PRE_START 中の流れ込みを防ぐ。
+  //   Fix 1 で 60Hz setState 連鎖が消えれば本経路自体が発火しないが、別経路（HDMI 抜き差し等）
+  //   からの流れ込みを保険ガードで二重防御。typeof チェックで hall 以外でも安全。
+  if (!(window.appRole === 'hall' && typeof hallPreStartState !== 'undefined' && hallPreStartState.isActive)) {
+    syncSlideshowFromState(state.remainingMs);
+  }
   // v2.0.0 STEP 3: operator モードのみミニ状態バーを更新（hall / operator-solo は no-op）
   updateOperatorStatusBar(state);
   // v2.0.4-rc4: operator モードのみ支援パネル（運用情報）を更新（hall / operator-solo は no-op）
@@ -3087,8 +3106,12 @@ function renderHallTickFrame() {
   }
   const now = Date.now();
   const remainingMs = Math.max(0, hallTickState.startedAtMs - now);
-  // setState({ remainingMs }) で subscribe 経由 → renderTime / renderNextBreak が DOM 更新
-  try { setState({ remainingMs }); } catch (_) { /* defensive */ }
+  // v2.1.20-rc1: 重さ真因対処（最重要）— setState({ remainingMs }) を削除し、DOM 直接書込に変更。
+  //   旧構造: 60Hz setState → subscribe 連鎖（50〜60Hz） → renderTime / syncSlideshowFromState 二重発火
+  //   新構造: 60Hz tick → DOM 直接書込 → subscribe 発火しない（renderHallPreStartTick と同設計）
+  //   appState.remainingMs はイベント時のみ更新（applyTimerStateToTimer 等）、tick では更新しない
+  try { renderTime(remainingMs); } catch (_) { /* defensive */ }
+  try { syncSlideshowFromState(remainingMs); } catch (_) { /* defensive */ }
   if (remainingMs <= 0) {
     // 0 到達時は自動遷移を operator broadcast に委ねる（hall 側で次レベル進行はしない）。
     // 0 表示の状態で rAF を停止して待機。次の operator broadcast で seed 更新されたら再起動される。
@@ -4200,6 +4223,8 @@ async function renderTournamentList(prefetched) {
     try { list = await _tournamentsListDedup() || []; } catch (_) { list = []; }
   }
   el.tournamentList.innerHTML = '';
+  // v2.1.20-rc1: Fix 2-A — DocumentFragment で reflow 回数を N → 1 に削減
+  const fragment = document.createDocumentFragment();
   for (const t of list) {
     const isActive = (t.id === tournamentState.id);
     let ts;
@@ -4210,13 +4235,15 @@ async function renderTournamentList(prefetched) {
       // STEP 6.21.2: 非アクティブは store の値 + 時刻計算で live を導出（並行進行）
       const stored = t.timerState || { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
       const levels = await getCachedLevels(t.blindPresetId);
+      // v2.1.20-rc1: Fix 2-B — 秒粒度メモ化で 1 秒以内の重複計算を圧縮
       ts = (levels && stored.status === 'running')
-        ? computeLiveTimerState(stored, levels)
+        ? computeLiveTimerStateMemoized(stored, levels)
         : stored;
     }
     // STEP 7.x ③-e: list.length を渡して、最後の1件は🗑ボタンを disabled に
-    el.tournamentList.appendChild(buildTournamentListItem(t, ts, isActive, list.length));
+    fragment.appendChild(buildTournamentListItem(t, ts, isActive, list.length));
   }
+  el.tournamentList.appendChild(fragment);
   // v2.1.18-meas1 perf:dom:rebuild: 出口で経過時間 + rows 数を記録（meas1 形式）
   // v2.1.20-meas1 カテゴリ D: _domCounter にも集計
   try { window.api?.log?.write?.('perf:dom:rebuild', { fn: 'renderTournamentList', ms: performance.now() - _t0, rows: list.length }); } catch (_) {}

@@ -30,11 +30,12 @@ function test(name, fn) {
   catch (err) { console.log('FAIL:', name, '\n  ', err.message); fail++; }
 }
 
-// v2.1.20-meas1: meas シリーズでは計測機構が**復活**しているため、本テスト（撤去 verify）は skip。
-const _shouldSkipMeasBuild = /-meas\d+$/.test(PKG.version || '');
+// v2.1.20-rc1: meas / rc 系試験ビルドでは計測機構が**保持**されているため、本テスト（撤去 verify）は skip。
+//   本番版（サフィックスなし）でのみ撤去 verify を実施。
+const _shouldSkipMeasBuild = /-(meas|rc)\d+$/.test(PKG.version || '');
 function testSkippableOnMeas(name, fn) {
   if (_shouldSkipMeasBuild) {
-    console.log('SKIP:', name, '(meas ビルドでは計測機構保持中のため撤去 verify を skip)');
+    console.log('SKIP:', name, '(meas / rc ビルドでは計測機構保持中のため撤去 verify を skip)');
     return;
   }
   test(name, fn);
