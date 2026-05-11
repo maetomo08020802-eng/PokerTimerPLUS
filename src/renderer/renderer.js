@@ -23,6 +23,8 @@ import {
   startAtLevel as timerStartAtLevel,
   startPreStart as timerStartPreStart,
   cancelPreStart as timerCancelPreStart,
+  // v2.1.20-rc4: operator 側 dual-sync 受信時の PRE_START 状態復元用
+  restorePreStart as timerRestorePreStart,
   isPreStartActive,
   getPreStartTotalMs,
   pause as timerPause,
@@ -2418,6 +2420,13 @@ function handleStartPauseToggle() {
   // 初回ユーザー操作時に AudioContext を resume（fire-and-forget）
   ensureAudioReady();
   const { status } = getState();
+  // v2.1.20-rc4: PRE_START 中の Space で確実に一時停止（operator 再起動後の復帰経路含む）。
+  //   既存 RUNNING/BREAK/PRE_START → timerPause() の経路と重複するが、explicit early-return で
+  //   restorePreStart 復元後の経路を明示。isPreStartActive() ガードで timer.js 内部状態と整合。
+  if (status === States.PRE_START && typeof isPreStartActive === 'function' && isPreStartActive()) {
+    timerPause();
+    return;
+  }
   // IDLE: スタートボタンと同じ挙動（プレスタート選択ダイアログを開く）
   if (status === States.IDLE) openPreStartDialog();
   else if (status === States.RUNNING || status === States.BREAK || status === States.PRE_START) timerPause();
@@ -3079,6 +3088,50 @@ function applyHallPreStartState(payload) {
       hallTickState.totalMs = 0;
       hallTickState.isActive = false;
       try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyHallPreStartState-inactive' }); } catch (_) {}
+    }
+  }
+}
+
+// v2.1.20-rc4: operator 側 PRE_START 状態受信処理（HDMI 抜き差し / operator 再起動時の復帰用）。
+//   真因: HDMI 抜き差し時 operator renderer 再生成 → timer.js の isPreStart フラグがリセット →
+//        main からの timerState (idle) のみ受信 → operator は PRE_START 中であることを一切知らない。
+//        その結果 `appState.status === IDLE` のまま、Space キーが「IDLE 分岐」で openPreStartDialog()
+//        を呼ぶが、内部の整合性なしで no-op。
+//   対処: dual-sync の preStartState を operator も受信し、timer.js の restorePreStart で復元。
+//        既存 hall 側 applyHallPreStartState と並列、hall 側ロジックには一切触れない。
+function applyOperatorPreStartState(payload) {
+  // operator / operator-solo でのみ呼ばれる（dual-sync handler で role 振り分け済）
+  if (window.appRole === 'hall') return;
+  // v2.1.20-rc4 新規確証ラベル: operator 側 PRE_START 受信時の状態を rolling-log に記録
+  try {
+    window.api?.log?.write?.('operator:applyPreStartState:apply', {
+      isActive: !!payload?.isActive,
+      isPaused: !!payload?.isPaused,
+      remainingMs: payload?.remainingMs,
+      totalMs: payload?.totalMs,
+      role: window.appRole
+    });
+  } catch (_) { /* never throw from logging */ }
+  if (!payload || typeof payload !== 'object') return;
+  if (payload.isActive) {
+    // 既に PRE_START 中なら no-op（重複復元防止、restorePreStart 側でも同等ガードあり）
+    if (typeof isPreStartActive === 'function' && isPreStartActive()) return;
+    // timer.js の復元 API を呼んで isPreStart + targetTime + state を整合
+    if (typeof timerRestorePreStart === 'function') {
+      try {
+        timerRestorePreStart({
+          remainingMs: payload.remainingMs,
+          totalMs: payload.totalMs,
+          isPaused: !!payload.isPaused
+        });
+      } catch (err) {
+        try { window.api?.log?.write?.('error:caught:operator.restorePreStart', { msg: err && err.message }); } catch (_) {}
+      }
+    }
+  } else {
+    // payload.isActive === false: PRE_START 終了状態を整合（既存 cancelPreStart 経路、冪等）
+    if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+      try { timerCancelPreStart(); } catch (_) {}
     }
   }
 }
@@ -7672,7 +7725,7 @@ if (__appRole === 'hall') {
           const levels = (typeof getStructure === 'function') ? getStructure() : null;
           applyTimerStateToTimer(value, levels, { silent: true });
         } catch (err) { console.warn('[dual-sync] timerState 適用失敗:', err); }
-      } else if (kind === 'preStartState' && value && typeof value === 'object') {
+      } else if (kind === 'preStartState' && value && typeof value === 'object' && window.appRole === 'hall') {
         // v2.1.6: PRE_START 専用 broadcast の hall 側受信。
         //   isActive=true: hall ローカル状態を更新 + メインタイマーに PRE_START カウントダウン描画
         //                  + スライドショー活性化（isSlideshowEligibleStatus が true を返す）
@@ -7680,6 +7733,15 @@ if (__appRole === 'hall') {
         try {
           applyHallPreStartState(value);
         } catch (err) { console.warn('[dual-sync] preStartState 適用失敗:', err); }
+      } else if (kind === 'preStartState' && value && typeof value === 'object' && window.appRole !== 'hall') {
+        // v2.1.20-rc4: operator / operator-solo 側 preStartState 受信処理（HDMI 抜き差し / 再起動後の復帰用）。
+        //   hall 側 applyHallPreStartState とは独立、timer.js の restorePreStart 経由で内部状態を復元。
+        try {
+          applyOperatorPreStartState(value);
+        } catch (err) {
+          console.warn('[dual-sync] operator preStartState 適用失敗:', err);
+          try { window.api?.log?.write?.('error:caught:operator.preStartState', { msg: err && err.message }); } catch (_) {}
+        }
       } else if (kind === 'structure' && value && Array.isArray(value.levels)) {
         // v2.0.4-rc20 タスク 1（案 A、問題 ⑥ 根治）:
         // ブラインド構造の即時 hall 同期。前原さん判断 ③ c により、進行中レベルの残り時間には影響しない設計。

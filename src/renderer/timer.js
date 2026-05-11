@@ -171,6 +171,47 @@ export function startPreStart(minutes) {
   startPreStartLoop();
 }
 
+// v2.1.20-rc4: operator が dual-sync から PRE_START 状態を復元するための API。
+//   既存 startPreStart(minutes) は新規開始用（onPreStartStart で broadcast）、本 API は中断状態からの復元用。
+//   - payload: { remainingMs, totalMs, isPaused }
+//   - 重複復元防止: 既に isPreStart === true なら no-op
+//   - isPaused === true の場合は PAUSED 状態で復元、rAF は起動しない（resume() で再開）
+//   - onPreStartStart ハンドラは呼ばない（受信側のため、broadcast loop を防ぐ）
+//   - hall 側 applyHallPreStartState と並列の operator 用パスとして設計
+export function restorePreStart(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  const { remainingMs, totalMs, isPaused } = payload;
+  if (typeof totalMs !== 'number' || totalMs <= 0) return;
+  if (isPreStart) return;   // 重複復元防止（既に PRE_START 中なら no-op）
+  const r = (typeof remainingMs === 'number' && remainingMs >= 0) ? Math.min(remainingMs, totalMs) : totalMs;
+  isPreStart = true;
+  preStartTotalMs = totalMs;
+  if (isPaused) {
+    // 一時停止状態で復元（pause() を呼ぶと onPreStartPause で broadcast loop になるため直接 setState）
+    pausedRemainingMs = r;
+    targetTime = 0;
+    setState({
+      status: States.PAUSED,
+      currentLevelIndex: 0,
+      remainingMs: r,
+      totalMs
+    });
+  } else {
+    // 通常進行状態で復元
+    targetTime = performance.now() + r;
+    pausedRemainingMs = 0;
+    setState({
+      status: States.PRE_START,
+      currentLevelIndex: 0,
+      remainingMs: r,
+      totalMs
+    });
+    startPreStartLoop();
+  }
+  // Lv1 情報を再描画させるため onLevelChange のみ発火（onPreStartStart は broadcast loop の原因になるため呼ばない）
+  handlers.onLevelChange(0);
+}
+
 // プレスタートを中断して IDLE に戻す（resetボタンと等価だが onPreStartEnd は鳴らさない）
 export function cancelPreStart() {
   if (!isPreStart) return;

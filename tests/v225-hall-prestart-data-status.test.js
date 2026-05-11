@@ -108,7 +108,7 @@ test('T4 (Fix 2): applyHallPreStartState 解除経路で delete el.clock.dataset
 // T5: package.json version 2.1.13 + scripts.test に v225 登録
 // ============================================================
 test('T5: package.json version は 2.1.13 + scripts.test に v225 登録', () => {
-  assert.equal(PKG.version, '2.1.20-rc3',
+  assert.equal(PKG.version, '2.1.20-rc4',
     `package.json version が ${PKG.version}（期待 2.1.18）`);
   assert.match(PKG.scripts.test, /v225-hall-prestart-data-status\.test\.js/,
     'scripts.test に v225-hall-prestart-data-status.test.js が登録されていない');

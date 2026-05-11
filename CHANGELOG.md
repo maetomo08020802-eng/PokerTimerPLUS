@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc4] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc4 試験ビルド（前原さん実機専用、配布なし）。rc3 試験で発覚した「HDMI 抜き差し後 operator 操作不可」の構造的問題を根治。
+
+### Fixed
+- **operator 側 preStartState 受信機構を追加**: HDMI 抜き差し後 operator renderer 再生成時に PRE_START 状態が消失して操作不可になる構造的問題を根治。timer.js に `restorePreStart(payload)` API 新規追加 + renderer.js の dual-sync ハンドラに operator 経路追加 + handleStartPauseToggle に PRE_START 分岐追加。これにより HDMI 抜き差し以外の operator 再起動シナリオでも PRE_START 復帰が可能に
+- 新規確証ラベル `operator:applyPreStartState:apply`
+
+### Maintained
+- v2.1.20-rc3 (スライドショー始動復活 + renderTournamentList Promise dedup) 完全保持
+- v2.1.20-rc2 (hallTickState reset 3 経路) 完全保持
+- v2.1.20-rc1 (重さ根治 4 件: setState 撤廃 + DocumentFragment + memo + CSS 統一) 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- v2.1.20-meas1 計測機構 完全保持（次フェーズで撤去 → v2.2.1 本番リリース予定）
+
+---
+
 ## [2.1.20-rc3] - 2026-05-11
 
 PokerTimerPLUS+ v2.1.20-rc3 試験ビルド（前原さん実機専用、配布なし）。rc2 試験で発覚した退行 2 件を最小修正で対処。本番 v2.2.1 リリース直前の最終形態。
