@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc3] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc3 試験ビルド（前原さん実機専用、配布なし）。rc2 試験で発覚した退行 2 件を最小修正で対処。本番 v2.2.1 リリース直前の最終形態。
+
+### Fixed
+- **PRE_START 中のスライドショー始動復活**: rc1 Fix 3 で追加した `syncSlideshowFromState` の hall PRE_START active ガードを撤去。rc1 Fix 1 で `renderHallTickFrame` の 60Hz setState 連鎖が消えたため、流れ込み防止のガードは不要だった。ガードが過剰防御でスライドショー始動経路自体を止めていた退行を解消
+- **新規/複製ボタン押下時の 2 倍表示根治**: `renderTournamentList` を Promise dedup ラッパ `renderTournamentListWithDedup` で包み、非同期描画中の並行呼出を 1 本化。既存 `_tournamentsListDedup` (tournaments.list IPC 1 本化) と同パターンで、innerHTML='' と appendChild の race による fragment 二重 append を根絶
+
+### Maintained
+- v2.1.20-rc2 hallTickState defensive 初期化 3 経路 完全保持
+- v2.1.20-rc1 軽量化機構（setState 撤廃 + DocumentFragment + memo + 症状 1 修正）完全保持
+- v2.1.19 重さ根治機構（setInterval 撤廃 + Promise dedup）完全保持
+- 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構すべて完全保持
+- v2.1.20-meas1 計測機構完全保持（次フェーズで撤去 → 本番 v2.2.1 リリース予定）
+
+---
+
 ## [2.1.20-rc2] - 2026-05-11
 
 PokerTimerPLUS+ v2.1.20-rc2 試験ビルド（前原さん実機専用、配布なし）。rc1 試験で発覚した「HDMI 抜き差し時の hall タイマー止まらず」退行を defensive 初期化 3 箇所で根治。rc1 の軽量化機構（setInterval 撤廃 / Promise dedup / setState 撤廃 / DocumentFragment / memo 化 / 症状 1/2 修正）はすべて完全保持。

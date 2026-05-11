@@ -69,10 +69,10 @@ function extractBalancedBlock(source, startIdx) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc2'
+// T1: package.json.version === '2.1.20-rc3'
 // ============================================================
 test('T1: package.json.version === 2.1.20-rc1', () => {
-  assert.equal(PKG.version, '2.1.20-rc2', `期待 2.1.20-rc1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.1.20-rc3', `期待 2.1.20-rc1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -139,13 +139,20 @@ test('T5: _computeLiveTimerStateMemo WeakMap + computeLiveTimerStateMemoized 関
 });
 
 // ============================================================
-// T6: Fix 3 — subscribe 内 syncSlideshowFromState 呼出前に hallPreStartState.isActive ガード
+// T6: v2.1.20-rc3 で rc1 Fix 3 ガードは撤去 — assertion 反転（ガード不在 + 無条件呼出存在）
 // ============================================================
-test('T6: subscribe 内 syncSlideshowFromState 呼出前に hall + hallPreStartState.isActive ガード存在', () => {
-  // subscribe 内で `if (!(window.appRole === 'hall' && ... hallPreStartState.isActive))` の形式
-  assert.match(RENDERER,
+test('T6: subscribe 内 syncSlideshowFromState 呼出は無条件（rc3 で rc1 Fix 3 ガード撤去）', () => {
+  // v2.1.20-rc3: rc1 Fix 3 ガードが過剰防御で PRE_START 中のスライドショー始動経路自体を止めていた退行を解消。
+  //   ガード `if (!(window.appRole === 'hall' && ... hallPreStartState.isActive))` は subscribe 内では不在、
+  //   subscribe からは無条件で syncSlideshowFromState(state.remainingMs) が呼ばれる。
+  // ガード形式が subscribe 内に残存していないことを確認（PRE_START ガード + syncSlideshow の隣接組合せ）
+  assert.doesNotMatch(RENDERER,
     /if\s*\(\s*!\s*\(\s*window\.appRole\s*===\s*['"]hall['"][\s\S]{0,200}?hallPreStartState\.isActive[\s\S]{0,80}?\)\s*\)\s*\{[\s\S]{0,200}?syncSlideshowFromState\s*\(\s*state\.remainingMs\s*\)/,
-    'subscribe 内 syncSlideshowFromState の hall PRE_START ガードが見つからない（Fix 3 未完了）');
+    'subscribe 内に rc1 Fix 3 の PRE_START ガードが残存（rc3 で撤去必須）');
+  // 無条件呼出は存在（行頭または直前 try/catch ブロックの後に `  syncSlideshowFromState(state.remainingMs)`）
+  assert.match(RENDERER,
+    /\n\s*syncSlideshowFromState\s*\(\s*state\.remainingMs\s*\)\s*;/,
+    'subscribe 内 syncSlideshowFromState(state.remainingMs) の無条件呼出が見つからない');
 });
 
 // ============================================================

@@ -95,6 +95,21 @@ async function _tournamentsListDedup() {
   return _tournamentsListInFlight;
 }
 
+// v2.1.20-rc3: renderTournamentList Promise dedup
+//   既存 `_tournamentsListDedup` (tournaments.list IPC 1 本化) と同パターン。
+//   非同期描画中の並行呼出を 1 本化し、新規/複製ボタン押下時の「2 倍表示」race を根絶。
+//   renderTournamentList は async で innerHTML='' / fragment.appendChild の間に await が挟まる構造で、
+//   複数経路から並行呼出すると fragment が 2 個並ぶ → リスト 2 倍表示 → throttle gate (1 秒) で
+//   ようやく修正される。本ラッパで in-flight 中は同じ Promise を返し、並行発火を 1 本化する。
+let _renderTournamentListInFlight = null;
+function renderTournamentListWithDedup(prefetched) {
+  if (_renderTournamentListInFlight) return _renderTournamentListInFlight;
+  _renderTournamentListInFlight = renderTournamentList(prefetched).finally(() => {
+    _renderTournamentListInFlight = null;
+  });
+  return _renderTournamentListInFlight;
+}
+
 // =============================================================================
 // v2.1.20-meas1 計測機構（重さ徹底排除観測 + 症状 1/2 真因確証）
 // =============================================================================
@@ -2025,12 +2040,10 @@ subscribeNamed('subscribe:main-renderer', (state, prev) => {
       });
     }
   } catch (_) {}
-  // v2.1.20-rc1: Fix 3（症状 2 保険ガード）— hall PRE_START 中の流れ込みを防ぐ。
-  //   Fix 1 で 60Hz setState 連鎖が消えれば本経路自体が発火しないが、別経路（HDMI 抜き差し等）
-  //   からの流れ込みを保険ガードで二重防御。typeof チェックで hall 以外でも安全。
-  if (!(window.appRole === 'hall' && typeof hallPreStartState !== 'undefined' && hallPreStartState.isActive)) {
-    syncSlideshowFromState(state.remainingMs);
-  }
+  // v2.1.20-rc3: rc1 Fix 3 ガード撤去 — rc1 Fix 1 で renderHallTickFrame の 60Hz setState 連鎖が消えたため、
+  //   流れ込み防止のガードは不要。ガードが過剰防御で PRE_START 中のスライドショー始動経路自体を止めていた。
+  //   症状 2（PIP timer に 01:00 一瞬表示）は rc1 Fix 1 の根本対処で防げる。
+  syncSlideshowFromState(state.remainingMs);
   // v2.0.0 STEP 3: operator モードのみミニ状態バーを更新（hall / operator-solo は no-op）
   updateOperatorStatusBar(state);
   // v2.0.4-rc4: operator モードのみ支援パネル（運用情報）を更新（hall / operator-solo は no-op）
@@ -2039,7 +2052,7 @@ subscribeNamed('subscribe:main-renderer', (state, prev) => {
   //   status / level 変化時は即時呼出（throttle 経由しない）、それ以外は 1 秒に 1 回だけ許可。
   //   旧 setInterval(renderTournamentList, 1000) を完全に置換、ベース 1 Hz の強制 fetch を廃止。
   if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex || _shouldRefreshListByThrottle()) {
-    renderTournamentList().catch(() => {});
+    renderTournamentListWithDedup().catch(() => {});
   }
 });
 
@@ -4205,7 +4218,7 @@ async function populateTournamentList() {
     if (tournamentState.id) el.tournamentSelect.value = tournamentState.id;
   }
   // STEP 6.21: 構造化リストを再描画
-  await renderTournamentList(list);
+  await renderTournamentListWithDedup(list);
   // STEP 7.x ③-a: ヘッダーの el.tournamentDelete は撤去済。各行 🗑 ボタンの disabled 制御は
   //               renderTournamentList → buildTournamentListItem 内で list.length <= 1 を渡して制御
   // STEP 6.7: 保存数表示「保存中: N/100 件」、上限到達時は赤字
@@ -4409,7 +4422,7 @@ async function handleTournamentListToggle(id, currentStatus) {
     next = { ...live, status: 'running', startedAt: now, pausedAt: null };
   }
   await window.api.tournaments.setTimerState(id, next);
-  await renderTournamentList();
+  await renderTournamentListWithDedup();
 }
 
 // 一覧の「リセット」ボタン: 確認 → idle 状態に戻す。アクティブなら timer.js も reset()
@@ -4419,7 +4432,7 @@ async function handleTournamentListReset(id, name) {
   const idleState = { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
   await window.api.tournaments.setTimerState(id, idleState);
   if (id === tournamentState.id) timerReset();
-  await renderTournamentList();
+  await renderTournamentListWithDedup();
 }
 
 // 一覧の「選択」ボタン: handleTournamentSelectChange と同じ流れ
@@ -4513,7 +4526,7 @@ async function handleTournamentSelectChange() {
 
   // 4) 新アクティブの blind preset を適用してから timerState を復元（時刻計算で live 復元 + silent）
   await restoreActiveTimerStateFromStore(newId, { silent: true });
-  await renderTournamentList();
+  await renderTournamentListWithDedup();
 }
 
 // STEP 6.21 / 6.21.2: 指定 id の保存済み timerState を timer.js に復元する。
@@ -7486,7 +7499,7 @@ async function initialize() {
         // active トーナメントを computeLiveTimerState で再復元（停電復元と同じロジック）
         await restoreActiveTimerStateFromStore(tournamentState.id, { silent: true });
         // 全リスト即時再描画（非 active も rebase 済みの状態を反映）
-        await renderTournamentList();
+        await renderTournamentListWithDedup();
       } catch (err) {
         console.warn('スリープ復帰時の再同期失敗:', err);
       }

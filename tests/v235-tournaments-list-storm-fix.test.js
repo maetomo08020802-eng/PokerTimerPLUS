@@ -36,7 +36,7 @@ function test(name, fn) {
 // version assertion
 // ============================================================
 test('version: package.json の version が 2.1.19-rc1', () => {
-  assert.equal(PKG.version, '2.1.20-rc2', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.1.20-rc3', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -70,9 +70,10 @@ test('T2: subscribe 内で _shouldRefreshListByThrottle gate 経由の renderTou
   assert.match(RENDERER, /let\s+_lastListRenderAt\s*=\s*0/,
     '_lastListRenderAt モジュールスコープ変数定義が見つからない');
   // subscribe 内で status/level 変化 OR throttle gate が renderTournamentList を呼ぶ独立 if 句
+  // v2.1.20-rc3: renderTournamentList → renderTournamentListWithDedup（Promise dedup ラッパ）への置換許容
   assert.match(RENDERER,
-    /if\s*\(\s*state\.status\s*!==\s*prev\.status\s*\|\|\s*state\.currentLevelIndex\s*!==\s*prev\.currentLevelIndex\s*\|\|\s*_shouldRefreshListByThrottle\s*\(\s*\)\s*\)\s*\{[\s\S]{0,200}?renderTournamentList\s*\(\s*\)\.catch/,
-    'subscribe 内に status/level OR _shouldRefreshListByThrottle gate 経由の renderTournamentList 呼出が見つからない');
+    /if\s*\(\s*state\.status\s*!==\s*prev\.status\s*\|\|\s*state\.currentLevelIndex\s*!==\s*prev\.currentLevelIndex\s*\|\|\s*_shouldRefreshListByThrottle\s*\(\s*\)\s*\)\s*\{[\s\S]{0,200}?renderTournamentList(?:WithDedup)?\s*\(\s*\)\.catch/,
+    'subscribe 内に status/level OR _shouldRefreshListByThrottle gate 経由の renderTournamentList(WithDedup) 呼出が見つからない');
 });
 
 // ============================================================
