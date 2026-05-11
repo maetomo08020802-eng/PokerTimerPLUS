@@ -194,14 +194,30 @@ try {
 const _subscribeCounter = {};   // listener 名 → { count: n, totalMs: n }
 try { if (typeof window !== 'undefined') window._subscribeCounter = _subscribeCounter; } catch (_) {}
 
+// v2.1.20-rc6-meas3: 高頻度ラベル集約用カウンタ（perf:render:duration / hall:updatePipTimer:set / perf:state:notify）
+//   個別 log.write を 1 秒 summary に置換、5 分 buffer を 124Hz × 60s = 7440 行/分の負荷から解放。
+const _highFreqCounter = {};   // label → { count, totalMs }
+try { if (typeof window !== 'undefined') window._highFreqCounter = _highFreqCounter; } catch (_) {}
+function _recordHighFreq(label, ms) {
+  if (typeof label !== 'string' || !label) return;
+  if (!_highFreqCounter[label]) _highFreqCounter[label] = { count: 0, totalMs: 0 };
+  _highFreqCounter[label].count++;
+  if (typeof ms === 'number' && Number.isFinite(ms)) _highFreqCounter[label].totalMs += ms;
+}
+
 // 集計タイマー: 1 秒ごとに RAF サマリ、30 秒ごとに IPC / DOM / subscribe サマリ。
-//   `_wrappedSetInterval` 自身ではなく直接 setInterval を使う（自己参照回避 + label は固定で記録）。
+//   `_wrappedSetInterval` 自身ではなく直接 setInterval を使う(自己参照回避 + label は固定で記録)。
 setInterval(() => {
   try {
     if (Object.keys(_rafCounter).length > 0) {
       window.api?.log?.write?.('perf:raf:summary', { ..._rafCounter });
     }
     _rafCounter = {};
+    // v2.1.20-rc6-meas3: 高頻度ラベル summary 出力 + リセット
+    if (Object.keys(_highFreqCounter).length > 0) {
+      window.api?.log?.write?.('perf:highfreq:summary', { ..._highFreqCounter });
+    }
+    for (const k of Object.keys(_highFreqCounter)) delete _highFreqCounter[k];
   } catch (_) {}
 }, 1000);
 setInterval(() => {
@@ -952,7 +968,7 @@ function renderTime(remainingMs) {
     el.clock.dataset.timerState = remainingMs > 0 && remainingMs <= DANGER_THRESHOLD_MS ? 'danger' : 'normal';
     // フォーマット属性: 残り時間が 60 分以上は HH:MM:SS（hms）、未満は MM:SS（ms）→ CSS が font-size を切替
     el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
-    try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderTime', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
+    try { _recordHighFreq('perf:render:duration', performance.now() - _t0); } catch (_) {}
     try { _recordDomTime('renderTime', performance.now() - _t0); } catch (_) {}
     return;
   }
@@ -961,7 +977,7 @@ function renderTime(remainingMs) {
     el.time.textContent = formatPreStartTime(remainingMs);
     el.clock.dataset.timerState = 'normal';
     el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
-    try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderTime', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
+    try { _recordHighFreq('perf:render:duration', performance.now() - _t0); } catch (_) {}
     try { _recordDomTime('renderTime', performance.now() - _t0); } catch (_) {}
     return;
   }
@@ -969,7 +985,7 @@ function renderTime(remainingMs) {
   if ('prestartFormat' in el.clock.dataset) delete el.clock.dataset.prestartFormat;
   el.time.textContent = formatTime(remainingMs);
   el.clock.dataset.timerState = status === States.BREAK ? 'normal' : classifyTimerState(remainingMs);
-  try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderTime', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
+  try { _recordHighFreq('perf:render:duration', performance.now() - _t0); } catch (_) {}
   try { _recordDomTime('renderTime', performance.now() - _t0); } catch (_) {}
 }
 
@@ -1054,7 +1070,7 @@ function renderControls(status) {
     default:
       break;
   }
-  try { window.api?.log?.write?.('perf:render:duration', { fn: 'renderControls', ms: performance.now() - _t0, role: window.appRole }); } catch (_) {}
+  try { _recordHighFreq('perf:render:duration', performance.now() - _t0); } catch (_) {}
   try { _recordDomTime('renderControls', performance.now() - _t0); } catch (_) {}
   // v2.1.20-meas1 カテゴリ G: 症状 1 真因確証 — `.clock__pause-label` の opacity 計算後を記録（hall 限定）
   try {
@@ -3323,14 +3339,10 @@ function updatePipTimer(remainingMs, status) {
     // PRE_START 終了 / RUNNING / BREAK 等では prestartFormat 属性をクリア
     if (el.pipTimer && 'prestartFormat' in el.pipTimer.dataset) delete el.pipTimer.dataset.prestartFormat;
   }
-  // v2.1.20-meas1 カテゴリ G: 症状 2 真因確証ラベル — pipDigits 書込時の値 / status / hallPreStartActive を記録
+  // v2.1.20-meas1 カテゴリ G: 症状 2 真因確証ラベル — pipDigits 書込時の頻度のみ計上（meas3 で集約化、payload は捨てる）
   try {
     if (window.appRole === 'hall') {
-      window.api?.log?.write?.('hall:updatePipTimer:set', {
-        value: el.pipDigits.textContent,
-        status,
-        hallPreStartActive: !!(typeof hallPreStartState !== 'undefined' && hallPreStartState.isActive)
-      });
+      _recordHighFreq('hall:updatePipTimer:set', 0);
     }
   } catch (_) {}
 }

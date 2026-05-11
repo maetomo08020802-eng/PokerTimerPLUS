@@ -1,7 +1,7 @@
 /**
  * v2.1.19 本番リリース確認テスト
  *
- *   T1: package.json.version === '2.1.20-rc5'（本番版数、サフィックスなし）
+ *   T1: package.json.version === '2.1.20-rc6-meas3'（本番版数、サフィックスなし）
  *   T2: dist/pokertimerplus-setup-2.1.19.exe 存在 + サイズ > 50 MB
  *   T3: dist/latest.yml 存在 + version: 2.1.19 を含む
  *   T4: rc1 機構完全保持

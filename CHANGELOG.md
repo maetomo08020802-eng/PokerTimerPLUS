@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc6-meas3] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc6-meas3 観測強化版（前原さん実機専用、配布なし）。rc4/rc5 で実証された「修正が動作しているか観測すらできない」構造的問題への対処。HDMI 抜き差し問題の修正コードは触らず、観測機構そのものを強化。
+
+### Added (観測強化)
+- **HDMI 検出時の自動採取**: `display-removed` / `display-added` 検出時に過去 buffer 全内容を別ファイル `hdmi-snapshot-{ISO}-{suffix}.log` に fire-and-forget で保存。前原さんの Ctrl+Shift+L 押下タイミングに依存しない
+- **高頻度ラベルの 1 秒集約**: `perf:render:duration`（124Hz）/ `hall:updatePipTimer:set`（60Hz）/ `perf:state:notify` を `perf:highfreq:summary` に集約、5 分 buffer が 20 秒で埋まる問題を解消
+- **buffer 容量の計測ビルド時拡張**: 5 分 → 30 分、5000 行 → 50000 行（本番版は従来通り 5 分 / 5000 行）
+- **優先バッファ**: HDMI 系・PRE_START 配信系・error 系ラベルは別ファイル `priority-events.log` に append（10000 行で循環）
+- **新規ラベル**: `perf:highfreq:summary` / `meas3:hdmi-snapshot:written`
+
+### Maintained
+- v2.1.20-rc5 (preStartState operator 配信経路) 完全保持
+- v2.1.20-rc4 (operator 側 PRE_START 復元 API) 完全保持
+- v2.1.20-rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- meas1 / meas2 計測機構 + 症状確証 4 ラベル + rc2 hall:hallTickState:reset + rc4 operator:applyPreStartState:apply + rc5 preStart:operator:send + operator:preStartResync:sent 完全保持
+
+### Performance Notes
+- buffer 拡張により計測ビルド時のメモリ使用量が +20MB 程度増加（50000 行 × 平均 440B）
+- `_flushLogsToFile` は fire-and-forget でファイル I/O が HDMI 切替を遅延させない設計
+- 高頻度ラベル集約により 5 分 buffer 内に 5 分分の情報を収納可能に
+
+---
+
 ## [2.1.20-rc5] - 2026-05-11
 
 PokerTimerPLUS+ v2.1.20-rc5 試験ビルド（前原さん実機専用、配布なし）。rc4 で実装した operator 側 preStartState 受信機構が hall ブロック内の dead code 化していた構造的問題を根治。

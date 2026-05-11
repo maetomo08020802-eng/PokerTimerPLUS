@@ -91,9 +91,16 @@ function notify(prev) {
     } catch (_) {}
   }
   try {
-    if (typeof window !== 'undefined' && window.api?.log?.write) {
+    // v2.1.20-rc6-meas3: perf:state:notify を高頻度ラベル集約用 _highFreqCounter 経由に置換（renderer.js が共有）
+    if (typeof window !== 'undefined') {
       const _ms = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : 0) - _t0;
-      window.api.log.write('perf:state:notify', { ms: _ms, count: subscribers.size, role: window.appRole || 'main' });
+      if (window._highFreqCounter) {
+        if (!window._highFreqCounter['perf:state:notify']) {
+          window._highFreqCounter['perf:state:notify'] = { count: 0, totalMs: 0 };
+        }
+        window._highFreqCounter['perf:state:notify'].count++;
+        window._highFreqCounter['perf:state:notify'].totalMs += _ms;
+      }
     }
   } catch (_) {}
   // v2.1.18-meas1 state:transition: status 変化を edge イベントとして rolling-log に記録

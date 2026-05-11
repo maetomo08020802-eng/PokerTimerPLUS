@@ -74,10 +74,10 @@ function findFunctionBodyBraceStart(source, fnSignatureIdx) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc5'
+// T1: package.json.version === '2.1.20-rc6-meas3'
 // ============================================================
 test('T1: package.json.version === 2.1.20-rc3', () => {
-  assert.equal(PKG.version, '2.1.20-rc5', `期待 2.1.20-rc3, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.1.20-rc6-meas3', `期待 2.1.20-rc3, 実際 ${PKG.version}`);
 });
 
 // ============================================================

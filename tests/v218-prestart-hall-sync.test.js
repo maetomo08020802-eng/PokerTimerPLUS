@@ -265,7 +265,7 @@ test('T12 (保護): 致命バグ保護 5 件すべて維持', () => {
 // T13: package.json version + scripts.test 登録
 // ============================================================
 test('T13: package.json version 2.1.12 + scripts.test に v218 登録', () => {
-  assert.equal(PKG.version, '2.1.20-rc5', `version が ${PKG.version}（期待 2.1.18）`);
+  assert.equal(PKG.version, '2.1.20-rc6-meas3', `version が ${PKG.version}（期待 2.1.18）`);
   assert.ok(PKG.scripts.test.includes('v218-prestart-hall-sync.test.js'),
     'scripts.test に v218-prestart-hall-sync.test.js が登録されていない');
 });

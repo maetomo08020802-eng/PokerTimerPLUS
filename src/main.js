@@ -52,12 +52,16 @@ let _measOpCounter = 0;
 // - 容量目安: 平均 440 B/行 × 約 200 行/5min ≒ 90 KB（上限 ~1 MB 想定）
 //
 // 致命バグ保護への影響: なし（C.1.7 等は観測のみ、再生経路に介入しない）
-const ROLLING_LOG_RETENTION_MS = 5 * 60 * 1000;   // 5 分
-const ROLLING_LOG_TRUNCATE_INTERVAL_MS = 30 * 1000; // 30 秒
+// v2.1.20-rc6-meas3: 計測ビルド時は buffer 容量を 6 倍に拡張。
+//   HDMI 抜き差し（30〜60 秒）等の中規模イベントを 5 分 buffer で観測できない問題への対処。
+//   isMeasBuild = app version に -meas / -rc サフィックスを含む。本番版（v2.x.y）は従来通り 5 分。
+const _appVersionForBuffer = (() => { try { return app.getVersion(); } catch (_) { return ''; } })();
+const _isMeasBuildForBuffer = /-meas\d*$/.test(_appVersionForBuffer) || /-rc\d+/.test(_appVersionForBuffer);
+const ROLLING_LOG_RETENTION_MS = _isMeasBuildForBuffer ? 30 * 60 * 1000 : 5 * 60 * 1000;  // 計測 30 分 / 本番 5 分
+const ROLLING_LOG_TRUNCATE_INTERVAL_MS = 30 * 1000; // 30 秒（変更なし）
 let _rollingLogFilePath = null;
 let _rollingLogTruncateTimer = null;
-// v2.0.4-rc18 第 1 弾 タスク 3: ring buffer 化（fire-and-forget appendFile を廃止、I/O 順序乱れを根絶）
-const ROLLING_LOG_BUFFER_MAX = 5000;  // 5 分 × 60 sec × 約 17 ラベル/秒余裕
+const ROLLING_LOG_BUFFER_MAX = _isMeasBuildForBuffer ? 50000 : 5000;  // 計測 5 万行 / 本番 5 千行
 let _rollingLogBuffer = [];
 function _initRollingLog() {
   if (_rollingLogFilePath !== null) return _rollingLogFilePath;
@@ -107,6 +111,85 @@ async function _flushRollingLog() {
     await fs.promises.writeFile(file, out);
   } catch (_) { /* never throw */ }
 }
+// v2.1.20-rc6-meas3: HDMI 抜き差し検出時の自動採取機構。
+//   現 buffer の全内容を別ファイル名（hdmi-snapshot-{ISO}-{suffix}.log）で書き出し。
+//   fire-and-forget（await しない）= HDMI 切替の応答性を阻害しない。
+//   suffix: 'display-removed' / 'display-added' を想定。
+function _flushLogsToFile(suffix) {
+  try {
+    const file = _initRollingLog();
+    if (!file || !_rollingLogBuffer.length) return;
+    const dir = path.dirname(file);
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const snapshotPath = path.join(dir, `hdmi-snapshot-${ts}-${String(suffix || 'unknown')}.log`);
+    const out = _rollingLogBuffer.map((e) => JSON.stringify(e)).join('\n') + '\n';
+    // fire-and-forget: HDMI 切替を遅延させないため await しない
+    fs.promises.writeFile(snapshotPath, out)
+      .then(() => { try { rollingLog('meas3:hdmi-snapshot:written', { file: path.basename(snapshotPath), bytes: out.length, suffix }); } catch (_) {} })
+      .catch((err) => { try { rollingLog('error:caught:flushLogsToFile', { msg: err && err.message, suffix }); } catch (_) {} });
+  } catch (_) { /* never throw from snapshot */ }
+}
+// v2.1.20-rc6-meas3: 優先ラベル専用バッファ機構。
+//   メイン rolling buffer が高頻度ラベルで埋まっても、HDMI 系・PRE_START 配信系・error 系は別バッファに保管。
+//   priority-events.log に 30 秒ごとに append（rolling buffer とは独立）。
+//   サイズ上限 10000 行で循環（無限増加を防止）。
+const PRIORITY_LOG_BUFFER_MAX = 10000;
+const PRIORITY_LOG_LABELS = new Set([
+  'display-removed',
+  'display-added',
+  'switchOperatorToSolo:enter',
+  'switchOperatorToSolo:exit',
+  'switchSoloToOperator:enter',
+  'switchSoloToOperator:exit',
+  'preStart:operator:send',
+  'operator:preStartResync:sent',
+  'operator:applyPreStartState:apply',
+  'meas3:hdmi-snapshot:written'
+]);
+let _priorityLogBuffer = [];
+let _priorityLogFilePath = null;
+let _priorityLogFlushTimer = null;
+function _isPriorityLabel(label) {
+  if (typeof label !== 'string') return false;
+  if (PRIORITY_LOG_LABELS.has(label)) return true;
+  if (label.startsWith('error:caught:')) return true;
+  return false;
+}
+function _appendPriorityLog(entry) {
+  try {
+    _priorityLogBuffer.push(entry);
+    if (_priorityLogBuffer.length > PRIORITY_LOG_BUFFER_MAX) _priorityLogBuffer.shift();
+  } catch (_) {}
+}
+function _initPriorityLogFile() {
+  if (_priorityLogFilePath !== null) return _priorityLogFilePath;
+  try {
+    if (typeof app.getPath !== 'function') { _priorityLogFilePath = ''; return ''; }
+    const userData = app.getPath('userData');
+    if (!userData) { _priorityLogFilePath = ''; return ''; }
+    const logsDir = path.join(userData, 'logs');
+    try { fs.mkdirSync(logsDir, { recursive: true }); } catch (_) {}
+    _priorityLogFilePath = path.join(logsDir, 'priority-events.log');
+    // 30 秒 interval で priority buffer を append flush
+    if (_priorityLogFlushTimer === null) {
+      _priorityLogFlushTimer = setInterval(() => {
+        _flushPriorityLog().catch(() => {});
+      }, 30 * 1000);
+      if (typeof _priorityLogFlushTimer.unref === 'function') _priorityLogFlushTimer.unref();
+    }
+  } catch (_) { _priorityLogFilePath = ''; }
+  return _priorityLogFilePath;
+}
+async function _flushPriorityLog() {
+  try {
+    const file = _initPriorityLogFile();
+    if (!file || !_priorityLogBuffer.length) return;
+    const snapshot = _priorityLogBuffer.slice();
+    _priorityLogBuffer = [];
+    const out = snapshot.map((e) => JSON.stringify(e)).join('\n') + '\n';
+    await fs.promises.appendFile(file, out);
+  } catch (_) { /* never throw from priority log */ }
+}
 // v2.0.15 Fix 3（M2 Sec-4）: rolling-log への出力時に店舗識別情報（presetName 等）を
 //   SHA-256 短縮ハッシュに置換する PII 配慮。ハッシュ化は rolling-log への出力時のみで、
 //   store / IPC / UI 表示等の本来データはハッシュ化しない。
@@ -122,6 +205,10 @@ function rollingLog(label, data) {
     _rollingLogBuffer.push(entry);
     if (_rollingLogBuffer.length > ROLLING_LOG_BUFFER_MAX) {
       _rollingLogBuffer.shift();   // 古いエントリ自動削除
+    }
+    // v2.1.20-rc6-meas3: priority label は別バッファにも記録（HDMI 系・PRE_START 配信系・error 系）
+    if (_isPriorityLabel(entry.label)) {
+      _appendPriorityLog(entry);
     }
   } catch (_) { /* never throw from logging */ }
 }
@@ -1460,6 +1547,8 @@ function setupDisplayChangeListeners() {
     _displayRemovedPending = true;
     // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayRemovedPending` チェック後で確実に 1 回）
     rollingLog('display-removed', _safeDisplayRemovedSnapshot(removedDisplay));
+    // v2.1.20-rc6-meas3: HDMI 抜き検出時の自動採取（fire-and-forget、HDMI 切替を遅延させない）
+    try { _flushLogsToFile('display-removed'); } catch (_) {}
     try {
       // v2.0.4-rc23 タスク 1（問題 ⑩ 真因根治）:
       //   rc22 計測ビルド実機ログで真因確定 = HDMI 抜き直後 Windows が hallWindow を新 primary display
@@ -1481,6 +1570,8 @@ function setupDisplayChangeListeners() {
     _displayAddedPending = true;
     // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayAddedPending` チェック後で確実に 1 回）
     rollingLog('display-added', _safeDisplaysCount());
+    // v2.1.20-rc6-meas3: HDMI 挿し検出時の自動採取（fire-and-forget）
+    try { _flushLogsToFile('display-added'); } catch (_) {}
     try {
       const displays = screen.getAllDisplays();
       if (!displays || displays.length < 2) return;
