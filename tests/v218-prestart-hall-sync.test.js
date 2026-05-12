@@ -56,7 +56,7 @@ test('T2 (Fix 1): main.js に ipcMain.on("dual:publish-pre-start-state") 登録'
   // ハンドラブロック内で _publishDualState('preStartState', ...) を呼んでいる
   const handlerStart = MAIN_JS.indexOf("ipcMain.on('dual:publish-pre-start-state'");
   assert.ok(handlerStart >= 0, 'IPC handler 開始位置が見つからない');
-  // v2.1.20-rc10.1: cache merge ロジック追加で handler が長くなったため slice を 4000 に拡張
+  // v2.2.1: cache merge ロジック追加で handler が長くなったため slice を 4000 に拡張
   const handlerBlock = MAIN_JS.slice(handlerStart, handlerStart + 4000);
   assert.ok(/_publishDualState\(\s*['"]preStartState['"]/.test(handlerBlock),
     'IPC handler 内で _publishDualState("preStartState", ...) を呼んでいない');
@@ -130,7 +130,7 @@ test('T6 (Fix 3): timer.js PRE_START 経路で新 handler 発火（5 箇所）',
     'cancelPreStart 内で handlers.onPreStartCancel 発火がない');
 
   // reset 内で wasPreStart 経由で onPreStartCancel 発火
-  // v2.1.20-rc10.1: reset シグネチャが `reset()` → `reset(opts = {})` に拡張されたため正規表現で吸収
+  // v2.2.1: reset シグネチャが `reset()` → `reset(opts = {})` に拡張されたため正規表現で吸収
   const resetMatch = TIMER_JS.match(/export\s+function\s+reset\s*\([^)]*\)/);
   assert.ok(resetMatch, 'reset 関数が見つからない');
   const resetIdx = resetMatch.index;
@@ -268,7 +268,7 @@ test('T12 (保護): 致命バグ保護 5 件すべて維持', () => {
 // T13: package.json version + scripts.test 登録
 // ============================================================
 test('T13: package.json version 2.1.12 + scripts.test に v218 登録', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `version が ${PKG.version}（期待 2.1.18）`);
+  assert.equal(PKG.version, '2.2.1', `version が ${PKG.version}（期待 2.1.18）`);
   assert.ok(PKG.scripts.test.includes('v218-prestart-hall-sync.test.js'),
     'scripts.test に v218-prestart-hall-sync.test.js が登録されていない');
 });

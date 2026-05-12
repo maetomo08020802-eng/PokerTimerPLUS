@@ -51,23 +51,9 @@ export function subscribe(listener) {
   return () => subscribers.delete(listener);
 }
 
-// v2.1.20-meas1 カテゴリ F: subscribe 通知頻度サマリ。
-//   subscribe 経由で登録される listener 名を識別するため、renderer.js 側から事前に名前を付与する
-//   `subscribeNamed(name, listener)` をエクスポート。state.js 側は notify ループ内で listener.__measName
-//   プロパティを読んで集計（window._subscribeCounter 経由で renderer.js の 30 秒集計と連動）。
-export function subscribeNamed(name, listener) {
-  // listener に名前を付与してから登録（既存 subscribe と完全互換、名前なしの listener は subscribe() を直接使う）
-  try { listener.__measName = String(name || 'unknown'); } catch (_) {}
-  return subscribe(listener);
-}
-
 function notify(prev) {
   const snapshot = getState();
-  // v2.1.18-meas1 perf:state:notify: 全購読者通知ループの所要時間を rolling-log に記録（hall / operator / main 共通）
-  const _t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
   for (const listener of subscribers) {
-    // v2.1.20-meas1 カテゴリ F: listener 個別の所要時間を集計（window._subscribeCounter は renderer.js 側で定義）
-    const _tL = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
     try {
       listener(snapshot, prev);
     } catch (err) {
@@ -79,30 +65,7 @@ function notify(prev) {
       } catch (_) {}
       console.warn('状態購読者でエラー発生:', err);
     }
-    try {
-      const _msL = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : 0) - _tL;
-      const lname = (listener.__measName) || 'unnamed';
-      if (typeof window !== 'undefined' && window._subscribeCounter) {
-        const c = window._subscribeCounter;
-        if (!c[lname]) c[lname] = { count: 0, totalMs: 0 };
-        c[lname].count += 1;
-        c[lname].totalMs += _msL;
-      }
-    } catch (_) {}
   }
-  try {
-    // v2.1.20-rc6-meas3: perf:state:notify を高頻度ラベル集約用 _highFreqCounter 経由に置換（renderer.js が共有）
-    if (typeof window !== 'undefined') {
-      const _ms = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : 0) - _t0;
-      if (window._highFreqCounter) {
-        if (!window._highFreqCounter['perf:state:notify']) {
-          window._highFreqCounter['perf:state:notify'] = { count: 0, totalMs: 0 };
-        }
-        window._highFreqCounter['perf:state:notify'].count++;
-        window._highFreqCounter['perf:state:notify'].totalMs += _ms;
-      }
-    }
-  } catch (_) {}
   // v2.1.18-meas1 state:transition: status 変化を edge イベントとして rolling-log に記録
   try {
     if (prev && prev.status !== snapshot.status && typeof window !== 'undefined' && window.api?.log?.write) {

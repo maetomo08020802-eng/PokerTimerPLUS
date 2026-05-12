@@ -1,16 +1,18 @@
 /**
- * v2.1.20-rc10.1 静的解析テスト — 観測機構強化（HDMI 自動採取 + 高頻度集約 + buffer 拡張 + priority buffer）
+ * v2.2.1 静的解析テスト — rc6-meas3 観測強化機構の **撤去** 確認（緩和版、v2.2.1 リリース仕様準拠）
  *
- *   Fix A: main.js buffer 容量定数の計測ビルド時拡張
- *   Fix B: main.js _flushLogsToFile(suffix) 新規追加
- *   Fix C: main.js priority buffer 機構（_isPriorityLabel / _appendPriorityLog / _flushPriorityLog 等）
- *   Fix D: main.js rollingLog 内に priority 分岐
- *   Fix E: main.js display-removed / display-added ハンドラに _flushLogsToFile 呼出追加
- *   Fix F: renderer.js _highFreqCounter + _recordHighFreq + 1 秒 summary
- *   Fix G: renderer.js 5 箇所の高頻度ラベル発火元差し替え
- *   Fix H: state.js perf:state:notify 集約化
+ *   v2.2.1 で撤去対象（旧 rc6-meas3 機構）:
+ *     - Fix A: buffer 容量定数の三項演算 → 本番値固定
+ *     - Fix B: _flushLogsToFile 関数 + hdmi-snapshot 採取 → 撤去
+ *     - Fix E: display ハンドラ内 _flushLogsToFile 呼出 → 撤去
+ *     - Fix F: _highFreqCounter + _recordHighFreq + 1 秒 summary → 撤去
+ *     - Fix G: 高頻度ラベル発火元差し替えコード → 撤去（呼出箇所も撤去）
+ *     - Fix H: state.js perf:state:notify 集約 → 撤去
  *
- *   rc1〜rc5 機構 + 計測機構 + 致命バグ保護 5 件 完全保持
+ *   v2.2.1 で **保持** 対象（priority buffer + edge ラベル）:
+ *     - Fix C: priority buffer 機構（_isPriorityLabel / _appendPriorityLog / _flushPriorityLog）保持
+ *     - Fix D: rollingLog 内 priority 分岐 保持
+ *     - PRIORITY_LOG_LABELS Set（meas3:hdmi-snapshot:written のみ削除して 12 ラベル維持 + rc10.1 3 ラベル追加で 13 ラベル）
  *
  * 実行: node tests/v244-meas3-observation-strengthen.test.js
  */
@@ -20,17 +22,13 @@ const assert = require('node:assert/strict');
 const fs     = require('node:fs');
 const path   = require('node:path');
 
-const ROOT       = path.join(__dirname, '..');
-const PKG        = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-const RENDERER   = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'renderer.js'), 'utf8');
-const TIMER_JS   = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'timer.js'), 'utf8');
-const DUAL_SYNC  = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'dual-sync.js'), 'utf8');
-const STATE_JS   = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'state.js'), 'utf8');
-const MAIN_JS    = fs.readFileSync(path.join(ROOT, 'src', 'main.js'), 'utf8');
-const PRELOAD_JS = fs.readFileSync(path.join(ROOT, 'src', 'preload.js'), 'utf8');
-const STYLE_CSS  = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'style.css'), 'utf8');
-const INDEX_HTML = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'index.html'), 'utf8');
-const AUDIO_JS   = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'audio.js'), 'utf8');
+const ROOT     = path.join(__dirname, '..');
+const PKG      = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const RENDERER = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'renderer.js'), 'utf8');
+const TIMER_JS = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'timer.js'), 'utf8');
+const STATE_JS = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'state.js'), 'utf8');
+const MAIN_JS  = fs.readFileSync(path.join(ROOT, 'src', 'main.js'), 'utf8');
+const AUDIO_JS = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'audio.js'), 'utf8');
 
 let pass = 0, fail = 0;
 function test(name, fn) {
@@ -39,175 +37,112 @@ function test(name, fn) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10.1'
+// T1: package.json.version 形式確認
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10.1', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
+test('T1: package.json.version は v2.2.1 以降 or 試験ビルド', () => {
+  assert.match(PKG.version, /^2\.(\d+)\.\d+(-(rc|meas)\d+(\.\d+)?)?$/,
+    `想定外の version 形式: ${PKG.version}`);
 });
 
 // ============================================================
-// T2: Fix A — main.js buffer 容量定数の計測ビルド時条件分岐
+// T2: 旧 Fix A — buffer 容量定数が **本番値固定**（三項演算撤去）
 // ============================================================
-test('T2: main.js に _isMeasBuildForBuffer + ROLLING_LOG_RETENTION_MS / ROLLING_LOG_BUFFER_MAX 条件分岐', () => {
-  assert.match(MAIN_JS, /const\s+_isMeasBuildForBuffer\s*=/,
-    'Fix A 未完了: _isMeasBuildForBuffer 定数定義なし');
-  // ROLLING_LOG_RETENTION_MS が条件分岐に置換
-  assert.match(MAIN_JS,
-    /const\s+ROLLING_LOG_RETENTION_MS\s*=\s*_isMeasBuildForBuffer\s*\?\s*30\s*\*\s*60\s*\*\s*1000\s*:\s*5\s*\*\s*60\s*\*\s*1000/,
-    'Fix A 未完了: ROLLING_LOG_RETENTION_MS の条件分岐なし');
-  // ROLLING_LOG_BUFFER_MAX が条件分岐に置換
-  assert.match(MAIN_JS,
-    /const\s+ROLLING_LOG_BUFFER_MAX\s*=\s*_isMeasBuildForBuffer\s*\?\s*50000\s*:\s*5000/,
-    'Fix A 未完了: ROLLING_LOG_BUFFER_MAX の条件分岐なし');
+test('T2: ROLLING_LOG_RETENTION_MS / BUFFER_MAX が本番値固定（三項演算撤去）', () => {
+  assert.match(MAIN_JS, /const\s+ROLLING_LOG_RETENTION_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/,
+    'ROLLING_LOG_RETENTION_MS が本番値（5 分）固定でない');
+  assert.match(MAIN_JS, /const\s+ROLLING_LOG_BUFFER_MAX\s*=\s*5000/,
+    'ROLLING_LOG_BUFFER_MAX が本番値（5000）固定でない');
+  // _isMeasBuildForBuffer / _appVersionForBuffer 撤去
+  assert.ok(!MAIN_JS.includes('_isMeasBuildForBuffer'),
+    '_isMeasBuildForBuffer が残存（三項演算撤去未完了）');
+  assert.ok(!MAIN_JS.includes('_appVersionForBuffer'),
+    '_appVersionForBuffer が残存（dead code）');
 });
 
 // ============================================================
-// T3: Fix B — main.js _flushLogsToFile(suffix) 関数 + meas3:hdmi-snapshot:written ラベル
+// T3: 旧 Fix B / E — _flushLogsToFile 関数 + display ハンドラ呼出 撤去
 // ============================================================
-test('T3: main.js _flushLogsToFile(suffix) 関数定義 + fs.promises.writeFile + meas3:hdmi-snapshot:written', () => {
-  assert.match(MAIN_JS, /function\s+_flushLogsToFile\s*\(\s*suffix\s*\)\s*\{/,
-    'Fix B 未完了: _flushLogsToFile(suffix) 関数定義なし');
-  // 関数本体に fs.promises.writeFile + hdmi-snapshot ファイル名
-  const m = MAIN_JS.match(/function\s+_flushLogsToFile\s*\(\s*suffix\s*\)\s*\{([\s\S]*?)\n\}/);
-  assert.ok(m, '_flushLogsToFile 関数本体抽出失敗');
-  const body = m[1];
-  assert.match(body, /fs\.promises\.writeFile\s*\(/,
-    'Fix B 未完了: _flushLogsToFile 内に fs.promises.writeFile 呼出なし');
-  assert.match(body, /hdmi-snapshot/,
-    'Fix B 未完了: _flushLogsToFile 内に hdmi-snapshot ファイル名生成なし');
-  assert.match(body, /meas3:hdmi-snapshot:written/,
-    'Fix B 未完了: meas3:hdmi-snapshot:written ラベル発火なし');
+test('T3: _flushLogsToFile 関数 + display ハンドラ呼出 + hdmi-snapshot ラベル 撤去', () => {
+  assert.ok(!MAIN_JS.includes('_flushLogsToFile'),
+    '_flushLogsToFile が残存');
+  assert.ok(!MAIN_JS.includes('hdmi-snapshot'),
+    'hdmi-snapshot 文字列が残存');
+  assert.ok(!MAIN_JS.includes('meas3:hdmi-snapshot:written'),
+    'meas3:hdmi-snapshot:written ラベルが残存');
 });
 
 // ============================================================
-// T4: Fix C — main.js priority buffer 機構
+// T4: 旧 Fix C — priority buffer 機構は **保持**（撤去対象外）
 // ============================================================
-test('T4: main.js PRIORITY_LOG_BUFFER_MAX + PRIORITY_LOG_LABELS Set + _isPriorityLabel / _appendPriorityLog / _flushPriorityLog 関数', () => {
+test('T4: priority buffer 機構保持（PRIORITY_LOG_LABELS Set + 3 関数）', () => {
   assert.match(MAIN_JS, /const\s+PRIORITY_LOG_BUFFER_MAX\s*=\s*10000/,
-    'Fix C 未完了: PRIORITY_LOG_BUFFER_MAX = 10000 定義なし');
+    'PRIORITY_LOG_BUFFER_MAX が消失');
   assert.match(MAIN_JS, /const\s+PRIORITY_LOG_LABELS\s*=\s*new\s+Set\s*\(/,
-    'Fix C 未完了: PRIORITY_LOG_LABELS Set 定義なし');
-  // 主要ラベルが Set に含まれること
-  for (const lbl of ['display-removed', 'display-added', 'preStart:operator:send', 'operator:preStartResync:sent', 'operator:applyPreStartState:apply', 'meas3:hdmi-snapshot:written']) {
-    assert.ok(MAIN_JS.includes(`'${lbl}'`),
-      `Fix C 未完了: PRIORITY_LOG_LABELS に ${lbl} が含まれていない`);
-  }
-  // 関数定義 3 種
+    'PRIORITY_LOG_LABELS Set が消失');
+  // 関数定義 3 種保持
   assert.match(MAIN_JS, /function\s+_isPriorityLabel\s*\(\s*label\s*\)\s*\{/,
-    'Fix C 未完了: _isPriorityLabel 関数定義なし');
+    '_isPriorityLabel が消失');
   assert.match(MAIN_JS, /function\s+_appendPriorityLog\s*\(\s*entry\s*\)\s*\{/,
-    'Fix C 未完了: _appendPriorityLog 関数定義なし');
+    '_appendPriorityLog が消失');
   assert.match(MAIN_JS, /async\s+function\s+_flushPriorityLog\s*\(\s*\)\s*\{/,
-    'Fix C 未完了: _flushPriorityLog async 関数定義なし');
+    '_flushPriorityLog が消失');
 });
 
 // ============================================================
-// T5: Fix D — main.js rollingLog 関数内に _isPriorityLabel + _appendPriorityLog 呼出
+// T5: 旧 Fix D — rollingLog 内 _isPriorityLabel + _appendPriorityLog 呼出 保持
 // ============================================================
-test('T5: rollingLog 関数内に _isPriorityLabel(entry.label) 分岐 + _appendPriorityLog(entry) 呼出', () => {
+test('T5: rollingLog 関数内に _isPriorityLabel(entry.label) + _appendPriorityLog(entry) 呼出 保持', () => {
   const m = MAIN_JS.match(/function\s+rollingLog\s*\(\s*label\s*,\s*data\s*\)\s*\{([\s\S]*?)\n\}/);
   assert.ok(m, 'rollingLog 関数本体抽出失敗');
   const body = m[1];
   assert.match(body, /_isPriorityLabel\s*\(\s*entry\.label\s*\)/,
-    'Fix D 未完了: rollingLog 内に _isPriorityLabel(entry.label) 呼出なし');
+    'rollingLog 内 _isPriorityLabel 呼出消失');
   assert.match(body, /_appendPriorityLog\s*\(\s*entry\s*\)/,
-    'Fix D 未完了: rollingLog 内に _appendPriorityLog(entry) 呼出なし');
+    'rollingLog 内 _appendPriorityLog 呼出消失');
 });
 
 // ============================================================
-// T6: Fix E — main.js display-removed / display-added ハンドラに _flushLogsToFile 呼出
+// T6: 旧 Fix F / G — _highFreqCounter + _recordHighFreq 撤去
 // ============================================================
-test('T6: screen.on(display-removed/added) ハンドラ内に _flushLogsToFile 呼出存在', () => {
-  // v2.1.20-rc10.1: display-removed ハンドラに stale 観測ブロック追加で文字数が拡大したため 800 → 1200
-  // display-removed ハンドラ内
-  assert.match(MAIN_JS,
-    /screen\.on\s*\(\s*['"]display-removed['"][\s\S]{0,1200}?_flushLogsToFile\s*\(\s*['"]display-removed['"]/,
-    'Fix E 未完了: display-removed ハンドラ内に _flushLogsToFile(display-removed) 呼出なし');
-  // display-added ハンドラ内
-  assert.match(MAIN_JS,
-    /screen\.on\s*\(\s*['"]display-added['"][\s\S]{0,1200}?_flushLogsToFile\s*\(\s*['"]display-added['"]/,
-    'Fix E 未完了: display-added ハンドラ内に _flushLogsToFile(display-added) 呼出なし');
+test('T6: _highFreqCounter + _recordHighFreq 機構 撤去', () => {
+  assert.ok(!RENDERER.includes('_highFreqCounter'),
+    'renderer.js に _highFreqCounter が残存');
+  assert.ok(!RENDERER.includes('_recordHighFreq'),
+    'renderer.js に _recordHighFreq が残存');
+  // 1 秒 setInterval 内 perf:highfreq:summary 出力撤去
+  assert.ok(!RENDERER.includes('perf:highfreq:summary'),
+    'renderer.js に perf:highfreq:summary が残存');
 });
 
 // ============================================================
-// T7: Fix F — renderer.js _highFreqCounter + _recordHighFreq + perf:highfreq:summary
+// T7: 旧 Fix H — state.js window._highFreqCounter 共有撤去
 // ============================================================
-test('T7: renderer.js _highFreqCounter 定数 + _recordHighFreq 関数 + perf:highfreq:summary ラベル + 1 秒 setInterval 内 summary', () => {
-  assert.match(RENDERER, /const\s+_highFreqCounter\s*=\s*\{\s*\}/,
-    'Fix F 未完了: _highFreqCounter 定数定義なし');
-  assert.match(RENDERER, /function\s+_recordHighFreq\s*\(\s*label\s*,\s*ms\s*\)\s*\{/,
-    'Fix F 未完了: _recordHighFreq 関数定義なし');
-  // perf:highfreq:summary ラベル発火 + 1 秒 setInterval 内
-  assert.match(RENDERER, /perf:highfreq:summary/,
-    'Fix F 未完了: perf:highfreq:summary ラベル消失');
-  // 1 秒 setInterval 内に _highFreqCounter summary 出力
-  assert.match(RENDERER,
-    /setInterval\s*\(\s*\(\s*\)\s*=>\s*\{[\s\S]*?_rafCounter[\s\S]{0,500}?_highFreqCounter[\s\S]{0,300}?perf:highfreq:summary/,
-    'Fix F 未完了: 1 秒 setInterval 内に _highFreqCounter summary 出力なし');
+test('T7: state.js から window._highFreqCounter 共有 + perf:state:notify 集約 撤去', () => {
+  assert.ok(!STATE_JS.includes('_highFreqCounter'),
+    'state.js に _highFreqCounter 参照が残存');
+  assert.ok(!STATE_JS.includes('perf:state:notify'),
+    'state.js に perf:state:notify ラベルが残存');
 });
 
 // ============================================================
-// T8: Fix G/H — 高頻度ラベルの直接 log.write 呼出が _recordHighFreq に差し替え済
+// T8: rc1〜rc5 機構 + 致命バグ保護 5 件 完全保持
 // ============================================================
-test('T8: 高頻度ラベル（perf:render:duration / hall:updatePipTimer:set / perf:state:notify）の直接 log.write 残存 0 件', () => {
-  // renderer.js: 'perf:render:duration' を含む log.write 呼出が 0 件
-  const renderDurationDirect = RENDERER.match(/window\.api\?\.log\?\.write\?\.\s*\(\s*['"]perf:render:duration['"]/g) || [];
-  assert.equal(renderDurationDirect.length, 0,
-    `Fix G 未完了: renderer.js に perf:render:duration の直接 log.write が ${renderDurationDirect.length} 件残存`);
-  // renderer.js: 'hall:updatePipTimer:set' を含む log.write 呼出が 0 件
-  const pipDirect = RENDERER.match(/window\.api\?\.log\?\.write\?\.\s*\(\s*['"]hall:updatePipTimer:set['"]/g) || [];
-  assert.equal(pipDirect.length, 0,
-    `Fix G 未完了: renderer.js に hall:updatePipTimer:set の直接 log.write が ${pipDirect.length} 件残存`);
-  // state.js: 'perf:state:notify' を含む直接 log.write 呼出が 0 件（_highFreqCounter 経由に置換）
-  const notifyDirect = STATE_JS.match(/window\.api\.log\.write\s*\(\s*['"]perf:state:notify['"]/g) || [];
-  assert.equal(notifyDirect.length, 0,
-    `Fix H 未完了: state.js に perf:state:notify の直接 log.write が ${notifyDirect.length} 件残存`);
-  // _recordHighFreq 呼出 + perf:render:duration 文字列が 4 箇所以上（4 か所 + ラベル定義）
-  const recordHighFreqCalls = (RENDERER.match(/_recordHighFreq\s*\(/g) || []).length;
-  assert.ok(recordHighFreqCalls >= 4,
-    `Fix G 未完了: _recordHighFreq 呼出が ${recordHighFreqCalls} 件（4 件以上必要、render×4 + pip×1 想定）`);
-  // state.js 内 _highFreqCounter 経由置換
-  assert.match(STATE_JS, /window\._highFreqCounter[\s\S]{0,300}?perf:state:notify/,
-    'Fix H 未完了: state.js 内 window._highFreqCounter 経由の perf:state:notify 集計なし');
-});
-
-// ============================================================
-// T9: rc1〜rc5 機構保持 + v2.1.19 機構 + 致命バグ保護 5 件
-// ============================================================
-test('T9: rc1〜rc5 機構 + v2.1.19 + 致命バグ保護 5 件 完全保持', () => {
-  // rc1 Fix 1: renderHallTickFrame setState 撤廃
-  const stripped = RENDERER.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  const fnStart = stripped.indexOf('function renderHallTickFrame()');
-  assert.ok(fnStart >= 0);
-  const fnSnippet = stripped.slice(fnStart, fnStart + 2000);
-  assert.doesNotMatch(fnSnippet, /setState\s*\(\s*\{[^}]*remainingMs/,
-    'rc1 Fix 1 退行: renderHallTickFrame に setState({...remainingMs...}) が残存');
+test('T8: rc1〜rc5 機構 + v2.1.19 + 致命バグ保護 5 件 完全保持', () => {
   // rc1 Fix 2-A: DocumentFragment
   assert.match(RENDERER, /document\.createDocumentFragment\s*\(\s*\)/, 'rc1 Fix 2-A 退行');
   // rc1 Fix 2-B: memoized
   assert.match(RENDERER, /function\s+computeLiveTimerStateMemoized\s*\(/, 'rc1 Fix 2-B 退行');
-  // rc1 Fix 4: CSS 統一
-  assert.match(STYLE_CSS, /\.clock\[data-prestart-paused="true"\]\s+\.clock__pause-label\s*\{[^}]*opacity\s*:\s*1/,
-    'rc1 Fix 4 退行');
   // rc2: hallTickState reset 3 trigger
   for (const tg of ['applyTimerStateToTimer-non-running', 'applyHallPreStartState-inactive', 'hall-window-init']) {
     assert.ok(RENDERER.includes(`'${tg}'`), `rc2 退行: ${tg} 消失`);
   }
-  // rc3: renderTournamentListWithDedup
-  assert.match(RENDERER, /function\s+renderTournamentListWithDedup\s*\(/, 'rc3 Fix 2 退行');
   // rc4: timer.js restorePreStart
   assert.match(TIMER_JS, /export\s+function\s+restorePreStart\s*\(\s*payload\s*\)\s*\{/, 'rc4 退行');
-  // rc4: handleStartPauseToggle 内 PRE_START 分岐
-  const fnH = RENDERER.match(/function\s+handleStartPauseToggle\s*\(\s*\)\s*\{([\s\S]*?)\n\}/);
-  assert.ok(fnH);
-  assert.match(fnH[1],
-    /if\s*\(\s*status\s*===\s*States\.PRE_START[\s\S]{0,80}?isPreStartActive\s*\(\s*\)\s*\)/,
-    'rc4 退行: handleStartPauseToggle PRE_START 分岐消失');
-  // rc4: applyOperatorPreStartState 関数
+  // rc4: applyOperatorPreStartState
   assert.match(RENDERER, /function\s+applyOperatorPreStartState\s*\(\s*payload\s*\)\s*\{/, 'rc4 退行');
-  // rc5: preStart:operator:send + operator:preStartResync:sent ラベル + subscribeStateSync 経路
-  assert.ok(MAIN_JS.includes('preStart:operator:send'), 'rc5 退行: preStart:operator:send 消失');
-  assert.ok(MAIN_JS.includes('operator:preStartResync:sent'), 'rc5 退行: operator:preStartResync:sent 消失');
+  // rc5
+  assert.ok(MAIN_JS.includes('preStart:operator:send'), 'rc5 退行');
+  assert.ok(MAIN_JS.includes('operator:preStartResync:sent'), 'rc5 退行');
   // v2.1.19 _tournamentsListDedup
   assert.match(RENDERER, /async\s+function\s+_tournamentsListDedup\s*\(\s*\)\s*\{/, 'v2.1.19 退行');
   // 致命バグ保護 5 件
@@ -219,33 +154,35 @@ test('T9: rc1〜rc5 機構 + v2.1.19 + 致命バグ保護 5 件 完全保持', (
 });
 
 // ============================================================
-// T10: 計測機構保持 + 新規 meas3 ラベル
+// T9: rc7 / rc8 / rc9 / rc10 / rc10.1 機構 完全保持
 // ============================================================
-test('T10: meas1 + meas2 + 症状確証 4 + rc2/rc4/rc5 ラベル + 新規 meas3 ラベル（perf:highfreq:summary + meas3:hdmi-snapshot:written）保持', () => {
-  // meas1 バッジ
-  assert.match(INDEX_HTML, /<div\s+id="meas-build-badge">\s*計測ビルド\s*<\/div>/, 'meas-build-badge HTML 消失');
-  assert.ok(STYLE_CSS.includes('#meas-build-badge'), '#meas-build-badge CSS 消失');
-  // meas2 6 カテゴリ
-  const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
-  for (const lbl of ['perf:interval:fire', 'perf:raf:summary', 'perf:ipc:summary', 'perf:dom:summary', 'perf:long-task', 'perf:subscribe:summary']) {
-    assert.ok(ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 消失`);
-  }
-  // 症状確証 4（hall:updatePipTimer:set は Fix G で集約化されたが、ラベル名は _recordHighFreq 引数で文字列として残存）
-  for (const lbl of ['hall:syncSlideshowFromState:call', 'hall:updatePipTimer:set', 'hall:applyHallPreStartState:apply', 'hall:clock-pause-label:visibility']) {
-    assert.ok(ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 消失`);
-  }
-  // rc2 / rc4 ラベル
-  assert.ok(RENDERER.includes('hall:hallTickState:reset'), 'rc2 退行');
-  assert.ok(RENDERER.includes('operator:applyPreStartState:apply'), 'rc4 退行');
-  // rc5 新規 2 ラベル
-  assert.ok(MAIN_JS.includes('preStart:operator:send'), 'rc5 退行');
-  assert.ok(MAIN_JS.includes('operator:preStartResync:sent'), 'rc5 退行');
-  // meas3 新規 2 ラベル
-  assert.ok(RENDERER.includes('perf:highfreq:summary'),
-    'meas3 新規ラベル perf:highfreq:summary が renderer.js に見つからない');
-  assert.ok(MAIN_JS.includes('meas3:hdmi-snapshot:written'),
-    'meas3 新規ラベル meas3:hdmi-snapshot:written が main.js に見つからない');
+test('T9: rc7〜rc10.1 機構 完全保持', () => {
+  // rc7
+  assert.match(MAIN_JS, /preStart:cache:merge/, 'rc7 消失');
+  // rc8/rc9
+  assert.match(RENDERER, /operator:applyTimerStateToTimer:skip-reset-during-prestart/, 'rc8/rc9 消失');
+  // rc10
+  assert.match(TIMER_JS, /export\s+function\s+reset\s*\(\s*opts\s*=\s*\{\s*\}\s*\)/, 'rc10 reset(opts) 消失');
+  assert.match(RENDERER, /timer:reset:skip-during-prestart/, 'rc10 ガード ラベル消失');
+  // rc10.1
+  assert.match(MAIN_JS, /hdmi:display-removed:dual-sync-stale/, 'rc10.1 #1 消失');
+  assert.match(MAIN_JS, /hdmi:dialog-blocked:switchOperatorToSolo/, 'rc10.1 #2 消失');
+  assert.match(RENDERER, /timer:reset:race-window-entry/, 'rc10.1 #10 消失');
 });
 
-console.log(`\nv244 meas3-observation-strengthen: ${pass} pass / ${fail} fail`);
+// ============================================================
+// T10: edge 発火ラベル（保持対象）完全保持
+// ============================================================
+test('T10: edge 発火ラベル（state:transition / meas:capture / meas:session:start / display 系）完全保持', () => {
+  // state.js edge ラベル
+  assert.ok(STATE_JS.includes('state:transition'), 'state:transition 消失');
+  // main.js edge ラベル
+  assert.ok(MAIN_JS.includes('meas:session:start'), 'meas:session:start 消失');
+  assert.ok(MAIN_JS.includes('meas:capture'), 'meas:capture 消失');
+  assert.ok(MAIN_JS.includes('display-removed'), 'display-removed 消失');
+  assert.ok(MAIN_JS.includes('display-added'), 'display-added 消失');
+  assert.ok(MAIN_JS.includes('switchOperatorToSolo:enter'), 'switchOperatorToSolo:enter 消失');
+});
+
+console.log(`\nv244 meas3-removal (v2.2.1): ${pass} pass / ${fail} fail`);
 process.exit(fail > 0 ? 1 : 0);

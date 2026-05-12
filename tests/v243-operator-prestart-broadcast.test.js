@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc10.1 静的解析テスト — operator 側 preStartState 配信経路 構造的根治
+ * v2.2.1 静的解析テスト — operator 側 preStartState 配信経路 構造的根治
  *
  *   Fix 1: main.js _publishDualState で preStartState を operator (mainWindow) にも broadcast
  *   Fix 2: main.js switchSoloToOperator で did-finish-load タイミングで cache から preStartState 再送信
@@ -35,10 +35,10 @@ function test(name, fn) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10.1'
+// T1: package.json.version === '2.2.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10.1', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.2.1', () => {
+  assert.equal(PKG.version, '2.2.1', `期待 2.2.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -207,30 +207,27 @@ test('T9: v2.1.19 重さ根治機構 + 致命バグ保護 5 件 完全保持', (
 // ============================================================
 // T10: 計測機構保持 + 新規 2 ラベル
 // ============================================================
-test('T10: 計測機構（meas1 + meas2 6 カテゴリ + 症状確証 4 + hall:hallTickState:reset + rc4 operator:applyPreStartState:apply + rc5 新規 2 ラベル）完全保持', () => {
-  // meas1
-  assert.match(INDEX_HTML, /<div\s+id="meas-build-badge">\s*計測ビルド\s*<\/div>/,
-    'meas-build-badge HTML 消失');
-  assert.ok(STYLE_CSS.includes('#meas-build-badge'), '#meas-build-badge CSS 消失');
-  // meas2 6 カテゴリ
+test('T10: v2.2.1 — 計測機構（meas1 + meas2 + 症状確証 4）撤去 + rc2/rc4/rc5 edge ラベル保持', () => {
+  if (/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) return;
+  // 撤去: meas1 バッジ
+  assert.ok(!INDEX_HTML.includes('meas-build-badge'),
+    'v2.2.1 撤去違反: meas-build-badge 残存');
+  assert.ok(!STYLE_CSS.includes('#meas-build-badge'),
+    'v2.2.1 撤去違反: #meas-build-badge 残存');
+  // 撤去: meas2 6 カテゴリ
   const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
   for (const lbl of ['perf:interval:fire', 'perf:raf:summary', 'perf:ipc:summary', 'perf:dom:summary', 'perf:long-task', 'perf:subscribe:summary']) {
-    assert.ok(ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 残存`);
   }
-  // 症状確証 4
+  // 撤去: 症状確証 4
   for (const lbl of ['hall:syncSlideshowFromState:call', 'hall:updatePipTimer:set', 'hall:applyHallPreStartState:apply', 'hall:clock-pause-label:visibility']) {
-    assert.ok(ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 残存`);
   }
-  // rc2
-  assert.ok(RENDERER.includes('hall:hallTickState:reset'), 'hall:hallTickState:reset 消失（rc2 退行）');
-  // rc4
-  assert.ok(RENDERER.includes('operator:applyPreStartState:apply'),
-    'rc4 ラベル operator:applyPreStartState:apply 消失');
-  // rc5 新規 2 ラベル
-  assert.ok(MAIN_JS.includes('preStart:operator:send'),
-    'rc5 新規ラベル preStart:operator:send が main.js に見つからない');
-  assert.ok(MAIN_JS.includes('operator:preStartResync:sent'),
-    'rc5 新規ラベル operator:preStartResync:sent が main.js に見つからない');
+  // 保持: rc2/rc4/rc5 edge ラベル
+  assert.ok(RENDERER.includes('hall:hallTickState:reset'), 'rc2 edge ラベル消失');
+  assert.ok(RENDERER.includes('operator:applyPreStartState:apply'), 'rc4 edge ラベル消失');
+  assert.ok(MAIN_JS.includes('preStart:operator:send'), 'rc5 preStart:operator:send 消失');
+  assert.ok(MAIN_JS.includes('operator:preStartResync:sent'), 'rc5 operator:preStartResync:sent 消失');
 });
 
 console.log(`\nv243 operator-prestart-broadcast: ${pass} pass / ${fail} fail`);

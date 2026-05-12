@@ -139,10 +139,7 @@ function _bufferDiff(diff) {
     //   で flush され、描画パイプと自然に同期する。atomic update 効果は維持
     //   （rAF boundary 内で複数 diff を集約、dedup + 受信順保持はそのまま）。
     // v2.1.10: rAF 自体は v2.1.9 のまま維持（変更禁止）。frame skip 検出のみ追加（hall 限定）。
-    // v2.1.20-meas1 カテゴリ B: RAF 発火を rolling-log に記録（dual-sync-flush ラベル、1 秒集計対象外、
-    //   イベント駆動のため発火頻度が低く個別ログで十分。renderer.js の _wrappedRAF とは別系統）。
     _flushTimer = requestAnimationFrame(() => {
-      try { window.api?.log?.write?.('perf:raf:fire', { label: 'dual-sync-flush' }); } catch (_) {}
       _flushTimer = null;
       // v2.1.10: hall 限定の frame skip 計測（独立関数で inline object literal 排除）
       _recordFlushFrameSkip();

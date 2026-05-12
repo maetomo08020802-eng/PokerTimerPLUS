@@ -1,10 +1,10 @@
 /**
- * v2.1.20-rc10.1 静的解析テスト — timer.js reset() に force フラグ引数追加で PRE_START を構造的保護
+ * v2.2.1 静的解析テスト — timer.js reset() に force フラグ引数追加で PRE_START を構造的保護
  *
  *   Fix 1: timer.js reset(opts = {}) シグネチャ + const { force = true } + if (!force && isPreStart) return false;
  *   Fix 2: renderer.js 5 経路で timerReset({ force: false }) 呼出 + 戻り値判定 + timer:reset:skip-during-prestart ラベル発火
  *   Fix 3: 意図的リセット経路 6 箇所は touch なし（force: true デフォルト維持）
- *   Fix 4: package.json version bump 2.1.20-rc9 → 2.1.20-rc10.1 + scripts.test 末尾追記
+ *   Fix 4: package.json version bump 2.1.20-rc9 → 2.2.1 + scripts.test 末尾追記
  *
  *   rc1〜rc9 機構 + 計測機構 + 致命バグ保護 5 件 完全保持
  *
@@ -46,10 +46,10 @@ const APPLY_TS_FN_BODY = extractFnBody(RENDERER, /function\s+applyTimerStateToTi
 const RESET_FN_BODY    = extractFnBody(TIMER_JS, /export\s+function\s+reset\s*\([^)]*\)\s*\{/);
 
 // ============================================================
-// T1: package.json version === '2.1.20-rc10.1'
+// T1: package.json version === '2.2.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10.1', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `version 不一致: ${PKG.version}`);
+test('T1: package.json.version === 2.2.1', () => {
+  assert.equal(PKG.version, '2.2.1', `version 不一致: ${PKG.version}`);
 });
 
 // ============================================================
@@ -195,34 +195,30 @@ test('T8: rc1〜rc9 機構 + 致命バグ保護 5 件 完全保持', () => {
 // ============================================================
 // T9: 計測機構保持 + 新規 rc10 ラベル 5 ctx 値
 // ============================================================
-test('T9: meas1+meas2+症状確証4+rc2/rc4/rc5/meas3/rc7/rc8/rc9 ラベル + 新規 rc10 5 ctx 値保持', () => {
-  // meas1 計測バッジ
+test('T9: v2.2.1 — meas1/meas2/症状確証4/meas3 撤去 + rc2/rc4/rc5/rc7/rc8/rc9/rc10 edge ラベル保持', () => {
+  // 試験ビルド時は skip
+  if (/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) return;
+  // 撤去: meas1 計測バッジ + meas3 高頻度ラベル
   const HTML = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'index.html'), 'utf8');
-  assert.match(HTML, /id=["']js-meas-build-badge["']|計測ビルド/, 'meas1 計測バッジが消えている');
-  // rc2 hallTickState:reset 3 trigger
-  assert.match(RENDERER, /hall:hallTickState:reset/, 'rc2 hallTickState:reset ラベルが消えている');
-  // rc4 ラベル
-  assert.match(RENDERER, /operator:applyPreStartState:apply/, 'rc4 applyPreStartState:apply ラベルが消えている');
-  // rc5 ラベル
-  assert.match(MAIN_JS, /preStart:operator:send/, 'rc5 ラベルが消えている');
-  // meas3 ラベル
-  assert.match(RENDERER, /perf:highfreq:summary/, 'meas3 perf:highfreq:summary ラベルが消えている');
-  assert.match(MAIN_JS, /meas3:hdmi-snapshot:written/, 'meas3 hdmi-snapshot:written ラベルが消えている');
-  // rc7 ラベル
-  assert.match(MAIN_JS, /preStart:cache:merge/, 'rc7 ラベルが消えている');
-  // rc8 ラベル（trigger:'idle' 含む）
-  assert.match(RENDERER, /trigger:\s*['"]idle['"]/, 'rc9 trigger:"idle" が消えている');
-  // rc9 ラベル 4 trigger 全種別
+  assert.ok(!HTML.includes('meas-build-badge'), 'v2.2.1 撤去違反: meas-build-badge HTML 残存');
+  assert.ok(!RENDERER.includes('perf:highfreq:summary'), 'meas3 perf:highfreq:summary 残存');
+  assert.ok(!MAIN_JS.includes('meas3:hdmi-snapshot:written'), 'meas3 hdmi-snapshot:written 残存');
+  // 保持: rc2 / rc4 / rc5 / rc7 / rc8 / rc9 edge ラベル
+  assert.match(RENDERER, /hall:hallTickState:reset/, 'rc2 消失');
+  assert.match(RENDERER, /operator:applyPreStartState:apply/, 'rc4 消失');
+  assert.match(MAIN_JS, /preStart:operator:send/, 'rc5 消失');
+  assert.match(MAIN_JS, /preStart:cache:merge/, 'rc7 消失');
+  assert.match(RENDERER, /operator:applyTimerStateToTimer:skip-reset-during-prestart/, 'rc8 消失');
   for (const trg of ['invalid-ts', 'idle', 'finished', 'no-levels']) {
     const re = new RegExp(`trigger:\\s*['"]${trg}['"]`);
-    assert.match(RENDERER, re, `rc9 trigger:'${trg}' が消えている`);
+    assert.match(RENDERER, re, `rc9 trigger:'${trg}' 消失`);
   }
-  // 新規 rc10 ラベル 5 ctx 値すべて
+  // 保持: rc10 5 ctx 値
   for (const ctx of ['applyTimerStateToTimer:invalid-ts', 'applyTimerStateToTimer:idle',
                      'applyTimerStateToTimer:finished', 'applyTimerStateToTimer:no-levels',
                      'initialize:restoredFromTimerState-false']) {
     const re = new RegExp(`timer:reset:skip-during-prestart[\\s\\S]{0,300}?ctx:\\s*['"]${ctx}['"]`);
-    assert.match(RENDERER, re, `rc10 ctx:'${ctx}' が renderer.js にない`);
+    assert.match(RENDERER, re, `rc10 ctx:'${ctx}' 消失`);
   }
 });
 

@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc10.1 静的解析テスト — operator 側 preStartState 受信機構追加
+ * v2.2.1 静的解析テスト — operator 側 preStartState 受信機構追加
  *
  *   Fix 1: timer.js に restorePreStart(payload) export 追加
  *   Fix 2: renderer.js に applyOperatorPreStartState + dual-sync operator 経路 + import 追加
@@ -35,10 +35,10 @@ function test(name, fn) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10.1'
+// T1: package.json.version === '2.2.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10.1', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.2.1', () => {
+  assert.equal(PKG.version, '2.2.1', `期待 2.2.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -170,21 +170,25 @@ test('T7: v2.1.19 重さ根治機構（_tournamentsListDedup / _shouldRefreshLis
 // ============================================================
 // T8: 計測機構保持（meas1 + meas2 + 症状確証 4 + hall:hallTickState:reset + 新規 operator:applyPreStartState:apply）
 // ============================================================
-test('T8: 計測機構（バッジ + meas2 6 カテゴリ + 症状確証 4 + hall:hallTickState:reset + 新規 operator:applyPreStartState:apply）完全保持', () => {
-  assert.match(INDEX_HTML, /<div\s+id="meas-build-badge">\s*計測ビルド\s*<\/div>/,
-    'meas-build-badge HTML 消失');
-  assert.ok(STYLE_CSS.includes('#meas-build-badge'), '#meas-build-badge CSS 消失');
+test('T8: v2.2.1 — 計測機構（バッジ + meas2 + 症状確証 4）撤去 + edge ラベル（hall:hallTickState:reset / operator:applyPreStartState:apply）保持', () => {
+  if (/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) return;
+  // 撤去確認
+  assert.ok(!INDEX_HTML.includes('meas-build-badge'),
+    'v2.2.1 撤去違反: meas-build-badge 残存');
+  assert.ok(!STYLE_CSS.includes('#meas-build-badge'),
+    'v2.2.1 撤去違反: #meas-build-badge 残存');
   const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
   for (const lbl of ['perf:interval:fire', 'perf:raf:summary', 'perf:ipc:summary', 'perf:dom:summary', 'perf:long-task', 'perf:subscribe:summary']) {
-    assert.ok(ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 残存`);
   }
   for (const lbl of ['hall:syncSlideshowFromState:call', 'hall:updatePipTimer:set', 'hall:applyHallPreStartState:apply', 'hall:clock-pause-label:visibility']) {
-    assert.ok(ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 残存`);
   }
-  assert.ok(RENDERER.includes('hall:hallTickState:reset'), 'hall:hallTickState:reset 消失（rc2 退行）');
-  // 新規 rc4 ラベル
+  // edge ラベル保持
+  assert.ok(RENDERER.includes('hall:hallTickState:reset'),
+    'rc2 edge ラベル hall:hallTickState:reset 消失');
   assert.ok(RENDERER.includes('operator:applyPreStartState:apply'),
-    '新規ラベル operator:applyPreStartState:apply が renderer.js に見つからない（Fix 4 未完了）');
+    'rc4 edge ラベル operator:applyPreStartState:apply 消失');
 });
 
 // ============================================================

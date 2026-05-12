@@ -25,18 +25,10 @@ if (typeof document !== 'undefined') {
 // renderer 側からも参照できるよう expose（read-only、STEP 3 以降の役割分岐ロジックで利用）
 contextBridge.exposeInMainWorld('appRole', _role);
 
-// v2.1.18-meas1 perf:ipc:roundtrip: 主要 ipcRenderer.invoke の往復時間を rolling-log に記録するラッパ。
-//   rollingLogViaIpc は IPC 'rolling-log:write' 経由（fire-and-forget、await しない、failure silent）。
-//   try/catch で握り潰し、本体動作に副作用なし。一方向 ipcRenderer.send は計測対象外。
-function rollingLogViaIpc(label, payload) {
-  try { ipcRenderer.send('rolling-log:write', { label: String(label || ''), data: payload || null }); }
-  catch (_) { /* never throw from logging */ }
-}
-async function _measuredInvoke(channel, ...args) {
-  const _t0 = performance.now();
-  const result = await ipcRenderer.invoke(channel, ...args);
-  try { rollingLogViaIpc('perf:ipc:roundtrip', { channel, ms: performance.now() - _t0 }); } catch (_) {}
-  return result;
+// v2.2.1: IPC 往復計測撤去。`_measuredInvoke` は名前だけ維持し ipcRenderer.invoke の薄ラッパとして残す
+//   （preload 内全 API が経由する設計のため）。計測ラベル発火は本番版で完全撤去。
+function _measuredInvoke(channel, ...args) {
+  return ipcRenderer.invoke(channel, ...args);
 }
 
 contextBridge.exposeInMainWorld('api', {

@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc10.1 静的解析テスト — applyTimerStateToTimer の残り 3 経路にも PRE_START 中スキップガード追加
+ * v2.2.1 静的解析テスト — applyTimerStateToTimer の残り 3 経路にも PRE_START 中スキップガード追加
  *
  *   Fix 1-1: invalid-ts 経路 !isHallApply 内に isPreStartActive() ガード + trigger:'invalid-ts'
  *   Fix 1-2: idle 経路（rc8 既存）の data に trigger:'idle' フィールド追加
@@ -103,10 +103,10 @@ function extractHallElseBlockAfter(condStr, lookAhead = 600) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10.1'
+// T1: package.json.version === '2.2.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10.1', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.2.1', () => {
+  assert.equal(PKG.version, '2.2.1', `期待 2.2.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -223,7 +223,7 @@ test('T7: applyTimerStateToTimer 外の timerReset 呼出が touch なし', () =
 // ============================================================
 // T8: rc8 機構保持（applyTimerStateToTimer idle 経路ガード）+ rc7/rc6-meas3/rc5/rc4/rc3/rc2/rc1 機構保持
 // ============================================================
-test('T8: rc8 idle ガード + rc7/rc6-meas3/rc5/rc4/rc3/rc2/rc1 機構完全保持', () => {
+test('T8: v2.2.1 — rc8 idle ガード + rc7/rc5/rc4/rc3/rc2/rc1 機構保持 + rc6-meas3 計測撤去', () => {
   // rc8: idle ガード（rc9 で trigger 追加されたが本体機構は維持）
   const idleBlock = extractNonHallBlockAfter("if (ts.status === 'idle')");
   assert.ok(idleBlock);
@@ -234,11 +234,13 @@ test('T8: rc8 idle ガード + rc7/rc6-meas3/rc5/rc4/rc3/rc2/rc1 機構完全保
   assert.match(MAIN_JS, /const\s+prev\s*=\s*_dualStateCache\.preStartState\s*\|\|\s*\{\s*\}/,
     'rc7 退行: prev = _dualStateCache.preStartState || {} 消失');
   assert.ok(MAIN_JS.includes('preStart:cache:merge'), 'rc7 退行');
-  // rc6-meas3
-  assert.match(MAIN_JS, /const\s+_isMeasBuildForBuffer\s*=/, 'rc6-meas3 Fix A 退行');
-  assert.match(MAIN_JS, /function\s+_flushLogsToFile\s*\(\s*suffix\s*\)\s*\{/, 'rc6-meas3 Fix B 退行');
-  assert.match(MAIN_JS, /const\s+PRIORITY_LOG_LABELS\s*=\s*new\s+Set\s*\(/, 'rc6-meas3 Fix C 退行');
-  assert.match(RENDERER, /function\s+_recordHighFreq\s*\(\s*label\s*,\s*ms\s*\)\s*\{/, 'rc6-meas3 Fix F 退行');
+  // rc6-meas3: priority buffer のみ保持、計測機構は撤去
+  assert.match(MAIN_JS, /const\s+PRIORITY_LOG_LABELS\s*=\s*new\s+Set\s*\(/, 'rc6-meas3 Fix C (priority buffer) 退行');
+  if (!/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) {
+    assert.ok(!MAIN_JS.includes('_isMeasBuildForBuffer'), 'v2.2.1 撤去違反: _isMeasBuildForBuffer 残存');
+    assert.ok(!MAIN_JS.includes('_flushLogsToFile'), 'v2.2.1 撤去違反: _flushLogsToFile 残存');
+    assert.ok(!RENDERER.includes('_recordHighFreq'), 'v2.2.1 撤去違反: _recordHighFreq 残存');
+  }
   // rc5
   assert.ok(MAIN_JS.includes('preStart:operator:send'), 'rc5 退行');
   assert.ok(MAIN_JS.includes('operator:preStartResync:sent'), 'rc5 退行');
@@ -273,33 +275,32 @@ test('T9: v2.1.19 機構 + 致命バグ保護 5 件 完全保持', () => {
 // ============================================================
 // T10: 計測機構 + 新規 rc9 4 trigger
 // ============================================================
-test('T10: meas1+meas2+症状確証 4+rc2/rc4/rc5/meas3/rc7/rc8 ラベル + 新規 rc9 4 trigger 保持', () => {
-  // meas1 バッジ
-  assert.match(INDEX_HTML, /<div\s+id="meas-build-badge">\s*計測ビルド\s*<\/div>/, 'meas-build-badge HTML 消失');
-  assert.ok(STYLE_CSS.includes('#meas-build-badge'), '#meas-build-badge CSS 消失');
-  // meas2 6 カテゴリ
+test('T10: v2.2.1 — meas/symptom/meas3 撤去 + rc2/rc4/rc5/rc7/rc8/rc9 edge ラベル保持', () => {
+  if (/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) return;
+  // 撤去確認
+  assert.ok(!INDEX_HTML.includes('meas-build-badge'), 'meas-build-badge 残存');
+  assert.ok(!STYLE_CSS.includes('#meas-build-badge'), '#meas-build-badge 残存');
   const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
   for (const lbl of ['perf:interval:fire', 'perf:raf:summary', 'perf:ipc:summary', 'perf:dom:summary', 'perf:long-task', 'perf:subscribe:summary']) {
-    assert.ok(ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `meas2 ${lbl} 残存`);
   }
-  // 症状確証 4
   for (const lbl of ['hall:syncSlideshowFromState:call', 'hall:updatePipTimer:set', 'hall:applyHallPreStartState:apply', 'hall:clock-pause-label:visibility']) {
-    assert.ok(ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `症状確証 ${lbl} 残存`);
   }
-  // rc2 / rc4 / rc5 / meas3 / rc7 / rc8
-  assert.ok(RENDERER.includes('hall:hallTickState:reset'), 'rc2 退行');
-  assert.ok(RENDERER.includes('operator:applyPreStartState:apply'), 'rc4 退行');
-  assert.ok(MAIN_JS.includes('preStart:operator:send'), 'rc5 退行');
-  assert.ok(MAIN_JS.includes('operator:preStartResync:sent'), 'rc5 退行');
-  assert.ok(RENDERER.includes('perf:highfreq:summary'), 'meas3 退行');
-  assert.ok(MAIN_JS.includes('meas3:hdmi-snapshot:written'), 'meas3 退行');
-  assert.ok(MAIN_JS.includes('preStart:cache:merge'), 'rc7 退行');
-  assert.ok(RENDERER.includes('operator:applyTimerStateToTimer:skip-reset-during-prestart'), 'rc8 退行');
-  // rc9 新規 4 trigger 値
+  assert.ok(!RENDERER.includes('perf:highfreq:summary'), 'meas3 perf:highfreq:summary 残存');
+  assert.ok(!MAIN_JS.includes('meas3:hdmi-snapshot:written'), 'meas3 hdmi-snapshot:written 残存');
+  // edge ラベル保持
+  assert.ok(RENDERER.includes('hall:hallTickState:reset'), 'rc2 消失');
+  assert.ok(RENDERER.includes('operator:applyPreStartState:apply'), 'rc4 消失');
+  assert.ok(MAIN_JS.includes('preStart:operator:send'), 'rc5 消失');
+  assert.ok(MAIN_JS.includes('operator:preStartResync:sent'), 'rc5 消失');
+  assert.ok(MAIN_JS.includes('preStart:cache:merge'), 'rc7 消失');
+  assert.ok(RENDERER.includes('operator:applyTimerStateToTimer:skip-reset-during-prestart'), 'rc8 消失');
+  // rc9 4 trigger
   for (const tg of ['idle', 'invalid-ts', 'finished', 'no-levels']) {
     assert.match(RENDERER,
       new RegExp(`['"]operator:applyTimerStateToTimer:skip-reset-during-prestart['"][\\s\\S]{0,200}?trigger:\\s*['"]${tg}['"]`),
-      `rc9 退行: trigger:"${tg}" の skip-reset ラベル発火経路が見つからない`);
+      `rc9 trigger:"${tg}" 消失`);
   }
 });
 

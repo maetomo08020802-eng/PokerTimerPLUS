@@ -31,10 +31,10 @@ function test(name, fn) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10.1'
+// T1: package.json.version === '2.2.1'
 // ============================================================
 test('T1: package.json.version === 2.1.20-rc3', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc3, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.2.1', `期待 2.1.20-rc3, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -151,14 +151,17 @@ test('T6: rc1 / rc2 機構保持（dedup / throttle / setInterval 撤廃 / Docum
 // ============================================================
 // T7: 計測機構保持
 // ============================================================
-test('T7: 計測機構（meas-build-badge + perf 系 + 症状確証 4 + hall:hallTickState:reset）完全保持', () => {
-  assert.match(INDEX_HTML, /<div\s+id="meas-build-badge">\s*計測ビルド\s*<\/div>/,
-    'meas-build-badge HTML 消失');
-  assert.ok(STYLE_CSS.includes('#meas-build-badge'), '#meas-build-badge CSS 消失');
+test('T7: v2.2.1 — 計測機構（バッジ + perf 系 + 症状確証 4）撤去 + rc2 edge ラベル hall:hallTickState:reset 保持', () => {
+  if (/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) return;
+  // 撤去確認
+  assert.ok(!INDEX_HTML.includes('meas-build-badge'),
+    'v2.2.1 撤去違反: meas-build-badge HTML 残存');
+  assert.ok(!STYLE_CSS.includes('#meas-build-badge'),
+    'v2.2.1 撤去違反: #meas-build-badge CSS 残存');
   const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
   const meas2Labels = ['perf:interval:fire', 'perf:raf:summary', 'perf:ipc:summary', 'perf:dom:summary', 'perf:long-task', 'perf:subscribe:summary'];
   for (const lbl of meas2Labels) {
-    assert.ok(ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 残存`);
   }
   const symptomLabels = [
     'hall:syncSlideshowFromState:call',
@@ -167,10 +170,11 @@ test('T7: 計測機構（meas-build-badge + perf 系 + 症状確証 4 + hall:hal
     'hall:clock-pause-label:visibility'
   ];
   for (const lbl of symptomLabels) {
-    assert.ok(ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 残存`);
   }
+  // edge ラベル保持
   assert.ok(RENDERER.includes('hall:hallTickState:reset'),
-    'hall:hallTickState:reset ラベル消失（rc2 退行）');
+    'rc2 edge ラベル hall:hallTickState:reset 消失（撤去禁止対象）');
 });
 
 // ============================================================

@@ -4136,27 +4136,3 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
   z-index: 1;
 }
 
-/* v2.1.18-meas1: 計測ビルド識別バッジ（version に -meas を含むときのみ表示、本番では loadAppVersion で display: none）。
-   pointer-events: none + user-select: none で UI 操作の邪魔をしない。 */
-#meas-build-badge {
-  position: fixed;
-  bottom: 8px;
-  right: 8px;
-  z-index: 9999;
-  padding: 4px 10px;
-  background: #FFD700;
-  color: #000;
-  font-family: 'BIZ UDPGothic', 'Noto Sans JP', sans-serif;
-  font-size: 12px;
-  font-weight: 700;
-  border-radius: 4px;
-  pointer-events: none;
-  user-select: none;
-}
-[data-role="hall"] #meas-build-badge {
-  bottom: 16px;
-  right: 16px;
-  font-size: 14px;
-  padding: 6px 14px;
-}
-

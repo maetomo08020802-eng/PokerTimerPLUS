@@ -111,7 +111,7 @@ test('T4: switchOperatorToSolo は show + focus / switchSoloToOperator は close
 // ============================================================
 test('T6: renderer.js operator-solo 経路で ensureAudioReady を明示呼出', () => {
   // operator-solo 分岐の else ブロックに ensureAudioReady() + initialize() が存在
-  // v2.1.20-rc10.1: else 内に subscribeStateSync 用の nested try/catch が追加されたため、
+  // v2.2.1: else 内に subscribeStateSync 用の nested try/catch が追加されたため、
   //   ブレース整数カウントで else ブロック範囲を厳密に抽出（脆弱な regex 抽出からの脱却）。
   const opIdx = RENDERER.indexOf("__appRole === 'operator'");
   assert.ok(opIdx >= 0, '__appRole === operator 分岐が見つからない');

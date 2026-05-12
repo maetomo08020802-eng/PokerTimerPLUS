@@ -8,9 +8,6 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- v2.1.18-meas1: 計測ビルド識別バッジ（version が `-meas` を含むときのみ表示、本番版は loadAppVersion で非表示化）。
-       position: fixed + pointer-events: none で UI 操作妨害なし。 -->
-  <div id="meas-build-badge">計測ビルド</div>
   <!-- STEP 10 フェーズC.1.3: 背景画像 overlay レイヤー（data-bg="image" 時のみ表示）。
        既存 body::before（菱形格子）/ body::after（4隅スート）の z-index: 0 と同階層、
        .clock 配下（z-index: 2）の背面に固定配置。pointer-events: none で操作素通し。 -->

@@ -357,31 +357,15 @@ function advancePreStartBy(deltaMs) {
   try { handlers.onPreStartAdjust({ remainingMs: newRem }); } catch (_) {}
 }
 
-// v2.1.20-meas1 カテゴリ B: timer.js 内 RAF は 1 秒に 1 回だけ rolling-log 出力（60Hz × 多源では暴走するため）。
-//   _rafFireCounter で 60 回に 1 回 emit（≒1 秒ごと）。
-let _rafFireCounter = 0;
-function _emitRafFire(label) {
-  _rafFireCounter++;
-  if (_rafFireCounter % 60 === 0) {
-    try {
-      if (typeof window !== 'undefined' && window.api?.log?.write) {
-        window.api.log.write('perf:raf:fire', { label, every_60th: true });
-      }
-    } catch (_) {}
-  }
-}
-
 // rAFループ開始
 function startLoop() {
   if (rafId !== null) return;
-  _emitRafFire('timer-tick');
   rafId = requestAnimationFrame(tick);
 }
 
 // PRE_START 用 rAF ループ（status が PRE_START 以外になれば自然停止）
 function startPreStartLoop() {
   if (rafId !== null) return;
-  _emitRafFire('timer-pre-start-tick');
   rafId = requestAnimationFrame(preStartTick);
 }
 
@@ -401,7 +385,6 @@ function preStartTick() {
   }
   setState({ remainingMs });
   handlers.onPreStartTick(remainingMs);
-  _emitRafFire('timer-pre-start-tick');
   rafId = requestAnimationFrame(preStartTick);
 }
 
@@ -428,7 +411,6 @@ function tick() {
 
   setState({ remainingMs });
   handlers.onTick(remainingMs);
-  _emitRafFire('timer-tick');
   rafId = requestAnimationFrame(tick);
 }
 

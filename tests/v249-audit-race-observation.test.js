@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc10.1 静的解析テスト — rc10-audit 高優先観測ラベル 3 個追加（致命級 race 配信後監視基盤）
+ * v2.2.1 静的解析テスト — rc10-audit 高優先観測ラベル 3 個追加（致命級 race 配信後監視基盤）
  *
  *   Fix 1: main.js `_preStartStateCacheUpdatedAt` 変数 + `_publishDualState` 内 preStartState 経路で更新時刻記録
  *          + display-removed ハンドラ内で `hdmi:display-removed:dual-sync-stale` 発火（500ms ガード）
@@ -46,10 +46,10 @@ function extractFnBody(src, sigRe) {
 }
 
 // ============================================================
-// T1: package.json version === '2.1.20-rc10.1'
+// T1: package.json version === '2.2.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10.1', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.2.1', () => {
+  assert.equal(PKG.version, '2.2.1', `期待 2.2.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -136,23 +136,28 @@ test('T5: 既存 operator:applyTimerStateToTimer:skip-reset-during-prestart 4 tr
 // ============================================================
 // T6: Fix 4 — PRIORITY_LOG_LABELS Set に新規 3 ラベル追加 + 既存 10 ラベル完全保持
 // ============================================================
-test('T6: Fix 4 — PRIORITY_LOG_LABELS Set に新規 3 ラベル追加 + 既存 10 ラベル完全保持', () => {
+test('T6: v2.2.1 — PRIORITY_LOG_LABELS Set に rc10.1 3 ラベル保持 + meas3:hdmi-snapshot:written のみ撤去', () => {
   const m = MAIN_JS.match(/const\s+PRIORITY_LOG_LABELS\s*=\s*new\s+Set\s*\(\s*\[([\s\S]*?)\]\s*\)/);
   assert.ok(m, 'PRIORITY_LOG_LABELS Set 定義が見つからない');
   const body = m[1];
-  // 新規 3 ラベル
+  // 新規 3 ラベル（rc10.1）
   for (const lbl of ['hdmi:display-removed:dual-sync-stale', 'hdmi:dialog-blocked:switchOperatorToSolo',
                      'timer:reset:race-window-entry']) {
     assert.ok(body.includes(`'${lbl}'`),
-      `Fix 4: 新規ラベル '${lbl}' が PRIORITY_LOG_LABELS Set に追加されていない`);
+      `rc10.1 ラベル '${lbl}' が PRIORITY_LOG_LABELS Set から消失`);
   }
-  // 既存 10 ラベル完全保持
+  // 既存 9 ラベル保持（meas3:hdmi-snapshot:written のみ削除）
   for (const lbl of ['display-removed', 'display-added', 'switchOperatorToSolo:enter',
                      'switchOperatorToSolo:exit', 'switchSoloToOperator:enter', 'switchSoloToOperator:exit',
                      'preStart:operator:send', 'operator:preStartResync:sent',
-                     'operator:applyPreStartState:apply', 'meas3:hdmi-snapshot:written']) {
+                     'operator:applyPreStartState:apply']) {
     assert.ok(body.includes(`'${lbl}'`),
       `既存ラベル '${lbl}' が PRIORITY_LOG_LABELS Set から消失`);
+  }
+  // v2.2.1: meas3:hdmi-snapshot:written のみ撤去確認
+  if (!/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) {
+    assert.ok(!body.includes("'meas3:hdmi-snapshot:written'"),
+      'v2.2.1 撤去違反: meas3:hdmi-snapshot:written が PRIORITY_LOG_LABELS Set に残存');
   }
 });
 
@@ -196,12 +201,20 @@ test('T8: rc1〜rc9 機構 + 致命バグ保護 5 件 完全保持', () => {
 // ============================================================
 // T9: 計測機構保持 + 新規 rc10.1 3 ラベル
 // ============================================================
-test('T9: 計測機構（meas1+meas2+症状確証4+rc2/rc4/rc5/meas3/rc7/rc8/rc9/rc10 ラベル）+ rc10.1 新規 3 ラベル保持', () => {
-  // 既存ラベル
+test('T9: v2.2.1 — rc2/rc4/rc5/rc7/rc8/rc9/rc10 edge ラベル保持 + rc10.1 新規 3 ラベル保持（meas3 ラベルは撤去）', () => {
+  // 試験ビルド時は skip
+  if (/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) {
+    // rc/meas ビルドでは meas3 ラベル保持確認
+    assert.match(RENDERER, /perf:highfreq:summary/, '試験ビルド meas3 perf:highfreq:summary 消失');
+    assert.match(MAIN_JS, /meas3:hdmi-snapshot:written/, '試験ビルド meas3 hdmi-snapshot:written 消失');
+  } else {
+    // v2.2.1: meas3 ラベル撤去確認
+    assert.ok(!RENDERER.includes('perf:highfreq:summary'), 'v2.2.1 撤去違反: meas3 perf:highfreq:summary 残存');
+    assert.ok(!MAIN_JS.includes('meas3:hdmi-snapshot:written'), 'v2.2.1 撤去違反: meas3 hdmi-snapshot:written 残存');
+  }
+  // edge ラベル保持
   assert.match(RENDERER, /hall:hallTickState:reset/, 'rc2 hallTickState:reset 消失');
   assert.match(RENDERER, /operator:applyPreStartState:apply/, 'rc4 applyPreStartState:apply 消失');
-  assert.match(RENDERER, /perf:highfreq:summary/, 'meas3 perf:highfreq:summary 消失');
-  assert.match(MAIN_JS, /meas3:hdmi-snapshot:written/, 'meas3 hdmi-snapshot:written 消失');
   // rc10 既存 5 ctx 値（skip-during-prestart）
   for (const ctx of ['applyTimerStateToTimer:invalid-ts', 'applyTimerStateToTimer:idle',
                      'applyTimerStateToTimer:finished', 'applyTimerStateToTimer:no-levels',

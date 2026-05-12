@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc10.1 静的解析テスト — preStartState cache merge + priority log lazy init
+ * v2.2.1 静的解析テスト — preStartState cache merge + priority log lazy init
  *
  *   Fix 1: main.js dual:publish-pre-start-state ハンドラに cache merge ロジック追加
  *          （tick / pause / resume / adjust 経由 publish で totalMs 欠落を防止）
@@ -51,10 +51,10 @@ function extractPublishPreStartHandler() {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10.1'
+// T1: package.json.version === '2.2.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10.1', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.2.1', () => {
+  assert.equal(PKG.version, '2.2.1', `期待 2.2.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -153,51 +153,38 @@ test('T6: _appendPriorityLog 関数内冒頭に _initPriorityLogFile() 呼出存
 });
 
 // ============================================================
-// T7: rc6-meas3 機構保持（_isMeasBuildForBuffer / _flushLogsToFile / PRIORITY_LOG_LABELS / _recordHighFreq / display ハンドラ _flushLogsToFile）
+// T7: v2.2.1 — rc6-meas3 観測機構撤去後、priority-events.log 基本機構のみ保持
 // ============================================================
-test('T7: rc6-meas3 機構（観測強化 4 件）完全保持', () => {
-  // Fix A: buffer 容量定数の計測ビルド時拡張
-  assert.match(MAIN_JS, /const\s+_isMeasBuildForBuffer\s*=/,
-    'rc6-meas3 Fix A 退行: _isMeasBuildForBuffer 消失');
-  assert.match(MAIN_JS,
-    /const\s+ROLLING_LOG_RETENTION_MS\s*=\s*_isMeasBuildForBuffer\s*\?/,
-    'rc6-meas3 Fix A 退行: ROLLING_LOG_RETENTION_MS 条件分岐消失');
-  assert.match(MAIN_JS,
-    /const\s+ROLLING_LOG_BUFFER_MAX\s*=\s*_isMeasBuildForBuffer\s*\?/,
-    'rc6-meas3 Fix A 退行: ROLLING_LOG_BUFFER_MAX 条件分岐消失');
-  // Fix B: _flushLogsToFile
-  assert.match(MAIN_JS, /function\s+_flushLogsToFile\s*\(\s*suffix\s*\)\s*\{/,
-    'rc6-meas3 Fix B 退行: _flushLogsToFile 消失');
-  // Fix C: priority buffer 機構
+test('T7: v2.2.1 — priority buffer 機構保持 + 撤去対象（_flushLogsToFile / _isMeasBuildForBuffer / _highFreqCounter）消失', () => {
+  // 保持: priority buffer 機構
   assert.match(MAIN_JS, /const\s+PRIORITY_LOG_LABELS\s*=\s*new\s+Set\s*\(/,
-    'rc6-meas3 Fix C 退行: PRIORITY_LOG_LABELS Set 消失');
+    'priority buffer Set 消失');
   assert.match(MAIN_JS, /async\s+function\s+_flushPriorityLog\s*\(\s*\)\s*\{/,
-    'rc6-meas3 Fix C 退行: _flushPriorityLog 消失');
-  // Fix D: rollingLog 内 priority 分岐
+    '_flushPriorityLog 消失');
+  // 保持: rollingLog 内 priority 分岐
   const rl = MAIN_JS.match(/function\s+rollingLog\s*\(\s*label\s*,\s*data\s*\)\s*\{([\s\S]*?)\n\}/);
   assert.ok(rl);
   assert.match(rl[1], /_isPriorityLabel\s*\(\s*entry\.label\s*\)/,
-    'rc6-meas3 Fix D 退行: rollingLog 内 _isPriorityLabel 分岐消失');
-  // Fix E: display ハンドラ内 _flushLogsToFile
-  // v2.1.20-rc10.1: display-removed ハンドラに stale 観測ブロック追加で文字数が拡大したため 800 → 1200
-  assert.match(MAIN_JS,
-    /screen\.on\s*\(\s*['"]display-removed['"][\s\S]{0,1200}?_flushLogsToFile\s*\(\s*['"]display-removed['"]/,
-    'rc6-meas3 Fix E 退行: display-removed ハンドラ内 _flushLogsToFile 消失');
-  assert.match(MAIN_JS,
-    /screen\.on\s*\(\s*['"]display-added['"][\s\S]{0,1200}?_flushLogsToFile\s*\(\s*['"]display-added['"]/,
-    'rc6-meas3 Fix E 退行: display-added ハンドラ内 _flushLogsToFile 消失');
-  // Fix F: _highFreqCounter + _recordHighFreq
-  assert.match(RENDERER, /const\s+_highFreqCounter\s*=\s*\{\s*\}/,
-    'rc6-meas3 Fix F 退行: _highFreqCounter 消失');
-  assert.match(RENDERER, /function\s+_recordHighFreq\s*\(\s*label\s*,\s*ms\s*\)\s*\{/,
-    'rc6-meas3 Fix F 退行: _recordHighFreq 消失');
-  // Fix G: 高頻度ラベル直接 log.write 残存 0 件
-  const renderDurationDirect = RENDERER.match(/window\.api\?\.log\?\.write\?\.\s*\(\s*['"]perf:render:duration['"]/g) || [];
-  assert.equal(renderDurationDirect.length, 0,
-    `rc6-meas3 Fix G 退行: perf:render:duration の直接 log.write ${renderDurationDirect.length} 件残存`);
-  // Fix H: state.js _highFreqCounter 経由
-  assert.match(STATE_JS, /window\._highFreqCounter[\s\S]{0,300}?perf:state:notify/,
-    'rc6-meas3 Fix H 退行: state.js 内 perf:state:notify 集約消失');
+    'rollingLog 内 _isPriorityLabel 分岐消失');
+  // 撤去: rc6-meas3 機構（_isMeasBuildForBuffer / _flushLogsToFile / display ハンドラ呼出）
+  assert.ok(!MAIN_JS.includes('_isMeasBuildForBuffer'),
+    'v2.2.1 撤去違反: _isMeasBuildForBuffer が残存');
+  assert.ok(!MAIN_JS.includes('_flushLogsToFile'),
+    'v2.2.1 撤去違反: _flushLogsToFile が残存');
+  assert.ok(!MAIN_JS.includes('meas3:hdmi-snapshot:written'),
+    'v2.2.1 撤去違反: meas3:hdmi-snapshot:written ラベルが残存');
+  // 撤去: _recordHighFreq / _highFreqCounter 機構
+  assert.ok(!RENDERER.includes('_recordHighFreq'),
+    'v2.2.1 撤去違反: renderer.js _recordHighFreq が残存');
+  assert.ok(!RENDERER.includes('_highFreqCounter'),
+    'v2.2.1 撤去違反: renderer.js _highFreqCounter が残存');
+  assert.ok(!STATE_JS.includes('_highFreqCounter'),
+    'v2.2.1 撤去違反: state.js _highFreqCounter 参照が残存');
+  // 本番値固定
+  assert.match(MAIN_JS, /const\s+ROLLING_LOG_RETENTION_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/,
+    'ROLLING_LOG_RETENTION_MS 本番値固定でない');
+  assert.match(MAIN_JS, /const\s+ROLLING_LOG_BUFFER_MAX\s*=\s*5000/,
+    'ROLLING_LOG_BUFFER_MAX 本番値固定でない');
 });
 
 // ============================================================
@@ -248,30 +235,29 @@ test('T8: rc1〜rc5 + v2.1.19 + 致命バグ保護 5 件 完全保持', () => {
 // ============================================================
 // T9: 計測機構保持 + 新規 rc7 ラベル `preStart:cache:merge`
 // ============================================================
-test('T9: meas1+meas2+症状確証 4+rc2/rc4/rc5/meas3 ラベル + 新規 rc7 ラベル preStart:cache:merge 保持', () => {
-  // meas1 バッジ
-  assert.match(INDEX_HTML, /<div\s+id="meas-build-badge">\s*計測ビルド\s*<\/div>/, 'meas-build-badge HTML 消失');
-  assert.ok(STYLE_CSS.includes('#meas-build-badge'), '#meas-build-badge CSS 消失');
-  // meas2 6 カテゴリ
+test('T9: v2.2.1 — meas1/meas2/症状確証 4/meas3 撤去 + rc2/rc4/rc5/rc7 edge ラベル保持', () => {
+  if (/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) return;
+  // 撤去: meas1 バッジ
+  assert.ok(!INDEX_HTML.includes('meas-build-badge'), 'meas-build-badge 残存');
+  assert.ok(!STYLE_CSS.includes('#meas-build-badge'), '#meas-build-badge 残存');
+  // 撤去: meas2 6 カテゴリ
   const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
   for (const lbl of ['perf:interval:fire', 'perf:raf:summary', 'perf:ipc:summary', 'perf:dom:summary', 'perf:long-task', 'perf:subscribe:summary']) {
-    assert.ok(ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `meas2 ラベル ${lbl} 残存`);
   }
-  // 症状確証 4
+  // 撤去: 症状確証 4
   for (const lbl of ['hall:syncSlideshowFromState:call', 'hall:updatePipTimer:set', 'hall:applyHallPreStartState:apply', 'hall:clock-pause-label:visibility']) {
-    assert.ok(ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 消失`);
+    assert.ok(!ALL_SRC.includes(lbl), `症状確証ラベル ${lbl} 残存`);
   }
-  // rc2 / rc4 / rc5
-  assert.ok(RENDERER.includes('hall:hallTickState:reset'), 'rc2 退行');
-  assert.ok(RENDERER.includes('operator:applyPreStartState:apply'), 'rc4 退行');
-  assert.ok(MAIN_JS.includes('preStart:operator:send'), 'rc5 退行');
-  assert.ok(MAIN_JS.includes('operator:preStartResync:sent'), 'rc5 退行');
-  // meas3 新規 2 ラベル
-  assert.ok(RENDERER.includes('perf:highfreq:summary'), 'meas3 退行');
-  assert.ok(MAIN_JS.includes('meas3:hdmi-snapshot:written'), 'meas3 退行');
-  // rc7 新規ラベル
-  assert.ok(MAIN_JS.includes('preStart:cache:merge'),
-    'rc7 新規ラベル preStart:cache:merge が main.js に見つからない');
+  // 撤去: meas3
+  assert.ok(!RENDERER.includes('perf:highfreq:summary'), 'meas3 perf:highfreq:summary 残存');
+  assert.ok(!MAIN_JS.includes('meas3:hdmi-snapshot:written'), 'meas3 hdmi-snapshot:written 残存');
+  // 保持: rc2/rc4/rc5/rc7 edge ラベル
+  assert.ok(RENDERER.includes('hall:hallTickState:reset'), 'rc2 消失');
+  assert.ok(RENDERER.includes('operator:applyPreStartState:apply'), 'rc4 消失');
+  assert.ok(MAIN_JS.includes('preStart:operator:send'), 'rc5 消失');
+  assert.ok(MAIN_JS.includes('operator:preStartResync:sent'), 'rc5 消失');
+  assert.ok(MAIN_JS.includes('preStart:cache:merge'), 'rc7 preStart:cache:merge 消失');
 });
 
 // ============================================================

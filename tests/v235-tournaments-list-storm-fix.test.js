@@ -36,7 +36,7 @@ function test(name, fn) {
 // version assertion
 // ============================================================
 test('version: package.json の version が 2.1.19-rc1', () => {
-  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.2.1', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -129,38 +129,40 @@ test('T5: _tournamentsListDedup が _tournamentsListInFlight チェック + fina
 // 旧 v2.1.19-rc1 時点: 計測機構保持を assert
 // 新 v2.1.19-rc2 以降: 計測機構撤去を assert
 //   meas1 / rc1 ビルドでは保持されているため skip、rc2 / 本番版でのみ撤去 verify
-test('T6: v2.1.18-meas1 計測機構（バッジ + 15 ラベル + Ctrl+Shift+L op-{NN} 保存）すべて撤去', () => {
-  // v2.1.20-rc2: meas / rc 系試験ビルドはすべて保持中、本番版（サフィックスなし）でのみ撤去 verify
+test('T6: v2.2.1 撤去対象（バッジ + 高頻度 14 ラベル + rc6-meas3 機構 + _recordHighFreq）すべて撤去', () => {
+  // meas / rc 系試験ビルドは保持中のため skip、本番版（サフィックスなし）でのみ撤去 verify
   if (/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) return;
-  // バッジ撤去
+  // 計測バッジ撤去
   assert.ok(!INDEX_HTML.includes('meas-build-badge'),
-    'index.html に meas-build-badge が残存（撤去未完了）');
+    'index.html に meas-build-badge が残存');
   assert.ok(!STYLE_CSS.includes('#meas-build-badge'), 'style.css に #meas-build-badge セレクタが残存');
-  // パフォーマンス系 6 ラベル撤去
-  const perfLabels = ['perf:render:duration', 'perf:ipc:roundtrip', 'perf:tick:fps', 'perf:memory:rss', 'perf:state:notify', 'perf:dom:rebuild'];
-  const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS;
+  // 高頻度 14 ラベル撤去（perf:*）
+  const perfLabels = [
+    'perf:render:duration', 'perf:state:notify', 'perf:ipc:roundtrip',
+    'perf:tick:fps', 'perf:memory:rss', 'perf:dom:rebuild',
+    'perf:raf:fire', 'perf:raf:summary', 'perf:highfreq:summary',
+    'perf:interval:fire', 'perf:long-task', 'perf:ipc:summary',
+    'perf:dom:summary', 'perf:subscribe:summary'
+  ];
+  const ALL_SRC = RENDERER + DUAL_SYNC + STATE_JS + MAIN_JS + PRELOAD_JS + TIMER_JS;
   for (const lbl of perfLabels) {
-    assert.ok(!ALL_SRC.includes(lbl), `パフォーマンス系ラベル ${lbl} が残存（Fix 2 撤去未完了）`);
+    assert.ok(!ALL_SRC.includes(lbl), `高頻度ラベル ${lbl} が残存`);
   }
-  // バグ発見系新規 4 ラベル撤去
-  const bugLabels = ['state:transition', 'dual-sync:apply', 'meas:session:start', 'meas:capture'];
-  for (const lbl of bugLabels) {
-    assert.ok(!ALL_SRC.includes(lbl), `バグ発見系ラベル ${lbl} が残存`);
-  }
-  // Ctrl+Shift+L 拡張（_measOpCounter + op-{NN}）撤去
-  assert.ok(!MAIN_JS.includes('_measOpCounter'),
-    'main.js に _measOpCounter が残存（Fix 3 拡張撤去未完了）');
-  // error:caught:* meas1 追加分すべて撤去（v2.1.18 以前から存在のもの含めゼロ件 — meas1 で全部追加されたため）
-  const errCatchMatches = ALL_SRC.match(/['"]error:caught:[a-zA-Z][\w:.-]*['"]/g) || [];
-  assert.equal(errCatchMatches.length, 0, `error:caught:* が ${errCatchMatches.length} 件残存（meas1 追加分撤去未完了）`);
-  // ui:keypress / ui:click:major 撤去
-  const keypressMatches = ALL_SRC.match(/['"]ui:keypress['"]/g) || [];
-  assert.equal(keypressMatches.length, 0, `ui:keypress が ${keypressMatches.length} 件残存`);
-  const clickMatches = ALL_SRC.match(/['"]ui:click:major['"]/g) || [];
-  assert.equal(clickMatches.length, 0, `ui:click:major が ${clickMatches.length} 件残存`);
-  // バッジ表示分岐: -meas / -rc 検出 regex も撤去
-  assert.ok(!/-meas\\d\*\$/.test(RENDERER),
-    'loadAppVersion に -meas\\d*$ regex が残存（バッジ表示分岐の撤去未完了）');
+  // rc6-meas3 機構撤去
+  assert.ok(!MAIN_JS.includes('_isMeasBuildForBuffer'),
+    'main.js に _isMeasBuildForBuffer が残存');
+  assert.ok(!MAIN_JS.includes('_flushLogsToFile'),
+    'main.js に _flushLogsToFile が残存');
+  assert.ok(!MAIN_JS.includes('meas3:hdmi-snapshot:written'),
+    'main.js に meas3:hdmi-snapshot:written ラベルが残存');
+  // _recordHighFreq / _highFreqCounter 撤去
+  assert.ok(!RENDERER.includes('_recordHighFreq'),
+    'renderer.js に _recordHighFreq が残存');
+  assert.ok(!RENDERER.includes('_highFreqCounter'),
+    'renderer.js に _highFreqCounter が残存');
+  // バッジ表示分岐撤去
+  assert.ok(!RENDERER.includes("getElementById('meas-build-badge')"),
+    'renderer.js に meas-build-badge 要素取得処理が残存');
 });
 
 // ============================================================

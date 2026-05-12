@@ -1,7 +1,7 @@
 // PokerTimerPLUS+ レンダラエントリポイント
 // 役割: 各モジュール（state / blinds / timer / marquee）を組み立て、UI と入力を接続する。
 
-import { States, getState, setState, subscribe, subscribeNamed } from './state.js';
+import { States, getState, setState, subscribe } from './state.js';
 import {
   loadPreset,
   getLevel,
@@ -113,133 +113,37 @@ function renderTournamentListWithDedup(prefetched) {
 }
 
 // =============================================================================
-// v2.1.20-meas1 計測機構（重さ徹底排除観測 + 症状 1/2 真因確証）
+// v2.2.1: setInterval / requestAnimationFrame ラッパ（wrapper 関数は機能実装に必須、計測ラベル発火行のみ撤去）
 // =============================================================================
-// 6 カテゴリの観測点を一括導入。すべて try/catch 握り潰しで本体動作に副作用なし。
-// 計測機構が無効化される本番版 (`-meas` / `-rc` サフィックスなし) では集計用 setInterval も
-// 軽量で実害なし（30 秒に 1 回 rolling-log に書き込むだけ）。
 
-// カテゴリ A: setInterval 経路網羅。すべての setInterval 呼出を `_wrappedSetInterval` 経由に統一し、
-//   発火のたびに `perf:interval:fire` を rolling-log に記録。label は構築士命名（事前 grep で確定）。
 const _IntervalLabel = {
-  PERIODIC_PERSIST: 'periodic-persist-all-running',      // 5秒永続化（renderer.js:1610）
-  SLIDESHOW_ROTATION: 'slideshow-rotation',              // スライドショー循環（renderer.js:2935）
-  ROLLING_LOG_FLUSH: 'rolling-log-flush',                // 30秒 flush（main.js:80、main プロセス）
-  // v2.1.20-meas1 集計用 setInterval
-  RAF_SUMMARY: 'meas:raf-summary',                       // 1秒 RAF 集計
-  IPC_SUMMARY: 'meas:ipc-summary',                       // 30秒 IPC 集計
-  DOM_SUMMARY: 'meas:dom-summary',                       // 30秒 DOM 集計
-  SUBSCRIBE_SUMMARY: 'meas:subscribe-summary'            // 30秒 subscribe 集計
+  PERIODIC_PERSIST: 'periodic-persist-all-running',
+  SLIDESHOW_ROTATION: 'slideshow-rotation',
+  ROLLING_LOG_FLUSH: 'rolling-log-flush'
 };
 function _wrappedSetInterval(label, fn, ms) {
   return setInterval(() => {
-    try { window.api?.log?.write?.('perf:interval:fire', { label, ms }); } catch (_) {}
     try { fn(); } catch (e) {
       try { window.api?.log?.write?.('error:caught:wrappedSetInterval', { label, message: e?.message }); } catch (_) {}
     }
   }, ms);
 }
 
-// カテゴリ B: requestAnimationFrame 経路網羅。すべての RAF 呼出を `_wrappedRAF` 経由に統一し、
-//   60Hz の発火を 1 秒ごとに集計して `perf:raf:summary` 出力（個別発火は出力過多のため）。
 const _RafLabel = {
-  HALL_PRE_START_TICK: 'hall-pre-start-tick',            // PRE_START カウントダウン rAF
-  HALL_TICK_FRAME: 'hall-tick-frame',                    // hall 60fps tick
-  DUAL_SYNC_FLUSH: 'dual-sync-flush',                    // dual-sync atomic flush rAF
-  TIMER_TICK: 'timer-tick',                              // timer.js tick (RUNNING/BREAK)
-  TIMER_PRE_START_TICK: 'timer-pre-start-tick',          // timer.js preStartTick
-  RENDERER_MISC: 'renderer-misc'                         // renderer.js その他の RAF（form sync 等）
+  HALL_PRE_START_TICK: 'hall-pre-start-tick',
+  HALL_TICK_FRAME: 'hall-tick-frame',
+  DUAL_SYNC_FLUSH: 'dual-sync-flush',
+  TIMER_TICK: 'timer-tick',
+  TIMER_PRE_START_TICK: 'timer-pre-start-tick',
+  RENDERER_MISC: 'renderer-misc'
 };
-let _rafCounter = {};
 function _wrappedRAF(label, fn) {
   return requestAnimationFrame((t) => {
-    _rafCounter[label] = (_rafCounter[label] || 0) + 1;
     try { fn(t); } catch (e) {
       try { window.api?.log?.write?.('error:caught:wrappedRAF', { label, message: e?.message }); } catch (_) {}
     }
   });
 }
-
-// カテゴリ C: IPC channel 別カウント（preload.js `_measuredInvoke` 拡張 + ipcRenderer.send は計測対象外）。
-//   30 秒ごとに集計出力。renderer.js 側では preload 経由のため直接 IPC 計測しないが、receive 側で集計可能。
-const _ipcCounter = {};   // channel → { calls: n }
-
-// カテゴリ D: DOM 書き換え頻度サマリ。主要 render 関数の入口・出口で _domCounter 更新。
-//   _recordDomTime ヘルパで一括集計、30 秒ごとに `perf:dom:summary` 出力。
-const _domCounter = {};   // 関数名 → { count: n, totalMs: n }
-function _recordDomTime(fnName, ms) {
-  if (!_domCounter[fnName]) _domCounter[fnName] = { count: 0, totalMs: 0 };
-  _domCounter[fnName].count += 1;
-  _domCounter[fnName].totalMs += ms || 0;
-}
-
-// カテゴリ E: 長い処理（Long Task）検出。PerformanceObserver で 50ms 超のメインスレッドブロッキングを検出。
-//   未対応環境（古い Electron / Chromium）では skip。
-try {
-  if (typeof PerformanceObserver !== 'undefined') {
-    const _longTaskObserver = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        if (entry.duration >= 50) {
-          try { window.api?.log?.write?.('perf:long-task', { duration: entry.duration, startTime: entry.startTime, name: entry.name }); } catch (_) {}
-        }
-      }
-    });
-    _longTaskObserver.observe({ entryTypes: ['longtask'] });
-  }
-} catch (_) { /* PerformanceObserver longtask 未対応環境では skip */ }
-
-// カテゴリ F: subscribe 通知頻度サマリ。state.js notify ループから呼ばれる listener 名を識別、
-//   呼出回数 + 所要時間を 30 秒ごとに集計。renderer 側で listener 登録時に名前を付与する。
-//   window._subscribeCounter を介して state.js (別モジュール) と共有。
-const _subscribeCounter = {};   // listener 名 → { count: n, totalMs: n }
-try { if (typeof window !== 'undefined') window._subscribeCounter = _subscribeCounter; } catch (_) {}
-
-// v2.1.20-rc6-meas3: 高頻度ラベル集約用カウンタ（perf:render:duration / hall:updatePipTimer:set / perf:state:notify）
-//   個別 log.write を 1 秒 summary に置換、5 分 buffer を 124Hz × 60s = 7440 行/分の負荷から解放。
-const _highFreqCounter = {};   // label → { count, totalMs }
-try { if (typeof window !== 'undefined') window._highFreqCounter = _highFreqCounter; } catch (_) {}
-function _recordHighFreq(label, ms) {
-  if (typeof label !== 'string' || !label) return;
-  if (!_highFreqCounter[label]) _highFreqCounter[label] = { count: 0, totalMs: 0 };
-  _highFreqCounter[label].count++;
-  if (typeof ms === 'number' && Number.isFinite(ms)) _highFreqCounter[label].totalMs += ms;
-}
-
-// 集計タイマー: 1 秒ごとに RAF サマリ、30 秒ごとに IPC / DOM / subscribe サマリ。
-//   `_wrappedSetInterval` 自身ではなく直接 setInterval を使う(自己参照回避 + label は固定で記録)。
-setInterval(() => {
-  try {
-    if (Object.keys(_rafCounter).length > 0) {
-      window.api?.log?.write?.('perf:raf:summary', { ..._rafCounter });
-    }
-    _rafCounter = {};
-    // v2.1.20-rc6-meas3: 高頻度ラベル summary 出力 + リセット
-    if (Object.keys(_highFreqCounter).length > 0) {
-      window.api?.log?.write?.('perf:highfreq:summary', { ..._highFreqCounter });
-    }
-    for (const k of Object.keys(_highFreqCounter)) delete _highFreqCounter[k];
-  } catch (_) {}
-}, 1000);
-setInterval(() => {
-  try {
-    if (Object.keys(_ipcCounter).length > 0) {
-      window.api?.log?.write?.('perf:ipc:summary', { ..._ipcCounter });
-    }
-    for (const k of Object.keys(_ipcCounter)) delete _ipcCounter[k];
-  } catch (_) {}
-  try {
-    if (Object.keys(_domCounter).length > 0) {
-      window.api?.log?.write?.('perf:dom:summary', { ..._domCounter });
-    }
-    for (const k of Object.keys(_domCounter)) delete _domCounter[k];
-  } catch (_) {}
-  try {
-    if (Object.keys(_subscribeCounter).length > 0) {
-      window.api?.log?.write?.('perf:subscribe:summary', { ..._subscribeCounter });
-    }
-    for (const k of Object.keys(_subscribeCounter)) delete _subscribeCounter[k];
-  } catch (_) {}
-}, 30000);
 
 // トーナメント基本情報（mutable、トーナメントタブで編集可）
 // electron-store 永続化、起動時 + 保存時に applyTournament で反映
@@ -958,9 +862,6 @@ function formatPreStartTime(ms) {
 
 // タイマーは単一要素テキストで更新（モノスペースフォントが桁幅を保証する）
 function renderTime(remainingMs) {
-  // v2.1.18-meas1 perf:render:duration: 入口で performance.now() を取得、出口で経過時間を rolling-log に記録。
-  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計（_recordDomTime ヘルパ経由）。
-  const _t0 = performance.now();
   const { status } = getState();
   if (status === States.PRE_START) {
     el.time.textContent = formatPreStartTime(remainingMs);
@@ -968,8 +869,6 @@ function renderTime(remainingMs) {
     el.clock.dataset.timerState = remainingMs > 0 && remainingMs <= DANGER_THRESHOLD_MS ? 'danger' : 'normal';
     // フォーマット属性: 残り時間が 60 分以上は HH:MM:SS（hms）、未満は MM:SS（ms）→ CSS が font-size を切替
     el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
-    try { _recordHighFreq('perf:render:duration', performance.now() - _t0); } catch (_) {}
-    try { _recordDomTime('renderTime', performance.now() - _t0); } catch (_) {}
     return;
   }
   // PAUSED 中も PRE_START 由来なら同じフォーマットを維持
@@ -977,16 +876,12 @@ function renderTime(remainingMs) {
     el.time.textContent = formatPreStartTime(remainingMs);
     el.clock.dataset.timerState = 'normal';
     el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
-    try { _recordHighFreq('perf:render:duration', performance.now() - _t0); } catch (_) {}
-    try { _recordDomTime('renderTime', performance.now() - _t0); } catch (_) {}
     return;
   }
   // PRE_START 終了 / RUNNING / IDLE / etc → 属性をクリア
   if ('prestartFormat' in el.clock.dataset) delete el.clock.dataset.prestartFormat;
   el.time.textContent = formatTime(remainingMs);
   el.clock.dataset.timerState = status === States.BREAK ? 'normal' : classifyTimerState(remainingMs);
-  try { _recordHighFreq('perf:render:duration', performance.now() - _t0); } catch (_) {}
-  try { _recordDomTime('renderTime', performance.now() - _t0); } catch (_) {}
 }
 
 function computeNextBreakMs(remainingMs, currentIndex) {
@@ -1039,8 +934,6 @@ function renderNextBreak(remainingMs, currentIndex) {
 }
 
 function renderControls(status) {
-  // v2.1.18-meas1 perf:render:duration: renderControls の処理時間を記録
-  const _t0 = performance.now();
   el.clock.dataset.status = status;
   switch (status) {
     case States.IDLE:
@@ -1070,20 +963,6 @@ function renderControls(status) {
     default:
       break;
   }
-  try { _recordHighFreq('perf:render:duration', performance.now() - _t0); } catch (_) {}
-  try { _recordDomTime('renderControls', performance.now() - _t0); } catch (_) {}
-  // v2.1.20-meas1 カテゴリ G: 症状 1 真因確証 — `.clock__pause-label` の opacity 計算後を記録（hall 限定）
-  try {
-    if (window.appRole === 'hall' && el.clock) {
-      const pauseLabel = document.querySelector('.clock__pause-label');
-      const opacity = pauseLabel ? getComputedStyle(pauseLabel).opacity : 'no-element';
-      window.api?.log?.write?.('hall:clock-pause-label:visibility', {
-        opacity,
-        dataStatus: el.clock.dataset.status,
-        dataPrestartPaused: el.clock.dataset.prestartPaused
-      });
-    }
-  } catch (_) {}
 }
 
 // STEP 6: 動的計算ヘルパ（STEP 6.5: GTD 対応）
@@ -2043,8 +1922,7 @@ function syncPowerSaveBlocker(status) {
 //   この変数を使って operator-pane を更新する（rc7 修正漏れの補完）。
 let _lastTimerStateForRoleSwitch = null;
 
-// v2.1.20-meas1 カテゴリ F: subscribeNamed で listener 名を付与し、state.js notify ループで集計対象に
-subscribeNamed('subscribe:main-renderer', (state, prev) => {
+subscribe((state, prev) => {
   _lastTimerStateForRoleSwitch = state;
   if (state.status !== prev.status) {
     renderControls(state.status);
@@ -2127,17 +2005,6 @@ subscribeNamed('subscribe:main-renderer', (state, prev) => {
     }
   }
   // STEP 10 フェーズC.1.4: スライドショー / PIP の状態同期
-  // v2.1.20-meas1 カテゴリ G: 症状 1 真因確証ラベル — syncSlideshowFromState 呼出時の hall PRE_START 状態を記録
-  try {
-    if (window.appRole === 'hall') {
-      window.api?.log?.write?.('hall:syncSlideshowFromState:call', {
-        remainingMs: state.remainingMs,
-        hallPreStartActive: !!(typeof hallPreStartState !== 'undefined' && hallPreStartState.isActive),
-        hallPreStartPaused: !!(typeof hallPreStartState !== 'undefined' && hallPreStartState.isPaused),
-        callerRole: window.appRole
-      });
-    }
-  } catch (_) {}
   // v2.1.20-rc3: rc1 Fix 3 ガード撤去 — rc1 Fix 1 で renderHallTickFrame の 60Hz setState 連鎖が消えたため、
   //   流れ込み防止のガードは不要。ガードが過剰防御で PRE_START 中のスライドショー始動経路自体を止めていた。
   //   症状 2（PIP timer に 01:00 一瞬表示）は rc1 Fix 1 の根本対処で防げる。
@@ -3102,16 +2969,6 @@ function applyHallPreStartState(payload) {
   if (window.appRole !== 'hall') return;
   // v2.1.10 計測: hall window でのみ applyHallPreStartState 入口時刻を rolling-log に記録
   try { window.api?.log?.write?.('hall:applyHallPreStartState:enter', { isActive: !!payload?.isActive, remainingMs: payload?.remainingMs, ts: Date.now() }); } catch (_) { /* never throw from logging */ }
-  // v2.1.20-meas1 カテゴリ G: 症状 1/2 真因確証 — apply 入口で詳細状態を記録（dataset 前後比較用）
-  try {
-    const datasetPrestartPausedBefore = (el.clock && el.clock.dataset) ? el.clock.dataset.prestartPaused : undefined;
-    window.api?.log?.write?.('hall:applyHallPreStartState:apply', {
-      isActive: !!payload?.isActive,
-      isPaused: !!payload?.isPaused,
-      remainingMs: payload?.remainingMs,
-      dataset_prestartPaused_before: datasetPrestartPausedBefore
-    });
-  } catch (_) {}
   const isActive = !!payload.isActive;
   // v2.1.16 ① 根治防御二重化: isPaused フィールドが payload に**含まれない**場合は現状値を維持。
   //   operator 側 publishPreStartIfOperator で isPaused フィールドを必ず付けるよう Fix 1/2 で対応済だが、
@@ -3288,26 +3145,9 @@ function renderHallPreStartTick() {
 //   ので、hall window の rAF は本機構（1 個）+ dual-sync flush（1 個）= 同時 2 個に収まる。
 //
 //   PRE_START は別系統（renderHallPreStartTick + hallPreStartState）。本関数は RUNNING/BREAK のみ。
-// v2.1.18-meas1 perf:tick:fps: hall RAF の実 fps を 1 秒ごとに集計して rolling-log に記録（hall 限定）
-let _fpsFrameCount = 0;
-let _fpsLastSampleAt = 0;
-function _samplePerfTickFps() {
-  _fpsFrameCount++;
-  const now = performance.now();
-  if (now - _fpsLastSampleAt >= 1000) {
-    if (window.appRole === 'hall' && _fpsLastSampleAt > 0) {
-      try { window.api?.log?.write?.('perf:tick:fps', { fps: _fpsFrameCount, sample_ms: now - _fpsLastSampleAt }); } catch (_) {}
-    }
-    _fpsFrameCount = 0;
-    _fpsLastSampleAt = now;
-  }
-}
-
 function renderHallTickFrame() {
   if (typeof window === 'undefined' || window.appRole !== 'hall') return;
   if (!hallTickState.isActive) return;
-  // v2.1.18-meas1: hall fps 集計
-  _samplePerfTickFps();
   // status が RUNNING/BREAK 以外（PAUSED/IDLE 等）に遷移した場合は rAF 停止
   if (hallTickState.status !== States.RUNNING && hallTickState.status !== States.BREAK) {
     hallTickState.isActive = false;
@@ -3419,12 +3259,6 @@ function updatePipTimer(remainingMs, status) {
     // PRE_START 終了 / RUNNING / BREAK 等では prestartFormat 属性をクリア
     if (el.pipTimer && 'prestartFormat' in el.pipTimer.dataset) delete el.pipTimer.dataset.prestartFormat;
   }
-  // v2.1.20-meas1 カテゴリ G: 症状 2 真因確証ラベル — pipDigits 書込時の頻度のみ計上（meas3 で集約化、payload は捨てる）
-  try {
-    if (window.appRole === 'hall') {
-      _recordHighFreq('hall:updatePipTimer:set', 0);
-    }
-  } catch (_) {}
 }
 
 // 「スライドショーに戻る」ボタンの disabled 状態を残り時間で更新
@@ -4415,9 +4249,6 @@ function ensureTournamentListDelegation() {
 }
 
 async function renderTournamentList(prefetched) {
-  // v2.1.18-meas1 perf:dom:rebuild: トーナメントリスト再構築の処理時間を記録
-  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計
-  const _t0 = performance.now();
   if (!el.tournamentList) return;
   // STEP 6.21.4.2 / STEP 10 フェーズB.fix9: 入力中スキップ。統一ヘルパに置換。
   // 1秒ごとの自動再描画で focus/打鍵イベントが奪われる現象を原理的に防止。
@@ -4450,10 +4281,6 @@ async function renderTournamentList(prefetched) {
     fragment.appendChild(buildTournamentListItem(t, ts, isActive, list.length));
   }
   el.tournamentList.appendChild(fragment);
-  // v2.1.18-meas1 perf:dom:rebuild: 出口で経過時間 + rows 数を記録（meas1 形式）
-  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計
-  try { window.api?.log?.write?.('perf:dom:rebuild', { fn: 'renderTournamentList', ms: performance.now() - _t0, rows: list.length }); } catch (_) {}
-  try { _recordDomTime('renderTournamentList', performance.now() - _t0); } catch (_) {}
 }
 
 function buildTournamentListItem(t, ts, isActive, listLength = 99) {
@@ -5751,9 +5578,6 @@ function getMixUnionFields() {
 //   ヘルパは text/number/textarea/contentEditable のみ true（checkbox/radio/button は除外、
 //   ブレイクチェックボックス change → 再描画 skip バグの fix8 修正を踏襲）。
 function renderBlindsTable() {
-  // v2.1.18-meas1 perf:dom:rebuild: 入口で performance.now() 取得
-  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計
-  const _t0 = performance.now();
   if (!el.blindsTbody || !blindsEditor.draft) return;
   if (isUserTypingInInput() && el.settingsDialog?.contains?.(document.activeElement)) {
     return;
@@ -5775,10 +5599,6 @@ function renderBlindsTable() {
   // STEP 10 フェーズB.fix6: 再描画後に readonly 状態を反映（新規生成された input/button にも disabled 伝播）
   const isBuiltin = !blindsEditor.meta || blindsEditor.meta.builtin;
   setBlindsTableReadonly(isBuiltin);
-  // v2.1.18-meas1 perf:dom:rebuild: 出口で経過時間 + rows 数を記録
-  // v2.1.20-meas1 カテゴリ D: _domCounter にも集計
-  try { window.api?.log?.write?.('perf:dom:rebuild', { fn: 'renderBlindsTable', ms: performance.now() - _t0, rows: blindsEditor.draft.levels.length }); } catch (_) {}
-  try { _recordDomTime('renderBlindsTable', performance.now() - _t0); } catch (_) {}
 }
 
 // 1行分の <tr> を生成（構造型のフィールドリストで列を動的に）
@@ -7552,11 +7372,9 @@ async function loadInitialSettings() {
 //   IPC 経路（preload.js: getVersion → main.js: ipcMain.handle('app:getVersion', ...)）は
 //   既に正常実装済のため、renderer 側の関数切り出しと initialize() からの呼出のみで根治。
 async function loadAppVersion() {
-  let _versionForBadge = '';
   if (el.appVersion && window.api?.app?.getVersion) {
     try {
       const version = await window.api.app.getVersion();
-      _versionForBadge = version || '';
       el.appVersion.textContent = version;
     } catch (err) {
       try { window.api?.log?.write?.('error:caught:loadAppVersion', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
@@ -7566,16 +7384,6 @@ async function loadAppVersion() {
   } else if (el.appVersion) {
     el.appVersion.textContent = '0.1.0';
   }
-  // v2.1.18-meas1: 計測ビルド識別バッジ。version が `-meas` / `-rc` のいずれも含まない（本番版）なら非表示。
-  //   `-meas1` / `-meas2` 等の連番にも対応するため `-meas\d*$` で末尾マッチ。
-  //   v2.1.19-rc1: 試験ビルド（rc）でも計測機構を完全保持するため `-rc\d+$` を OR で許容。
-  try {
-    const _v = _versionForBadge || '';
-    if (!(/-meas\d*$/.test(_v) || /-rc\d+$/.test(_v))) {
-      const badge = document.getElementById('meas-build-badge');
-      if (badge) badge.style.display = 'none';
-    }
-  } catch (_) { /* never throw */ }
 }
 
 async function initialize() {
