@@ -1,313 +1,375 @@
-# CC_REPORT — 2026-05-09 v2.1.12 スライドショー周辺退行 2 件のピンポイント根治 + 配布完了
+# CC_REPORT — 2026-05-12 v2.1.20-rc10 timer.js reset に force フラグ追加で PRE_START を構造的保護（HDMI 抜き差し問題 真因根治 第 4 弾）
 
 ## §1 サマリ
 
-NEXT_CC_PROMPT v2.1.12 通り、前原さん 2 画面実機 v2.1.11 試験中に発覚した 2 件の退行（症状 A: PRE_START カウントダウン Lv1 表示固まり / 症状 B: BREAK 中スライドショー起動せず）を最小修正で根治し、GitHub Releases で v2.1.12 を Latest として公開済。
-
-**事前調査で症状 A の真因を**、構築士仮説候補（α / β / γ）にない**新ケース δ を独立確定**:
-- `el.clockTime` プロパティが `el` オブジェクト未定義（HTML id は `js-time`、`el.time` のみ）
-- → `if (el.clockTime && ...)` 条件が**常に false** → `renderHallPreStartTick` の DOM 書込ブロックが v2.1.6 から**常にスキップ**されていた dead code バグ
-- スライドショーが画面上に乗っていた間気付かれず、「タイマー画面にもどす」でスライドショー解除 → 裏の固まった IDLE Lv1 duration 表示が露見していた
-
-| 項目 | 内容 |
+| 項目 | 値 |
 |---|---|
-| 修正ファイル数 | 3（renderer.js 2 箇所 / package.json / CHANGELOG.md）+ tests/v224 新規 + 既存 35 テストの version assertion 更新 |
-| 並列 sub-agent / Task 数 | **0 体**（直接実行、cc-operation-pitfalls §1.1 / §4.2 準拠）|
-| 全テスト件数 | **901 件 PASS / 0 件 FAIL**（v2.1.11 時点 893 + v224 新規 8） |
-| 致命バグ保護 5 件 | **5 件すべて影響なし**（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8） |
-| ビルド成果物 | `dist/pokertimerplus-setup-2.1.12.exe`（82,995,743 bytes、約 82.99 MB）+ `dist/latest.yml`（version 2.1.12） |
-| Release URL | <https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.1.12> |
-| publishedAt | `2026-05-08T16:31:42Z` |
+| バージョン | `2.1.20-rc9` → **`2.1.20-rc10`** |
+| フェーズ | **Phase 1 並列調査 → Phase 2 修正方針 5 案提示 → Phase 3 構築士承認（案 A 単独採用） → 実装完了** |
+| 並列 sub-agent 数 | **3 体（Phase 1 調査のみ、本実装は機械的反映で 0 体）** |
+| 修正ファイル数 | **63 ファイル**（timer.js + renderer.js + package.json + CHANGELOG.md + 既存テスト 59 ファイル + v248 新規）|
+| テスト件数 | **1106 PASS / 0 FAIL / 21 SKIP**（rc9 1096 + v248 新規 10 件）|
+| ビルド成果物 | `dist/pokertimerplus-setup-2.1.20-rc10.exe` 83,018,701 B |
+| feature ブランチ | `feature/v2.1.20-rc10-structural-prestart-protection` commit `8995a7b`（rc9 `63f8d5c` から分岐）|
+| main マージ / tag / Release / push | **すべて未実施**（spec 禁止条項に準拠）|
+
+### rc10 の目的（HDMI 抜き差し問題 構造的根本対策、5 連続失敗中のピンポイント連鎖を断つ）
+
+rc4〜rc9 で 5 連続失敗中の HDMI 抜き差し race に対し、**timer.js `reset()` 関数本体に `force` フラグ引数を追加**して意図せぬ reset 経路を一箇所で網羅遮断する。並列 sub-agent 3 体で「PRE_START を消す全経路」を網羅特定後、構築士が 5 案の中から**案 A 単独採用**を確定 → Phase 3 spec に従い機械的に実装。
+
+#### 多層防御アーキテクチャ
+
+| 層 | 機構 | 経路数 |
+|---|---|---|
+| **第 1 層** | rc8/rc9 既存 `isPreStartActive()` ガード（renderer.js 内、経路識別 trigger 4 種別ログ）| 4 経路 |
+| **第 2 層** | rc10 新規 `timer.js reset({ force: false })` 構造的ガード | **全 reset 呼出（11 経路中 5 経路）** |
+| ガード抜け検知 | rc10 新規ラベル `timer:reset:skip-during-prestart`（5 ctx 値で発火経路識別）| 5 ctx |
 
 ---
 
-## §2 事前調査結果
+## §2 並列調査結果（Phase 1 サマリ）
 
-### A. 症状 B 真因の独立検証（既に確度高）
+3 sub-agent（Explore Agent）で 3 領域を同時調査、各報告 300〜600 行。
 
-| 検証項目 | 結果 |
+### Sub-agent 1: timer.js（438 行）
+
+| 検出経路 | 行 | クリア対象 | onPreStartCancel 発火 |
+|---|---|---|---|
+| `reset()` | L120-L141 | isPreStart/preStartTotalMs/pausedRemainingMs/targetTime | wasPreStart 経由 |
+| `cancelPreStart()` | L216-L221 | reset 経由（冪等設計）| 明示発火 |
+| `preStartTick()` 自然終了 | L380-L398 | RAF タイムアウト | 自然遷移 |
+| `advancePreStartBy()` 時間 0 到達 | L323-L350 | 手動進行満了 | 自然遷移 |
+| **state ↔ isPreStart 乖離リスク**（`advanceTimeBy` / `advanceToNextLevel` で state=IDLE だが isPreStart 未クリア）| L256 / L432 | ⚠️ 案 D 候補（rc10 範囲外）| ‐ |
+
+### Sub-agent 2: renderer.js（7881 行）
+
+`timerReset()` 呼出 **11 箇所** 完全特定:
+
+| # | 行 | 経路 | 既存ガード | rc10 修正 |
+|---|---|---|---|---|
+| 1 | 1634 | applyTimerStateToTimer invalid-ts | rc9 | ✅ `{force: false}` |
+| 2 | 1664 | applyTimerStateToTimer idle | rc8 | ✅ `{force: false}` |
+| 3 | 1694 | applyTimerStateToTimer finished | rc9 | ✅ `{force: false}` |
+| 4 | 1725 | applyTimerStateToTimer no-levels | rc9 | ✅ `{force: false}` |
+| 5 | **7603** | **initialize 復元失敗 fallback** | **なし** | ✅ **`{force: false}`（rc10 真因経路）** |
+| 6-10 | 7292/7301/4535/4725/4808 | handleReset / resetBlindProgressOnly / リスト「リセット」 / 新規 / 複製 | 意図的 | touch なし（force=true デフォルト維持）|
+| 11 | 3186 | applyOperatorPreStartState isActive=false 経由 cancelPreStart | 意図的 | touch なし |
+
+### Sub-agent 3: main.js（3180 行）+ preload.js
+
+- preStartState cache 変更 3 経路（rc7 cache merge / rc5 did-finish-load resync）すべて完全保持
+- display-removed/added の debounce guard（rc23 確定）完備、rc10 で touch なし
+- 「rc10 主因経路 F（initialize L7603）」の race パターン特定: HDMI 挿し直し直後の mainWindow reload → initialize → preStartState resync が間に合わず `timerReset()` 経由で isPreStart クリア
+
+### 統合: PRE_START を消す全経路マップ（前回 CC_REPORT §2 から継承、本実装で 5 経路に第 2 層追加）
+
+---
+
+## §3 修正方針 5 案の提示と構築士確定
+
+| 案 | 修正規模 | 真因経路 F 対処 | 経路 D 対処 | 観測強化 | 確証度 | 構築士判断 |
+|---|---|---|---|---|---|---|
+| **A** timer.js reset 構造的ガード | 小（1+5）| ✅ 全網羅 | ❌ | なし | ⭐⭐⭐⭐⭐ | ✅ **採用** |
+| B reset フラグ引数（全 11 経路）| 中（1+11）| ✅ | ❌ | なし | ⭐⭐⭐⭐ | 不採用（過剰）|
+| C L7591 ピンポイント | 極小 | ✅ 単一 | ❌ | 1 | ⭐⭐ | 不採用（spec 違反）|
+| D state↔isPreStart 乖離防御 | 小 | ❌ | ✅ | なし | ⭐⭐⭐ | 不採用（範囲外、別フェーズ）|
+| E main.js 観測 + validation | 小 | ❌ | ❌ | ✅ | ⭐⭐ | 不採用（範囲外）|
+
+---
+
+## §4 構築士承認状況
+
+✅ **2026-05-12 構築士確定**: 案 A 単独採用 + 以下パラメータ:
+
+| 項目 | 構築士確定値 |
 |---|---|
-| `handlePipShowTimer` (renderer.js:2892) で `slideshowState.userOverride = 'force-timer'` セット | ✅ 確認 |
-| `slideshowState.userOverride` リセット経路全件 grep | `syncSlideshowFromState` L2846 の `!eligibleStatus` 分岐内 1 箇所のみ（status 変化トリガなし）|
-| L2873 `if (slideshowState.userOverride === 'force-timer') return;` early return | ✅ 確認 |
-| v2.1.11 hall 60fps tick（`renderHallTickFrame` の `setState({ remainingMs })`）→ subscribe → `syncSlideshowFromState` 毎フレーム発火 | ✅ 確認、症状 B 真因の構造的説明と一致 |
-
-→ **構築士仮説と完全一致**。Fix 1 で確実根治。
-
-### B. 症状 A 真因の確定（最重要、CC 独立調査）
-
-NEXT_CC_PROMPT 候補（α / β / γ）全件を Read で検証:
-
-| ケース | 検証結果 | 判定 |
-|---|---|---|
-| α: `handlePipShowTimer` 押下で `hallPreStartState.isActive` が false にされる経路 | `handlePipShowTimer` 本体（renderer.js:2892-2897）4 行のみ、`hallPreStartState` への書込なし | **不成立** |
-| β: subscribe 経由 `renderTime(state.remainingMs)` が PRE_START 中に `el.clockTime` を上書き | hall PRE_START 中、subscribe 発火条件（status / level / PAUSED.remainingMs / IDLE.remainingMs/totalMs 変化）に該当変化なし → subscribe 発火しない → renderTime も呼ばれない | **不成立** |
-| γ: `slideshowState.userOverride` が hall に伝わらない | 双方向問題は確認できるが、これだけでは「Lv1 表示固まり」を説明不能（スライドショー解除自体は成功）| **部分的説明、症状 A 全体を説明できない** |
-
-→ **新ケース δ を CC が独立確定**:
-
-```
-$ grep -n "clockTime" src/renderer/renderer.js
-2656://   毎フレーム Date.now() から remainingMs を計算 → 直書きで el.clockTime を更新 → 60fps 描画。
-2663:  //   formatPreStartTime + el.clockTime に直接書込（operator 側 renderTime が PRE_START 中に
-2666:  if (el.clockTime && typeof formatPreStartTime === 'function') {
-2667:    el.clockTime.textContent = formatPreStartTime(remainingMs);
-
-$ grep -n "clockTime" src/renderer/index.html
-（出力なし）
-
-$ grep -nE 'clockTime\s*:' src/renderer/renderer.js
-（出力なし）
-```
-
-`el` オブジェクト定義（renderer.js:199-）には `time: document.getElementById('js-time')` のみ存在。`el.clockTime` というプロパティは**存在しない** → `undefined` → `if (el.clockTime && ...)` が常に false → `renderHallPreStartTick` の DOM 書込が**常にスキップ** → v2.1.6 から hall 側 PRE_START メイン画面更新は無効。
-
-スライドショーが画面上に乗っていた間気付かれず、「タイマー画面にもどす」でスライドショー解除 → 裏の固まった IDLE 起動時の Lv1 duration 値が露見していた。
-
-**ケース δ 修正方針**: `el.clockTime` を `el.time` に変更（typo 修正、1 行）。
-
-### C. 致命バグ保護 5 件への影響
-
-| 保護 | 影響評価 | 根拠 |
-|---|---|---|
-| C.2.7-A `resetBlindProgressOnly` | **影響なし** | 修正対象は subscribe コールバック内 1 行 + renderHallPreStartTick 内 1 行のみ、`resetBlindProgressOnly` 関数本体・呼出経路は完全無変更 |
-| C.2.7-D `timerState` destructure 除外 | **影響なし** | main.js 完全無変更 |
-| C.1-A2 `ensureEditorEditableState` | **影響なし** | 編集モード経路は本修正範囲外 |
-| C.1.7 AudioContext resume | **影響なし** | audio.js 完全無変更 |
-| C.1.8 runtime 永続化 | **影響なし** | main.js 完全無変更、`schedulePersistRuntime` 8 箇所維持 |
-
-→ **5 件すべて完全無傷**。v224 T7 で再検証済。
-
-### D. 既存テストへの影響
-
-`tests/v218〜v223` で `slideshowState.userOverride` / `el.clockTime` 参照を全件 grep:
-- `userOverride` への参照: **なし**（v224 が初出）→ アサーション破壊なし
-- `el.clockTime` への参照: **CC_REPORT.md / NEXT_CC_PROMPT.md 内の記述のみ**、テストファイル内ではゼロ → アサーション破壊なし
-
-→ 既存 893 件は全件 PASS 維持を確認（実行ログで確認済）。
+| 引数名 | `force` |
+| デフォルト | `force: true`（後方互換）|
+| 返り値 | `true` / `false`（呼出側で判定）|
+| 観測ラベル | `timer:reset:skip-during-prestart`（renderer 側発火）|
+| rc8/rc9 既存 4 経路ガード | **保持**（多層防御）|
+| handleReset 内 cancelPreStart 明示化 | やらない（C.2.7-A 範囲最小変更）|
 
 ---
 
-## §3 各 Fix の実装内容（diff 要点）
+## §5 各 Fix の実装内容
 
-### Fix 1: `renderer.js` subscribe コールバック内で status 変化時に userOverride='auto' リセット
+### Fix 1: timer.js `reset()` に `force` 引数追加（src/renderer/timer.js L119-L147）
 
-```diff
-     if (state.status !== prev.status) {
-       slideshowState.autoEndedAt = null;
-+      // v2.1.12 Fix 1（症状 B 根治）: status 変化時に userOverride を 'auto' にリセット。
-+      slideshowState.userOverride = 'auto';
-       if (state.status === States.BREAK && prev.status !== States.BREAK) {
-         slideshowState.breakStartedAt = Date.now();
-       } else if (state.status !== States.BREAK) {
-         slideshowState.breakStartedAt = null;
-       }
-     }
+```js
+// リセット（IDLE状態でレベル0に戻す）
+// v2.1.20-rc10: opts.force === false かつ PRE_START 中なら no-op で false 返却（構造的 PRE_START 保護）
+// 後方互換: opts 省略時は force=true デフォルト、既存呼出は無変更で動作
+// 返り値: true = reset 実行 / false = PRE_START 中ガードで no-op
+export function reset(opts = {}) {
+  const { force = true } = opts;
+  if (!force && isPreStart) {
+    return false;
+  }
+  stopLoop();
+  // ... 既存処理（無変更）...
+  return true;
+}
 ```
 
-**設計理由**: `handlePipShowTimer`（タイマーに戻す）は「**今のフェーズ中だけ**」スライドショーを止めたい操作と解釈するのが自然。次の status 遷移 = フェーズ変化なので、ユーザー意図としても自動リセットが妥当。「BREAK 中もタイマーのまま見続けたい」ユースケースは BREAK 進入後に再度ボタン押下で対応可能（許容、UX 設計判断）。
+**重要設計判断**: timer.js 内では `window.api?.log?.write?.` を呼ばない（依存ゼロ維持、テスト性）。観測ラベル発火は呼出側 renderer.js が担当。
 
-### Fix 2: `renderer.js` `renderHallPreStartTick` 内の `el.clockTime` → `el.time` typo 修正（症状 A 根治、ケース δ）
+### Fix 2: renderer.js の 5 経路を `{ force: false }` 経由に変更 + ガード発火時ログ
 
-```diff
-   if (el.time && typeof formatPreStartTime === 'function') {
--    el.clockTime.textContent = formatPreStartTime(remainingMs);
-+    el.time.textContent = formatPreStartTime(remainingMs);
-     if (el.clock) {
-       el.clock.dataset.prestartFormat = remainingMs >= 60 * 60 * 1000 ? 'hms' : 'ms';
-     }
-   }
+| # | 行 | ctx 値 |
+|---|---|---|
+| 1 | 1634 | `applyTimerStateToTimer:invalid-ts` |
+| 2 | 1664 | `applyTimerStateToTimer:idle` |
+| 3 | 1694 | `applyTimerStateToTimer:finished` |
+| 4 | 1725 | `applyTimerStateToTimer:no-levels` |
+| 5 | 7603 | `initialize:restoredFromTimerState-false` |
+
+各経路で:
+```js
+// v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
+if (!timerReset({ force: false })) {
+  try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: '...', role: window.appRole }); } catch (_) {}
+}
 ```
 
-**注意**: `el.time` は HTML の `<div class="clock__time" id="js-time">` を指す既存要素。`renderTime`（operator + hall 共通）も `el.time.textContent` に書く。両者同じ要素を共有 → race condition の可能性あり:
-- operator: `getState().status === PRE_START` → renderTime 内で formatPreStartTime 書込 → renderHallPreStartTick は呼ばれない（appRole !== 'hall' で早期 return）→ 衝突なし
-- hall: `getState().status === IDLE`（v2.0.3 Fix L 経由）→ renderTime 内で IDLE 分岐の `formatTime` 書込（subscribe 発火時のみ）→ subscribe は PRE_START 中 hall で発火しない（state 値変化なし）→ 実質 renderHallPreStartTick が独占的に書込 → 視覚的に問題なし
+rc8/rc9 既存ガードは**保持**（撤去せず）、多層防御として併存。
 
-### Fix 3: package.json + CHANGELOG + 新規テスト
+### Fix 3: 意図的リセット経路 6 箇所は touch なし
 
-- `package.json`: `"version": "2.1.11"` → `"version": "2.1.12"`、`scripts.test` に `v224-userOverride-reset.test.js` 追加
-- `CHANGELOG.md`: `[2.1.12]` セクションを `[2.1.11]` の上に挿入
-- `tests/v224-userOverride-reset.test.js`: 新規 8 件
-- 既存 35 テストファイルの version assertion を `2.1.11` → `2.1.12` に一括更新
+handleReset / resetBlindProgressOnly / handleTournamentListReset / 新規 / 複製 / applyOperatorPreStartState (timerCancelPreStart 経由) すべて `timerReset()` 引数なしのまま、`force: true` デフォルトで従来動作。
 
-#### v224 テスト 8 件（NEXT_CC_PROMPT §3.4 案 + 症状 A 検証 +）
+### Fix 4: package.json bump + scripts.test 追記
 
-| # | 検証ポイント |
+- `version`: `2.1.20-rc9` → `2.1.20-rc10`
+- `scripts.test` 末尾に `&& node tests/v248-reset-structural-guard.test.js`
+- 既存 59 テストの `'2.1.20-rc9'` リテラル → `'2.1.20-rc10'` を Node ワンライナーで機械置換（**97 件置換、残存 0**）
+
+### Fix 5: 新規テスト `tests/v248-reset-structural-guard.test.js`（10 件、全 PASS）
+
+| # | 検証項目 | 結果 |
+|---|---|---|
+| T1 | package.json.version === '2.1.20-rc10' | PASS |
+| T2 | timer.js `reset(opts = {})` + `const { force = true }` + `if (!force && isPreStart) return false;` | PASS |
+| T3 | reset() force=true デフォルトで wasPreStart 経由 onPreStartCancel 発火が保持 | PASS |
+| T4 | applyTimerStateToTimer 4 経路すべてで `timerReset({ force: false })` + 5 ctx 値中 4 つ発火経路 | PASS |
+| T5 | initialize 経路 L7603 で `timerReset({ force: false })` + ctx:'initialize:restoredFromTimerState-false' | PASS |
+| T6 | 意図的リセット経路 6 箇所は引数なし `timerReset()` 維持（touch なし）| PASS |
+| T7 | rc8/rc9 既存 4 経路 `isPreStartActive()` ガード保持（多層防御、撤去されていない）| PASS |
+| T8 | rc1〜rc9 機構 + 致命バグ保護 5 件 完全保持 | PASS |
+| T9 | meas1+meas2+症状確証 4+rc2/rc4/rc5/meas3/rc7/rc8/rc9 ラベル + rc10 5 ctx 値 | PASS |
+| T10 | timer.js `reset()` 関数本体は window.api?.log?.write?. を呼ばない（rc10 設計判断）| PASS |
+
+### Fix 6: CHANGELOG.md `[2.1.20-rc10] - 2026-05-12` セクション追加
+
+`[2.1.20-rc9]` セクション上に新規セクション挿入。Fixed / Maintained / Notes の 3 区分（spec 通り）。
+
+### 副次修正: 既存 4 テストを rc10 のシグネチャ変更に対応
+
+| ファイル | 変更箇所 | 理由 |
+|---|---|---|
+| `tests/v218-prestart-hall-sync.test.js` T6 | `TIMER_JS.indexOf('export function reset()')` → 正規表現 `/export\s+function\s+reset\s*\([^)]*\)/` | rc10 で `reset()` シグネチャ → `reset(opts = {})` 拡張に追従 |
+| `tests/v222-hall-rAF-reduction.test.js` T2 | `timerReset\s*\(\s*\)` → `timerReset\s*\(\s*(?:\{\s*force\s*:\s*false\s*\}\s*)?\)` | rc10 で 4 経路が `timerReset({ force: false })` に切替えられたため両形式許容 |
+| `tests/v223-hall-60fps-restore.test.js` T2 | 同上 | 同上 |
+| `tests/v246-prestart-skip-reset.test.js` T4/T6 | 同上 | 同上 |
+| `tests/v247-skip-reset-all-routes.test.js` T2/T5 | 同上（replace_all で 3 箇所一括）| 同上 |
+
+詳細は §10 構築士への質問にて報告。
+
+---
+
+## §6 rc1〜rc9 機構保持確認（grep 証跡）
+
+| 機構 | 検証結果 |
 |---|---|
-| T1 | subscribe 内 status 変化時に `slideshowState.userOverride = 'auto'` リセットコード存在 |
-| T2 | リセット位置が `autoEndedAt = null` 直後（順序保証）|
-| T3 | `handlePipShowTimer` の `userOverride = 'force-timer'` セット維持 + `deactivateSlideshow()` 呼出維持 |
-| T4 | `renderHallPreStartTick` 内で `el.time.textContent = formatPreStartTime(...)` 書込（`el.clockTime` 不在確認）|
-| T5 | `el` オブジェクトに `clockTime:` プロパティ未定義（dead code 確認）+ `time:` プロパティ存在確認 |
-| T6 | package.json version 2.1.12 + scripts.test に v224 登録 |
-| T7 | 致命バグ保護 5 件 cross-check |
-| T8 | hallPreStartState（PRE_START）+ hallTickState（RUNNING/BREAK）共存維持（v2.1.11 機構保護）|
+| rc1〜rc3 すべて | 完全保持 ✅（v248 T8 PASS）|
+| rc4 timer.js `restorePreStart` / `applyOperatorPreStartState` / `handleStartPauseToggle` PRE_START 分岐 | 完全保持 ✅ |
+| rc5 `preStart:operator:send` + `operator:preStartResync:sent` + `subscribeStateSync` | 完全保持 ✅ |
+| rc6-meas3 観測強化 8 項目（Fix A〜H）| すべて完全保持 ✅ |
+| rc7 cache merge + `preStart:cache:merge` + `_appendPriorityLog` lazy init | 完全保持 ✅ |
+| rc8 `applyTimerStateToTimer` idle 経路 `isPreStartActive()` ガード | 完全保持（撤去せず多層防御）✅ |
+| rc9 残り 3 経路（invalid-ts / finished / no-levels）ガード + trigger 4 種別 | 完全保持（撤去せず多層防御）✅ |
+| timer.js `reset()` 既存 wasPreStart 経由 onPreStartCancel 発火 | 完全保持（v248 T3 PASS）✅ |
+| timer.js `publishPreStartIfOperator` | touch なし ✅ |
+| `applyTimerStateToTimer` hall 側 else 4 経路 | touch なし、v247 T6 で確認 ✅ |
+| `handleTournamentListReset` / 新規 / 複製 / handleReset / resetBlindProgressOnly | touch なし、v248 T6 で確認 ✅ |
+
+すべて v247/v248 で自動 verify、全 PASS。
 
 ---
 
-## §4 設計判断
+## §7 計測機構保持確認（grep 証跡）
 
-### 症状 A のケース判定: 構築士候補 α / β / γ から外れた **ケース δ**
+- meas1 計測バッジ HTML + CSS: **保持** ✅
+- バージョン文字列 `/-meas\d*$/` + `/-rc\d+/` 分岐: **保持**（rc10 でもバッジ表示）
+- meas1 既存 15 ラベル: **保持** ✅
+- meas2 6 カテゴリ ラベル: **保持** ✅
+- 症状確証 4 ラベル: **保持** ✅
+- rc2 `hall:hallTickState:reset` 3 trigger: **保持** ✅
+- rc4 `operator:applyPreStartState:apply`: **保持** ✅
+- rc5 `preStart:operator:send` / `operator:preStartResync:sent`: **保持** ✅
+- meas3 `perf:highfreq:summary` / `meas3:hdmi-snapshot:written`: **保持** ✅
+- rc7 `preStart:cache:merge`: **保持** ✅
+- rc8/rc9 `operator:applyTimerStateToTimer:skip-reset-during-prestart` + 4 trigger 値: **保持** ✅
+- **rc10 新規ラベル** `timer:reset:skip-during-prestart` + 5 ctx 値:
+  - `applyTimerStateToTimer:invalid-ts` ✅
+  - `applyTimerStateToTimer:idle` ✅
+  - `applyTimerStateToTimer:finished` ✅
+  - `applyTimerStateToTimer:no-levels` ✅
+  - `initialize:restoredFromTimerState-false` ✅
 
-事前調査 §2-B で構築士候補をすべて Read 検証:
-- α: `handlePipShowTimer` が `hallPreStartState.isActive` を false にする経路 → 不在
-- β: subscribe 経由の `renderTime` 上書き → subscribe が PRE_START 中 hall で発火しない（state 変化なし）ため不成立
-- γ: userOverride 同期問題 → スライドショー解除自体は成功しているので γ だけでは説明不能
-
-CC が**独立に新ケース δ を確定**: `el.clockTime` プロパティが `el` オブジェクトに**未定義**（typo）→ if 条件常に false → DOM 書込が v2.1.6 から**常にスキップ**されていた dead code バグ。
-
-**修正方針**: ピンポイント typo 修正（1 行、`el.clockTime` → `el.time`）。
-
-CC 独立反論プロセス（root-cause-analysis §3 / §7 準拠）:
-1. ケース α 反論: `handlePipShowTimer` 本体 4 行のみ、`hallPreStartState` への書込ゼロ → α 不成立
-2. ケース β 反論: subscribe 発火条件 4 件すべて hall PRE_START で発火しないことを確認 → β 不成立
-3. ケース γ 反論: γ が真でも「スライドショー解除後の Lv1 表示固まり」を説明できない → γ だけでは不十分
-4. ケース δ 確認: HTML ID と `el` 定義の比較で `el.clockTime` が undefined であることを確認 → 真因確定
-
-**実コード根拠 + 症状との整合 + 既存テストへの影響評価** すべて満たし真因確定（root-cause-analysis §4 の 3 条件達成）。
-
----
-
-## §5 テスト結果
-
-```
-全テスト件数: 901 PASS / 0 FAIL
-  - 既存 893 件（v2.1.11 時点）
-  - 新規 v224 8 件
-  - 既存 35 ファイルの version assertion 更新（実体は同一テストの version 値変更のみ）
-
-実行コマンド: npm test
-所要時間: 約 25 秒
-```
-
-主要関連ファイル個別確認:
-- v218 (PRE_START hall sync): 13 PASS（hallPreStartState + renderHallPreStartTick 維持確認）
-- v219 (hall atomic update): 9 PASS（dual-sync buffer 完全保持）
-- v220 (PRE_START / audio hall guard): 8 PASS（hall ガード機構保持）
-- v221 (rAF flush): 8 PASS（v2.1.9 機構保持）
-- v222 (hall rAF reduction): 6 PASS（v2.1.10 検証残部）
-- v223 (hall 60fps restore): 12 PASS（v2.1.11 機構保持）
-- v224 (userOverride reset): **8 PASS**（v2.1.12 専用、Fix 1 + Fix 2 + 致命バグ保護 cross-check）
-
-回帰なし、既存全機構（v2.1.6 〜 v2.1.11）が完全動作。
+v248 T9 で全項目自動 verify、PASS。
 
 ---
 
-## §6 main マージ + タグ + push 結果 + ビルド成果物
+## §8 テスト結果
 
 ```
-git checkout -b feature/v2.1.12-slideshow-overrides-fix → 実装 → コミット df7e334
-git checkout main && git merge --no-ff → 114a087
-git tag -a v2.1.12
-npm run build → dist/pokertimerplus-setup-2.1.12.exe + dist/latest.yml
-git push origin main → 114a087 push 完了
-git push origin v2.1.12 → タグ push 完了
+$ npm test
+Total PASS: 1106
+Total FAIL: 0
+Total SKIP: 21
+（rc9 1096 + v248 新規 10 件、SKIP 件数は ±0）
 ```
 
-最新 main 履歴:
-- `114a087` Merge v2.1.12 退行 2 件のピンポイント根治
-- `df7e334` v2.1.12: スライドショー周辺退行 2 件のピンポイント根治
-- `f95ebf6` v2.1.11: CC_REPORT 執筆
-- `bcf658d` Merge v2.1.11 hall 60fps tick restore (v2.1.10 設計ミスの構造的根治)
-- `a97f23d` v2.1.11: hall 自前 60fps tick 再導入（v2.1.10 設計ミスの構造的根治）
-
-ビルド成果物:
-```
-dist/pokertimerplus-setup-2.1.12.exe   82,995,743 bytes (約 82.99 MB)
-dist/latest.yml                        version: 2.1.12
-                                       sha512: 1WyW4yo4EbIHvZtkjCnq+fwEmNCl+5af4brufKx5jbJn+YHg0IuD70WBmBvibgCq/izco4qZBiGiJW7oUtWX3Q==
-                                       releaseDate: 2026-05-08T16:31:03.833Z
-```
+- 全 95 テストファイル（v248 新規含む）実行、想定通り 1106 PASS / 0 FAIL / 21 SKIP
+- v248 reset-structural-guard: 10 PASS / 0 FAIL
+- 致命バグ保護 5 件 grep 確認: v248 T8 で全 PASS
+- 副次修正で更新した v218 / v222 / v223 / v246 / v247 すべて PASS
 
 ---
 
-## §7 GitHub Releases 公開結果
+## §9 ビルド成果物
 
-```
-$ gh release create v2.1.12 --title "v2.1.12 - スライドショー周辺退行 2 件のピンポイント根治" \
-    --notes-file .release-notes-v2.1.12.md --latest \
-    dist/pokertimerplus-setup-2.1.12.exe dist/latest.yml
-https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.1.12
-```
-
-検証結果:
-
-| 確認ポイント | 結果 | 値 |
-|---|---|---|
-| `tagName == "v2.1.12"` | ✅ | `v2.1.12` |
-| `name == "v2.1.12 - スライドショー周辺退行 2 件のピンポイント根治"` | ✅ | 一致 |
-| `isLatest == true` | ✅（代替確認）| `gh api repos/.../releases/latest --jq .tag_name` → `v2.1.12` |
-| `assets` 2 件 | ✅ | `pokertimerplus-setup-2.1.12.exe`（82,995,743 bytes）+ `latest.yml`（359 bytes）|
-| `publishedAt` 時刻入り | ✅ | `2026-05-08T16:31:42Z` |
-| `curl latest.yml` 冒頭 `version: 2.1.12` | ✅ | 取得成功 + sha512 一致 |
-
-一時ファイル `.release-notes-v2.1.12.md` 削除済。
+| 項目 | 値 |
+|---|---|
+| 絶対パス | `C:\Users\user\Documents\Claude\Projects\個人アシスタント\poker-clock\dist\pokertimerplus-setup-2.1.20-rc10.exe` |
+| サイズ | 83,018,701 B（約 79.2 MB）|
+| sha512 | `Vvqxm7AZDG2jkAk+ws5KBl+Acy3yHpREN7TfD9jbp3izQngw8UjC2q6PWaSEH4eCLEROyFYPCT2+H1U8z6JcMA==` |
+| latest.yml | `dist/latest.yml` 出力済（version: 2.1.20-rc10、releaseDate: 2026-05-12T07:49:13.072Z）|
+| 配布判断 | **配布禁止**（前原さん PC 実機専用、上書きインストール）|
 
 ---
 
-## §8 試験項目別の前原さん確認手順（v2.1.12 実機）
+## §10 副作用評価結果
+
+### 致命バグ保護 5 件すべて完全無傷
+
+| 保護 | 検証結果 |
+|---|---|
+| C.2.7-A `resetBlindProgressOnly` / `handleReset` 責任分離 | touch なし、`timerReset()` 引数なし呼出維持、v248 T6 / T8 PASS |
+| C.2.7-D `tournaments:setDisplaySettings` の timerState destructure 除外 | main.js touch なし、v248 T8 PASS |
+| C.1-A2 / C.1.4-fix1 `ensureEditorEditableState` 4 重防御 | 編集経路 touch なし、v248 T8 PASS |
+| C.1.7 AudioContext suspend 防御 | audio.js 完全無変更、v248 T8 PASS（`audioContext.resume` 検証）|
+| C.1.8 runtime 永続化 | schedulePersistRuntime + 主犯 2 5 秒 setInterval touch なし、v248 T8 PASS |
+
+### v2.1.6〜v2.1.20-rc9 機構完全保持
+
+すべて touch なし、`timer.js reset()` に opts.force 引数追加 + renderer.js 5 経路で `{ force: false }` 経由に変更 + 観測ラベル発火のみ。v248 T6 / T7 / T8 で自動 verify、全 PASS。
+
+### Race / 副作用評価
+
+- **Fix 1（timer.js reset force 引数）**: 後方互換完全（デフォルト force=true、既存呼出は無変更で動作）。`force: false` 経由でのみガード発火、PRE_START 中以外は即時 reset 実行（v248 T2/T3 検証）
+- **Fix 2（5 経路）**: 各経路で `!isHallApply` ブロック内に閉じ込め、hall 側 else は touch なし（v247 T6 で 4 経路 + v248 T8 で initialize 経路を一括検証済）
+- **rc8/rc9 既存ガードとの関係**: 多層防御として併存。第 1 層（`isPreStartActive()`）と第 2 層（`force: false` ガード）の両方を通過した場合のみ reset 実行
+- **新ラベル `timer:reset:skip-during-prestart`**: priority log labels には**含めない**（HDMI 挿し直し時のみ発火想定の低頻度ラベル）。rolling log に出力、5 ctx 値で発火経路識別
+- **handleReset 経由のリセット**: 意図的、`timerReset()` 引数なし呼出 → デフォルト `force: true` でガード非適用、従来通り動作
+- **operator-solo モード**: `window.appRole === 'operator-solo'` でも `!isHallApply` で同じ経路、5 経路すべて第 2 層ガード機能
+- **timer.js 依存ゼロ維持**: `reset()` 関数本体に `window.api` 参照なし（v248 T10 で自動 verify、rc6-meas3 で追加された `perf:raf:fire` は別関数 `_emitRafFire` 内）
+
+---
+
+## §11 並列 sub-agent / Task 数報告
+
+- **Phase 1 並列 sub-agent: 3 体**（cc-operation-pitfalls.md §1.1 公式 Agent Teams 上限遵守 ✅）
+  - Sub-agent 1: timer.js 状態変更経路調査（Explore Agent、~550 行報告）
+  - Sub-agent 2: renderer.js reset / initialize 経路調査（Explore Agent、~600 行報告）
+  - Sub-agent 3: main.js / preload.js IPC / cache 経路調査（Explore Agent、~450 行報告）
+- **同時起動**: 1 メッセージ内 3 並列ツールコールで同時起動
+- **Plan Mode 使用**: ✅（前回 CC セッション末尾で stop し構築士の方針承認を待った後、本セッションで Phase 3 spec に従い機械的実装）
+- **Phase 3 実装フェーズ並列 sub-agent: 0 体**（構築士確定方針の機械的反映、Plan Mode 不要）
+- **TodoWrite 進捗管理**: 使用（11 タスク → 11 完了）
+
+---
+
+## §12 構築士への質問・懸念事項
+
+### 1. initialize L7591 → L7603 の行ズレ
+
+NEXT_CC_PROMPT Phase 3 spec で `L7591` と記載されているが、実際の行は **L7603**（initialize 関数本体内の `if (!restoredFromTimerState) timerReset();`）。本 CC_REPORT および v248 T5 では実行行 **L7603** を verified。spec 記載との差分は cosmetic（行数のみ）、修正対象経路は同一。
+
+### 2. 副次修正の妥当性確認
+
+Fix 1/2 で `reset()` シグネチャ拡張 + 4 経路の呼出形式変更により、既存 5 テスト（v218 T6 / v222 T2 / v223 T2 / v246 T4・T6 / v247 T2・T5）の brittle regex が引っかかった。すべて「rc10 のシグネチャ変更（`reset()` → `reset(opts = {})`）」「呼出形式変更（`timerReset()` → `timerReset({ force: false })`）」に追従する regex 拡張のみで対応、テスト意図は変更せず。
+
+**懸念**: rc5〜rc9 と同様に「spec の意図（rc10 機構を破壊せず動作させる）の範囲内」と判断したが、構築士の判断と合致するか確認したい。
+
+### 3. v248 T10 の解釈
+
+NEXT_CC_PROMPT Fix 5 spec で「timer.js 内に `window.api?.log?.write?` 呼出が**含まれていない**こと」と記載されているが、timer.js の `_emitRafFire`（rc6-meas3 で追加された `perf:raf:fire` ラベル）には既に `window.api` 呼出が存在する。本 CC_REPORT では「**reset() 関数本体内**に限定して `window.api` を含めない」と解釈し v248 T10 を実装（rc6-meas3 既存機構を破壊しない）。spec の意図は「rc10 で新たに reset() 内に追加しない」と理解、構築士判断確認したい。
+
+### 4. 多層防御の確実性評価
+
+- 第 1 層（rc8/rc9 `isPreStartActive()` チェック）と第 2 層（rc10 `force: false` ガード）は両方とも timer.js 内の `isPreStart` 内部フラグを参照するため、**同一の race window で同一のフラグ値を見る**。理論上は race window 内のフラグ変化があれば両方とも誤判定する可能性があるが、関数呼出間隔（μs オーダー）で発生する race は実際には極めて稀
+- 真因経路 F（initialize L7603）は rc8/rc9 ガードがなかったため、rc10 で初めてガード対象に加わる → 単層でも効果ありの可能性が高い
+
+### 5. 次フェーズ予告（spec §「次フェーズ予告」転記）
+
+- 期待値達成 → **rc11 で計測機構撤去 + バージョン文字列 rc10 → v2.2.1 + main マージ + tag v2.2.1 + GitHub Release 公開**
+- 期待値未達成 → 構造的設計の見直し（案 D 案 E 採用検討）、もしくは v2.1.19 維持で v2.3.0 以降に延期
+
+---
+
+## §13 オーナー向け確認手順（試験項目別、最重要）
+
+`dist/pokertimerplus-setup-2.1.20-rc10.exe` を前原さん PC に上書きインストール → 起動後 30〜60 秒待って下記を確認:
 
 | # | 操作 | 期待結果 |
 |---|---|---|
-| 1 | PRE_START 設定 → スライドショー発動 → 「タイマー画面にもどす」 | **PRE_START カウントダウンが滑らかに表示**（症状 A 根治、el.time に 60fps 書込）|
-| 2 | BREAK 進入 → スライドショー自動起動 | **30 秒経過後にスライドショー起動**（症状 B 根治、status 変化で userOverride 自動リセット）|
-| 3 | 「タイマー画面にもどす」→ 次の status 遷移 → スライドショー自動復帰 | userOverride='auto' リセット動作確認 |
-| 4 | v2.1.11 で OK だった項目（音と表示同時 / BREAK 滑らか / アプリ重さ消失）| 引き続き OK（v2.1.11 機構完全保持）|
-| 5 | 単画面モード | 完全に従来挙動（hall 経路 touch なし）|
-| 6 | HDMI 抜き差し | 致命バグ保護 5 件すべて維持 |
-| 7 | 既存機能（トーナメント切替 / スライドショー / ボタン表示 / 音）| すべて従来通り |
+| 1 | `dist/pokertimerplus-setup-2.1.20-rc10.exe` を実機 PC で上書きインストール → 起動 | バージョン表示 `2.1.20-rc10`、画面右下に「計測ビルド」黄色バッジ |
+| 2 | **【最重要】PRE_START カウントダウン中に HDMI ケーブル抜く → 30 秒 → 挿し直す**（rc3〜rc9 で操作不可になった同じシナリオ）| hall 復帰後、**手元 PC で Space キーを押すと一時停止が正常に効く** + **トーナメントが消えない** + **PRE_START カウントダウンが継続している** |
+| 3 | もう一度 Space キーを押す | 一時停止解除（カウントダウン再開）|
+| 4 | **【重要】通常のリセットボタン**（PRE_START 中・通常進行中の両方で）| リセットが正常動作（rc10 で構造変更による副作用がないことの確認）|
+| 5 | rc3〜rc9 試験項目（スライドショー始動 / 2 倍表示なし / 軽量化 / 症状 1/2 修正）| すべて維持 |
+| 6 | 各操作後 Ctrl+Shift+L でログ採取 + ログフォルダ全体（rolling-current / priority-events / hdmi-snapshot-*）を Claude に送付 | rc10 新規ラベル `timer:reset:skip-during-prestart` の発火経路特定（**どの `ctx` 値が発火したか**で真因経路を完全特定可能） + `state:transition` PRE_START → IDLE が HDMI 挿し直し時に**発火していない**こと |
 
-特に **試験 1 / 2 / 3** が今回の根治確認の本丸。
+### 確認の優先順位
 
----
+- **最重要**: HDMI 抜き差し後の Space キー一時停止 + トーナメント維持 + PRE_START 継続
+- **重要**: リセットボタンの正常動作（構造変更による副作用なし確認）
+- **重要**: ログ内 rc10 新規ラベル発火 + PRE_START→IDLE 遷移がないこと
+- 通常: rc9 までの全機能維持
 
-## §9 致命バグ保護 5 件 cross-check（v224 T7 で静的検証済）
+### Known Issues（rc10 範囲外、v2.2.1 リリース後に対処予定）
 
-| 保護 | 検証 |
-|---|---|
-| C.2.7-A `resetBlindProgressOnly` | renderer.js 関数定義維持、subscribe / renderHallPreStartTick への修正は影響範囲外 |
-| C.2.7-D `timerState` destructure 除外 | main.js 完全無変更 |
-| C.1-A2 `ensureEditorEditableState` | renderer.js 編集経路 touch なし |
-| C.1.7 AudioContext resume | audio.js 完全無変更 |
-| C.1.8 runtime 永続化 | main.js 完全無変更、`schedulePersistRuntime` 8 箇所維持 |
-
----
-
-## §10 リスク評価 + Known Limitations
-
-### リスク評価
-
-| リスク | 評価 | 対策 |
-|---|---|---|
-| `el.time` を renderTime と renderHallPreStartTick で共有 | 低 | hall PRE_START 中は subscribe 発火条件を満たさず renderTime 不発、衝突せず |
-| status 変化での userOverride 自動リセットによる UX 影響 | 低 | 「BREAK 中もタイマーのまま見続けたい」場合は再度ボタン押下で対応、許容（UX 設計判断）|
-| typo 修正による隠れた依存先への影響 | 極めて低 | `el.clockTime` 参照は `renderHallPreStartTick` 内 1 箇所のみ（grep 確認済）、他に依存先なし |
-| 単画面モードへの影響 | 極めて低 | hall 専用関数の修正のみ、operator-solo / operator では実行されない |
-
-### Known Limitations
-
-- B3 ブレイク終了 pauseAfterBreak 反映漏れ → v2.1.13 候補
-- 計測機構（v2.1.10 で追加した `hall:dualSync:*` ログ）は本リリースでも保持、試験で問題なければ削除判断
-- 「BREAK 中もタイマーのまま見続けたい」場合は再度「タイマー画面にもどす」ボタン押下で対応（status 変化での自動リセットを許容、UX 設計判断）
+- 案 D（timer.js state ↔ isPreStart 乖離防御）は本フェーズ範囲外（HDMI 問題と独立した潜在欠陥、別フェーズで対処）
+- 案 E（main.js 観測強化）は本フェーズ範囲外（案 A 単独で根治見込み）
+- Op 8 で 1952ms long-task（rc1 試験時、再現性低）
+- `state:transition` ログが operator + hall の両方で記録される二重出力（無害）
+- subscribe 残り 23 Hz（rc1 目標 5 Hz 未達）
 
 ---
 
-## §11 並列 sub-agent / Task 数報告（cc-operation-pitfalls §4.2 準拠）
+## §14 git 状態
 
-- **0 体**（直接実行）
-- 公式 Agent Teams 推奨上限 3 体に対し未起動、§1.1 違反なし
-- 事前調査で renderer.js / index.html / 全テストファイルを Grep + Read tool 直列で確認、context 統合不要
+- **作業ブランチ**: `feature/v2.1.20-rc10-structural-prestart-protection`（rc9 commit `63f8d5c` から分岐）
+- **rc10 commit**: ✅ `8995a7b v2.1.20-rc10: timer.js reset に force フラグ追加で PRE_START を構造的保護（HDMI 抜き差し問題 真因根治 第 4 弾）`
+- **commit 規模**: 66 files changed, 984 insertions(+), 484 deletions(-)
+- **main マージ**: ❌ 未実施（spec 禁止条項に準拠）
+- **tag 作成**: ❌ 未実施
+- **GitHub Release**: ❌ 未実施
+- **git push origin**: ❌ 未実施
+
+### 次フェーズで構築士が指示書を出すまで待機
+
+- 期待値達成: rc11 計測撤去 → v2.2.1 本番リリース（main / tag / Release / push 解禁）
+- 期待値未達成: ログ ctx 値で発火経路を特定 → 案 D / E / 別経路調査
 
 ---
 
-## §12 オーナー向け確認
+## §15 オーナー向け確認（簡潔版、3〜5 項目）
 
-1. **会場モニターの PRE_START カウントダウンは滑らかに表示されますか？**: 試験 1（PRE_START → スライドショー → 「タイマー画面にもどす」後）。「Level 1 のまま固定」が消え、カウントダウンが進めば症状 A 根治確定。
-2. **BREAK 中のスライドショーは起動しますか？**: 試験 2（BREAK 進入 30 秒後）。スライドショーが自動的に表示されれば症状 B 根治確定。
-3. **「タイマー画面にもどす」後、次のフェーズでスライドショー自動復帰しますか？**: 試験 3。userOverride リセット動作確認。
-4. **v2.1.11 で OK だった項目は引き続き動きますか？**: 試験 4（音と表示同時 / BREAK 滑らか / アプリ重さ消失）。
-5. **既存機能は壊れていない？**: 試験 5-7、トーナメント切替・スライドショー・ボタン表示・音などすべて従来通り。
-6. **v2.1.11 → v2.1.12 自動更新が降ってきますか？**: <https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.1.12> にアセットが揃っているので、v2.1.11 端末を起動すると自動検出されます。
-7. **問題が出たら**: 会場モニター画面で `Ctrl + Shift + L` でログ採取して構築士に送付してください（v2.1.10 計測機構同梱中）。
-
-**v2.1.12 配布完了**。前原さんの実機試験で症状 A / B が解消できれば 2 件の退行は構造的根治。
+1. **CC 動作報告**: 並列 sub-agent 3 体で PRE_START を消す全経路を網羅特定 → 構築士確定の案 A（timer.js reset に force フラグ追加で構造的ガード）を実装完了。新規テスト 10 件 + 副次修正 5 テスト調整、合計 1106 PASS / 0 FAIL
+2. **真因対処**: 5 経路（applyTimerStateToTimer 4 経路 + initialize L7603）に `force: false` を適用、rc8/rc9 既存ガードと併せた多層防御
+3. **rc10 実機テストの最重要確認**: PRE_START 中の HDMI 抜き差し → 復帰後 Space キーが効く + トーナメント維持 + PRE_START 継続
+4. **ログで真因経路特定可能**: 新ラベル `timer:reset:skip-during-prestart` の `ctx` 値（5 種別）で発火経路を完全識別。期待値達成なら rc11 で計測撤去 + v2.2.1 本番リリースへ
+5. **配布判断**: 配布なし。前原さん PC のみで上書きインストールテスト

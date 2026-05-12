@@ -1631,7 +1631,10 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
         try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'invalid-ts', role: window.appRole }); } catch (_) {}
         return;
       }
-      timerReset();
+      // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
+      if (!timerReset({ force: false })) {
+        try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'applyTimerStateToTimer:invalid-ts', role: window.appRole }); } catch (_) {}
+      }
     }
     else {
       // v2.1.20-rc2: PAUSED/IDLE/PRE_START 遷移時に hallTickState を明示リセット
@@ -1661,7 +1664,10 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
         try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'idle', status: ts.status, role: window.appRole }); } catch (_) {}
         return;   // PRE_START 状態を維持、reset しない
       }
-      timerReset();
+      // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
+      if (!timerReset({ force: false })) {
+        try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'applyTimerStateToTimer:idle', role: window.appRole }); } catch (_) {}
+      }
     }
     else {
       // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
@@ -1691,7 +1697,10 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
         el.clock?.classList.add('clock--timer-finished');
         return;
       }
-      timerReset();
+      // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
+      if (!timerReset({ force: false })) {
+        try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'applyTimerStateToTimer:finished', role: window.appRole }); } catch (_) {}
+      }
     }
     else {
       // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
@@ -1722,7 +1731,10 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
         try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'no-levels', role: window.appRole }); } catch (_) {}
         return;
       }
-      timerReset();
+      // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
+      if (!timerReset({ force: false })) {
+        try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'applyTimerStateToTimer:no-levels', role: window.appRole }); } catch (_) {}
+      }
     }
     else {
       // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
@@ -7588,7 +7600,13 @@ async function initialize() {
   } catch (err) {
     console.warn('起動時 timerState 復元失敗:', err);
   }
-  if (!restoredFromTimerState) timerReset();
+  if (!restoredFromTimerState) {
+    // v2.1.20-rc10: 多層防御 — HDMI 挿し直し直後の initialize 経路で preStartState 復元が
+    //   dual-sync で先着している場合、timer.js の isPreStart=true 状態をここで消さない（rc10 真因対処）
+    if (!timerReset({ force: false })) {
+      try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'initialize:restoredFromTimerState-false', role: window.appRole }); } catch (_) {}
+    }
+  }
   // STEP 6.21.1: 5秒ごとの定期保存を開始（強制終了時の経過秒巻き戻し対策）
   startPeriodicTimerStatePersist();
   // STEP 6.21.2: リスト UI を 1秒ごとに再描画（並行進行の経過時間を動的表示）

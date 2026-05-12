@@ -117,7 +117,14 @@ export function resume() {
 }
 
 // リセット（IDLE状態でレベル0に戻す）
-export function reset() {
+// v2.1.20-rc10: opts.force === false かつ PRE_START 中なら no-op で false 返却（構造的 PRE_START 保護）
+// 後方互換: opts 省略時は force=true デフォルト、既存呼出は無変更で動作
+// 返り値: true = reset 実行 / false = PRE_START 中ガードで no-op
+export function reset(opts = {}) {
+  const { force = true } = opts;
+  if (!force && isPreStart) {
+    return false;
+  }
   stopLoop();
   pausedRemainingMs = 0;
   targetTime = 0;
@@ -138,6 +145,7 @@ export function reset() {
   if (wasPreStart) {
     try { handlers.onPreStartCancel(); } catch (_) {}
   }
+  return true;
 }
 
 // IDLE状態からの初回スタート（レベル0から即時開始）

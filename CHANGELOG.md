@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc10] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc10 試験ビルド（前原さん実機専用、配布なし）。rc4〜rc9 で 5 連続失敗中の HDMI 抜き差し問題に対し、**構造的根本対策**を実施。並列 sub-agent 3 体で「PRE_START を消す全経路」を網羅特定 → timer.js `reset()` 関数本体に `force` フラグ引数を追加し、意図せぬ reset 経路 5 箇所を一括ガード。
+
+### Fixed
+- **timer.js `reset()` に `force` フラグ引数追加**（デフォルト `true`、後方互換完全）: `force: false` 指定 + `isPreStart === true` の場合は no-op で `false` 返却、PRE_START 状態を保護
+- **意図せぬ reset 経路 5 箇所に `{ force: false }` を適用**: applyTimerStateToTimer 4 経路（invalid-ts / idle / finished / no-levels）+ initialize 復元失敗 fallback（L7603）
+- **多層防御**: rc8/rc9 既存ガード（`isPreStartActive()` チェック）は保持、ガード抜けが起きても timer.js 内 `force` 引数で確実に塞ぐ
+- 新規確証ラベル `timer:reset:skip-during-prestart`（5 ctx 値: 'applyTimerStateToTimer:invalid-ts' / ':idle' / ':finished' / ':no-levels' / 'initialize:restoredFromTimerState-false'）
+
+### Maintained
+- v2.1.20-rc9 (applyTimerStateToTimer 4 経路 PRE_START ガード) 完全保持、撤去せず多層防御として維持
+- v2.1.20-rc8 (idle 経路ガード) 完全保持
+- v2.1.20-rc7 / rc6-meas3 / rc5 / rc4 / rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- 意図的リセット経路 6 箇所（handleReset / resetBlindProgressOnly / handleTournamentListReset / 新規 / 複製 / applyOperatorPreStartState）は `force: true` デフォルトで従来動作維持
+
+### Notes
+- 案 D（timer.js state ↔ isPreStart 乖離防御）は本フェーズ範囲外（HDMI 問題と独立した潜在欠陥、別フェーズで対処）
+- 案 E（main.js 観測強化）は本フェーズ範囲外（案 A 単独で根治見込み）
+- timer.js `reset()` 関数本体は `window.api?.log?.write?` を呼ばない設計を維持（依存ゼロ、テスト性維持）。観測ラベルは呼出側 renderer.js から発火（rc6-meas3 で追加された `perf:raf:fire` は別関数 `_emitRafFire` 内で対象外）
+
+---
+
 ## [2.1.20-rc9] - 2026-05-12
 
 PokerTimerPLUS+ v2.1.20-rc9 試験ビルド（前原さん実機専用、配布なし）。rc8 試験で `state:transition` IDLE→PRE_START 復元成功確認 + 1.6 秒後に別経路 reset で PRE_START→IDLE に戻る race 発覚 → applyTimerStateToTimer の残り 3 経路にも同じスキップガードを追加して reset 経路を完全網羅。HDMI 抜き差し問題 真因根治 第 3 弾・網羅版。

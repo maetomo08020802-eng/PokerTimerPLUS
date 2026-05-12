@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc9 静的解析テスト — applyTimerStateToTimer の残り 3 経路にも PRE_START 中スキップガード追加
+ * v2.1.20-rc10 静的解析テスト — applyTimerStateToTimer の残り 3 経路にも PRE_START 中スキップガード追加
  *
  *   Fix 1-1: invalid-ts 経路 !isHallApply 内に isPreStartActive() ガード + trigger:'invalid-ts'
  *   Fix 1-2: idle 経路（rc8 既存）の data に trigger:'idle' フィールド追加
@@ -103,10 +103,10 @@ function extractHallElseBlockAfter(condStr, lookAhead = 600) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc9'
+// T1: package.json.version === '2.1.20-rc10'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc9', () => {
-  assert.equal(PKG.version, '2.1.20-rc9', `期待 2.1.20-rc9, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.1.20-rc10', () => {
+  assert.equal(PKG.version, '2.1.20-rc10', `期待 2.1.20-rc10, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -125,7 +125,7 @@ test('T2: invalid-ts 経路 !isHallApply 内に isPreStartActive() ガード + t
     'Fix 1-1 未完了: trigger:"invalid-ts" の skip-reset ラベル発火経路がない');
   // ガード後の return + ガード外の timerReset()
   assert.match(block,
-    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,300}?return[\s\S]{0,80}?\}[\s\S]{0,200}?timerReset\s*\(\s*\)/,
+    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,300}?return[\s\S]{0,80}?\}[\s\S]{0,500}?timerReset\s*\(\s*(?:\{\s*force\s*:\s*false\s*\}\s*)?\)/,
     'Fix 1-1 未完了: ガード ブロック内 return → ガード外 timerReset の構造がない');
 });
 
@@ -177,7 +177,7 @@ test('T5: levelCount===0 経路 !isHallApply 内に isPreStartActive() ガード
     'Fix 1-4 未完了: trigger:"no-levels" の skip-reset ラベル発火経路がない');
   // ガード後の return + ガード外の timerReset()
   assert.match(block,
-    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,300}?return[\s\S]{0,80}?\}[\s\S]{0,200}?timerReset\s*\(\s*\)/,
+    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,300}?return[\s\S]{0,80}?\}[\s\S]{0,500}?timerReset\s*\(\s*(?:\{\s*force\s*:\s*false\s*\}\s*)?\)/,
     'Fix 1-4 未完了: ガード ブロック内 return → ガード外 timerReset の構造がない');
 });
 
