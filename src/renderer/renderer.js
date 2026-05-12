@@ -1625,7 +1625,14 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   }
   if (!ts || typeof ts !== 'object') {
     el.clock?.classList.remove('clock--timer-finished');
-    if (!isHallApply) timerReset();
+    if (!isHallApply) {
+      // v2.1.20-rc9: PRE_START 中の operator では invalid-ts 経由の reset も skip（rc8 idle 経路と同パターン）
+      if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'invalid-ts', role: window.appRole }); } catch (_) {}
+        return;
+      }
+      timerReset();
+    }
     else {
       // v2.1.20-rc2: PAUSED/IDLE/PRE_START 遷移時に hallTickState を明示リセット
       //   HDMI 抜き差し時に前トーナメントの seed が残存する race を防ぐ（rc1 hall タイマー止まらず根治）
@@ -1650,7 +1657,8 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
       //   PRE_START は dual-sync の preStartState 経路で別途管理されているため、timerState idle で
       //   reset しても整合性は保たれる。
       if (typeof isPreStartActive === 'function' && isPreStartActive()) {
-        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { status: ts.status, role: window.appRole }); } catch (_) {}
+        // v2.1.20-rc9: trigger フィールド追加（rc8 既存ガード、経路識別用）
+        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'idle', status: ts.status, role: window.appRole }); } catch (_) {}
         return;   // PRE_START 状態を維持、reset しない
       }
       timerReset();
@@ -1676,7 +1684,15 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   //   ユーザーが「タイマーリセット」を押すと idle に戻り、新規エントリーで再開可能。
   //   メイン画面に「トーナメント終了」オーバーレイを表示（緑系、playersRemaining=0 とは別経路）。
   if (ts.status === 'finished') {
-    if (!isHallApply) timerReset();
+    if (!isHallApply) {
+      // v2.1.20-rc9: PRE_START 中の operator では finished 経由の reset も skip（rc8 idle 経路と同パターン）
+      if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'finished', role: window.appRole }); } catch (_) {}
+        el.clock?.classList.add('clock--timer-finished');
+        return;
+      }
+      timerReset();
+    }
     else {
       // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
       stopHallTickFrame();
@@ -1700,7 +1716,14 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
     : ts;
   const levelCount = getLevelCount();
   if (levelCount === 0) {
-    if (!isHallApply) timerReset();
+    if (!isHallApply) {
+      // v2.1.20-rc9: PRE_START 中の operator では no-levels 経由の reset も skip（rc8 idle 経路と同パターン）
+      if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'no-levels', role: window.appRole }); } catch (_) {}
+        return;
+      }
+      timerReset();
+    }
     else {
       // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
       stopHallTickFrame();

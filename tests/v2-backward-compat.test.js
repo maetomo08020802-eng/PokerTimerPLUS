@@ -36,7 +36,7 @@ function test(name, fn) {
 test('T1: operator-solo モードは initialize() を経由（v1.3.0 と同じ起動パス）', () => {
   // __appRole === 'operator-solo' or else 分岐が initialize() を呼ぶ
   // STEP 5 で ensureAudioReady() も追加されたが、initialize() が主役
-  // v2.1.20-rc8: else 内に subscribeStateSync 用 nested try/catch が追加されたため、ブレースカウントで厳密抽出。
+  // v2.1.20-rc9: else 内に subscribeStateSync 用 nested try/catch が追加されたため、ブレースカウントで厳密抽出。
   const opIdx = RENDERER.indexOf("__appRole === 'operator'");
   assert.ok(opIdx >= 0, '__appRole === operator 分岐が見つからない');
   const afterOp = RENDERER.slice(opIdx);

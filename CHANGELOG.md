@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc9] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc9 試験ビルド（前原さん実機専用、配布なし）。rc8 試験で `state:transition` IDLE→PRE_START 復元成功確認 + 1.6 秒後に別経路 reset で PRE_START→IDLE に戻る race 発覚 → applyTimerStateToTimer の残り 3 経路にも同じスキップガードを追加して reset 経路を完全網羅。HDMI 抜き差し問題 真因根治 第 3 弾・網羅版。
+
+### Fixed
+- **applyTimerStateToTimer の残り 3 経路にも PRE_START 中スキップガード追加**: rc8 で idle 経路のみガードしていたが、rc8 試験で `state:transition` PRE_START→IDLE が `skip-reset-during-prestart` ラベル発火なしで起きていることを観測 → 残り 3 経路（invalid-ts / finished / levelCount===0）が真因と推定。3 経路すべてに同じ `isPreStartActive()` ガードを追加して PRE_START 復元直後の reset 経路を完全網羅
+- **`trigger` フィールド追加でどの経路が発火したかを実機ログで識別可能化**（'idle' / 'invalid-ts' / 'finished' / 'no-levels' の 4 種別）
+
+### Maintained
+- v2.1.20-rc8 (applyTimerStateToTimer idle 経路ガード) 完全保持、trigger フィールド追加のみ
+- v2.1.20-rc7 (preStartState cache merge + priority log 初期化漏れ修正) 完全保持
+- v2.1.20-rc6-meas3 観測機構 完全保持
+- v2.1.20-rc5 / rc4 / rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- meas1 / meas2 計測機構 + 症状確証 4 ラベル + rc2 / rc4 / rc5 / meas3 / rc7 / rc8 ラベル 完全保持
+
+### Notes
+- 修正は `applyTimerStateToTimer` の 4 経路すべて operator 側のみ、hall 側 else ブロック（rc2 hallTickState reset マーカー含む）は完全保持
+- `handleTournamentListReset` 経由のリセットボタンは別経路で動作（`timerReset()` 直接呼出、`applyTimerStateToTimer` を介さない）= 影響なし
+- 通常のトーナメント終了（finished）は PRE_START 中に発生し得ない（設計上）
+- 不正値（invalid-ts）/ 構造未取得（levelCount===0）は一時的状態のため reset スキップしても preStartState 経路で正常管理
+
+---
+
 ## [2.1.20-rc8] - 2026-05-12
 
 PokerTimerPLUS+ v2.1.20-rc8 試験ビルド（前原さん実機専用、配布なし）。rc7 試験で発覚した「PRE_START 復元直後に勝手にキャンセルされる」新真因を根治。HDMI 抜き差し問題 真因根治 第 2 弾。

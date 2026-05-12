@@ -160,7 +160,7 @@ test('T7 (Fix 3): 条件付き発火が appRole === "hall" ガードの内側で
 // T8: package.json version 2.1.14 + scripts.test に v226 登録
 // ============================================================
 test('T8: package.json version は 2.1.14 + scripts.test に v226 登録', () => {
-  assert.equal(PKG.version, '2.1.20-rc8',
+  assert.equal(PKG.version, '2.1.20-rc9',
     `package.json version が ${PKG.version}（期待 2.1.18）`);
   assert.match(PKG.scripts.test, /v226-structure-hall-sync-2-holes\.test\.js/,
     'scripts.test に v226-structure-hall-sync-2-holes.test.js が登録されていない');

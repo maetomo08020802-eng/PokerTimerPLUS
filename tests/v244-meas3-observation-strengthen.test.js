@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc8 静的解析テスト — 観測機構強化（HDMI 自動採取 + 高頻度集約 + buffer 拡張 + priority buffer）
+ * v2.1.20-rc9 静的解析テスト — 観測機構強化（HDMI 自動採取 + 高頻度集約 + buffer 拡張 + priority buffer）
  *
  *   Fix A: main.js buffer 容量定数の計測ビルド時拡張
  *   Fix B: main.js _flushLogsToFile(suffix) 新規追加
@@ -39,10 +39,10 @@ function test(name, fn) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc8'
+// T1: package.json.version === '2.1.20-rc9'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc8', () => {
-  assert.equal(PKG.version, '2.1.20-rc8', `期待 2.1.20-rc8, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.1.20-rc9', () => {
+  assert.equal(PKG.version, '2.1.20-rc9', `期待 2.1.20-rc9, 実際 ${PKG.version}`);
 });
 
 // ============================================================

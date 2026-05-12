@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc8 静的解析テスト — preStartState cache merge + priority log lazy init
+ * v2.1.20-rc9 静的解析テスト — preStartState cache merge + priority log lazy init
  *
  *   Fix 1: main.js dual:publish-pre-start-state ハンドラに cache merge ロジック追加
  *          （tick / pause / resume / adjust 経由 publish で totalMs 欠落を防止）
@@ -51,10 +51,10 @@ function extractPublishPreStartHandler() {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc8'
+// T1: package.json.version === '2.1.20-rc9'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc8', () => {
-  assert.equal(PKG.version, '2.1.20-rc8', `期待 2.1.20-rc8, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.1.20-rc9', () => {
+  assert.equal(PKG.version, '2.1.20-rc9', `期待 2.1.20-rc9, 実際 ${PKG.version}`);
 });
 
 // ============================================================

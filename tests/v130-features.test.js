@@ -68,7 +68,8 @@ test('T4: applyTimerStateToTimer が finished 時に timerReset + overlay 表示
   const start = RENDERER.indexOf('function applyTimerStateToTimer');
   assert.ok(start >= 0);
   // v2.1.20-rc2: Fix 1 で hall defensive reset が追加され関数本体が拡大 → slice window 拡大
-  const slice = stripComments(RENDERER.slice(start, start + 3500));
+  // v2.1.20-rc9: 4 経路すべてに isPreStartActive() ガード追加で更に拡大 → 5500 に再拡大
+  const slice = stripComments(RENDERER.slice(start, start + 5500));
   // status === 'finished' で早期処理
   assert.match(slice, /status\s*===\s*['"]finished['"]/, 'finished 判定がない');
   assert.match(slice, /clock--timer-finished/, 'overlay クラス追加がない');
@@ -140,7 +141,7 @@ test('T11: package.json version === 2.0.0', () => {
   // v2.0.0 STEP 7 (2026-05-01): version bump 1.3.0 → 2.0.0 に追従。
   // 本テストは「リリース版を表すバージョン文字列が期待値である」ことを担保するもの。
   // 今後の minor / patch リリース時はここを追従更新する（テスト skip / 無効化ではない）。
-  assert.equal(PKG.version, '2.1.20-rc8', `version が ${PKG.version}（期待 2.1.18）`);
+  assert.equal(PKG.version, '2.1.20-rc9', `version が ${PKG.version}（期待 2.1.18）`);
 });
 
 // ============================================================
