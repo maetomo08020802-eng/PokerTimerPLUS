@@ -157,6 +157,8 @@ function _isPriorityLabel(label) {
 }
 function _appendPriorityLog(entry) {
   try {
+    // v2.1.20-rc7: 初回 entry 追加時に init + setInterval 登録（idempotent、2 回目以降は path 返却のみ）
+    _initPriorityLogFile();
     _priorityLogBuffer.push(entry);
     if (_priorityLogBuffer.length > PRIORITY_LOG_BUFFER_MAX) _priorityLogBuffer.shift();
   } catch (_) {}
@@ -2847,13 +2849,44 @@ function registerIpcHandlers() {
       const isActive = !!payload.isActive;
       const sanitized = { isActive };
       if (isActive) {
-        if (Number.isFinite(payload.totalMs)     && payload.totalMs     >= 0) sanitized.totalMs     = Math.floor(payload.totalMs);
-        if (Number.isFinite(payload.remainingMs) && payload.remainingMs >= 0) sanitized.remainingMs = Math.floor(payload.remainingMs);
-        if (Number.isFinite(payload.startAtMs)   && payload.startAtMs   >= 0) sanitized.startAtMs   = Math.floor(payload.startAtMs);
+        // v2.1.20-rc7 真因根治: tick / pause / resume / adjust 経由の publish では totalMs / startAtMs が
+        //   含まれないため、cache から維持する（HDMI 抜き差し時の operator 復元で totalMs が必要）。
+        //   feedback_ipc_sanitization_field_drop.md パターン（v2.1.15→16→17）の再発を防止。
+        //   PRE_START 開始時（renderer.js:2401）は totalMs / startAtMs を必ず送るため、初回は新値で確定、
+        //   以後の tick / pause / resume / adjust は cache の値を維持し続ける。
+        const prev = _dualStateCache.preStartState || {};
+        let mergedFromCache = false;
+        if (Number.isFinite(payload.totalMs) && payload.totalMs >= 0) {
+          sanitized.totalMs = Math.floor(payload.totalMs);
+        } else if (Number.isFinite(prev.totalMs) && prev.totalMs >= 0) {
+          sanitized.totalMs = prev.totalMs;
+          mergedFromCache = true;
+        }
+        if (Number.isFinite(payload.remainingMs) && payload.remainingMs >= 0) {
+          sanitized.remainingMs = Math.floor(payload.remainingMs);
+        } else if (Number.isFinite(prev.remainingMs) && prev.remainingMs >= 0) {
+          sanitized.remainingMs = prev.remainingMs;
+          mergedFromCache = true;
+        }
+        if (Number.isFinite(payload.startAtMs) && payload.startAtMs >= 0) {
+          sanitized.startAtMs = Math.floor(payload.startAtMs);
+        } else if (Number.isFinite(prev.startAtMs) && prev.startAtMs >= 0) {
+          sanitized.startAtMs = prev.startAtMs;
+          mergedFromCache = true;
+        }
         // v2.1.17 ① 真の根治: isPaused フィールドを sanitization で転送（v2.1.15/v2.1.16 で追加された renderer 側機構が
         //   ここで落とされて hall に届かないため、PRE_START 一時停止が hall に反映されない真因。
         //   payload.isPaused が boolean 型のときのみ転送（型安全 + 既存 sanitization パターンと整合）。
-        if (typeof payload.isPaused === 'boolean') sanitized.isPaused = payload.isPaused;
+        if (typeof payload.isPaused === 'boolean') {
+          sanitized.isPaused = payload.isPaused;
+        } else if (typeof prev.isPaused === 'boolean') {
+          sanitized.isPaused = prev.isPaused;
+          mergedFromCache = true;
+        }
+        // v2.1.20-rc7 新規確証ラベル: cache merge が発火した = 受信 payload に欠落フィールドがあった証拠
+        if (mergedFromCache) {
+          try { rollingLog('preStart:cache:merge', { totalMs: sanitized.totalMs, remainingMs: sanitized.remainingMs, hasIsPaused: typeof sanitized.isPaused === 'boolean' }); } catch (_) {}
+        }
       }
       _publishDualState('preStartState', sanitized);
     } catch (err) {

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc7] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc7 試験ビルド（前原さん実機専用、配布なし）。rc6-meas3 観測強化で確定した HDMI 抜き差し問題の真因を構造的根治 + priority-events.log 初期化漏れ修正。
+
+### Fixed
+- **HDMI 抜き差し後の operator 復元失敗を根治**: rc6-meas3 ログ解析で真因確定 = main.js sanitization が tick / pause / resume / adjust 経由 publish 時の totalMs 欠落で `_dualStateCache.preStartState.totalMs` を失い、HDMI 挿し直し時の resync で operator の `restorePreStart` が早期 return していた問題を解消。`dual:publish-pre-start-state` ハンドラに field cache merge ロジックを追加し、欠落フィールドは前回 cache 値を維持
+- **priority-events.log が生成されない問題を修正**: rc6-meas3 Fix C の `_initPriorityLogFile()` が誰からも呼ばれていなかった構造的不備を解消。`_appendPriorityLog` 冒頭に lazy init 呼出追加
+- 新規確証ラベル `preStart:cache:merge`
+
+### Maintained
+- v2.1.20-rc6-meas3 観測機構（HDMI 自動採取 + 高頻度ラベル集約 + buffer 拡張 + 優先バッファ）完全保持
+- v2.1.20-rc5 (preStartState operator 配信経路) 完全保持
+- v2.1.20-rc4 (operator 側 PRE_START 復元 API) 完全保持
+- v2.1.20-rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- meas1 / meas2 計測機構 + 症状確証 4 ラベル + rc2 / rc4 / rc5 / meas3 ラベル 完全保持
+
+### Notes
+- timer.js `restorePreStart` 関数本体は touch なし（rc4 で実装、totalMs ガードは健全な防御として維持）
+- renderer.js `applyOperatorPreStartState` / `publishPreStartIfOperator` は touch なし（送信側の tick で totalMs を含めない設計も維持、main 側 merge で吸収）
+
+---
+
 ## [2.1.20-rc6-meas3] - 2026-05-12
 
 PokerTimerPLUS+ v2.1.20-rc6-meas3 観測強化版（前原さん実機専用、配布なし）。rc4/rc5 で実証された「修正が動作しているか観測すらできない」構造的問題への対処。HDMI 抜き差し問題の修正コードは触らず、観測機構そのものを強化。
