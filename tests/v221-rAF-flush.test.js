@@ -97,9 +97,20 @@ test('T3 (Fix 2): beforeunload listener 内で cancelAnimationFrame が呼ばれ
 // ============================================================
 test('T4 (Fix 1 cleanup): rAF callback 内で _flushTimer = null 代入が存在', () => {
   // requestAnimationFrame(() => { ... _flushTimer = null; ... _flushDiffBuffer(); ... }) パターン
-  const m = DUAL_SYNC.match(/requestAnimationFrame\s*\(\s*\(\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\)/);
-  assert.ok(m, 'requestAnimationFrame の arrow function callback が見つからない');
-  const body = m[1];
+  // v2.1.20-meas1: rAF callback 内に perf:raf:fire ログ用の nested object literal (`{ label: ... }`) が
+  //   追加され、非貪欲 regex が早期マッチする。balanced-brace 抽出に変更。
+  const startRe = /requestAnimationFrame\s*\(\s*\(\s*\)\s*=>\s*\{/;
+  const startMatch = DUAL_SYNC.match(startRe);
+  assert.ok(startMatch, 'requestAnimationFrame の arrow function callback 開始が見つからない');
+  const openIdx = startMatch.index + startMatch[0].length - 1;   // 開き `{` 位置
+  let depth = 1, i = openIdx + 1;
+  while (i < DUAL_SYNC.length && depth > 0) {
+    if (DUAL_SYNC[i] === '{') depth++;
+    else if (DUAL_SYNC[i] === '}') depth--;
+    i++;
+  }
+  assert.ok(depth === 0, 'rAF callback の balanced-brace 終端が見つからない');
+  const body = DUAL_SYNC.slice(openIdx + 1, i - 1);
   assert.match(body, /_flushTimer\s*=\s*null/,
     'rAF callback 内で _flushTimer = null の代入が見つからない（cleanup 経路維持）');
   assert.match(body, /_flushDiffBuffer\s*\(\s*\)/,
@@ -148,7 +159,7 @@ test('T7 (Fix 4 動作保証): handlePipShowTimer / handlePipShowSlideshow に a
 // T8: package.json version 2.1.12 + scripts.test に v221 登録
 // ============================================================
 test('T8: package.json version は 2.1.12 + scripts.test に v221 登録', () => {
-  assert.equal(PKG.version, '2.1.19',
+  assert.equal(PKG.version, '2.2.1',
     `package.json version が ${PKG.version}（期待 2.1.18）`);
   assert.match(PKG.scripts.test, /v221-rAF-flush\.test\.js/,
     'scripts.test に v221-rAF-flush.test.js が登録されていない');

@@ -7,6 +7,312 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v2.2.1 — 2026-05-12
+
+PokerTimerPLUS+ v2.2.1 を全国リリースします。v2.1.19（重さ根治版）に加え、HDMI ケーブル抜き差し時の安定性を大幅に向上させました。
+
+### 🛠 修正
+
+- **HDMI ケーブル抜き差し時のタイマー消失問題を根治**
+  会場モニターを途中で抜き差ししたとき、まれにタイマー（特に開始前カウントダウン）が消えてしまう問題を修正しました。HDMI を挿し直した後も、設定したトーナメントとカウントダウンがそのまま継続します。
+
+- **会場モニターの切り替えが安定**
+  USB-HDMI アダプタ使用時の多重検知や、PC スリープ復帰直後の HDMI 再接続でのモード切替が、より確実に動作するようになりました。
+
+- **手元 PC のタイマー操作（スペースキー一時停止、リセットなど）の信頼性向上**
+  HDMI 抜き差し直後でも、手元 PC からの操作（スペースキーでの一時停止、リセットボタンなど）が確実に効くようになりました。
+
+### 📦 v2.1.19 からの継承（変更なしで維持）
+
+- アプリ全体の動作軽量化（タイマー一覧の更新頻度を 90% 削減）
+- BREAK 終了演出、PRE_START 一時停止表示など、v2.1.18 までの全機能
+
+### 🔍 内部改善（一般運用には影響なし）
+
+- 万が一の不具合発生時に原因解析できるよう、軽量な動作ログを内部で記録する仕組みを追加（個人情報や店舗情報は記録されません）
+- 動作ログはアプリ内「ログフォルダを開く」ボタンから確認可能、トラブル時に開発者へ送付できます
+
+### ⚠️ アップグレード時の注意
+
+- 自動更新で適用される場合、インストール完了まで **30〜60 秒** かかります。アプリを閉じてからすぐ再起動せず、少し待ってから起動してください
+- 既存のトーナメント設定・ブラインド構造・各種設定はすべて引き継がれます
+
+### 📝 詳細（技術者向け）
+
+- HDMI 抜き差し時の競合状態を構造的に根治（timer.js の reset 関数に「PRE_START 保護フラグ」を追加、多層防御アーキテクチャ）
+- ログ保管容量を最適化（本番版は 5 分、開発者向け計測ビルドは 30 分）
+- 致命級競合の早期検出ラベル 3 種を低頻度監視ラベルとして配置
+
+配布: GitHub Releases から自動更新（または手動ダウンロード可）
+配布元: Yu Shitamachi（PLUS2 運営）
+
+---
+
+## [2.1.20-rc10.1] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc10.1 試験ビルド（前原さん実機専用、配布なし）。rc10-audit リリース前監査で検出された致命級 race 2 件 + 多層防御論理的死角の観測ラベル 3 個を追加（rc10-audit §4 §5 高優先 #1 / #2 / #10）。配信後の本番運用で race 発生頻度を事実ベース計測する基盤を確立。
+
+### Added (観測強化)
+- **`hdmi:display-removed:dual-sync-stale`**: display-removed 検出時、preStartState cache が 500ms 以上古い場合に警告ラベル発火。PRE_START 消失の早期発見用
+- **`hdmi:dialog-blocked:switchOperatorToSolo`**: switchOperatorToSolo の所要時間が 50ms 超の場合に警告ラベル発火。autoUpdater ダイアログ等による Win32 メッセージループ遮断の race 検出用
+- **`timer:reset:race-window-entry`**: rc8/rc9/rc10 ガード 5 経路の race window が 1ms 以上の場合に警告ラベル発火。多層防御 race の論理的死角を観測
+
+### Infrastructure
+- `_preStartStateCacheUpdatedAt` 変数追加（main.js）+ `_publishDualState` 内で preStartState cache 更新時刻記録
+- `_switchStartTimeMs` 計測（main.js switchOperatorToSolo 関数内）
+- `_raceEntryMs` / `_raceExitMs` 計測（renderer.js 5 経路、`performance.now()` ベース）
+- PRIORITY_LOG_LABELS Set に新規 3 ラベル追加（priority-events.log に記録、配信後監視で活用）
+
+### Maintained
+- v2.1.20-rc10 (timer.js reset force フラグ + 5 経路 + 多層防御) 完全保持
+- v2.1.20-rc9 (4 経路 ガード + trigger 4 種別) 完全保持
+- v2.1.20-rc8 / rc7 / rc6-meas3 / rc5 / rc4 / rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+
+### Notes
+- 致命級 race 2 件は実機影響度低（rc10-audit §7 評価）、本 rc10.1 では**観測のみ**追加。構造的対処は v2.2.2 以降で事実ベース計測後に判断
+- 試験範囲は標準セット（rc10-audit §5 試験 1〜6、所要 3〜4 時間）
+- 試験合格後、rc11 で計測機構撤去 → v2.2.1 として全国配信予定
+
+---
+
+## [2.1.20-rc10] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc10 試験ビルド（前原さん実機専用、配布なし）。rc4〜rc9 で 5 連続失敗中の HDMI 抜き差し問題に対し、**構造的根本対策**を実施。並列 sub-agent 3 体で「PRE_START を消す全経路」を網羅特定 → timer.js `reset()` 関数本体に `force` フラグ引数を追加し、意図せぬ reset 経路 5 箇所を一括ガード。
+
+### Fixed
+- **timer.js `reset()` に `force` フラグ引数追加**（デフォルト `true`、後方互換完全）: `force: false` 指定 + `isPreStart === true` の場合は no-op で `false` 返却、PRE_START 状態を保護
+- **意図せぬ reset 経路 5 箇所に `{ force: false }` を適用**: applyTimerStateToTimer 4 経路（invalid-ts / idle / finished / no-levels）+ initialize 復元失敗 fallback（L7603）
+- **多層防御**: rc8/rc9 既存ガード（`isPreStartActive()` チェック）は保持、ガード抜けが起きても timer.js 内 `force` 引数で確実に塞ぐ
+- 新規確証ラベル `timer:reset:skip-during-prestart`（5 ctx 値: 'applyTimerStateToTimer:invalid-ts' / ':idle' / ':finished' / ':no-levels' / 'initialize:restoredFromTimerState-false'）
+
+### Maintained
+- v2.1.20-rc9 (applyTimerStateToTimer 4 経路 PRE_START ガード) 完全保持、撤去せず多層防御として維持
+- v2.1.20-rc8 (idle 経路ガード) 完全保持
+- v2.1.20-rc7 / rc6-meas3 / rc5 / rc4 / rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- 意図的リセット経路 6 箇所（handleReset / resetBlindProgressOnly / handleTournamentListReset / 新規 / 複製 / applyOperatorPreStartState）は `force: true` デフォルトで従来動作維持
+
+### Notes
+- 案 D（timer.js state ↔ isPreStart 乖離防御）は本フェーズ範囲外（HDMI 問題と独立した潜在欠陥、別フェーズで対処）
+- 案 E（main.js 観測強化）は本フェーズ範囲外（案 A 単独で根治見込み）
+- timer.js `reset()` 関数本体は `window.api?.log?.write?` を呼ばない設計を維持（依存ゼロ、テスト性維持）。観測ラベルは呼出側 renderer.js から発火（rc6-meas3 で追加された `perf:raf:fire` は別関数 `_emitRafFire` 内で対象外）
+
+---
+
+## [2.1.20-rc9] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc9 試験ビルド（前原さん実機専用、配布なし）。rc8 試験で `state:transition` IDLE→PRE_START 復元成功確認 + 1.6 秒後に別経路 reset で PRE_START→IDLE に戻る race 発覚 → applyTimerStateToTimer の残り 3 経路にも同じスキップガードを追加して reset 経路を完全網羅。HDMI 抜き差し問題 真因根治 第 3 弾・網羅版。
+
+### Fixed
+- **applyTimerStateToTimer の残り 3 経路にも PRE_START 中スキップガード追加**: rc8 で idle 経路のみガードしていたが、rc8 試験で `state:transition` PRE_START→IDLE が `skip-reset-during-prestart` ラベル発火なしで起きていることを観測 → 残り 3 経路（invalid-ts / finished / levelCount===0）が真因と推定。3 経路すべてに同じ `isPreStartActive()` ガードを追加して PRE_START 復元直後の reset 経路を完全網羅
+- **`trigger` フィールド追加でどの経路が発火したかを実機ログで識別可能化**（'idle' / 'invalid-ts' / 'finished' / 'no-levels' の 4 種別）
+
+### Maintained
+- v2.1.20-rc8 (applyTimerStateToTimer idle 経路ガード) 完全保持、trigger フィールド追加のみ
+- v2.1.20-rc7 (preStartState cache merge + priority log 初期化漏れ修正) 完全保持
+- v2.1.20-rc6-meas3 観測機構 完全保持
+- v2.1.20-rc5 / rc4 / rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- meas1 / meas2 計測機構 + 症状確証 4 ラベル + rc2 / rc4 / rc5 / meas3 / rc7 / rc8 ラベル 完全保持
+
+### Notes
+- 修正は `applyTimerStateToTimer` の 4 経路すべて operator 側のみ、hall 側 else ブロック（rc2 hallTickState reset マーカー含む）は完全保持
+- `handleTournamentListReset` 経由のリセットボタンは別経路で動作（`timerReset()` 直接呼出、`applyTimerStateToTimer` を介さない）= 影響なし
+- 通常のトーナメント終了（finished）は PRE_START 中に発生し得ない（設計上）
+- 不正値（invalid-ts）/ 構造未取得（levelCount===0）は一時的状態のため reset スキップしても preStartState 経路で正常管理
+
+---
+
+## [2.1.20-rc8] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc8 試験ビルド（前原さん実機専用、配布なし）。rc7 試験で発覚した「PRE_START 復元直後に勝手にキャンセルされる」新真因を根治。HDMI 抜き差し問題 真因根治 第 2 弾。
+
+### Fixed
+- **HDMI 抜き差し後の自動 PRE_START キャンセル race を根治**: rc6-meas3 観測でログから真因確定 = operator 起動時の `tournaments:getActive` → `applyTimerStateToTimer({status: 'idle'})` → `timerReset()` → `reset()` 内 `wasPreStart=true` で `handlers.onPreStartCancel()` 発火 → `publishPreStartIfOperator({isActive:false})` で main cache を破壊し PRE_START が全画面で消える race を解消。`applyTimerStateToTimer` の operator 経路で `isPreStartActive()` ガードを追加、PRE_START 中なら reset をスキップ
+- 新規確証ラベル `operator:applyTimerStateToTimer:skip-reset-during-prestart`
+
+### Maintained
+- v2.1.20-rc7 (preStartState cache merge + priority log 初期化漏れ修正) 完全保持
+- v2.1.20-rc6-meas3 観測機構（HDMI 自動採取 + 高頻度ラベル集約 + buffer 拡張 + 優先バッファ）完全保持
+- v2.1.20-rc5 (preStartState operator 配信経路) 完全保持
+- v2.1.20-rc4 (operator 側 PRE_START 復元 API) 完全保持
+- v2.1.20-rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- meas1 / meas2 計測機構 + 症状確証 4 ラベル + rc2 / rc4 / rc5 / meas3 / rc7 ラベル 完全保持
+
+### Notes
+- 修正は `applyTimerStateToTimer` の `'idle'` 経路 operator 側のみ、他 status 経路（`'finished'` / `invalid-ts` / `levelCount === 0`）の `timerReset()` 呼出は **touch なし**（PRE_START 中の意図的リセットは別経路で動作する設計と整合）
+- hall 側の処理は完全保持（v2.1.20-rc2 hallTickState reset 3 マーカー含む）
+- 通常のリセットボタン（handleReset 経由 → `cancelPreStart()` 直接呼出）は **touch なし**で従来動作
+
+---
+
+## [2.1.20-rc7] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc7 試験ビルド（前原さん実機専用、配布なし）。rc6-meas3 観測強化で確定した HDMI 抜き差し問題の真因を構造的根治 + priority-events.log 初期化漏れ修正。
+
+### Fixed
+- **HDMI 抜き差し後の operator 復元失敗を根治**: rc6-meas3 ログ解析で真因確定 = main.js sanitization が tick / pause / resume / adjust 経由 publish 時の totalMs 欠落で `_dualStateCache.preStartState.totalMs` を失い、HDMI 挿し直し時の resync で operator の `restorePreStart` が早期 return していた問題を解消。`dual:publish-pre-start-state` ハンドラに field cache merge ロジックを追加し、欠落フィールドは前回 cache 値を維持
+- **priority-events.log が生成されない問題を修正**: rc6-meas3 Fix C の `_initPriorityLogFile()` が誰からも呼ばれていなかった構造的不備を解消。`_appendPriorityLog` 冒頭に lazy init 呼出追加
+- 新規確証ラベル `preStart:cache:merge`
+
+### Maintained
+- v2.1.20-rc6-meas3 観測機構（HDMI 自動採取 + 高頻度ラベル集約 + buffer 拡張 + 優先バッファ）完全保持
+- v2.1.20-rc5 (preStartState operator 配信経路) 完全保持
+- v2.1.20-rc4 (operator 側 PRE_START 復元 API) 完全保持
+- v2.1.20-rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- meas1 / meas2 計測機構 + 症状確証 4 ラベル + rc2 / rc4 / rc5 / meas3 ラベル 完全保持
+
+### Notes
+- timer.js `restorePreStart` 関数本体は touch なし（rc4 で実装、totalMs ガードは健全な防御として維持）
+- renderer.js `applyOperatorPreStartState` / `publishPreStartIfOperator` は touch なし（送信側の tick で totalMs を含めない設計も維持、main 側 merge で吸収）
+
+---
+
+## [2.1.20-rc6-meas3] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc6-meas3 観測強化版（前原さん実機専用、配布なし）。rc4/rc5 で実証された「修正が動作しているか観測すらできない」構造的問題への対処。HDMI 抜き差し問題の修正コードは触らず、観測機構そのものを強化。
+
+### Added (観測強化)
+- **HDMI 検出時の自動採取**: `display-removed` / `display-added` 検出時に過去 buffer 全内容を別ファイル `hdmi-snapshot-{ISO}-{suffix}.log` に fire-and-forget で保存。前原さんの Ctrl+Shift+L 押下タイミングに依存しない
+- **高頻度ラベルの 1 秒集約**: `perf:render:duration`（124Hz）/ `hall:updatePipTimer:set`（60Hz）/ `perf:state:notify` を `perf:highfreq:summary` に集約、5 分 buffer が 20 秒で埋まる問題を解消
+- **buffer 容量の計測ビルド時拡張**: 5 分 → 30 分、5000 行 → 50000 行（本番版は従来通り 5 分 / 5000 行）
+- **優先バッファ**: HDMI 系・PRE_START 配信系・error 系ラベルは別ファイル `priority-events.log` に append（10000 行で循環）
+- **新規ラベル**: `perf:highfreq:summary` / `meas3:hdmi-snapshot:written`
+
+### Maintained
+- v2.1.20-rc5 (preStartState operator 配信経路) 完全保持
+- v2.1.20-rc4 (operator 側 PRE_START 復元 API) 完全保持
+- v2.1.20-rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- meas1 / meas2 計測機構 + 症状確証 4 ラベル + rc2 hall:hallTickState:reset + rc4 operator:applyPreStartState:apply + rc5 preStart:operator:send + operator:preStartResync:sent 完全保持
+
+### Performance Notes
+- buffer 拡張により計測ビルド時のメモリ使用量が +20MB 程度増加（50000 行 × 平均 440B）
+- `_flushLogsToFile` は fire-and-forget でファイル I/O が HDMI 切替を遅延させない設計
+- 高頻度ラベル集約により 5 分 buffer 内に 5 分分の情報を収納可能に
+
+---
+
+## [2.1.20-rc5] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc5 試験ビルド（前原さん実機専用、配布なし）。rc4 で実装した operator 側 preStartState 受信機構が hall ブロック内の dead code 化していた構造的問題を根治。
+
+### Fixed
+- **operator 側 preStartState 配信経路を構造的に修復**: rc4 で追加した受信機構（`applyOperatorPreStartState` / `restorePreStart` / `handleStartPauseToggle` PRE_START 分岐）はそのまま生かし、配信側（main.js）と購読側（renderer.js operator/operator-solo ブロック）を新規追加することで動作可能化。HDMI 抜き差し後の operator 再生成時に PRE_START カウントダウンが消失して Space キーが「タイマースタートダイアログ」を開く症状を根治
+- main.js `_publishDualState` で `kind === 'preStartState'` のときに operator (mainWindow) にも `dual:state-sync` を送信する経路追加
+- main.js `switchSoloToOperator` で新 operator window load 完了後に cache から preStartState を 1 回送信する経路追加（broadcast race の二重保険）
+- renderer.js operator / operator-solo ブロックに `subscribeStateSync` 経路追加（preStartState だけ拾って `applyOperatorPreStartState` 呼出）
+- 新規ラベル `preStart:operator:send` / `operator:preStartResync:sent`
+
+### Maintained
+- v2.1.20-rc4 (operator 側 PRE_START 復元 API: `restorePreStart` + `applyOperatorPreStartState` + `handleStartPauseToggle` PRE_START 分岐) 完全保持
+- v2.1.20-rc3 (スライドショー始動復活 + renderTournamentList Promise dedup) 完全保持
+- v2.1.20-rc2 (hallTickState reset 3 経路) 完全保持
+- v2.1.20-rc1 (重さ根治 4 件) 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- v2.1.20-meas1 計測機構 完全保持（次フェーズで撤去 → v2.2.1 本番リリース予定）
+
+---
+
+## [2.1.20-rc4] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc4 試験ビルド（前原さん実機専用、配布なし）。rc3 試験で発覚した「HDMI 抜き差し後 operator 操作不可」の構造的問題を根治。
+
+### Fixed
+- **operator 側 preStartState 受信機構を追加**: HDMI 抜き差し後 operator renderer 再生成時に PRE_START 状態が消失して操作不可になる構造的問題を根治。timer.js に `restorePreStart(payload)` API 新規追加 + renderer.js の dual-sync ハンドラに operator 経路追加 + handleStartPauseToggle に PRE_START 分岐追加。これにより HDMI 抜き差し以外の operator 再起動シナリオでも PRE_START 復帰が可能に
+- 新規確証ラベル `operator:applyPreStartState:apply`
+
+### Maintained
+- v2.1.20-rc3 (スライドショー始動復活 + renderTournamentList Promise dedup) 完全保持
+- v2.1.20-rc2 (hallTickState reset 3 経路) 完全保持
+- v2.1.20-rc1 (重さ根治 4 件: setState 撤廃 + DocumentFragment + memo + CSS 統一) 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- v2.1.20-meas1 計測機構 完全保持（次フェーズで撤去 → v2.2.1 本番リリース予定）
+
+---
+
+## [2.1.20-rc3] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc3 試験ビルド（前原さん実機専用、配布なし）。rc2 試験で発覚した退行 2 件を最小修正で対処。本番 v2.2.1 リリース直前の最終形態。
+
+### Fixed
+- **PRE_START 中のスライドショー始動復活**: rc1 Fix 3 で追加した `syncSlideshowFromState` の hall PRE_START active ガードを撤去。rc1 Fix 1 で `renderHallTickFrame` の 60Hz setState 連鎖が消えたため、流れ込み防止のガードは不要だった。ガードが過剰防御でスライドショー始動経路自体を止めていた退行を解消
+- **新規/複製ボタン押下時の 2 倍表示根治**: `renderTournamentList` を Promise dedup ラッパ `renderTournamentListWithDedup` で包み、非同期描画中の並行呼出を 1 本化。既存 `_tournamentsListDedup` (tournaments.list IPC 1 本化) と同パターンで、innerHTML='' と appendChild の race による fragment 二重 append を根絶
+
+### Maintained
+- v2.1.20-rc2 hallTickState defensive 初期化 3 経路 完全保持
+- v2.1.20-rc1 軽量化機構（setState 撤廃 + DocumentFragment + memo + 症状 1 修正）完全保持
+- v2.1.19 重さ根治機構（setInterval 撤廃 + Promise dedup）完全保持
+- 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構すべて完全保持
+- v2.1.20-meas1 計測機構完全保持（次フェーズで撤去 → 本番 v2.2.1 リリース予定）
+
+---
+
+## [2.1.20-rc2] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc2 試験ビルド（前原さん実機専用、配布なし）。rc1 試験で発覚した「HDMI 抜き差し時の hall タイマー止まらず」退行を defensive 初期化 3 箇所で根治。rc1 の軽量化機構（setInterval 撤廃 / Promise dedup / setState 撤廃 / DocumentFragment / memo 化 / 症状 1/2 修正）はすべて完全保持。
+
+### Fixed
+- **HDMI 抜き差し時の hall タイマー止まらず退行**: `applyTimerStateToTimer` hall 経路 / `applyHallPreStartState` isActive=false 経路 / hall window 起動経路 の 3 箇所で `hallTickState` の defensive 初期化を追加、HDMI 再生成シーンで前トーナメントの seed が残存する race を防ぐ
+
+### Maintained
+- v2.1.20-rc1 軽量化機構（setState 撤廃 + DocumentFragment + memo + 症状 1/2 修正）完全保持
+- v2.1.19 重さ根治機構（setInterval 撤廃 + Promise dedup）完全保持
+- 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構すべて完全保持
+- v2.1.20-meas1 計測機構完全保持（次フェーズで撤去予定）
+
+### Known Issues（v2.1.21 以降で対処予定）
+- Op 8 で 1952ms（約 2 秒）のメインスレッドブロック が 1 回観測（再現性低、再起動で復旧）。本 rc2 の defensive 初期化で「hall タイマー止まらず」症状は防げるが、根本原因は計装ラベル不足で確定不可。v2.1.21 で計装追加 + 再観測予定
+- `state:transition` ログが operator + hall の両方で記録される二重出力（無害、ログ汚染のみ）。v2.1.21 で role 区別ガード追加予定
+
+---
+
+## [2.1.20-rc1] - 2026-05-11
+
+PokerTimerPLUS+ v2.1.20-rc1 試験ビルド（前原さん実機専用、配布なし）。v2.1.20-meas1 計測ビルドで真因 100% 確定 → 重さの主犯（renderHallTickFrame の 60Hz setState 連鎖）+ renderTournamentList 1 回 500ms + 症状 1/2 を最小修正で一気に対処。計測機構は完全保持（効果計測のため、次フェーズで撤去）。
+
+### Performance
+- **重さの真の主犯撤廃**: `renderHallTickFrame` の `setState({remainingMs})` 60Hz 呼出を削除、DOM 直接書込に変更（subscribe 連鎖 50〜60Hz → 0、renderTime 120Hz → 60Hz、renderHallPreStartTick と同設計に統一）
+- **renderTournamentList 軽量化**: `DocumentFragment` 経由で reflow 回数を N → 1 に削減 + `computeLiveTimerState` を秒粒度でメモ化（1 回 500ms → 200ms 程度の見込み）
+
+### Fixed
+- **症状 1**: 会場モニター PRE_START 一時停止時の「一時停止中」テロップが左下小さく表示される問題を、通常 PAUSED と同じ「真ん中大きく枠付き」表示に統一
+- **症状 2**: 会場モニター PRE_START 一時停止時の右下カウントダウン枠に「01:00」が一瞬表示される問題を、主犯撤廃 + subscribe gate 二重防御で根治
+
+### Compatibility
+- v2.1.6〜v2.1.19 機構完全互換、致命バグ保護 5 件無傷
+- v2.1.20-meas1 計測機構完全保持（次フェーズで撤去予定）
+- 単画面モード完全同一
+
+---
+
+## [2.1.20-meas1] - 2026-05-10
+
+PokerTimerPLUS+ v2.1.20-meas1 計測ビルド（前原さん実機専用、配布なし）。v2.1.19 本番リリース後の残り重さ網羅観測 + 症状 1/2 真因確証用。
+
+### Added (meas2 新規 6 カテゴリ)
+- カテゴリ A: setInterval 経路網羅（`_wrappedSetInterval` + `perf:interval:fire`）
+- カテゴリ B: requestAnimationFrame 経路網羅（`_wrappedRAF` + `perf:raf:summary` 1 秒集計 + `perf:raf:fire` 単発）
+- カテゴリ C: IPC channel 別カウント（`perf:ipc:summary` 30 秒集計）
+- カテゴリ D: DOM 書き換え頻度サマリ（`perf:dom:summary` 30 秒集計）
+- カテゴリ E: Long Task 検出（PerformanceObserver で 50ms 超ブロッキング検出、`perf:long-task`）
+- カテゴリ F: subscribe 通知頻度サマリ（`perf:subscribe:summary` 30 秒集計、`subscribeNamed` API 追加）
+- カテゴリ G: 症状 1/2 真因確証 4 ラベル（`hall:syncSlideshowFromState:call` / `hall:updatePipTimer:set` / `hall:applyHallPreStartState:apply` / `hall:clock-pause-label:visibility`）
+
+### Restored (meas1 機構を完全復活)
+- 計測バッジ + Ctrl+Shift+L 拡張 + 5 分 rolling + preload `_measuredInvoke` ラッパ
+- meas1 既存 15 ラベル（perf 系 6 + バグ発見系 9）
+
+### Maintained
+- v2.1.19 重さ根治機構（setInterval 撤廃 + Promise dedup）完全保持
+- 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構すべて完全保持
+- 単画面モード完全互換
+
+---
+
 ## [2.1.19] - 2026-05-10
 
 PokerTimerPLUS+ v2.1.19 本番リリース。「アプリが重い」体感の主犯（`tournaments:list` IPC の常時暴走発火 1.5〜28.8 回/秒）を、計測ビルド観測 → 真因確定 → 最小修正の 3 段階で根治。設定タブ表示中 90% 減 / 編集モード 80% 減 / 通常進行 80% 減を達成。前原さん実機試験 OK、退行なし、致命バグ保護 5 件・v2.1.6〜v2.1.18 機構すべて完全保持。

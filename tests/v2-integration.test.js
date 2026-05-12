@@ -86,11 +86,25 @@ test('T4: renderer.js に dual-sync import + ensureAudioReady（notifyOperatorAc
   assert.doesNotMatch(RENDERER, /function\s+notifyOperatorActionIfNeeded\s*\(/,
     'notifyOperatorActionIfNeeded が残存（v2.0.2 で撤去予定）');
   // STEP 5: operator-solo 経路で ensureAudioReady（C.1.7 の明示呼出強化）
-  // __appRole 分岐の else ブロック（operator-solo）に initialize() + ensureAudioReady()
-  const elseMatch = RENDERER.match(/__appRole\s*===\s*['"]operator['"][\s\S]*?\}\s*else\s*\{([\s\S]*?)\}\s*$/m);
-  assert.ok(elseMatch, '__appRole 分岐の else (operator-solo) ブロック抽出失敗');
-  assert.match(elseMatch[1], /initialize\s*\(\s*\)/, 'else 分岐に initialize() なし');
-  assert.match(elseMatch[1], /ensureAudioReady\s*\(\s*\)/, 'else 分岐に ensureAudioReady() なし');
+  // v2.2.1: else 内に subscribeStateSync 用の nested try/catch が追加されたため、
+  //   ブレースカウントで else ブロック範囲を厳密に抽出（脆弱な regex 抽出からの脱却）。
+  const opIdx2 = RENDERER.indexOf("__appRole === 'operator'");
+  assert.ok(opIdx2 >= 0, '__appRole === operator 分岐が見つからない');
+  const afterOp2 = RENDERER.slice(opIdx2);
+  const elseStartRel2 = afterOp2.search(/\}\s*else\s*\{/);
+  assert.ok(elseStartRel2 >= 0, '__appRole 分岐の else ブロック開始位置が見つからない');
+  const braceOpen2 = afterOp2.indexOf('{', elseStartRel2);
+  let depth2 = 1;
+  let end2 = braceOpen2 + 1;
+  while (end2 < afterOp2.length && depth2 > 0) {
+    const ch = afterOp2[end2];
+    if (ch === '{') depth2++;
+    else if (ch === '}') depth2--;
+    end2++;
+  }
+  const elseBlock2 = afterOp2.slice(braceOpen2 + 1, end2 - 1);
+  assert.match(elseBlock2, /initialize\s*\(\s*\)/, 'else 分岐に initialize() なし');
+  assert.match(elseBlock2, /ensureAudioReady\s*\(\s*\)/, 'else 分岐に ensureAudioReady() なし');
 });
 
 // ============================================================

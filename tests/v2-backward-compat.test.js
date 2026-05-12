@@ -36,9 +36,22 @@ function test(name, fn) {
 test('T1: operator-solo モードは initialize() を経由（v1.3.0 と同じ起動パス）', () => {
   // __appRole === 'operator-solo' or else 分岐が initialize() を呼ぶ
   // STEP 5 で ensureAudioReady() も追加されたが、initialize() が主役
-  const elseMatch = RENDERER.match(/__appRole\s*===\s*['"]operator['"][\s\S]*?\}\s*else\s*\{([\s\S]*?)\}\s*$/m);
-  assert.ok(elseMatch, '__appRole 分岐の else (operator-solo) ブロック抽出失敗');
-  const elseBlock = elseMatch[1];
+  // v2.2.1: else 内に subscribeStateSync 用 nested try/catch が追加されたため、ブレースカウントで厳密抽出。
+  const opIdx = RENDERER.indexOf("__appRole === 'operator'");
+  assert.ok(opIdx >= 0, '__appRole === operator 分岐が見つからない');
+  const afterOp = RENDERER.slice(opIdx);
+  const elseStartRel = afterOp.search(/\}\s*else\s*\{/);
+  assert.ok(elseStartRel >= 0, '__appRole 分岐の else ブロック開始位置が見つからない');
+  const braceOpen = afterOp.indexOf('{', elseStartRel);
+  let depth = 1;
+  let end = braceOpen + 1;
+  while (end < afterOp.length && depth > 0) {
+    const ch = afterOp[end];
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    end++;
+  }
+  const elseBlock = afterOp.slice(braceOpen + 1, end - 1);
   assert.match(elseBlock, /initialize\s*\(\s*\)/, 'operator-solo 経路で initialize() を呼んでいない');
   // initDualSyncForHall は呼ばれない（hall 限定）
   assert.doesNotMatch(elseBlock, /initDualSyncForHall\s*\(/,

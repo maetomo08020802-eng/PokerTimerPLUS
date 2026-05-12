@@ -33,6 +33,10 @@ const WINDOW_TITLE = 'PokerTimerPLUS+ — presented by Yu Shitamachi';
 
 const isDev = process.env.NODE_ENV === 'development';
 
+// v2.1.18-meas1 Fix 4: Ctrl+Shift+L で rolling-current.log のスナップショットを別ファイル保存する際の連番カウンタ。
+//   app セッション開始時 0、押下のたびに increment して `op-{NN}-{timestamp}.log` のファイル名を生成。
+let _measOpCounter = 0;
+
 // ============================================================
 // v2.0.4-rc15 タスク 2: 5 分 rolling ログ機構（案 A 単一ファイル + 30s 切捨）
 // ============================================================
@@ -48,12 +52,12 @@ const isDev = process.env.NODE_ENV === 'development';
 // - 容量目安: 平均 440 B/行 × 約 200 行/5min ≒ 90 KB（上限 ~1 MB 想定）
 //
 // 致命バグ保護への影響: なし（C.1.7 等は観測のみ、再生経路に介入しない）
-const ROLLING_LOG_RETENTION_MS = 5 * 60 * 1000;   // 5 分
-const ROLLING_LOG_TRUNCATE_INTERVAL_MS = 30 * 1000; // 30 秒
+// v2.2.1: 本番値固定（rc6-meas3 三項演算撤去）
+const ROLLING_LOG_RETENTION_MS = 5 * 60 * 1000;        // 5 分 retention
+const ROLLING_LOG_TRUNCATE_INTERVAL_MS = 30 * 1000;    // 30 秒 flush
+const ROLLING_LOG_BUFFER_MAX = 5000;                   // 5000 行上限
 let _rollingLogFilePath = null;
 let _rollingLogTruncateTimer = null;
-// v2.0.4-rc18 第 1 弾 タスク 3: ring buffer 化（fire-and-forget appendFile を廃止、I/O 順序乱れを根絶）
-const ROLLING_LOG_BUFFER_MAX = 5000;  // 5 分 × 60 sec × 約 17 ラベル/秒余裕
 let _rollingLogBuffer = [];
 function _initRollingLog() {
   if (_rollingLogFilePath !== null) return _rollingLogFilePath;
@@ -101,6 +105,72 @@ async function _flushRollingLog() {
     await fs.promises.writeFile(file, out);
   } catch (_) { /* never throw */ }
 }
+// v2.1.20-rc6-meas3: 優先ラベル専用バッファ機構。
+//   メイン rolling buffer が高頻度ラベルで埋まっても、HDMI 系・PRE_START 配信系・error 系は別バッファに保管。
+//   priority-events.log に 30 秒ごとに append（rolling buffer とは独立）。
+//   サイズ上限 10000 行で循環（無限増加を防止）。
+const PRIORITY_LOG_BUFFER_MAX = 10000;
+const PRIORITY_LOG_LABELS = new Set([
+  'display-removed',
+  'display-added',
+  'switchOperatorToSolo:enter',
+  'switchOperatorToSolo:exit',
+  'switchSoloToOperator:enter',
+  'switchSoloToOperator:exit',
+  'preStart:operator:send',
+  'operator:preStartResync:sent',
+  'operator:applyPreStartState:apply',
+  // v2.1.20-rc10.1 追加（rc10-audit 高優先 #1 / #2 / #10）
+  'hdmi:display-removed:dual-sync-stale',
+  'hdmi:dialog-blocked:switchOperatorToSolo',
+  'timer:reset:race-window-entry'
+]);
+let _priorityLogBuffer = [];
+let _priorityLogFilePath = null;
+let _priorityLogFlushTimer = null;
+function _isPriorityLabel(label) {
+  if (typeof label !== 'string') return false;
+  if (PRIORITY_LOG_LABELS.has(label)) return true;
+  if (label.startsWith('error:caught:')) return true;
+  return false;
+}
+function _appendPriorityLog(entry) {
+  try {
+    // v2.1.20-rc7: 初回 entry 追加時に init + setInterval 登録（idempotent、2 回目以降は path 返却のみ）
+    _initPriorityLogFile();
+    _priorityLogBuffer.push(entry);
+    if (_priorityLogBuffer.length > PRIORITY_LOG_BUFFER_MAX) _priorityLogBuffer.shift();
+  } catch (_) {}
+}
+function _initPriorityLogFile() {
+  if (_priorityLogFilePath !== null) return _priorityLogFilePath;
+  try {
+    if (typeof app.getPath !== 'function') { _priorityLogFilePath = ''; return ''; }
+    const userData = app.getPath('userData');
+    if (!userData) { _priorityLogFilePath = ''; return ''; }
+    const logsDir = path.join(userData, 'logs');
+    try { fs.mkdirSync(logsDir, { recursive: true }); } catch (_) {}
+    _priorityLogFilePath = path.join(logsDir, 'priority-events.log');
+    // 30 秒 interval で priority buffer を append flush
+    if (_priorityLogFlushTimer === null) {
+      _priorityLogFlushTimer = setInterval(() => {
+        _flushPriorityLog().catch(() => {});
+      }, 30 * 1000);
+      if (typeof _priorityLogFlushTimer.unref === 'function') _priorityLogFlushTimer.unref();
+    }
+  } catch (_) { _priorityLogFilePath = ''; }
+  return _priorityLogFilePath;
+}
+async function _flushPriorityLog() {
+  try {
+    const file = _initPriorityLogFile();
+    if (!file || !_priorityLogBuffer.length) return;
+    const snapshot = _priorityLogBuffer.slice();
+    _priorityLogBuffer = [];
+    const out = snapshot.map((e) => JSON.stringify(e)).join('\n') + '\n';
+    await fs.promises.appendFile(file, out);
+  } catch (_) { /* never throw from priority log */ }
+}
 // v2.0.15 Fix 3（M2 Sec-4）: rolling-log への出力時に店舗識別情報（presetName 等）を
 //   SHA-256 短縮ハッシュに置換する PII 配慮。ハッシュ化は rolling-log への出力時のみで、
 //   store / IPC / UI 表示等の本来データはハッシュ化しない。
@@ -116,6 +186,10 @@ function rollingLog(label, data) {
     _rollingLogBuffer.push(entry);
     if (_rollingLogBuffer.length > ROLLING_LOG_BUFFER_MAX) {
       _rollingLogBuffer.shift();   // 古いエントリ自動削除
+    }
+    // v2.1.20-rc6-meas3: priority label は別バッファにも記録（HDMI 系・PRE_START 配信系・error 系）
+    if (_isPriorityLabel(entry.label)) {
+      _appendPriorityLog(entry);
     }
   } catch (_) { /* never throw from logging */ }
 }
@@ -1006,6 +1080,8 @@ const _dualStateCache = {
   //   payload 形: { isActive: bool, totalMs?: number, remainingMs?: number, startAtMs?: number }
   preStartState: null
 };
+// v2.1.20-rc10.1: preStartState cache の最終更新時刻（rc10-audit #1 race 観測用、ms epoch）
+let _preStartStateCacheUpdatedAt = 0;
 function _broadcastDualState(channel, payload) {
   if (!hallWindow || hallWindow.isDestroyed()) return;
   try {
@@ -1018,6 +1094,10 @@ function _broadcastDualState(channel, payload) {
 function _publishDualState(kind, value) {
   if (!Object.prototype.hasOwnProperty.call(_dualStateCache, kind)) return;
   _dualStateCache[kind] = value;
+  // v2.1.20-rc10.1: preStartState cache 更新時刻記録（rc10-audit #1 race 観測用）
+  if (kind === 'preStartState') {
+    _preStartStateCacheUpdatedAt = Date.now();
+  }
   // v2.0.4-rc17: 常時 3 ラベル rolling ログ #1（timerState 送信 ts）
   if (kind === 'timerState') {
     try { rollingLog('timer:state:send', { status: value?.status, level: value?.currentLevel, elapsed: value?.elapsedSecondsInLevel }); } catch (_) { /* never throw from logging */ }
@@ -1031,6 +1111,16 @@ function _publishDualState(kind, value) {
     try { rollingLog('blindPreset:state:send', { presetId: value?.blindPresetId, presetName: hashPII(value?.name), structureLength: value?.structure?.levels?.length || 0 }); } catch (_) { /* never throw from logging */ }
   }
   _broadcastDualState('dual:state-sync', { kind, value });
+  // v2.1.20-rc5: preStartState だけは operator (mainWindow) にも送信する。
+  //   _broadcastDualState は hall 限定送信のため、HDMI 抜き差し後の operator 再生成時に
+  //   PRE_START 状態が消失して Space キーが IDLE 分岐に振られる（→ タイマースタートダイアログが開く）構造的問題を根治。
+  //   他 kind（timerState 等）は operator 側で個別 IPC 経由で取得しているため対象外、preStartState のみ追加。
+  if (kind === 'preStartState' && mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      mainWindow.webContents.send('dual:state-sync', { kind, value });
+      try { rollingLog('preStart:operator:send', { isActive: value?.isActive, isPaused: !!value?.isPaused }); } catch (_) {}
+    } catch (_) { /* operator may be in transition (reload after HDMI replug), ignore */ }
+  }
 }
 
 // v2.0.0 STEP 1: 共通の webPreferences ベース（operator / hall で同一の Electron セキュリティ設定）。
@@ -1335,6 +1425,8 @@ let _isSwitchingMode = false;
 //   show() で即時前面表示にすれば role 切替 IPC も即時反映され、症状が根治する。
 //   close ではなく show なので race ゼロは維持。Fix 2-C で _showRestoreNoticeOnce ポップアップも撤去。
 async function switchOperatorToSolo() {
+  // v2.1.20-rc10.1 観測: 関数所要時間計測（autoUpdater 等の Win32 メッセージループ遮断 race 検出用）
+  const _switchStartTimeMs = Date.now();
   rollingLog('switchOperatorToSolo:enter', { isSwitchingMode: _isSwitchingMode });
   if (_isSwitchingMode) return;
   _isSwitchingMode = true;
@@ -1368,6 +1460,11 @@ async function switchOperatorToSolo() {
   } finally {
     _isSwitchingMode = false;
     rollingLog('switchOperatorToSolo:exit', null);
+    // v2.1.20-rc10.1 観測: 50ms 以上かかった場合、dialog ブロック等の race を検出
+    const _switchDurationMs = Date.now() - _switchStartTimeMs;
+    if (_switchDurationMs >= 50) {
+      try { rollingLog('hdmi:dialog-blocked:switchOperatorToSolo', { durationMs: _switchDurationMs }); } catch (_) {}
+    }
   }
 }
 
@@ -1401,6 +1498,26 @@ async function switchSoloToOperator(hallDisplay) {
         mainWindow.webContents.send('dual:role-changed', 'operator');
       }
     } catch (_) { /* ignore */ }
+    // v2.1.20-rc5: 新 operator window load 完了後に PRE_START 状態を 1 回再同期。
+    //   HDMI 挿し直しで operator window が close → 再生成され、renderer.js / timer.js が初期化されるため
+    //   PRE_START 中の state が消失する。cache に保持された preStartState が active なら、
+    //   load 完了タイミングで 1 回 push して applyOperatorPreStartState 経路で復元させる。
+    //   Fix 1 の常時 broadcast と二重保険（cache の値 vs. broadcast タイミングの race どちらにも耐える設計）。
+    if (_dualStateCache.preStartState && _dualStateCache.preStartState.isActive) {
+      const cachedPreStart = _dualStateCache.preStartState;
+      try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.once('did-finish-load', () => {
+            try {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('dual:state-sync', { kind: 'preStartState', value: cachedPreStart });
+                try { rollingLog('operator:preStartResync:sent', { isActive: cachedPreStart.isActive, isPaused: !!cachedPreStart.isPaused, ctx: 'switchSoloToOperator' }); } catch (_) {}
+              }
+            } catch (_) { /* never throw from resync */ }
+          });
+        }
+      } catch (_) { /* never throw from listener registration */ }
+    }
   } finally {
     _isSwitchingMode = false;
     rollingLog('switchSoloToOperator:exit', null);
@@ -1424,6 +1541,13 @@ function setupDisplayChangeListeners() {
     _displayRemovedPending = true;
     // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayRemovedPending` チェック後で確実に 1 回）
     rollingLog('display-removed', _safeDisplayRemovedSnapshot(removedDisplay));
+    // v2.1.20-rc10.1 観測: preStartState cache が 500ms 以上古い場合に警告ラベル（PRE_START 消失の早期発見）
+    if (_dualStateCache.preStartState && _dualStateCache.preStartState.isActive && _preStartStateCacheUpdatedAt > 0) {
+      const cacheAgeMs = Date.now() - _preStartStateCacheUpdatedAt;
+      if (cacheAgeMs >= 500) {
+        try { rollingLog('hdmi:display-removed:dual-sync-stale', { cacheAgeMs, isActive: true }); } catch (_) {}
+      }
+    }
     try {
       // v2.0.4-rc23 タスク 1（問題 ⑩ 真因根治）:
       //   rc22 計測ビルド実機ログで真因確定 = HDMI 抜き直後 Windows が hallWindow を新 primary display
@@ -1530,17 +1654,55 @@ function toggleDevTools() {
 }
 
 function registerShortcuts() {
-  globalShortcut.register('F11', toggleFullScreen);
-  globalShortcut.register('CommandOrControl+Q', confirmQuit);
+  // v2.1.18-meas1 ui:keypress: globalShortcut のキー押下を rolling-log に記録（main プロセス）
+  globalShortcut.register('F11', () => {
+    try { rollingLog('ui:keypress', { key: 'F11', ctx: 'main:globalShortcut' }); } catch (_) {}
+    toggleFullScreen();
+  });
+  globalShortcut.register('CommandOrControl+Q', () => {
+    try { rollingLog('ui:keypress', { key: 'CommandOrControl+Q', ctx: 'main:globalShortcut' }); } catch (_) {}
+    confirmQuit();
+  });
   // STEP 6.21: 配布版（isDev=false）でも F12 で DevTools を開けるよう常時登録
   // before-input-event 側にもフォールバックを置いてあるので二重登録だが副作用なし
-  globalShortcut.register('F12', toggleDevTools);
+  globalShortcut.register('F12', () => {
+    try { rollingLog('ui:keypress', { key: 'F12', ctx: 'main:globalShortcut' }); } catch (_) {}
+    toggleDevTools();
+  });
   // v2.0.4-rc22 タスク 2（問題 ⑩ 案 ⑩-A）:
   //   タイマー画面消失時にも UI 不要でログフォルダを開けるようにする救済策。
   //   _flushRollingLog で in-memory buffer を確実にディスクに反映してから shell.openPath。
   //   rc18 第 1 弾の I/O 順序保証維持のため、必ず await で待つ。
+  // v2.1.18-meas1 Fix 4: 既存 Ctrl+Shift+L 機構を「拡張」。flush + フォルダオープンに加えて、
+  //   押下時点の rolling-current.log のスナップショットを `op-{NN}-{ISO timestamp}.log` 形式で別保存する。
+  //   保存仕様:
+  //     - `_measOpCounter` は app セッション開始時 0、押下のたびに increment（1, 2, 3, ...）
+  //     - ファイル名: `op-{counter:02d}-{ISO}.log`（ISO は : と . と Z を除去）
+  //     - ヘッダ行: `# captured at ISO / op N / version vX.Y.Z` を先頭に付与
+  //     - rollingLog('meas:capture') で保存先パスを記録（テスト・分析用）
+  //   既存の「フォルダを開く」動作は維持（前原さんが保存した op-NN ファイルをすぐ確認できるよう）。
   globalShortcut.register('CommandOrControl+Shift+L', async () => {
+    try { rollingLog('ui:keypress', { key: 'CommandOrControl+Shift+L', ctx: 'main:globalShortcut' }); } catch (_) {}
     try { await _flushRollingLog(); } catch (_) { /* never throw from logging */ }
+    // v2.1.18-meas1: スナップショット保存
+    try {
+      _measOpCounter++;
+      const isoRaw = new Date().toISOString();
+      const isoForName = isoRaw.replace(/[:.]/g, '').replace(/Z$/, '');
+      const fname = `op-${String(_measOpCounter).padStart(2, '0')}-${isoForName}.log`;
+      const logsDir = _resolveLogsDir();
+      if (logsDir) {
+        const dst = path.join(logsDir, fname);
+        const src = path.join(logsDir, 'rolling-current.log');
+        const header = `# captured at ${isoRaw} / op ${_measOpCounter} / version ${app.getVersion()}\n`;
+        const content = await fs.promises.readFile(src, 'utf8').catch(() => '');
+        await fs.promises.writeFile(dst, header + content);
+        rollingLog('meas:capture', { op: _measOpCounter, file: fname });
+      }
+    } catch (e) {
+      // v2.1.18-meas1 error:caught:meas:capture
+      try { rollingLog('error:caught:meas:capture', { message: e?.message }); } catch (_) {}
+    }
     try {
       const dir = _resolveLogsDir();
       if (dir) shell.openPath(dir);
@@ -2682,17 +2844,50 @@ function registerIpcHandlers() {
       const isActive = !!payload.isActive;
       const sanitized = { isActive };
       if (isActive) {
-        if (Number.isFinite(payload.totalMs)     && payload.totalMs     >= 0) sanitized.totalMs     = Math.floor(payload.totalMs);
-        if (Number.isFinite(payload.remainingMs) && payload.remainingMs >= 0) sanitized.remainingMs = Math.floor(payload.remainingMs);
-        if (Number.isFinite(payload.startAtMs)   && payload.startAtMs   >= 0) sanitized.startAtMs   = Math.floor(payload.startAtMs);
+        // v2.1.20-rc7 真因根治: tick / pause / resume / adjust 経由の publish では totalMs / startAtMs が
+        //   含まれないため、cache から維持する（HDMI 抜き差し時の operator 復元で totalMs が必要）。
+        //   feedback_ipc_sanitization_field_drop.md パターン（v2.1.15→16→17）の再発を防止。
+        //   PRE_START 開始時（renderer.js:2401）は totalMs / startAtMs を必ず送るため、初回は新値で確定、
+        //   以後の tick / pause / resume / adjust は cache の値を維持し続ける。
+        const prev = _dualStateCache.preStartState || {};
+        let mergedFromCache = false;
+        if (Number.isFinite(payload.totalMs) && payload.totalMs >= 0) {
+          sanitized.totalMs = Math.floor(payload.totalMs);
+        } else if (Number.isFinite(prev.totalMs) && prev.totalMs >= 0) {
+          sanitized.totalMs = prev.totalMs;
+          mergedFromCache = true;
+        }
+        if (Number.isFinite(payload.remainingMs) && payload.remainingMs >= 0) {
+          sanitized.remainingMs = Math.floor(payload.remainingMs);
+        } else if (Number.isFinite(prev.remainingMs) && prev.remainingMs >= 0) {
+          sanitized.remainingMs = prev.remainingMs;
+          mergedFromCache = true;
+        }
+        if (Number.isFinite(payload.startAtMs) && payload.startAtMs >= 0) {
+          sanitized.startAtMs = Math.floor(payload.startAtMs);
+        } else if (Number.isFinite(prev.startAtMs) && prev.startAtMs >= 0) {
+          sanitized.startAtMs = prev.startAtMs;
+          mergedFromCache = true;
+        }
         // v2.1.17 ① 真の根治: isPaused フィールドを sanitization で転送（v2.1.15/v2.1.16 で追加された renderer 側機構が
         //   ここで落とされて hall に届かないため、PRE_START 一時停止が hall に反映されない真因。
         //   payload.isPaused が boolean 型のときのみ転送（型安全 + 既存 sanitization パターンと整合）。
-        if (typeof payload.isPaused === 'boolean') sanitized.isPaused = payload.isPaused;
+        if (typeof payload.isPaused === 'boolean') {
+          sanitized.isPaused = payload.isPaused;
+        } else if (typeof prev.isPaused === 'boolean') {
+          sanitized.isPaused = prev.isPaused;
+          mergedFromCache = true;
+        }
+        // v2.1.20-rc7 新規確証ラベル: cache merge が発火した = 受信 payload に欠落フィールドがあった証拠
+        if (mergedFromCache) {
+          try { rollingLog('preStart:cache:merge', { totalMs: sanitized.totalMs, remainingMs: sanitized.remainingMs, hasIsPaused: typeof sanitized.isPaused === 'boolean' }); } catch (_) {}
+        }
       }
       _publishDualState('preStartState', sanitized);
     } catch (err) {
       try { rollingLog('preStart:publish-error', { message: err && err.message }); } catch (_) {}
+      // v2.1.18-meas1 error:caught:main.dual.publishPreStartState
+      try { rollingLog('error:caught:main.dual.publishPreStartState', { message: err && err.message, stack_top: (err && err.stack || '').split('\n')[1] }); } catch (_) {}
     }
   });
 
@@ -2755,6 +2950,18 @@ app.whenReady().then(async () => {
   // v2.0.4-rc15 タスク 2: rolling ログ初期化 + app:ready 記録（最初のイベント）
   _initRollingLog();
   rollingLog('app:ready', { version: app.getVersion(), isPackaged: app.isPackaged });
+
+  // v2.1.18-meas1 meas:session:start: セッション情報（version / electron / displays）を 1 回だけ記録
+  try {
+    rollingLog('meas:session:start', {
+      version: app.getVersion(),
+      electronVersion: process.versions.electron,
+      nodeVersion: process.versions.node,
+      platform: process.platform,
+      arch: process.arch,
+      displays: screen.getAllDisplays().map((d) => ({ id: d.id, bounds: d.bounds, scaleFactor: d.scaleFactor }))
+    });
+  } catch (_) {}
 
   if (!isDev) {
     Menu.setApplicationMenu(null);

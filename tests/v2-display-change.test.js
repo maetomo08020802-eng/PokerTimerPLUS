@@ -110,15 +110,26 @@ test('T4: switchOperatorToSolo は show + focus / switchSoloToOperator は close
 // T6: renderer.js の operator-solo 経路に ensureAudioReady 明示呼出（HDMI 抜き直後の音欠落対策）
 // ============================================================
 test('T6: renderer.js operator-solo 経路で ensureAudioReady を明示呼出', () => {
-  // operator-solo 分岐の else ブロックに ensureAudioReady() が存在
-  // 簡易検出: __appRole === 'operator-solo' or その else 分岐内の initialize() の近傍に ensureAudioReady
-  // operator-solo は文字列リテラルとして登場、その後 ensureAudioReady() を含むこと
-  const operatorSoloSection = RENDERER.match(/['"]operator-solo['"][\s\S]*?\}\s*$/);
-  // operator-solo 後の領域で ensureAudioReady 呼出があること（else 分岐相当）
-  // より正確に: __appRole 分岐の else 部分を抽出
-  const branchMatch = RENDERER.match(/__appRole\s*===\s*['"]operator['"][\s\S]*?\}\s*else\s*\{([\s\S]*?)\}\s*$/m);
-  assert.ok(branchMatch, '__appRole 3 分岐の else (operator-solo) ブロックが抽出できない');
-  const elseBlock = branchMatch[1];
+  // operator-solo 分岐の else ブロックに ensureAudioReady() + initialize() が存在
+  // v2.2.1: else 内に subscribeStateSync 用の nested try/catch が追加されたため、
+  //   ブレース整数カウントで else ブロック範囲を厳密に抽出（脆弱な regex 抽出からの脱却）。
+  const opIdx = RENDERER.indexOf("__appRole === 'operator'");
+  assert.ok(opIdx >= 0, '__appRole === operator 分岐が見つからない');
+  // operator ブロックの後にある「} else {」を非空白で探す
+  const afterOp = RENDERER.slice(opIdx);
+  const elseStartRel = afterOp.search(/\}\s*else\s*\{/);
+  assert.ok(elseStartRel >= 0, '__appRole 分岐の else ブロック開始位置が見つからない');
+  const braceOpen = afterOp.indexOf('{', elseStartRel);
+  // ブレースカウントで else ブロック範囲を抽出
+  let depth = 1;
+  let end = braceOpen + 1;
+  while (end < afterOp.length && depth > 0) {
+    const ch = afterOp[end];
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    end++;
+  }
+  const elseBlock = afterOp.slice(braceOpen + 1, end - 1);
   assert.match(elseBlock, /initialize\s*\(\s*\)/, 'operator-solo の else 分岐に initialize() なし');
   assert.match(elseBlock, /ensureAudioReady\s*\(\s*\)/, 'operator-solo の else 分岐に ensureAudioReady() 明示呼出なし');
 });

@@ -56,11 +56,12 @@ test('Fix 1: _handleTournamentDuplicateImpl 関数本体に ensureEditorEditable
 test('Fix 1: _handleTournamentDuplicateImpl の 1 回目の呼出は同期（RAF 外）', () => {
   const body = extractFunctionBody(RENDERER, /async\s+function\s+_handleTournamentDuplicateImpl\s*\(\s*\)\s*\{/);
   assert.ok(body);
-  // 1 回目の ensureEditorEditableState 呼出位置が requestAnimationFrame の前にあるか
+  // 1 回目の ensureEditorEditableState 呼出位置が requestAnimationFrame / _wrappedRAF の前にあるか
+  // v2.1.20-meas1: requestAnimationFrame は _wrappedRAF(_RafLabel.RENDERER_MISC, ...) に置換
   const firstCallIdx = body.search(/ensureEditorEditableState\s*\(\s*\)/);
-  const rafIdx = body.search(/requestAnimationFrame/);
+  const rafIdx = body.search(/requestAnimationFrame|_wrappedRAF/);
   assert.ok(firstCallIdx >= 0, '1 回目の ensureEditorEditableState 呼出が見つからない');
-  assert.ok(rafIdx >= 0, 'requestAnimationFrame が見つからない');
+  assert.ok(rafIdx >= 0, 'requestAnimationFrame / _wrappedRAF が見つからない');
   assert.ok(firstCallIdx < rafIdx,
     `1 回目の ensureEditorEditableState (idx=${firstCallIdx}) が RAF (idx=${rafIdx}) より後（同期呼出位置が誤り）`);
 });
@@ -68,9 +69,9 @@ test('Fix 1: _handleTournamentDuplicateImpl の 1 回目の呼出は同期（RAF
 test('Fix 1: _handleTournamentDuplicateImpl の 2 回目の呼出は RAF 内（focus + select 直後）', () => {
   const body = extractFunctionBody(RENDERER, /async\s+function\s+_handleTournamentDuplicateImpl\s*\(\s*\)\s*\{/);
   assert.ok(body);
-  // RAF コールバック内に focus + select + ensureEditorEditableState を含む
-  const m = body.match(/requestAnimationFrame\(\s*\(\s*\)\s*=>\s*\{[\s\S]*?\}\s*\)/);
-  assert.ok(m, 'RAF コールバックが見つからない');
+  // v2.1.20-meas1: RAF コールバックは _wrappedRAF(_RafLabel.XXX, () => {...}) に置換、両形式許容
+  const m = body.match(/(?:requestAnimationFrame|_wrappedRAF\s*\([^,]+,)\s*\(\s*\)\s*=>\s*\{[\s\S]*?\}\s*\)/);
+  assert.ok(m, 'RAF コールバック / _wrappedRAF が見つからない');
   assert.match(m[0], /\.focus\s*\(\s*\)/, 'RAF 内に .focus() がない');
   assert.match(m[0], /\.select\s*\(\s*\)/, 'RAF 内に .select() がない');
   assert.match(m[0], /ensureEditorEditableState\s*\(\s*\)/,
@@ -278,7 +279,7 @@ test('operator-solo 互換: rc8 の [data-role="operator-solo"] 防御保険 CSS
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.1.19',
+  assert.equal(pkg.version, '2.2.1',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 

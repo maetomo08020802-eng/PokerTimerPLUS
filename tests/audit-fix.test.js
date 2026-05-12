@@ -72,9 +72,18 @@ test('T4: renderer.js の subscribe 内で syncPowerSaveBlocker が呼ばれる'
   assert.match(RENDERER, /function\s+syncPowerSaveBlocker\s*\(/, 'syncPowerSaveBlocker 関数が定義されていない');
   // v2.1.18-rc2: subscribe 内に Fix 2-A の hall:subscribe:fire ログ + nested 閉じ括弧が増えたため、
   //   旧 naive regex `[\s\S]+?\}\);` は最初の `});` で打ち切られる。balanced-brace で正確抽出。
-  const startMarker = 'subscribe((state, prev) => {';
-  const startIdx = RENDERER.indexOf(startMarker);
-  assert.ok(startIdx >= 0, 'subscribe((state, prev) => { 開始位置が見つからない');
+  // v2.1.20-meas1: カテゴリ F で main subscribe が subscribeNamed('subscribe:main-renderer', ...) に変更され、
+  //   起動マーカーが変わった。両形式を許容（subscribe / subscribeNamed）。
+  const markers = [
+    "subscribeNamed('subscribe:main-renderer', (state, prev) => {",
+    'subscribe((state, prev) => {'
+  ];
+  let startIdx = -1, startMarker = '';
+  for (const m of markers) {
+    const i = RENDERER.indexOf(m);
+    if (i >= 0) { startIdx = i; startMarker = m; break; }
+  }
+  assert.ok(startIdx >= 0, 'subscribe / subscribeNamed の開始位置が見つからない');
   const openBraceIdx = startIdx + startMarker.length - 1;
   let depth = 0;
   let endIdx = -1;

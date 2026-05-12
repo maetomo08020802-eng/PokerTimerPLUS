@@ -25,64 +25,70 @@ if (typeof document !== 'undefined') {
 // renderer 側からも参照できるよう expose（read-only、STEP 3 以降の役割分岐ロジックで利用）
 contextBridge.exposeInMainWorld('appRole', _role);
 
+// v2.2.1: IPC 往復計測撤去。`_measuredInvoke` は名前だけ維持し ipcRenderer.invoke の薄ラッパとして残す
+//   （preload 内全 API が経由する設計のため）。計測ラベル発火は本番版で完全撤去。
+function _measuredInvoke(channel, ...args) {
+  return ipcRenderer.invoke(channel, ...args);
+}
+
 contextBridge.exposeInMainWorld('api', {
   app: {
-    getVersion: () => ipcRenderer.invoke('app:getVersion')
+    getVersion: () => _measuredInvoke('app:getVersion')
   },
   settings: {
-    getAll: () => ipcRenderer.invoke('settings:getAll'),
+    getAll: () => _measuredInvoke('settings:getAll'),
     // STEP 7: setMarquee は削除（tournaments:setMarqueeSettings に完全移行）
-    setDisplay: (value) => ipcRenderer.invoke('settings:setDisplay', value),
+    setDisplay: (value) => _measuredInvoke('settings:setDisplay', value),
     // STEP 6.22: 店舗名「Presented by ○○」表記
-    setVenueName: (value) => ipcRenderer.invoke('settings:setVenueName', value)
+    setVenueName: (value) => _measuredInvoke('settings:setVenueName', value)
   },
   presets: {
-    listBuiltin: () => ipcRenderer.invoke('presets:listBuiltin'),
-    loadBuiltin: (id) => ipcRenderer.invoke('presets:loadBuiltin', id),
-    listUser: () => ipcRenderer.invoke('presets:listUser'),
-    loadUser: (id) => ipcRenderer.invoke('presets:loadUser', id),
-    saveUser: (preset) => ipcRenderer.invoke('presets:saveUser', preset),
-    deleteUser: (id) => ipcRenderer.invoke('presets:deleteUser', id)
+    listBuiltin: () => _measuredInvoke('presets:listBuiltin'),
+    loadBuiltin: (id) => _measuredInvoke('presets:loadBuiltin', id),
+    listUser: () => _measuredInvoke('presets:listUser'),
+    loadUser: (id) => _measuredInvoke('presets:loadUser', id),
+    saveUser: (preset) => _measuredInvoke('presets:saveUser', preset),
+    deleteUser: (id) => _measuredInvoke('presets:deleteUser', id)
   },
   tournament: {
-    get: () => ipcRenderer.invoke('tournament:get'),
-    set: (data) => ipcRenderer.invoke('tournament:set', data)
+    get: () => _measuredInvoke('tournament:get'),
+    set: (data) => _measuredInvoke('tournament:set', data)
   },
   tournaments: {
-    list: () => ipcRenderer.invoke('tournaments:list'),
-    getActive: () => ipcRenderer.invoke('tournaments:getActive'),
-    setActive: (id) => ipcRenderer.invoke('tournaments:setActive', id),
-    save: (t) => ipcRenderer.invoke('tournaments:save', t),
-    delete: (id) => ipcRenderer.invoke('tournaments:delete', id),
+    list: () => _measuredInvoke('tournaments:list'),
+    getActive: () => _measuredInvoke('tournaments:getActive'),
+    setActive: (id) => _measuredInvoke('tournaments:setActive', id),
+    save: (t) => _measuredInvoke('tournaments:save', t),
+    delete: (id) => _measuredInvoke('tournaments:delete', id),
     // STEP 6.21: 個別 timerState 部分更新
-    setTimerState: (id, timerState) => ipcRenderer.invoke('tournaments:setTimerState', { id, timerState }),
+    setTimerState: (id, timerState) => _measuredInvoke('tournaments:setTimerState', { id, timerState }),
     // STEP 10 フェーズC.1.8: ランタイム情報の部分更新（playersInitial / Remaining / reentryCount / addOnCount）
-    setRuntime: (id, runtime) => ipcRenderer.invoke('tournaments:setRuntime', { id, runtime }),
+    setRuntime: (id, runtime) => _measuredInvoke('tournaments:setRuntime', { id, runtime }),
     // STEP 6.21.6: 個別 displaySettings 部分更新（背景プリセット / 数字フォントの即時保存）
-    setDisplaySettings: (id, displaySettings) => ipcRenderer.invoke('tournaments:setDisplaySettings', { id, displaySettings }),
+    setDisplaySettings: (id, displaySettings) => _measuredInvoke('tournaments:setDisplaySettings', { id, displaySettings }),
     // STEP 6.22.1: 個別 marqueeSettings 部分更新（テロップ enabled/text/speed の即時保存）
-    setMarqueeSettings: (id, marqueeSettings) => ipcRenderer.invoke('tournaments:setMarqueeSettings', { id, marqueeSettings }),
+    setMarqueeSettings: (id, marqueeSettings) => _measuredInvoke('tournaments:setMarqueeSettings', { id, marqueeSettings }),
     // STEP 6.23: PC間データ移行（JSON Export / Import）
-    exportSingle:    (id) => ipcRenderer.invoke('tournaments:exportSingle', id),
-    exportBulk:      () => ipcRenderer.invoke('tournaments:exportBulk'),
-    writeExportFile: (payload, defaultFileName) => ipcRenderer.invoke('tournaments:writeExportFile', payload, defaultFileName),
-    readImportFile:  () => ipcRenderer.invoke('tournaments:readImportFile'),
-    importPayload:   (params) => ipcRenderer.invoke('tournaments:importPayload', params)
+    exportSingle:    (id) => _measuredInvoke('tournaments:exportSingle', id),
+    exportBulk:      () => _measuredInvoke('tournaments:exportBulk'),
+    writeExportFile: (payload, defaultFileName) => _measuredInvoke('tournaments:writeExportFile', payload, defaultFileName),
+    readImportFile:  () => _measuredInvoke('tournaments:readImportFile'),
+    importPayload:   (params) => _measuredInvoke('tournaments:importPayload', params)
   },
   audio: {
-    get: () => ipcRenderer.invoke('audio:get'),
-    set: (data) => ipcRenderer.invoke('audio:set', data)
+    get: () => _measuredInvoke('audio:get'),
+    set: (data) => _measuredInvoke('audio:set', data)
   },
   // STEP 9-B: メイン画面左上ロゴ設定
   logo: {
-    selectFile: () => ipcRenderer.invoke('logo:selectFile'),
-    setMode: (kind) => ipcRenderer.invoke('logo:setMode', kind)
+    selectFile: () => _measuredInvoke('logo:selectFile'),
+    setMode: (kind) => _measuredInvoke('logo:setMode', kind)
   },
   // STEP 10 フェーズC.1.3: 背景画像（カスタム画像）の選択 — OS ファイルダイアログ → base64 data URL を返す
   // STEP 10 フェーズC.1.4: 休憩中スライドショー用の複数画像選択
   display: {
-    selectBackgroundImage: () => ipcRenderer.invoke('display:selectBackgroundImage'),
-    selectBreakImages:     () => ipcRenderer.invoke('display:selectBreakImages')
+    selectBackgroundImage: () => _measuredInvoke('display:selectBackgroundImage'),
+    selectBreakImages:     () => _measuredInvoke('display:selectBreakImages')
   },
   // STEP 6.21.4: PC スリープ → 復帰時の通知購読
   // 引数 callback は (event) => void。event は IPC イベントオブジェクト（通常は引数として無視）
@@ -92,8 +98,8 @@ contextBridge.exposeInMainWorld('api', {
   },
   // STEP 10 フェーズC.2.7-audit-fix: powerSaveBlocker（営業中ディスプレイスリープ抑止）
   power: {
-    preventDisplaySleep: () => ipcRenderer.invoke('power:preventDisplaySleep'),
-    allowDisplaySleep:   () => ipcRenderer.invoke('power:allowDisplaySleep')
+    preventDisplaySleep: () => _measuredInvoke('power:preventDisplaySleep'),
+    allowDisplaySleep:   () => _measuredInvoke('power:allowDisplaySleep')
   },
   // v2.0.0 STEP 2: 2 画面間の状態同期ブリッジ。
   //   - subscribeStateSync: hall 側で main からの差分を受信（イベント駆動、ポーリング禁止）
@@ -105,7 +111,7 @@ contextBridge.exposeInMainWorld('api', {
       if (typeof callback !== 'function') return;
       ipcRenderer.on('dual:state-sync', (_event, payload) => callback(payload));
     },
-    fetchInitialState: () => ipcRenderer.invoke('dual:state-sync-init'),
+    fetchInitialState: () => _measuredInvoke('dual:state-sync-init'),
     // v2.1.6: PRE_START の hall 同期。operator 側から send で broadcast を要求、main 側で
     //   _publishDualState('preStartState', payload) を呼ぶ。payload 形:
     //   { isActive: bool, totalMs?: number, remainingMs?: number, startAtMs?: number }
@@ -149,7 +155,7 @@ contextBridge.exposeInMainWorld('api', {
     //   fetchDisplays: 検出済の displays + 前回選択 id を取得（invoke、結果を返す）
     //   selectHallMonitor: ユーザーが選んだモニター id を main に通知（send、結果不要）
     //   ※ ipcRenderer.send は通知系（main 側 ipcMain.on で受信）。invoke と区別。
-    fetchDisplays: () => ipcRenderer.invoke('display-picker:fetch'),
+    fetchDisplays: () => _measuredInvoke('display-picker:fetch'),
     selectHallMonitor: (displayId) => ipcRenderer.send('dual:select-hall-monitor', displayId)
   },
   // v2.0.4-rc15 タスク 2: 5 分 rolling ログ機構の renderer ブリッジ。
@@ -161,6 +167,6 @@ contextBridge.exposeInMainWorld('api', {
       try { ipcRenderer.send('rolling-log:write', { label: String(label || ''), data: data || null }); }
       catch (_) { /* never throw from logging */ }
     },
-    openFolder: () => ipcRenderer.invoke('logs:openFolder')
+    openFolder: () => _measuredInvoke('logs:openFolder')
   }
 });

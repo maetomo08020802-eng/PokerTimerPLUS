@@ -57,9 +57,21 @@ function notify(prev) {
     try {
       listener(snapshot, prev);
     } catch (err) {
+      // v2.1.18-meas1 error:caught:state.notify: subscriber 内 throw を rolling-log に記録
+      try {
+        if (typeof window !== 'undefined' && window.api?.log?.write) {
+          window.api.log.write('error:caught:state.notify', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] });
+        }
+      } catch (_) {}
       console.warn('状態購読者でエラー発生:', err);
     }
   }
+  // v2.1.18-meas1 state:transition: status 変化を edge イベントとして rolling-log に記録
+  try {
+    if (prev && prev.status !== snapshot.status && typeof window !== 'undefined' && window.api?.log?.write) {
+      window.api.log.write('state:transition', { from: prev.status, to: snapshot.status, levelIdx: snapshot.currentLevelIndex });
+    }
+  } catch (_) {}
 }
 
 function isValidStatus(status) {

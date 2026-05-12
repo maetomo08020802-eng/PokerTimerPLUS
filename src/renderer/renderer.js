@@ -23,6 +23,8 @@ import {
   startAtLevel as timerStartAtLevel,
   startPreStart as timerStartPreStart,
   cancelPreStart as timerCancelPreStart,
+  // v2.1.20-rc4: operator 側 dual-sync 受信時の PRE_START 状態復元用
+  restorePreStart as timerRestorePreStart,
   isPreStartActive,
   getPreStartTotalMs,
   pause as timerPause,
@@ -93,6 +95,54 @@ async function _tournamentsListDedup() {
     _tournamentsListInFlight = null;
   });
   return _tournamentsListInFlight;
+}
+
+// v2.1.20-rc3: renderTournamentList Promise dedup
+//   既存 `_tournamentsListDedup` (tournaments.list IPC 1 本化) と同パターン。
+//   非同期描画中の並行呼出を 1 本化し、新規/複製ボタン押下時の「2 倍表示」race を根絶。
+//   renderTournamentList は async で innerHTML='' / fragment.appendChild の間に await が挟まる構造で、
+//   複数経路から並行呼出すると fragment が 2 個並ぶ → リスト 2 倍表示 → throttle gate (1 秒) で
+//   ようやく修正される。本ラッパで in-flight 中は同じ Promise を返し、並行発火を 1 本化する。
+let _renderTournamentListInFlight = null;
+function renderTournamentListWithDedup(prefetched) {
+  if (_renderTournamentListInFlight) return _renderTournamentListInFlight;
+  _renderTournamentListInFlight = renderTournamentList(prefetched).finally(() => {
+    _renderTournamentListInFlight = null;
+  });
+  return _renderTournamentListInFlight;
+}
+
+// =============================================================================
+// v2.2.1: setInterval / requestAnimationFrame ラッパ（wrapper 関数は機能実装に必須、計測ラベル発火行のみ撤去）
+// =============================================================================
+
+const _IntervalLabel = {
+  PERIODIC_PERSIST: 'periodic-persist-all-running',
+  SLIDESHOW_ROTATION: 'slideshow-rotation',
+  ROLLING_LOG_FLUSH: 'rolling-log-flush'
+};
+function _wrappedSetInterval(label, fn, ms) {
+  return setInterval(() => {
+    try { fn(); } catch (e) {
+      try { window.api?.log?.write?.('error:caught:wrappedSetInterval', { label, message: e?.message }); } catch (_) {}
+    }
+  }, ms);
+}
+
+const _RafLabel = {
+  HALL_PRE_START_TICK: 'hall-pre-start-tick',
+  HALL_TICK_FRAME: 'hall-tick-frame',
+  DUAL_SYNC_FLUSH: 'dual-sync-flush',
+  TIMER_TICK: 'timer-tick',
+  TIMER_PRE_START_TICK: 'timer-pre-start-tick',
+  RENDERER_MISC: 'renderer-misc'
+};
+function _wrappedRAF(label, fn) {
+  return requestAnimationFrame((t) => {
+    try { fn(t); } catch (e) {
+      try { window.api?.log?.write?.('error:caught:wrappedRAF', { label, message: e?.message }); } catch (_) {}
+    }
+  });
 }
 
 // トーナメント基本情報（mutable、トーナメントタブで編集可）
@@ -1415,6 +1465,20 @@ function computeLiveTimerState(ts, levels) {
   return { ...ts, currentLevel: level, elapsedSecondsInLevel: Math.floor(elapsed) };
 }
 
+// v2.1.20-rc1: computeLiveTimerState を秒粒度でメモ化（renderTournamentList 軽量化）。
+//   同じ tournament + 同じ秒なら結果を再利用 → 1 回 400〜570ms → 200ms 程度に圧縮見込み。
+//   WeakMap なので tournament オブジェクトが GC 対象になれば自動解放 = メモリリークなし。
+const _computeLiveTimerStateMemo = new WeakMap();
+function computeLiveTimerStateMemoized(ts, levels) {
+  if (!ts || typeof ts !== 'object') return computeLiveTimerState(ts, levels);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const cached = _computeLiveTimerStateMemo.get(ts);
+  if (cached && cached.nowSec === nowSec && cached.levels === levels) return cached.value;
+  const value = computeLiveTimerState(ts, levels);
+  try { _computeLiveTimerStateMemo.set(ts, { nowSec, levels, value }); } catch (_) {}
+  return value;
+}
+
 // STEP 6.21.2: blindPresetId → levels 配列のキャッシュ
 // renderTournamentList が 1秒ごとに呼ばれるため、毎回 fetch すると重い → 起動時/プリセット変更時のみ load
 const blindPresetCache = new Map();
@@ -1440,15 +1504,75 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   }
   if (!ts || typeof ts !== 'object') {
     el.clock?.classList.remove('clock--timer-finished');
-    if (!isHallApply) timerReset();
-    else stopHallTickFrame();
+    if (!isHallApply) {
+      // v2.1.20-rc9: PRE_START 中の operator では invalid-ts 経由の reset も skip（rc8 idle 経路と同パターン）
+      if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        // v2.1.20-rc10.1 観測: race window 計測開始（多層防御 race の論理的死角検出）
+        const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'invalid-ts', role: window.appRole }); } catch (_) {}
+        // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+        const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        const _raceWindowMs = _raceExitMs - _raceEntryMs;
+        if (_raceWindowMs >= 1) {
+          try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'invalid-ts', windowMs: _raceWindowMs }); } catch (_) {}
+        }
+        return;
+      }
+      // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
+      if (!timerReset({ force: false })) {
+        try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'applyTimerStateToTimer:invalid-ts', role: window.appRole }); } catch (_) {}
+      }
+    }
+    else {
+      // v2.1.20-rc2: PAUSED/IDLE/PRE_START 遷移時に hallTickState を明示リセット
+      //   HDMI 抜き差し時に前トーナメントの seed が残存する race を防ぐ（rc1 hall タイマー止まらず根治）
+      stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: 'invalid-ts' }); } catch (_) {}
+    }
     return;
   }
   if (ts.status === 'idle') {
     el.clock?.classList.remove('clock--timer-finished');
-    if (!isHallApply) timerReset();
+    if (!isHallApply) {
+      // v2.1.20-rc8 真因根治: PRE_START 中の operator では timerState idle 経由の reset を skip。
+      //   HDMI 挿し直し時 operator 再生成 → rc5/rc7 機構で preStartState を復元（restorePreStart で
+      //   isPreStart=true）→ その直後 initialize() 内 applyTimerStateToTimer({status:'idle'}) が呼ばれ
+      //   → timerReset() → reset() 内 wasPreStart=true で handlers.onPreStartCancel() 発火
+      //   → publishPreStartIfOperator({isActive:false}) で main cache を破壊する race を阻止。
+      //   PRE_START は dual-sync の preStartState 経路で別途管理されているため、timerState idle で
+      //   reset しても整合性は保たれる。
+      if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        // v2.1.20-rc9: trigger フィールド追加（rc8 既存ガード、経路識別用）
+        // v2.1.20-rc10.1 観測: race window 計測開始
+        const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'idle', status: ts.status, role: window.appRole }); } catch (_) {}
+        // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+        const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        const _raceWindowMs = _raceExitMs - _raceEntryMs;
+        if (_raceWindowMs >= 1) {
+          try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'idle', windowMs: _raceWindowMs }); } catch (_) {}
+        }
+        return;   // PRE_START 状態を維持、reset しない
+      }
+      // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
+      if (!timerReset({ force: false })) {
+        try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'applyTimerStateToTimer:idle', role: window.appRole }); } catch (_) {}
+      }
+    }
     else {
+      // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
       stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: ts.status }); } catch (_) {}
       try {
         const lvl0 = (getLevelCount() > 0) ? getLevel(0) : null;
         const totalMs0 = (lvl0?.durationMinutes || 0) * 60 * 1000;
@@ -1461,9 +1585,35 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   //   ユーザーが「タイマーリセット」を押すと idle に戻り、新規エントリーで再開可能。
   //   メイン画面に「トーナメント終了」オーバーレイを表示（緑系、playersRemaining=0 とは別経路）。
   if (ts.status === 'finished') {
-    if (!isHallApply) timerReset();
+    if (!isHallApply) {
+      // v2.1.20-rc9: PRE_START 中の operator では finished 経由の reset も skip（rc8 idle 経路と同パターン）
+      if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        // v2.1.20-rc10.1 観測: race window 計測開始
+        const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'finished', role: window.appRole }); } catch (_) {}
+        // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+        const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        const _raceWindowMs = _raceExitMs - _raceEntryMs;
+        if (_raceWindowMs >= 1) {
+          try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'finished', windowMs: _raceWindowMs }); } catch (_) {}
+        }
+        el.clock?.classList.add('clock--timer-finished');
+        return;
+      }
+      // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
+      if (!timerReset({ force: false })) {
+        try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'applyTimerStateToTimer:finished', role: window.appRole }); } catch (_) {}
+      }
+    }
     else {
+      // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
       stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: ts.status }); } catch (_) {}
       // hall: 終了表示用に setState で IDLE + remainingMs=0 を反映
       try { setState({ status: States.IDLE, remainingMs: 0 }); } catch (_) {}
     }
@@ -1478,8 +1628,35 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
     : ts;
   const levelCount = getLevelCount();
   if (levelCount === 0) {
-    if (!isHallApply) timerReset();
-    else stopHallTickFrame();
+    if (!isHallApply) {
+      // v2.1.20-rc9: PRE_START 中の operator では no-levels 経由の reset も skip（rc8 idle 経路と同パターン）
+      if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        // v2.1.20-rc10.1 観測: race window 計測開始
+        const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'no-levels', role: window.appRole }); } catch (_) {}
+        // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+        const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        const _raceWindowMs = _raceExitMs - _raceEntryMs;
+        if (_raceWindowMs >= 1) {
+          try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'no-levels', windowMs: _raceWindowMs }); } catch (_) {}
+        }
+        return;
+      }
+      // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
+      if (!timerReset({ force: false })) {
+        try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'applyTimerStateToTimer:no-levels', role: window.appRole }); } catch (_) {}
+      }
+    }
+    else {
+      // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
+      stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: 'no-levels' }); } catch (_) {}
+    }
     return;
   }
   const idx = Math.max(0, Math.min(levelCount - 1, (live.currentLevel || 1) - 1));
@@ -1522,7 +1699,11 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
         renderHallTickFrame();
       } else {
         // PAUSED: rAF 停止、上の setState で残り時間が固定表示される
+        // v2.1.20-rc2: PAUSED 遷移時も defensive hallTickState リセット（前トーナメント seed 残存防止）
+        //   なお totalMs / currentLevelIndex / startedAtMs は直前 setState で適切値が seed されているため上書きしない
         stopHallTickFrame();
+        hallTickState.isActive = false;
+        try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyTimerStateToTimer-non-running', status: live.status }); } catch (_) {}
       }
     } catch (err) { console.warn('[v2.1.11 hall] tick state seed 更新失敗:', err); }
   }
@@ -1607,7 +1788,8 @@ let timerStatePeriodicInterval = null;
 function startPeriodicTimerStatePersist() {
   if (window.appRole === 'hall') return;  // v2.0.1: hall は purely consumer、逆書込禁止
   if (timerStatePeriodicInterval) return;
-  timerStatePeriodicInterval = setInterval(periodicPersistAllRunning, 5000);
+  // v2.1.20-meas1 カテゴリ A: _wrappedSetInterval 経由で発火を記録
+  timerStatePeriodicInterval = _wrappedSetInterval(_IntervalLabel.PERIODIC_PERSIST, periodicPersistAllRunning, 5000);
 }
 function stopPeriodicTimerStatePersist() {
   if (timerStatePeriodicInterval) {
@@ -1823,6 +2005,9 @@ subscribe((state, prev) => {
     }
   }
   // STEP 10 フェーズC.1.4: スライドショー / PIP の状態同期
+  // v2.1.20-rc3: rc1 Fix 3 ガード撤去 — rc1 Fix 1 で renderHallTickFrame の 60Hz setState 連鎖が消えたため、
+  //   流れ込み防止のガードは不要。ガードが過剰防御で PRE_START 中のスライドショー始動経路自体を止めていた。
+  //   症状 2（PIP timer に 01:00 一瞬表示）は rc1 Fix 1 の根本対処で防げる。
   syncSlideshowFromState(state.remainingMs);
   // v2.0.0 STEP 3: operator モードのみミニ状態バーを更新（hall / operator-solo は no-op）
   updateOperatorStatusBar(state);
@@ -1832,7 +2017,7 @@ subscribe((state, prev) => {
   //   status / level 変化時は即時呼出（throttle 経由しない）、それ以外は 1 秒に 1 回だけ許可。
   //   旧 setInterval(renderTournamentList, 1000) を完全に置換、ベース 1 Hz の強制 fetch を廃止。
   if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex || _shouldRefreshListByThrottle()) {
-    renderTournamentList().catch(() => {});
+    renderTournamentListWithDedup().catch(() => {});
   }
 });
 
@@ -2198,6 +2383,13 @@ function handleStartPauseToggle() {
   // 初回ユーザー操作時に AudioContext を resume（fire-and-forget）
   ensureAudioReady();
   const { status } = getState();
+  // v2.1.20-rc4: PRE_START 中の Space で確実に一時停止（operator 再起動後の復帰経路含む）。
+  //   既存 RUNNING/BREAK/PRE_START → timerPause() の経路と重複するが、explicit early-return で
+  //   restorePreStart 復元後の経路を明示。isPreStartActive() ガードで timer.js 内部状態と整合。
+  if (status === States.PRE_START && typeof isPreStartActive === 'function' && isPreStartActive()) {
+    timerPause();
+    return;
+  }
   // IDLE: スタートボタンと同じ挙動（プレスタート選択ダイアログを開く）
   if (status === States.IDLE) openPreStartDialog();
   else if (status === States.RUNNING || status === States.BREAK || status === States.PRE_START) timerPause();
@@ -2264,6 +2456,8 @@ function readPreStartMinutes() {
 }
 
 el.btnStart.addEventListener('click', () => {
+  // v2.1.18-meas1 ui:click:major
+  try { window.api?.log?.write?.('ui:click:major', { id: 'btnStart' }); } catch (_) {}
   // v2.0.0 STEP 3: ホール側ではボタン自体が hidden だが多重防御
   if (window.appRole === 'hall') return;
   // 初回スタート時に AudioContext を resume（ブラウザ自動再生ポリシー対策）
@@ -2274,8 +2468,12 @@ el.btnStart.addEventListener('click', () => {
   if (getState().status === States.IDLE) openPreStartDialog();
 });
 
-el.prestartCancel?.addEventListener('click', () => el.prestartDialog?.close());
+el.prestartCancel?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'prestartCancel' }); } catch (_) {}
+  el.prestartDialog?.close();
+});
 el.prestartOk?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'prestartOk' }); } catch (_) {}
   const minutes = readPreStartMinutes();
   const players = readPreStartPlayers();
   el.prestartDialog?.close();
@@ -2294,18 +2492,24 @@ el.prestartCustomMin?.addEventListener('focus', () => {
   if (customRadio) customRadio.checked = true;
 });
 el.btnPause.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'btnPause' }); } catch (_) {}
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: 多重防御
   ensureAudioReady();
   // v2.0.2 cleanup: notifyOperatorActionIfNeeded 呼出撤去（dual:operator-action がデッドコード）。
   handleStartPauseToggle();
 });
 el.btnReset.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'btnReset' }); } catch (_) {}
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: 多重防御
   ensureAudioReady();
   openResetDialog();
 });
-el.resetCancel.addEventListener('click', () => el.resetDialog.close());
+el.resetCancel.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'resetCancel' }); } catch (_) {}
+  el.resetDialog.close();
+});
 el.resetOk.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'resetOk' }); } catch (_) {}
   el.resetDialog.close();
   handleReset();   // STEP 6.6: tournamentRuntime もクリア → FINISHED 解除
 });
@@ -2379,12 +2583,16 @@ async function handleVenueSave() {
     // STEP 6.22.1.fix: 成功フィードバック（緑字 2.5 秒）
     _venueHintSuccess('保存しました');
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:handleVenueSave', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('venueName 保存失敗:', err);
     _venueHintError('保存に失敗しました: ' + (err.message || err));
   }
 }
 
-el.venueSaveBtn?.addEventListener('click', handleVenueSave);
+el.venueSaveBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'venueSaveBtn' }); } catch (_) {}
+  handleVenueSave();
+});
 
 // ===== STEP 6.23: PC間データ移行（エクスポート / インポート） =====
 
@@ -2550,10 +2758,19 @@ async function handleImportClipboard() {
   }
 }
 
-el.exportSingleFileBtn?.addEventListener('click', handleExportSingleFile);
+el.exportSingleFileBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'exportSingleFileBtn' }); } catch (_) {}
+  handleExportSingleFile();
+});
 el.exportSingleClipboardBtn?.addEventListener('click', handleExportSingleClipboard);
-el.exportBulkFileBtn?.addEventListener('click', handleExportBulkFile);
-el.importFileBtn?.addEventListener('click', handleImportFile);
+el.exportBulkFileBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'exportBulkFileBtn' }); } catch (_) {}
+  handleExportBulkFile();
+});
+el.importFileBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'importFileBtn' }); } catch (_) {}
+  handleImportFile();
+});
 el.importClipboardBtn?.addEventListener('click', handleImportClipboard);
 
 function applyBackground(value) {
@@ -2814,6 +3031,61 @@ function applyHallPreStartState(payload) {
     if (typeof renderTime === 'function') renderTime(0);
     // スライドショー判定を再評価（PRE_START → idle で deactivate）
     if (typeof syncSlideshowFromState === 'function') syncSlideshowFromState(0);
+    // v2.1.20-rc2: PRE_START 解除時に hallTickState も IDLE 正規化
+    //   hallTickState seed が前 RUNNING 値で残存している場合の保険（hall タイマー止まらず根治）
+    if (hallTickState.isActive || hallTickState.status !== 0 || hallTickState.startedAtMs !== 0) {
+      stopHallTickFrame();
+      hallTickState.startedAtMs = 0;
+      hallTickState.status = 0;
+      hallTickState.currentLevelIndex = 0;
+      hallTickState.totalMs = 0;
+      hallTickState.isActive = false;
+      try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'applyHallPreStartState-inactive' }); } catch (_) {}
+    }
+  }
+}
+
+// v2.1.20-rc4: operator 側 PRE_START 状態受信処理（HDMI 抜き差し / operator 再起動時の復帰用）。
+//   真因: HDMI 抜き差し時 operator renderer 再生成 → timer.js の isPreStart フラグがリセット →
+//        main からの timerState (idle) のみ受信 → operator は PRE_START 中であることを一切知らない。
+//        その結果 `appState.status === IDLE` のまま、Space キーが「IDLE 分岐」で openPreStartDialog()
+//        を呼ぶが、内部の整合性なしで no-op。
+//   対処: dual-sync の preStartState を operator も受信し、timer.js の restorePreStart で復元。
+//        既存 hall 側 applyHallPreStartState と並列、hall 側ロジックには一切触れない。
+function applyOperatorPreStartState(payload) {
+  // operator / operator-solo でのみ呼ばれる（dual-sync handler で role 振り分け済）
+  if (window.appRole === 'hall') return;
+  // v2.1.20-rc4 新規確証ラベル: operator 側 PRE_START 受信時の状態を rolling-log に記録
+  try {
+    window.api?.log?.write?.('operator:applyPreStartState:apply', {
+      isActive: !!payload?.isActive,
+      isPaused: !!payload?.isPaused,
+      remainingMs: payload?.remainingMs,
+      totalMs: payload?.totalMs,
+      role: window.appRole
+    });
+  } catch (_) { /* never throw from logging */ }
+  if (!payload || typeof payload !== 'object') return;
+  if (payload.isActive) {
+    // 既に PRE_START 中なら no-op（重複復元防止、restorePreStart 側でも同等ガードあり）
+    if (typeof isPreStartActive === 'function' && isPreStartActive()) return;
+    // timer.js の復元 API を呼んで isPreStart + targetTime + state を整合
+    if (typeof timerRestorePreStart === 'function') {
+      try {
+        timerRestorePreStart({
+          remainingMs: payload.remainingMs,
+          totalMs: payload.totalMs,
+          isPaused: !!payload.isPaused
+        });
+      } catch (err) {
+        try { window.api?.log?.write?.('error:caught:operator.restorePreStart', { msg: err && err.message }); } catch (_) {}
+      }
+    }
+  } else {
+    // payload.isActive === false: PRE_START 終了状態を整合（既存 cancelPreStart 経路、冪等）
+    if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+      try { timerCancelPreStart(); } catch (_) {}
+    }
   }
 }
 
@@ -2859,7 +3131,8 @@ function renderHallPreStartTick() {
     return;
   }
   // v2.1.11: 自己再帰 rAF で次フレームへ（v2.1.6 同等）
-  hallPreStartState.rafId = requestAnimationFrame(renderHallPreStartTick);
+  // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で発火回数を 1 秒集計
+  hallPreStartState.rafId = _wrappedRAF(_RafLabel.HALL_PRE_START_TICK, renderHallPreStartTick);
 }
 
 // v2.1.11: hall 側 RUNNING / BREAK 用の 60fps 自前 tick rAF（自己再帰）。
@@ -2883,8 +3156,12 @@ function renderHallTickFrame() {
   }
   const now = Date.now();
   const remainingMs = Math.max(0, hallTickState.startedAtMs - now);
-  // setState({ remainingMs }) で subscribe 経由 → renderTime / renderNextBreak が DOM 更新
-  try { setState({ remainingMs }); } catch (_) { /* defensive */ }
+  // v2.1.20-rc1: 重さ真因対処（最重要）— setState({ remainingMs }) を削除し、DOM 直接書込に変更。
+  //   旧構造: 60Hz setState → subscribe 連鎖（50〜60Hz） → renderTime / syncSlideshowFromState 二重発火
+  //   新構造: 60Hz tick → DOM 直接書込 → subscribe 発火しない（renderHallPreStartTick と同設計）
+  //   appState.remainingMs はイベント時のみ更新（applyTimerStateToTimer 等）、tick では更新しない
+  try { renderTime(remainingMs); } catch (_) { /* defensive */ }
+  try { syncSlideshowFromState(remainingMs); } catch (_) { /* defensive */ }
   if (remainingMs <= 0) {
     // 0 到達時は自動遷移を operator broadcast に委ねる（hall 側で次レベル進行はしない）。
     // 0 表示の状態で rAF を停止して待機。次の operator broadcast で seed 更新されたら再起動される。
@@ -2893,7 +3170,8 @@ function renderHallTickFrame() {
     return;
   }
   // 自己再帰で次フレームへ
-  hallTickState.rafId = requestAnimationFrame(renderHallTickFrame);
+  // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で発火回数を 1 秒集計
+  hallTickState.rafId = _wrappedRAF(_RafLabel.HALL_TICK_FRAME, renderHallTickFrame);
 }
 
 function applyPipSize(value) {
@@ -2932,7 +3210,8 @@ function activateSlideshow() {
   // setInterval で循環
   const intervalMs = Math.max(3, breakImagesState.intervalSec) * 1000;
   if (slideshowState.intervalId) clearInterval(slideshowState.intervalId);
-  slideshowState.intervalId = setInterval(() => {
+  // v2.1.20-meas1 カテゴリ A: _wrappedSetInterval 経由で発火を記録
+  slideshowState.intervalId = _wrappedSetInterval(_IntervalLabel.SLIDESHOW_ROTATION, () => {
     if (!slideshowState.active || breakImagesState.images.length === 0) return;
     slideshowState.currentIndex = (slideshowState.currentIndex + 1) % breakImagesState.images.length;
     if (el.slideshowImg) {
@@ -3312,6 +3591,7 @@ async function handleFontThumbClick(value) {
     try {
       await window.api.tournaments.setDisplaySettings(tournamentState.id, { timerFont: value });
     } catch (err) {
+      try { window.api?.log?.write?.('error:caught:handleFontThumbClick', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('フォント設定の保存に失敗:', err);
     }
   }
@@ -3333,6 +3613,7 @@ async function toggleBottomBar() {
     try {
       await window.api.settings.setDisplay({ bottomBarHidden });
     } catch (err) {
+      try { window.api?.log?.write?.('error:caught:toggleBottomBar', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('ボトムバー表示状態の保存に失敗:', err);
     }
   }
@@ -3583,6 +3864,7 @@ async function handleTournamentGameTypeChange(newGameType) {
       }
     }
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:structureTypeChange', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('構造型変更時のフォーマットロード失敗:', err);
   }
 
@@ -3915,7 +4197,7 @@ async function populateTournamentList() {
     if (tournamentState.id) el.tournamentSelect.value = tournamentState.id;
   }
   // STEP 6.21: 構造化リストを再描画
-  await renderTournamentList(list);
+  await renderTournamentListWithDedup(list);
   // STEP 7.x ③-a: ヘッダーの el.tournamentDelete は撤去済。各行 🗑 ボタンの disabled 制御は
   //               renderTournamentList → buildTournamentListItem 内で list.length <= 1 を渡して制御
   // STEP 6.7: 保存数表示「保存中: N/100 件」、上限到達時は赤字
@@ -3978,6 +4260,8 @@ async function renderTournamentList(prefetched) {
     try { list = await _tournamentsListDedup() || []; } catch (_) { list = []; }
   }
   el.tournamentList.innerHTML = '';
+  // v2.1.20-rc1: Fix 2-A — DocumentFragment で reflow 回数を N → 1 に削減
+  const fragment = document.createDocumentFragment();
   for (const t of list) {
     const isActive = (t.id === tournamentState.id);
     let ts;
@@ -3988,13 +4272,15 @@ async function renderTournamentList(prefetched) {
       // STEP 6.21.2: 非アクティブは store の値 + 時刻計算で live を導出（並行進行）
       const stored = t.timerState || { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
       const levels = await getCachedLevels(t.blindPresetId);
+      // v2.1.20-rc1: Fix 2-B — 秒粒度メモ化で 1 秒以内の重複計算を圧縮
       ts = (levels && stored.status === 'running')
-        ? computeLiveTimerState(stored, levels)
+        ? computeLiveTimerStateMemoized(stored, levels)
         : stored;
     }
     // STEP 7.x ③-e: list.length を渡して、最後の1件は🗑ボタンを disabled に
-    el.tournamentList.appendChild(buildTournamentListItem(t, ts, isActive, list.length));
+    fragment.appendChild(buildTournamentListItem(t, ts, isActive, list.length));
   }
+  el.tournamentList.appendChild(fragment);
 }
 
 function buildTournamentListItem(t, ts, isActive, listLength = 99) {
@@ -4108,7 +4394,7 @@ async function handleTournamentListToggle(id, currentStatus) {
     next = { ...live, status: 'running', startedAt: now, pausedAt: null };
   }
   await window.api.tournaments.setTimerState(id, next);
-  await renderTournamentList();
+  await renderTournamentListWithDedup();
 }
 
 // 一覧の「リセット」ボタン: 確認 → idle 状態に戻す。アクティブなら timer.js も reset()
@@ -4118,7 +4404,7 @@ async function handleTournamentListReset(id, name) {
   const idleState = { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
   await window.api.tournaments.setTimerState(id, idleState);
   if (id === tournamentState.id) timerReset();
-  await renderTournamentList();
+  await renderTournamentListWithDedup();
 }
 
 // 一覧の「選択」ボタン: handleTournamentSelectChange と同じ流れ
@@ -4187,6 +4473,7 @@ async function handleTournamentSelectChange() {
     const prevTimerState = captureCurrentTimerState();
     await window.api.tournaments.setTimerState(prevId, prevTimerState);
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:switchActive.preserveTimerState', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('切替前 timerState 保存失敗:', err);
   }
 
@@ -4196,6 +4483,7 @@ async function handleTournamentSelectChange() {
     current.id = prevId;
     await window.api.tournaments.save(current);
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:switchActive.preserveForm', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('切替前の自動保存に失敗:', err);
   }
 
@@ -4210,7 +4498,7 @@ async function handleTournamentSelectChange() {
 
   // 4) 新アクティブの blind preset を適用してから timerState を復元（時刻計算で live 復元 + silent）
   await restoreActiveTimerStateFromStore(newId, { silent: true });
-  await renderTournamentList();
+  await renderTournamentListWithDedup();
 }
 
 // STEP 6.21 / 6.21.2: 指定 id の保存済み timerState を timer.js に復元する。
@@ -4233,6 +4521,7 @@ async function restoreActiveTimerStateFromStore(id, opts = {}) {
     }
     applyTimerStateToTimer(found.timerState, levels, { silent: !!opts.silent });
   } catch (err) {
+    try { window.api?.log?.write?.('error:caught:restoreActiveTimerStateFromStore', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
     console.warn('timerState 復元失敗:', err);
   }
 }
@@ -4316,7 +4605,8 @@ async function _handleTournamentNewImpl() {
   ensureEditorEditableState();
   // 名前欄に focus + select で即座に編集できるように
   if (el.tournamentTitle) {
-    requestAnimationFrame(() => {
+    // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
+    _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
       el.tournamentTitle.focus();
       el.tournamentTitle.select();
       // STEP 10 フェーズC.1.4-fix1 Fix 5: C.1.4 で applyTournament が breakImagesState 反映 +
@@ -4404,7 +4694,8 @@ async function _handleTournamentDuplicateImpl() {
     try { ensureEditorEditableState(); } catch (_) { /* ignore */ }
   }
   if (el.tournamentTitle) {
-    requestAnimationFrame(() => {
+    // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
+    _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
       el.tournamentTitle.focus();
       el.tournamentTitle.select();
       // v2.0.4-rc13 Fix 1: RAF 内でも再保証（applyTournament → renderBreakImagesList 等の race で
@@ -5657,7 +5948,8 @@ function insertLevelAfter(idx) {
   setDirty(true);
   renderBlindsTable();
   // STEP 6.9: 挿入直後に flash アニメーションを 0.6s 付与
-  requestAnimationFrame(() => {
+  // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
+  _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
     const tr = el.blindsTbody?.querySelector(`tr[data-index="${insertedAt}"]`);
     if (!tr) return;
     tr.classList.add('level-row--just-inserted');
@@ -5725,7 +6017,8 @@ el.presetNew?.addEventListener('click', async () => {
   // STEP 10 フェーズC.1-A2 Fix: 編集可能状態を強制保証（builtin → user 移行時の readonly 残存対策）
   ensureEditorEditableState();
   if (el.presetName) {
-    requestAnimationFrame(() => {
+    // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
+    _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
       // RAF 内でも再保証（DOM 更新後のタイミング保護）
       ensureEditorEditableState();
       el.presetName.focus();
@@ -5757,8 +6050,9 @@ el.presetDuplicate?.addEventListener('click', async () => {
   ensureEditorEditableState();
   // 複製直後の名前編集を即座に可能にする
   if (el.presetName) {
+    // v2.1.20-meas1 カテゴリ B: _wrappedRAF 経由で RENDERER_MISC として集計
     // 次フレームで focus + select（DOM 更新後でないと focus が外れることがある）+ 再保証
-    requestAnimationFrame(() => {
+    _wrappedRAF(_RafLabel.RENDERER_MISC, () => {
       ensureEditorEditableState();   // RAF 内でも最終保証
       el.presetName.focus();
       el.presetName.select();
@@ -6651,6 +6945,8 @@ window.addEventListener('keydown', (event) => {
     target.tagName === 'SELECT' ||
     target.isContentEditable
   )) return;
+  // v2.1.18-meas1 ui:keypress: ローカル keydown を rolling-log に記録
+  try { window.api?.log?.write?.('ui:keypress', { key: event.key, code: event.code, ctrl: !!event.ctrlKey, shift: !!event.shiftKey, ctx: 'renderer:local-keydown', role: window.appRole }); } catch (_) {}
   dispatchClockShortcut(event);
 });
 
@@ -6662,6 +6958,8 @@ window.addEventListener('keydown', (event) => {
 if (typeof window !== 'undefined' && window.appRole === 'operator') {
   window.api?.dual?.onHallForwardedKey?.((data) => {
     if (!data || typeof data.code !== 'string') return;
+    // v2.1.18-meas1 ui:keypress: hall から IPC 経由で転送されたキー
+    try { window.api?.log?.write?.('ui:keypress', { key: data.key, code: data.code, ctrl: !!data.control, shift: !!data.shift, ctx: 'renderer:hall-forwarded', role: window.appRole }); } catch (_) {}
     dispatchClockShortcut({
       code: data.code,
       key: data.key,
@@ -7079,6 +7377,7 @@ async function loadAppVersion() {
       const version = await window.api.app.getVersion();
       el.appVersion.textContent = version;
     } catch (err) {
+      try { window.api?.log?.write?.('error:caught:loadAppVersion', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('バージョン取得に失敗:', err);
       el.appVersion.textContent = '0.1.0';
     }
@@ -7141,7 +7440,21 @@ async function initialize() {
   } catch (err) {
     console.warn('起動時 timerState 復元失敗:', err);
   }
-  if (!restoredFromTimerState) timerReset();
+  if (!restoredFromTimerState) {
+    // v2.1.20-rc10: 多層防御 — HDMI 挿し直し直後の initialize 経路で preStartState 復元が
+    //   dual-sync で先着している場合、timer.js の isPreStart=true 状態をここで消さない（rc10 真因対処）
+    if (!timerReset({ force: false })) {
+      // v2.1.20-rc10.1 観測: race window 計測開始
+      const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+      try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'initialize:restoredFromTimerState-false', role: window.appRole }); } catch (_) {}
+      // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+      const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+      const _raceWindowMs = _raceExitMs - _raceEntryMs;
+      if (_raceWindowMs >= 1) {
+        try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'initialize:restoredFromTimerState-false', windowMs: _raceWindowMs }); } catch (_) {}
+      }
+    }
+  }
   // STEP 6.21.1: 5秒ごとの定期保存を開始（強制終了時の経過秒巻き戻し対策）
   startPeriodicTimerStatePersist();
   // STEP 6.21.2: リスト UI を 1秒ごとに再描画（並行進行の経過時間を動的表示）
@@ -7153,7 +7466,7 @@ async function initialize() {
         // active トーナメントを computeLiveTimerState で再復元（停電復元と同じロジック）
         await restoreActiveTimerStateFromStore(tournamentState.id, { silent: true });
         // 全リスト即時再描画（非 active も rebase 済みの状態を反映）
-        await renderTournamentList();
+        await renderTournamentListWithDedup();
       } catch (err) {
         console.warn('スリープ復帰時の再同期失敗:', err);
       }
@@ -7206,6 +7519,16 @@ if (typeof window !== 'undefined') {
 }
 
 if (__appRole === 'hall') {
+  // v2.1.20-rc2: hall 起動時の defensive init（HDMI 再生成 race 対策）
+  //   hallTickState は変数定義時に default 値だが、明示的に再代入して残存リスクを排除。
+  //   HDMI 抜き差し時の window 再生成シーンで前トーナメント seed が残存する race を根本的に防ぐ。
+  hallTickState.isActive = false;
+  hallTickState.status = 0;
+  hallTickState.currentLevelIndex = 0;
+  hallTickState.totalMs = 0;
+  hallTickState.startedAtMs = 0;
+  hallTickState.rafId = null;
+  try { window.api?.log?.write?.('hall:hallTickState:reset', { trigger: 'hall-window-init' }); } catch (_) {}
   // v2.0.1 #A1: hall 側 dual-sync 差分ハンドラを登録。
   //   main からの broadcast を受信したとき、kind 別に該当する apply* 関数を呼ぶ。
   //   tournamentBasics 受信時は active トーナメント全体を再取得して applyTournament（最も安全）。
@@ -7316,7 +7639,7 @@ if (__appRole === 'hall') {
           const levels = (typeof getStructure === 'function') ? getStructure() : null;
           applyTimerStateToTimer(value, levels, { silent: true });
         } catch (err) { console.warn('[dual-sync] timerState 適用失敗:', err); }
-      } else if (kind === 'preStartState' && value && typeof value === 'object') {
+      } else if (kind === 'preStartState' && value && typeof value === 'object' && window.appRole === 'hall') {
         // v2.1.6: PRE_START 専用 broadcast の hall 側受信。
         //   isActive=true: hall ローカル状態を更新 + メインタイマーに PRE_START カウントダウン描画
         //                  + スライドショー活性化（isSlideshowEligibleStatus が true を返す）
@@ -7324,6 +7647,18 @@ if (__appRole === 'hall') {
         try {
           applyHallPreStartState(value);
         } catch (err) { console.warn('[dual-sync] preStartState 適用失敗:', err); }
+      } else if (kind === 'preStartState' && value && typeof value === 'object' && window.appRole !== 'hall') {
+        // v2.1.20-rc4: operator / operator-solo 側 preStartState 受信処理（HDMI 抜き差し / 再起動後の復帰用）。
+        //   hall 側 applyHallPreStartState とは独立、timer.js の restorePreStart 経由で内部状態を復元。
+        // v2.1.20-rc5 補足: 本分岐は `if (__appRole === 'hall')` ブロック内のため operator 経路から到達しない（dead code 確定）。
+        //   実際の operator 側受信は line 7790 付近の `else if (__appRole === 'operator')` / else (operator-solo) ブロック内
+        //   subscribeStateSync 経路で行う（Fix 3）。本分岐は rc4 履歴保持のためコード削除せず残置。
+        try {
+          applyOperatorPreStartState(value);
+        } catch (err) {
+          console.warn('[dual-sync] operator preStartState 適用失敗:', err);
+          try { window.api?.log?.write?.('error:caught:operator.preStartState', { msg: err && err.message }); } catch (_) {}
+        }
       } else if (kind === 'structure' && value && Array.isArray(value.levels)) {
         // v2.0.4-rc20 タスク 1（案 A、問題 ⑥ 根治）:
         // ブラインド構造の即時 hall 同期。前原さん判断 ③ c により、進行中レベルの残り時間には影響しない設計。
@@ -7370,11 +7705,38 @@ if (__appRole === 'hall') {
   //   await の失敗で initialize が止まらないよう finally でフォールバック。
   initDualSyncForHall().finally(() => initialize());
 } else if (__appRole === 'operator') {
+  // v2.1.20-rc5: operator も preStartState だけは購読する（HDMI 抜き差し後の PRE_START 復元用）。
+  //   既存設計では subscribeStateSync は hall 限定購読だが、main.js Fix 1/Fix 2 で operator にも
+  //   preStartState を送信する経路を作ったため、ここで対応する受信側を追加。
+  //   timerState 等の他 kind は operator 側で既存 IPC 経由で個別取得しているため、本購読では preStartState のみ拾う。
+  try {
+    window.api?.dual?.subscribeStateSync?.((payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      if (payload.kind === 'preStartState' && payload.value && typeof payload.value === 'object') {
+        try { applyOperatorPreStartState(payload.value); }
+        catch (err) {
+          try { window.api?.log?.write?.('error:caught:operator.preStartState.subscribe', { msg: err && err.message }); } catch (_) {}
+        }
+      }
+    });
+  } catch (_) { /* never throw from subscribe registration */ }
   // operator（2 画面の PC 側）: 本 STEP では既存ロジックそのまま。
   //   STEP 3 で表示要素の hidden 化 + main への operator-action 通知へ移行する。
   initialize();
 } else {
   // operator-solo（単画面、デフォルト）: v1.3.0 と完全同等。
+  // v2.1.20-rc5: operator-solo も対称性のため preStartState を購読（hall 不在モードのため発火頻度低、害なし）。
+  try {
+    window.api?.dual?.subscribeStateSync?.((payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      if (payload.kind === 'preStartState' && payload.value && typeof payload.value === 'object') {
+        try { applyOperatorPreStartState(payload.value); }
+        catch (err) {
+          try { window.api?.log?.write?.('error:caught:operator-solo.preStartState.subscribe', { msg: err && err.message }); } catch (_) {}
+        }
+      }
+    });
+  } catch (_) {}
   // v2.0.0 STEP 5: HDMI 抜き差し直後にウィンドウが再生成されるため、
   //   AudioContext が新しい renderer で suspend 状態になっている可能性。
   //   C.1.7 修正で _play() 内 resume が走るが、最初の音発火を待たずに

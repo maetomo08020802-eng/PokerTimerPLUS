@@ -62,6 +62,8 @@ test('T2 (Fix 1): subscribe の renderNextBreak 呼出が同 gate 配下', () =>
 test('T3 (Fix 2-A): subscribe 冒頭に hall:subscribe:fire ログ — 本番では撤去、rc では存在', () => {
   // v2.1.19-rc2: 本テストは v2.1.18-rc\d+ または v2.1.18-meas\d+ 専用（rc2 計測ログ Fix 2-A〜D を検証）。
   //   v2.1.18 本番 / v2.1.19-rc\d+ 以降では撤去済（v233 / v236 で撤去確認）→ 本テストは skip。
+  // v2.1.20-meas1: rc2 計測ログ (hall:subscribe:fire 等) は v2.1.18-rc / v2.1.18-meas 限定で、
+  //   v2.1.20-meas では復活しない（meas1 計測機構は復活するが、rc2 専用ログは別系統）→ skip 維持。
   const isV218RcOrMeas = /^2\.1\.(18-rc|18-meas)/.test(PKG.version || '');
   if (!isV218RcOrMeas) return;   // 本番ビルドでは v233 で撤去確認、ここはスキップ
   assert.match(RENDERER, /subscribe\s*\(\s*\(\s*state\s*,\s*prev\s*\)\s*=>\s*\{[\s\S]{0,500}?window\.appRole\s*===\s*['"]hall['"][\s\S]{0,200}?hall:subscribe:fire/,
@@ -71,6 +73,8 @@ test('T3 (Fix 2-A): subscribe 冒頭に hall:subscribe:fire ログ — 本番で
 test('T4 (Fix 2-B): renderTime 冒頭に hall:renderTime:enter ログ — 本番では撤去、rc では存在', () => {
   // v2.1.19-rc2: 本テストは v2.1.18-rc\d+ または v2.1.18-meas\d+ 専用（rc2 計測ログ Fix 2-A〜D を検証）。
   //   v2.1.18 本番 / v2.1.19-rc\d+ 以降では撤去済（v233 / v236 で撤去確認）→ 本テストは skip。
+  // v2.1.20-meas1: rc2 計測ログ (hall:subscribe:fire 等) は v2.1.18-rc / v2.1.18-meas 限定で、
+  //   v2.1.20-meas では復活しない（meas1 計測機構は復活するが、rc2 専用ログは別系統）→ skip 維持。
   const isV218RcOrMeas = /^2\.1\.(18-rc|18-meas)/.test(PKG.version || '');
   if (!isV218RcOrMeas) return;
   const fnMatch = RENDERER.match(/function\s+renderTime\s*\(\s*remainingMs\s*\)\s*\{([\s\S]{0,800})/);
@@ -83,6 +87,8 @@ test('T4 (Fix 2-B): renderTime 冒頭に hall:renderTime:enter ログ — 本番
 test('T5 (Fix 2-C): dual-sync.js setState({dual_*}) 直前に hall:setState:dual ログ — 本番では撤去、rc では存在', () => {
   // v2.1.19-rc2: 本テストは v2.1.18-rc\d+ または v2.1.18-meas\d+ 専用（rc2 計測ログ Fix 2-A〜D を検証）。
   //   v2.1.18 本番 / v2.1.19-rc\d+ 以降では撤去済（v233 / v236 で撤去確認）→ 本テストは skip。
+  // v2.1.20-meas1: rc2 計測ログ (hall:subscribe:fire 等) は v2.1.18-rc / v2.1.18-meas 限定で、
+  //   v2.1.20-meas では復活しない（meas1 計測機構は復活するが、rc2 専用ログは別系統）→ skip 維持。
   const isV218RcOrMeas = /^2\.1\.(18-rc|18-meas)/.test(PKG.version || '');
   if (!isV218RcOrMeas) return;
   const setStateIdx = DUAL_SYNC.indexOf('setState({ [`dual_');
@@ -97,6 +103,8 @@ test('T5 (Fix 2-C): dual-sync.js setState({dual_*}) 直前に hall:setState:dual
 test('T6 (Fix 2-D): hall:dataset:status:write 4 箇所 + caller 4 種すべて存在 — 本番では撤去、rc では存在', () => {
   // v2.1.19-rc2: 本テストは v2.1.18-rc\d+ または v2.1.18-meas\d+ 専用（rc2 計測ログ Fix 2-A〜D を検証）。
   //   v2.1.18 本番 / v2.1.19-rc\d+ 以降では撤去済（v233 / v236 で撤去確認）→ 本テストは skip。
+  // v2.1.20-meas1: rc2 計測ログ (hall:subscribe:fire 等) は v2.1.18-rc / v2.1.18-meas 限定で、
+  //   v2.1.20-meas では復活しない（meas1 計測機構は復活するが、rc2 専用ログは別系統）→ skip 維持。
   const isV218RcOrMeas = /^2\.1\.(18-rc|18-meas)/.test(PKG.version || '');
   if (!isV218RcOrMeas) return;
   const labelCount = (RENDERER.match(/hall:dataset:status:write/g) || []).length;

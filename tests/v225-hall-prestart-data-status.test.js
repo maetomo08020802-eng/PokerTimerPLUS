@@ -108,7 +108,7 @@ test('T4 (Fix 2): applyHallPreStartState 解除経路で delete el.clock.dataset
 // T5: package.json version 2.1.13 + scripts.test に v225 登録
 // ============================================================
 test('T5: package.json version は 2.1.13 + scripts.test に v225 登録', () => {
-  assert.equal(PKG.version, '2.1.19',
+  assert.equal(PKG.version, '2.2.1',
     `package.json version が ${PKG.version}（期待 2.1.18）`);
   assert.match(PKG.scripts.test, /v225-hall-prestart-data-status\.test\.js/,
     'scripts.test に v225-hall-prestart-data-status.test.js が登録されていない');
@@ -157,8 +157,9 @@ test('T7: v2.1.11 機構（hallPreStartState / hallTickState / renderHallTickFra
   // 自己再帰 rAF（renderHallPreStartTick 内に requestAnimationFrame で再帰）維持
   const rawBody = extractFnBody(RENDERER, /function\s+renderHallPreStartTick\s*\([^)]*\)\s*\{/);
   assert.ok(rawBody, 'renderHallPreStartTick 関数本体が抽出できない');
-  assert.match(rawBody, /requestAnimationFrame\s*\(\s*renderHallPreStartTick\s*\)/,
-    'renderHallPreStartTick の自己再帰 rAF が消えている（v2.1.11 機構）');
+  // v2.1.20-meas1: requestAnimationFrame → _wrappedRAF(_RafLabel.HALL_PRE_START_TICK, ...) に置換、両形式許容
+  assert.match(rawBody, /(?:requestAnimationFrame\s*\(\s*renderHallPreStartTick\s*\)|_wrappedRAF\s*\(\s*_RafLabel\.HALL_PRE_START_TICK\s*,\s*renderHallPreStartTick\s*\))/,
+    'renderHallPreStartTick の自己再帰 rAF が消えている（v2.1.11 機構、requestAnimationFrame / _wrappedRAF どちらも可）');
   // v2.1.12 で確立した el.time 書込経路維持（v2.1.13 で改変なし）
   assert.match(rawBody, /el\.time\.textContent\s*=\s*formatPreStartTime/,
     'v2.1.12 で確立した el.time.textContent = formatPreStartTime 経路が消えている');
