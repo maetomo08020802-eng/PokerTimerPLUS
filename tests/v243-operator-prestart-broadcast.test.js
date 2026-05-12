@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc10 静的解析テスト — operator 側 preStartState 配信経路 構造的根治
+ * v2.1.20-rc10.1 静的解析テスト — operator 側 preStartState 配信経路 構造的根治
  *
  *   Fix 1: main.js _publishDualState で preStartState を operator (mainWindow) にも broadcast
  *   Fix 2: main.js switchSoloToOperator で did-finish-load タイミングで cache から preStartState 再送信
@@ -35,10 +35,10 @@ function test(name, fn) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10'
+// T1: package.json.version === '2.1.20-rc10.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10', () => {
-  assert.equal(PKG.version, '2.1.20-rc10', `期待 2.1.20-rc10, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.1.20-rc10.1', () => {
+  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================

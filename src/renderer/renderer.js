@@ -1628,7 +1628,15 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
     if (!isHallApply) {
       // v2.1.20-rc9: PRE_START 中の operator では invalid-ts 経由の reset も skip（rc8 idle 経路と同パターン）
       if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        // v2.1.20-rc10.1 観測: race window 計測開始（多層防御 race の論理的死角検出）
+        const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
         try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'invalid-ts', role: window.appRole }); } catch (_) {}
+        // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+        const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        const _raceWindowMs = _raceExitMs - _raceEntryMs;
+        if (_raceWindowMs >= 1) {
+          try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'invalid-ts', windowMs: _raceWindowMs }); } catch (_) {}
+        }
         return;
       }
       // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
@@ -1661,7 +1669,15 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
       //   reset しても整合性は保たれる。
       if (typeof isPreStartActive === 'function' && isPreStartActive()) {
         // v2.1.20-rc9: trigger フィールド追加（rc8 既存ガード、経路識別用）
+        // v2.1.20-rc10.1 観測: race window 計測開始
+        const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
         try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'idle', status: ts.status, role: window.appRole }); } catch (_) {}
+        // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+        const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        const _raceWindowMs = _raceExitMs - _raceEntryMs;
+        if (_raceWindowMs >= 1) {
+          try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'idle', windowMs: _raceWindowMs }); } catch (_) {}
+        }
         return;   // PRE_START 状態を維持、reset しない
       }
       // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
@@ -1693,7 +1709,15 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
     if (!isHallApply) {
       // v2.1.20-rc9: PRE_START 中の operator では finished 経由の reset も skip（rc8 idle 経路と同パターン）
       if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        // v2.1.20-rc10.1 観測: race window 計測開始
+        const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
         try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'finished', role: window.appRole }); } catch (_) {}
+        // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+        const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        const _raceWindowMs = _raceExitMs - _raceEntryMs;
+        if (_raceWindowMs >= 1) {
+          try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'finished', windowMs: _raceWindowMs }); } catch (_) {}
+        }
         el.clock?.classList.add('clock--timer-finished');
         return;
       }
@@ -1728,7 +1752,15 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
     if (!isHallApply) {
       // v2.1.20-rc9: PRE_START 中の operator では no-levels 経由の reset も skip（rc8 idle 経路と同パターン）
       if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        // v2.1.20-rc10.1 観測: race window 計測開始
+        const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
         try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { trigger: 'no-levels', role: window.appRole }); } catch (_) {}
+        // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+        const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        const _raceWindowMs = _raceExitMs - _raceEntryMs;
+        if (_raceWindowMs >= 1) {
+          try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'no-levels', windowMs: _raceWindowMs }); } catch (_) {}
+        }
         return;
       }
       // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
@@ -7604,7 +7636,15 @@ async function initialize() {
     // v2.1.20-rc10: 多層防御 — HDMI 挿し直し直後の initialize 経路で preStartState 復元が
     //   dual-sync で先着している場合、timer.js の isPreStart=true 状態をここで消さない（rc10 真因対処）
     if (!timerReset({ force: false })) {
+      // v2.1.20-rc10.1 観測: race window 計測開始
+      const _raceEntryMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
       try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'initialize:restoredFromTimerState-false', role: window.appRole }); } catch (_) {}
+      // v2.1.20-rc10.1 観測: race window 計測終了（1ms 以上なら警告ラベル）
+      const _raceExitMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+      const _raceWindowMs = _raceExitMs - _raceEntryMs;
+      if (_raceWindowMs >= 1) {
+        try { window.api?.log?.write?.('timer:reset:race-window-entry', { trigger: 'initialize:restoredFromTimerState-false', windowMs: _raceWindowMs }); } catch (_) {}
+      }
     }
   }
   // STEP 6.21.1: 5秒ごとの定期保存を開始（強制終了時の経過秒巻き戻し対策）

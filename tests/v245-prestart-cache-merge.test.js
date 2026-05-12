@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc10 静的解析テスト — preStartState cache merge + priority log lazy init
+ * v2.1.20-rc10.1 静的解析テスト — preStartState cache merge + priority log lazy init
  *
  *   Fix 1: main.js dual:publish-pre-start-state ハンドラに cache merge ロジック追加
  *          （tick / pause / resume / adjust 経由 publish で totalMs 欠落を防止）
@@ -51,10 +51,10 @@ function extractPublishPreStartHandler() {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10'
+// T1: package.json.version === '2.1.20-rc10.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10', () => {
-  assert.equal(PKG.version, '2.1.20-rc10', `期待 2.1.20-rc10, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.1.20-rc10.1', () => {
+  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -179,11 +179,12 @@ test('T7: rc6-meas3 機構（観測強化 4 件）完全保持', () => {
   assert.match(rl[1], /_isPriorityLabel\s*\(\s*entry\.label\s*\)/,
     'rc6-meas3 Fix D 退行: rollingLog 内 _isPriorityLabel 分岐消失');
   // Fix E: display ハンドラ内 _flushLogsToFile
+  // v2.1.20-rc10.1: display-removed ハンドラに stale 観測ブロック追加で文字数が拡大したため 800 → 1200
   assert.match(MAIN_JS,
-    /screen\.on\s*\(\s*['"]display-removed['"][\s\S]{0,800}?_flushLogsToFile\s*\(\s*['"]display-removed['"]/,
+    /screen\.on\s*\(\s*['"]display-removed['"][\s\S]{0,1200}?_flushLogsToFile\s*\(\s*['"]display-removed['"]/,
     'rc6-meas3 Fix E 退行: display-removed ハンドラ内 _flushLogsToFile 消失');
   assert.match(MAIN_JS,
-    /screen\.on\s*\(\s*['"]display-added['"][\s\S]{0,800}?_flushLogsToFile\s*\(\s*['"]display-added['"]/,
+    /screen\.on\s*\(\s*['"]display-added['"][\s\S]{0,1200}?_flushLogsToFile\s*\(\s*['"]display-added['"]/,
     'rc6-meas3 Fix E 退行: display-added ハンドラ内 _flushLogsToFile 消失');
   // Fix F: _highFreqCounter + _recordHighFreq
   assert.match(RENDERER, /const\s+_highFreqCounter\s*=\s*\{\s*\}/,

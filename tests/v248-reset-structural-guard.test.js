@@ -1,10 +1,10 @@
 /**
- * v2.1.20-rc10 静的解析テスト — timer.js reset() に force フラグ引数追加で PRE_START を構造的保護
+ * v2.1.20-rc10.1 静的解析テスト — timer.js reset() に force フラグ引数追加で PRE_START を構造的保護
  *
  *   Fix 1: timer.js reset(opts = {}) シグネチャ + const { force = true } + if (!force && isPreStart) return false;
  *   Fix 2: renderer.js 5 経路で timerReset({ force: false }) 呼出 + 戻り値判定 + timer:reset:skip-during-prestart ラベル発火
  *   Fix 3: 意図的リセット経路 6 箇所は touch なし（force: true デフォルト維持）
- *   Fix 4: package.json version bump 2.1.20-rc9 → 2.1.20-rc10 + scripts.test 末尾追記
+ *   Fix 4: package.json version bump 2.1.20-rc9 → 2.1.20-rc10.1 + scripts.test 末尾追記
  *
  *   rc1〜rc9 機構 + 計測機構 + 致命バグ保護 5 件 完全保持
  *
@@ -46,10 +46,10 @@ const APPLY_TS_FN_BODY = extractFnBody(RENDERER, /function\s+applyTimerStateToTi
 const RESET_FN_BODY    = extractFnBody(TIMER_JS, /export\s+function\s+reset\s*\([^)]*\)\s*\{/);
 
 // ============================================================
-// T1: package.json version === '2.1.20-rc10'
+// T1: package.json version === '2.1.20-rc10.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10', () => {
-  assert.equal(PKG.version, '2.1.20-rc10', `version 不一致: ${PKG.version}`);
+test('T1: package.json.version === 2.1.20-rc10.1', () => {
+  assert.equal(PKG.version, '2.1.20-rc10.1', `version 不一致: ${PKG.version}`);
 });
 
 // ============================================================

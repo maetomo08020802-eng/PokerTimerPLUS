@@ -140,7 +140,7 @@ test('T6: isSlideshowEligibleStatus 末尾は return false（通常レベル PAU
 // T7 (Fix 5): package.json version 2.1.16
 // ============================================================
 test('T7 (Fix 5): package.json version が 2.1.16', () => {
-  assert.equal(PKG.version, '2.1.20-rc10', `package.json version が 2.1.16 ではない（実際: ${PKG.version}）`);
+  assert.equal(PKG.version, '2.1.20-rc10.1', `package.json version が 2.1.16 ではない（実際: ${PKG.version}）`);
 });
 
 // ============================================================

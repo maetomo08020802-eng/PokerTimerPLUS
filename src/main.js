@@ -144,7 +144,11 @@ const PRIORITY_LOG_LABELS = new Set([
   'preStart:operator:send',
   'operator:preStartResync:sent',
   'operator:applyPreStartState:apply',
-  'meas3:hdmi-snapshot:written'
+  'meas3:hdmi-snapshot:written',
+  // v2.1.20-rc10.1 追加（rc10-audit 高優先 #1 / #2 / #10）
+  'hdmi:display-removed:dual-sync-stale',
+  'hdmi:dialog-blocked:switchOperatorToSolo',
+  'timer:reset:race-window-entry'
 ]);
 let _priorityLogBuffer = [];
 let _priorityLogFilePath = null;
@@ -1101,6 +1105,8 @@ const _dualStateCache = {
   //   payload 形: { isActive: bool, totalMs?: number, remainingMs?: number, startAtMs?: number }
   preStartState: null
 };
+// v2.1.20-rc10.1: preStartState cache の最終更新時刻（rc10-audit #1 race 観測用、ms epoch）
+let _preStartStateCacheUpdatedAt = 0;
 function _broadcastDualState(channel, payload) {
   if (!hallWindow || hallWindow.isDestroyed()) return;
   try {
@@ -1113,6 +1119,10 @@ function _broadcastDualState(channel, payload) {
 function _publishDualState(kind, value) {
   if (!Object.prototype.hasOwnProperty.call(_dualStateCache, kind)) return;
   _dualStateCache[kind] = value;
+  // v2.1.20-rc10.1: preStartState cache 更新時刻記録（rc10-audit #1 race 観測用）
+  if (kind === 'preStartState') {
+    _preStartStateCacheUpdatedAt = Date.now();
+  }
   // v2.0.4-rc17: 常時 3 ラベル rolling ログ #1（timerState 送信 ts）
   if (kind === 'timerState') {
     try { rollingLog('timer:state:send', { status: value?.status, level: value?.currentLevel, elapsed: value?.elapsedSecondsInLevel }); } catch (_) { /* never throw from logging */ }
@@ -1440,6 +1450,8 @@ let _isSwitchingMode = false;
 //   show() で即時前面表示にすれば role 切替 IPC も即時反映され、症状が根治する。
 //   close ではなく show なので race ゼロは維持。Fix 2-C で _showRestoreNoticeOnce ポップアップも撤去。
 async function switchOperatorToSolo() {
+  // v2.1.20-rc10.1 観測: 関数所要時間計測（autoUpdater 等の Win32 メッセージループ遮断 race 検出用）
+  const _switchStartTimeMs = Date.now();
   rollingLog('switchOperatorToSolo:enter', { isSwitchingMode: _isSwitchingMode });
   if (_isSwitchingMode) return;
   _isSwitchingMode = true;
@@ -1473,6 +1485,11 @@ async function switchOperatorToSolo() {
   } finally {
     _isSwitchingMode = false;
     rollingLog('switchOperatorToSolo:exit', null);
+    // v2.1.20-rc10.1 観測: 50ms 以上かかった場合、dialog ブロック等の race を検出
+    const _switchDurationMs = Date.now() - _switchStartTimeMs;
+    if (_switchDurationMs >= 50) {
+      try { rollingLog('hdmi:dialog-blocked:switchOperatorToSolo', { durationMs: _switchDurationMs }); } catch (_) {}
+    }
   }
 }
 
@@ -1549,6 +1566,13 @@ function setupDisplayChangeListeners() {
     _displayRemovedPending = true;
     // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayRemovedPending` チェック後で確実に 1 回）
     rollingLog('display-removed', _safeDisplayRemovedSnapshot(removedDisplay));
+    // v2.1.20-rc10.1 観測: preStartState cache が 500ms 以上古い場合に警告ラベル（PRE_START 消失の早期発見）
+    if (_dualStateCache.preStartState && _dualStateCache.preStartState.isActive && _preStartStateCacheUpdatedAt > 0) {
+      const cacheAgeMs = Date.now() - _preStartStateCacheUpdatedAt;
+      if (cacheAgeMs >= 500) {
+        try { rollingLog('hdmi:display-removed:dual-sync-stale', { cacheAgeMs, isActive: true }); } catch (_) {}
+      }
+    }
     // v2.1.20-rc6-meas3: HDMI 抜き検出時の自動採取（fire-and-forget、HDMI 切替を遅延させない）
     try { _flushLogsToFile('display-removed'); } catch (_) {}
     try {

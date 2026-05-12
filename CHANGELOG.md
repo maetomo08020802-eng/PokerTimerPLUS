@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc10.1] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc10.1 試験ビルド（前原さん実機専用、配布なし）。rc10-audit リリース前監査で検出された致命級 race 2 件 + 多層防御論理的死角の観測ラベル 3 個を追加（rc10-audit §4 §5 高優先 #1 / #2 / #10）。配信後の本番運用で race 発生頻度を事実ベース計測する基盤を確立。
+
+### Added (観測強化)
+- **`hdmi:display-removed:dual-sync-stale`**: display-removed 検出時、preStartState cache が 500ms 以上古い場合に警告ラベル発火。PRE_START 消失の早期発見用
+- **`hdmi:dialog-blocked:switchOperatorToSolo`**: switchOperatorToSolo の所要時間が 50ms 超の場合に警告ラベル発火。autoUpdater ダイアログ等による Win32 メッセージループ遮断の race 検出用
+- **`timer:reset:race-window-entry`**: rc8/rc9/rc10 ガード 5 経路の race window が 1ms 以上の場合に警告ラベル発火。多層防御 race の論理的死角を観測
+
+### Infrastructure
+- `_preStartStateCacheUpdatedAt` 変数追加（main.js）+ `_publishDualState` 内で preStartState cache 更新時刻記録
+- `_switchStartTimeMs` 計測（main.js switchOperatorToSolo 関数内）
+- `_raceEntryMs` / `_raceExitMs` 計測（renderer.js 5 経路、`performance.now()` ベース）
+- PRIORITY_LOG_LABELS Set に新規 3 ラベル追加（priority-events.log に記録、配信後監視で活用）
+
+### Maintained
+- v2.1.20-rc10 (timer.js reset force フラグ + 5 経路 + 多層防御) 完全保持
+- v2.1.20-rc9 (4 経路 ガード + trigger 4 種別) 完全保持
+- v2.1.20-rc8 / rc7 / rc6-meas3 / rc5 / rc4 / rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+
+### Notes
+- 致命級 race 2 件は実機影響度低（rc10-audit §7 評価）、本 rc10.1 では**観測のみ**追加。構造的対処は v2.2.2 以降で事実ベース計測後に判断
+- 試験範囲は標準セット（rc10-audit §5 試験 1〜6、所要 3〜4 時間）
+- 試験合格後、rc11 で計測機構撤去 → v2.2.1 として全国配信予定
+
+---
+
 ## [2.1.20-rc10] - 2026-05-12
 
 PokerTimerPLUS+ v2.1.20-rc10 試験ビルド（前原さん実機専用、配布なし）。rc4〜rc9 で 5 連続失敗中の HDMI 抜き差し問題に対し、**構造的根本対策**を実施。並列 sub-agent 3 体で「PRE_START を消す全経路」を網羅特定 → timer.js `reset()` 関数本体に `force` フラグ引数を追加し、意図せぬ reset 経路 5 箇所を一括ガード。

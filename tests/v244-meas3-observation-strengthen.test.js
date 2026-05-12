@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc10 静的解析テスト — 観測機構強化（HDMI 自動採取 + 高頻度集約 + buffer 拡張 + priority buffer）
+ * v2.1.20-rc10.1 静的解析テスト — 観測機構強化（HDMI 自動採取 + 高頻度集約 + buffer 拡張 + priority buffer）
  *
  *   Fix A: main.js buffer 容量定数の計測ビルド時拡張
  *   Fix B: main.js _flushLogsToFile(suffix) 新規追加
@@ -39,10 +39,10 @@ function test(name, fn) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10'
+// T1: package.json.version === '2.1.20-rc10.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10', () => {
-  assert.equal(PKG.version, '2.1.20-rc10', `期待 2.1.20-rc10, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.1.20-rc10.1', () => {
+  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -118,13 +118,14 @@ test('T5: rollingLog 関数内に _isPriorityLabel(entry.label) 分岐 + _append
 // T6: Fix E — main.js display-removed / display-added ハンドラに _flushLogsToFile 呼出
 // ============================================================
 test('T6: screen.on(display-removed/added) ハンドラ内に _flushLogsToFile 呼出存在', () => {
+  // v2.1.20-rc10.1: display-removed ハンドラに stale 観測ブロック追加で文字数が拡大したため 800 → 1200
   // display-removed ハンドラ内
   assert.match(MAIN_JS,
-    /screen\.on\s*\(\s*['"]display-removed['"][\s\S]{0,800}?_flushLogsToFile\s*\(\s*['"]display-removed['"]/,
+    /screen\.on\s*\(\s*['"]display-removed['"][\s\S]{0,1200}?_flushLogsToFile\s*\(\s*['"]display-removed['"]/,
     'Fix E 未完了: display-removed ハンドラ内に _flushLogsToFile(display-removed) 呼出なし');
   // display-added ハンドラ内
   assert.match(MAIN_JS,
-    /screen\.on\s*\(\s*['"]display-added['"][\s\S]{0,800}?_flushLogsToFile\s*\(\s*['"]display-added['"]/,
+    /screen\.on\s*\(\s*['"]display-added['"][\s\S]{0,1200}?_flushLogsToFile\s*\(\s*['"]display-added['"]/,
     'Fix E 未完了: display-added ハンドラ内に _flushLogsToFile(display-added) 呼出なし');
 });
 

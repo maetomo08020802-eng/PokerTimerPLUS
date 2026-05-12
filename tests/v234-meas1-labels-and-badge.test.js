@@ -34,7 +34,7 @@ function test(name, fn) {
 }
 
 // v2.1.20-rc2: meas / rc 系試験ビルドでは計測機構保持中のため skip。本番版（サフィックスなし）のみで撤去 verify。
-const _shouldSkip = /-(meas|rc)\d+$/.test(PKG.version || '');
+const _shouldSkip = /-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '');
 function testSkippableOnMeas(name, fn) {
   if (_shouldSkip) {
     console.log('SKIP:', name, '(meas / rc ビルドでは計測機構保持中のためテスト skip)');

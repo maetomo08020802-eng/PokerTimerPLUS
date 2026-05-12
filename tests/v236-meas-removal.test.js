@@ -32,7 +32,7 @@ function test(name, fn) {
 
 // v2.1.20-rc1: meas / rc 系試験ビルドでは計測機構が**保持**されているため、本テスト（撤去 verify）は skip。
 //   本番版（サフィックスなし）でのみ撤去 verify を実施。
-const _shouldSkipMeasBuild = /-(meas|rc)\d+$/.test(PKG.version || '');
+const _shouldSkipMeasBuild = /-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '');
 function testSkippableOnMeas(name, fn) {
   if (_shouldSkipMeasBuild) {
     console.log('SKIP:', name, '(meas / rc ビルドでは計測機構保持中のため撤去 verify を skip)');
@@ -45,8 +45,8 @@ function testSkippableOnMeas(name, fn) {
 // version assertion: meas ビルドは別系列、test ではなく skip 経由で許容
 // ============================================================
 test('T0 version: package.json.version が現行版数（meas/non-meas どちらも許容）', () => {
-  // v2.1.20-rc10: rc + meas 複合サフィックス（例 `rc6-meas3`）を許容するため regex 拡張
-  assert.match(PKG.version, /^2\.\d+\.\d+(-(meas|rc)\d+(-meas\d+)?)?$/, `想定外の version: ${PKG.version}`);
+  // v2.1.20-rc10.1: rc + meas 複合サフィックス（例 `rc6-meas3`）を許容するため regex 拡張
+  assert.match(PKG.version, /^2\.\d+\.\d+(-(meas|rc)\d+(\.\d+)?(-meas\d+)?)?$/, `想定外の version: ${PKG.version}`);
 });
 
 // ============================================================

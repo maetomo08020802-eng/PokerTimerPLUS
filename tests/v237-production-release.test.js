@@ -1,7 +1,7 @@
 /**
  * v2.1.19 本番リリース確認テスト
  *
- *   T1: package.json.version === '2.1.20-rc10'（本番版数、サフィックスなし）
+ *   T1: package.json.version === '2.1.20-rc10.1'（本番版数、サフィックスなし）
  *   T2: dist/pokertimerplus-setup-2.1.19.exe 存在 + サイズ > 50 MB
  *   T3: dist/latest.yml 存在 + version: 2.1.19 を含む
  *   T4: rc1 機構完全保持
@@ -34,7 +34,7 @@ function test(name, fn) {
 }
 
 // v2.1.20-meas1: 本テストは本番リリース確認専用、meas / rc 系試験ビルドでは全 skip。
-const _isSkippedBuild = /-(meas|rc)\d+$/.test(PKG.version || '');
+const _isSkippedBuild = /-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '');
 function testIfProduction(name, fn) {
   if (_isSkippedBuild) {
     console.log('SKIP:', name, '(meas / rc 系試験ビルドのため本番リリース verify を skip)');

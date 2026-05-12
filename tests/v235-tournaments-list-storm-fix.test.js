@@ -36,7 +36,7 @@ function test(name, fn) {
 // version assertion
 // ============================================================
 test('version: package.json の version が 2.1.19-rc1', () => {
-  assert.equal(PKG.version, '2.1.20-rc10', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.19-rc1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -131,7 +131,7 @@ test('T5: _tournamentsListDedup が _tournamentsListInFlight チェック + fina
 //   meas1 / rc1 ビルドでは保持されているため skip、rc2 / 本番版でのみ撤去 verify
 test('T6: v2.1.18-meas1 計測機構（バッジ + 15 ラベル + Ctrl+Shift+L op-{NN} 保存）すべて撤去', () => {
   // v2.1.20-rc2: meas / rc 系試験ビルドはすべて保持中、本番版（サフィックスなし）でのみ撤去 verify
-  if (/-(meas|rc)\d+$/.test(PKG.version || '')) return;
+  if (/-(meas|rc)\d+(\.\d+)?$/.test(PKG.version || '')) return;
   // バッジ撤去
   assert.ok(!INDEX_HTML.includes('meas-build-badge'),
     'index.html に meas-build-badge が残存（撤去未完了）');

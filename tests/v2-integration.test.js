@@ -86,7 +86,7 @@ test('T4: renderer.js に dual-sync import + ensureAudioReady（notifyOperatorAc
   assert.doesNotMatch(RENDERER, /function\s+notifyOperatorActionIfNeeded\s*\(/,
     'notifyOperatorActionIfNeeded が残存（v2.0.2 で撤去予定）');
   // STEP 5: operator-solo 経路で ensureAudioReady（C.1.7 の明示呼出強化）
-  // v2.1.20-rc10: else 内に subscribeStateSync 用の nested try/catch が追加されたため、
+  // v2.1.20-rc10.1: else 内に subscribeStateSync 用の nested try/catch が追加されたため、
   //   ブレースカウントで else ブロック範囲を厳密に抽出（脆弱な regex 抽出からの脱却）。
   const opIdx2 = RENDERER.indexOf("__appRole === 'operator'");
   assert.ok(opIdx2 >= 0, '__appRole === operator 分岐が見つからない');

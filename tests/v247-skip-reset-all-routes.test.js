@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc10 静的解析テスト — applyTimerStateToTimer の残り 3 経路にも PRE_START 中スキップガード追加
+ * v2.1.20-rc10.1 静的解析テスト — applyTimerStateToTimer の残り 3 経路にも PRE_START 中スキップガード追加
  *
  *   Fix 1-1: invalid-ts 経路 !isHallApply 内に isPreStartActive() ガード + trigger:'invalid-ts'
  *   Fix 1-2: idle 経路（rc8 既存）の data に trigger:'idle' フィールド追加
@@ -103,10 +103,10 @@ function extractHallElseBlockAfter(condStr, lookAhead = 600) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc10'
+// T1: package.json.version === '2.1.20-rc10.1'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc10', () => {
-  assert.equal(PKG.version, '2.1.20-rc10', `期待 2.1.20-rc10, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.1.20-rc10.1', () => {
+  assert.equal(PKG.version, '2.1.20-rc10.1', `期待 2.1.20-rc10.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================
@@ -125,7 +125,7 @@ test('T2: invalid-ts 経路 !isHallApply 内に isPreStartActive() ガード + t
     'Fix 1-1 未完了: trigger:"invalid-ts" の skip-reset ラベル発火経路がない');
   // ガード後の return + ガード外の timerReset()
   assert.match(block,
-    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,300}?return[\s\S]{0,80}?\}[\s\S]{0,500}?timerReset\s*\(\s*(?:\{\s*force\s*:\s*false\s*\}\s*)?\)/,
+    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,1200}?return[\s\S]{0,80}?\}[\s\S]{0,500}?timerReset\s*\(\s*(?:\{\s*force\s*:\s*false\s*\}\s*)?\)/,
     'Fix 1-1 未完了: ガード ブロック内 return → ガード外 timerReset の構造がない');
 });
 
@@ -157,7 +157,7 @@ test('T4: finished 経路 !isHallApply 内に isPreStartActive() ガード + tri
     'Fix 1-3 未完了: trigger:"finished" の skip-reset ラベル発火経路がない');
   // ガード通過時も classList.add('clock--timer-finished') を実行
   assert.match(block,
-    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,400}?el\.clock\?\.classList\.add\s*\(\s*['"]clock--timer-finished['"]\s*\)[\s\S]{0,80}?return/,
+    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,1200}?el\.clock\?\.classList\.add\s*\(\s*['"]clock--timer-finished['"]\s*\)[\s\S]{0,80}?return/,
     'Fix 1-3 未完了: ガード通過時にも el.clock?.classList.add(clock--timer-finished) を呼んでいない（視覚整合性違反）');
 });
 
@@ -177,7 +177,7 @@ test('T5: levelCount===0 経路 !isHallApply 内に isPreStartActive() ガード
     'Fix 1-4 未完了: trigger:"no-levels" の skip-reset ラベル発火経路がない');
   // ガード後の return + ガード外の timerReset()
   assert.match(block,
-    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,300}?return[\s\S]{0,80}?\}[\s\S]{0,500}?timerReset\s*\(\s*(?:\{\s*force\s*:\s*false\s*\}\s*)?\)/,
+    /isPreStartActive\s*\(\s*\)\s*\)\s*\{[\s\S]{0,1200}?return[\s\S]{0,80}?\}[\s\S]{0,500}?timerReset\s*\(\s*(?:\{\s*force\s*:\s*false\s*\}\s*)?\)/,
     'Fix 1-4 未完了: ガード ブロック内 return → ガード外 timerReset の構造がない');
 });
 
