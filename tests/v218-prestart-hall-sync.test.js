@@ -56,7 +56,7 @@ test('T2 (Fix 1): main.js に ipcMain.on("dual:publish-pre-start-state") 登録'
   // ハンドラブロック内で _publishDualState('preStartState', ...) を呼んでいる
   const handlerStart = MAIN_JS.indexOf("ipcMain.on('dual:publish-pre-start-state'");
   assert.ok(handlerStart >= 0, 'IPC handler 開始位置が見つからない');
-  // v2.1.20-rc7: cache merge ロジック追加で handler が長くなったため slice を 4000 に拡張
+  // v2.1.20-rc8: cache merge ロジック追加で handler が長くなったため slice を 4000 に拡張
   const handlerBlock = MAIN_JS.slice(handlerStart, handlerStart + 4000);
   assert.ok(/_publishDualState\(\s*['"]preStartState['"]/.test(handlerBlock),
     'IPC handler 内で _publishDualState("preStartState", ...) を呼んでいない');
@@ -266,7 +266,7 @@ test('T12 (保護): 致命バグ保護 5 件すべて維持', () => {
 // T13: package.json version + scripts.test 登録
 // ============================================================
 test('T13: package.json version 2.1.12 + scripts.test に v218 登録', () => {
-  assert.equal(PKG.version, '2.1.20-rc7', `version が ${PKG.version}（期待 2.1.18）`);
+  assert.equal(PKG.version, '2.1.20-rc8', `version が ${PKG.version}（期待 2.1.18）`);
   assert.ok(PKG.scripts.test.includes('v218-prestart-hall-sync.test.js'),
     'scripts.test に v218-prestart-hall-sync.test.js が登録されていない');
 });

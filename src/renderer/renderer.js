@@ -1641,7 +1641,20 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   }
   if (ts.status === 'idle') {
     el.clock?.classList.remove('clock--timer-finished');
-    if (!isHallApply) timerReset();
+    if (!isHallApply) {
+      // v2.1.20-rc8 真因根治: PRE_START 中の operator では timerState idle 経由の reset を skip。
+      //   HDMI 挿し直し時 operator 再生成 → rc5/rc7 機構で preStartState を復元（restorePreStart で
+      //   isPreStart=true）→ その直後 initialize() 内 applyTimerStateToTimer({status:'idle'}) が呼ばれ
+      //   → timerReset() → reset() 内 wasPreStart=true で handlers.onPreStartCancel() 発火
+      //   → publishPreStartIfOperator({isActive:false}) で main cache を破壊する race を阻止。
+      //   PRE_START は dual-sync の preStartState 経路で別途管理されているため、timerState idle で
+      //   reset しても整合性は保たれる。
+      if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+        try { window.api?.log?.write?.('operator:applyTimerStateToTimer:skip-reset-during-prestart', { status: ts.status, role: window.appRole }); } catch (_) {}
+        return;   // PRE_START 状態を維持、reset しない
+      }
+      timerReset();
+    }
     else {
       // v2.1.20-rc2: defensive hallTickState reset（前トーナメント seed 残存防止）
       stopHallTickFrame();

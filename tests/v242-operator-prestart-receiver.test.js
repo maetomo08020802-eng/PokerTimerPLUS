@@ -1,5 +1,5 @@
 /**
- * v2.1.20-rc7 静的解析テスト — operator 側 preStartState 受信機構追加
+ * v2.1.20-rc8 静的解析テスト — operator 側 preStartState 受信機構追加
  *
  *   Fix 1: timer.js に restorePreStart(payload) export 追加
  *   Fix 2: renderer.js に applyOperatorPreStartState + dual-sync operator 経路 + import 追加
@@ -35,10 +35,10 @@ function test(name, fn) {
 }
 
 // ============================================================
-// T1: package.json.version === '2.1.20-rc7'
+// T1: package.json.version === '2.1.20-rc8'
 // ============================================================
-test('T1: package.json.version === 2.1.20-rc7', () => {
-  assert.equal(PKG.version, '2.1.20-rc7', `期待 2.1.20-rc7, 実際 ${PKG.version}`);
+test('T1: package.json.version === 2.1.20-rc8', () => {
+  assert.equal(PKG.version, '2.1.20-rc8', `期待 2.1.20-rc8, 実際 ${PKG.version}`);
 });
 
 // ============================================================

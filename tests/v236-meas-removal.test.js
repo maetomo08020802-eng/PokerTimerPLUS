@@ -45,7 +45,7 @@ function testSkippableOnMeas(name, fn) {
 // version assertion: meas ビルドは別系列、test ではなく skip 経由で許容
 // ============================================================
 test('T0 version: package.json.version が現行版数（meas/non-meas どちらも許容）', () => {
-  // v2.1.20-rc7: rc + meas 複合サフィックス（例 `rc6-meas3`）を許容するため regex 拡張
+  // v2.1.20-rc8: rc + meas 複合サフィックス（例 `rc6-meas3`）を許容するため regex 拡張
   assert.match(PKG.version, /^2\.\d+\.\d+(-(meas|rc)\d+(-meas\d+)?)?$/, `想定外の version: ${PKG.version}`);
 });
 

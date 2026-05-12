@@ -93,7 +93,7 @@ test('T4-2 (保護): build.nsis 設定 (oneClick: false) 維持', () => {
 // T5: package.json version が 2.1.12
 // ============================================================
 test('T5: package.json version が 2.1.12', () => {
-  assert.equal(PKG.version, '2.1.20-rc7', `version が ${PKG.version}（期待 2.1.18）`);
+  assert.equal(PKG.version, '2.1.20-rc8', `version が ${PKG.version}（期待 2.1.18）`);
 });
 
 test('T5-2: scripts.test に v211-silent-install.test.js が登録', () => {

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.20-rc8] - 2026-05-12
+
+PokerTimerPLUS+ v2.1.20-rc8 試験ビルド（前原さん実機専用、配布なし）。rc7 試験で発覚した「PRE_START 復元直後に勝手にキャンセルされる」新真因を根治。HDMI 抜き差し問題 真因根治 第 2 弾。
+
+### Fixed
+- **HDMI 抜き差し後の自動 PRE_START キャンセル race を根治**: rc6-meas3 観測でログから真因確定 = operator 起動時の `tournaments:getActive` → `applyTimerStateToTimer({status: 'idle'})` → `timerReset()` → `reset()` 内 `wasPreStart=true` で `handlers.onPreStartCancel()` 発火 → `publishPreStartIfOperator({isActive:false})` で main cache を破壊し PRE_START が全画面で消える race を解消。`applyTimerStateToTimer` の operator 経路で `isPreStartActive()` ガードを追加、PRE_START 中なら reset をスキップ
+- 新規確証ラベル `operator:applyTimerStateToTimer:skip-reset-during-prestart`
+
+### Maintained
+- v2.1.20-rc7 (preStartState cache merge + priority log 初期化漏れ修正) 完全保持
+- v2.1.20-rc6-meas3 観測機構（HDMI 自動採取 + 高頻度ラベル集約 + buffer 拡張 + 優先バッファ）完全保持
+- v2.1.20-rc5 (preStartState operator 配信経路) 完全保持
+- v2.1.20-rc4 (operator 側 PRE_START 復元 API) 完全保持
+- v2.1.20-rc3 / rc2 / rc1 機構 完全保持
+- v2.1.19 重さ根治機構 + 致命バグ保護 5 件 + v2.1.6〜v2.1.18 機構 完全保持
+- meas1 / meas2 計測機構 + 症状確証 4 ラベル + rc2 / rc4 / rc5 / meas3 / rc7 ラベル 完全保持
+
+### Notes
+- 修正は `applyTimerStateToTimer` の `'idle'` 経路 operator 側のみ、他 status 経路（`'finished'` / `invalid-ts` / `levelCount === 0`）の `timerReset()` 呼出は **touch なし**（PRE_START 中の意図的リセットは別経路で動作する設計と整合）
+- hall 側の処理は完全保持（v2.1.20-rc2 hallTickState reset 3 マーカー含む）
+- 通常のリセットボタン（handleReset 経由 → `cancelPreStart()` 直接呼出）は **touch なし**で従来動作
+
+---
+
 ## [2.1.20-rc7] - 2026-05-12
 
 PokerTimerPLUS+ v2.1.20-rc7 試験ビルド（前原さん実機専用、配布なし）。rc6-meas3 観測強化で確定した HDMI 抜き差し問題の真因を構造的根治 + priority-events.log 初期化漏れ修正。
