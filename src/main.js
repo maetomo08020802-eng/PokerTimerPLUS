@@ -152,7 +152,12 @@ const PRIORITY_LOG_LABELS = new Set([
   'power:blocker:app-suspension:start',
   'power:blocker:app-suspension:stop',
   'power:blocker:display-sleep:start',
-  'power:blocker:display-sleep:stop'
+  'power:blocker:display-sleep:stop',
+  // v2.2.2 hotfix Phase 2 第 1.5 段階: §8.B-2 setTimeout フォールバック観測ラベル
+  //   prestart:fallback:fired が 1 件でも本番ログで発火 = 仮説 F が現実に発生した決定的証拠
+  'prestart:fallback:scheduled',
+  'prestart:fallback:cleared',
+  'prestart:fallback:fired'
 ]);
 let _priorityLogBuffer = [];
 let _priorityLogFilePath = null;
