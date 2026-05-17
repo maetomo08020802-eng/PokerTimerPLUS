@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v2.2.2 — 2026-05-17
+
+PokerTimerPLUS+ v2.2.2 をリリースします。v2.2.1 で発見された致命バグ（「スタートまで 30 分後」radio 選択時のカウントダウン停止）を二段防御で根治しました。
+
+### 🚨 致命バグ修正（仮説 F: Windows OS レベルのプロセス suspension 二段防御）
+
+**症状**（v2.2.1 で発生）:
+- 「スタートまで 30 分後」のラジオボタンでカウントダウン開始 → 30 分後に Level 1 が 25:00 表示で停止する
+- 発生条件: 長時間（30 分以上）のアイドル状態 + ノート PC 環境などで Windows が裏でアプリを一時停止した場合
+
+**根本原因の構造的特定**:
+- Electron の `backgroundThrottling: false` 設定は Chromium 内部の rAF throttling のみ抑制、Windows OS レベルの Modern Standby / プロセス suspension は対象外
+- 30 分間 PRE_START 中に OS がアプリプロセスを suspend → rAF chain が discard → カウントダウン 0:00 検出経路の `startAtLevel(0)` は走るが、続く tick の rAF chain が動かず Level 1 表示で frozen
+
+**二段防御**:
+
+1. **第 1 防御線**: `prevent-app-suspension` powerSaveBlocker を PRE_START 中のみ並行発火
+   - `main.js` の IPC ハンドラ `power:preventAppSuspension` / `power:allowAppSuspension` 追加
+   - `renderer.js` の `syncPowerSaveBlocker` で PRE_START 中のみ blocker 起動
+   - Windows / macOS で動作（Linux は no-op）、既存 `preventDisplaySleep` 経路とは独立した blocker ID で管理
+
+2. **第 2 防御線**: setTimeout フォールバック追加
+   - 万一第 1 防御で OS suspend が抑止しきれなくても、目標時刻 + 1 秒のバッファ経過で setTimeout callback が強制発動 → Level 1 を必ず開始
+   - 仕掛け 3 経路（startPreStart / restorePreStart 非 paused / resume）、解除 3 経路（cancelPreStart / pause / preStartTick 0:00 検出）
+   - 観測ラベル `prestart:fallback:fired` が本番ログで発火 = 仮説 F が現実に発生した決定的証拠
+
+### 🔍 観測機構（仮説 F の確証 + 将来の本番監視）
+
+- 観測ラベル 28+3 種類（`prestart:tick` / `timer:startLoop` / `timer:tick:raf-gap` / `prestart:fallback:scheduled` / `prestart:fallback:cleared` / `prestart:fallback:fired` 等）を `PRIORITY_LOG_LABELS` に追加
+- 本番ログ（`priority-events.log` + `rolling-current.log`）に確実記録、ユーザー環境での再現解析を容易化
+
+### 🛡 既存機構の完全保持
+
+- 致命バグ保護 5 件（C.2.7-A / C.2.7-D / C.1-A2 / C.1.7 / C.1.8）
+- rc1〜rc10.1 機構（applyTimerStateToTimer 4 経路ガード + race 観測）
+- v2.1.6〜v2.1.18 機構 + v2.1.19 重さ根治機構（setInterval 撤廃 + Promise dedup）
+
+### ✅ テスト
+
+- 1140 件全 PASS（v2.2.1 比 +14 件、新規 `tests/v251-prestart-fallback.test.js` で setTimeout フォールバック検証）
+
+### 🔄 互換性
+
+- v2.2.1 と完全互換、データ移行不要
+- 自動更新で配信、ユーザー操作不要
+
+---
+
+配布元: Yu Shimomachi（PLUS2 運営）
+
+---
+
 ## v2.2.1 — 2026-05-12
 
 PokerTimerPLUS+ v2.2.1 を全国リリースします。v2.1.19（重さ根治版）に加え、HDMI ケーブル抜き差し時の安定性を大幅に向上させました。
