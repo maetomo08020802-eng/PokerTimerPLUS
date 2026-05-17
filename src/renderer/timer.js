@@ -33,6 +33,27 @@ let rafId = null;          // requestAnimationFrame の戻り値
 let isPreStart = false;    // PRE_START 中（PAUSED に遷移しても true を維持し、resume の分岐に使う）
 let preStartTotalMs = 0;   // プレスタート選択値（renderer のフォーマット決定にも使われる）
 
+// v2.2.2 hotfix Phase 2 第 1 段階: 観測ログ仕込み（rAF chain breakage + OS suspend 捕捉）
+//   timer.js は renderer 側 ES module。window.api.log.write は preload 経由で
+//   ipcRenderer.send('rolling-log:write', ...) を発火。優先ログラベルは main.js 側
+//   PRIORITY_LOG_LABELS に登録済（priority-events.log への確実記録）。
+//   v247 T10 制約（reset() 関数本体は window.api?.log?.write?. を呼ばない）遵守 →
+//   reset() / cancelPreStart() 内ではログ発火せず、renderer.js 呼出側で caller log を発火。
+//   Phase 3 真因確定後に削除予定（仮 hotfix 用観測機構）。
+function _hotfixLog(label, data) {
+  try {
+    if (typeof window !== 'undefined' && window.api && window.api.log && typeof window.api.log.write === 'function') {
+      window.api.log.write(label, data || null);
+    }
+  } catch (_) { /* never throw from logging */ }
+}
+// throttle 用 closure 変数群（5 秒間隔、PRE_START 開始 / 終了境界 2 秒は throttle 解除）
+let _hotfixPrestartTickLastLogAt = 0;
+let _hotfixPrestartLastRafAt = 0;
+let _hotfixTickLastLogAt = 0;
+let _hotfixTickLastRafAt = 0;
+let _hotfixTickAfterPreStartFrameCount = 0;
+
 // イベントハンドラ登録
 export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick, onPreStartEnd, onPreStartStart, onPreStartCancel, onPreStartAdjust, onPreStartPause, onPreStartResume, onTournamentComplete }) {
   if (onTick) handlers.onTick = onTick;
@@ -62,6 +83,8 @@ export function getPreStartTotalMs() {
 
 // 指定インデックスのレベルにジャンプし、即時開始
 export function startAtLevel(index) {
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.2: startAtLevel 入口を観測
+  _hotfixLog('timer:startAtLevel:enter', { levelIndex: index, status: getState().status, isPreStart, isBreak: (index >= 0 && index < getLevelCount()) ? isBreakLevel(index) : null });
   if (index < 0 || index >= getLevelCount()) {
     console.warn(`無効なレベルインデックス: ${index}`);
     return;
@@ -76,7 +99,11 @@ export function startAtLevel(index) {
     totalMs,
     status: isBreakLevel(index) ? States.BREAK : States.RUNNING
   });
+  // v2.2.2 hotfix: RUNNING / BREAK setState 後の状態を観測
+  _hotfixLog('timer:startAtLevel:setState-running', { status: getState().status, remainingMs: totalMs, totalMs });
   handlers.onLevelChange(index);
+  // v2.2.2 hotfix: startLoop 呼出直前を観測（rafId が null か確認）
+  _hotfixLog('timer:startAtLevel:before-startLoop', { status: getState().status, rafId });
   startLoop();
 }
 
@@ -359,8 +386,11 @@ function advancePreStartBy(deltaMs) {
 
 // rAFループ開始
 function startLoop() {
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.2: startLoop 入口 + rafId 設定を観測
+  _hotfixLog('timer:startLoop:enter', { rafId, status: getState().status });
   if (rafId !== null) return;
   rafId = requestAnimationFrame(tick);
+  _hotfixLog('timer:startLoop:rafId-set', { rafId, perfNow: performance.now() });
 }
 
 // PRE_START 用 rAF ループ（status が PRE_START 以外になれば自然停止）
@@ -372,15 +402,42 @@ function startPreStartLoop() {
 function preStartTick() {
   rafId = null;
   if (getState().status !== States.PRE_START) return;
-  const remainingMs = targetTime - performance.now();
+  const _hotfixPerfNow = performance.now();
+  const remainingMs = targetTime - _hotfixPerfNow;
+  // v2.2.2 hotfix §A.3: rAF gap 計測（前回 callback からの経過時間、100ms 超過 = OS suspend 復帰の決定的証拠）
+  if (_hotfixPrestartLastRafAt > 0) {
+    const _gapMs = _hotfixPerfNow - _hotfixPrestartLastRafAt;
+    if (_gapMs >= 100) {
+      _hotfixLog('prestart:tick:raf-gap', { gapMs: _gapMs, perfNow: _hotfixPerfNow, targetTime, remainingMs });
+    }
+  }
+  _hotfixPrestartLastRafAt = _hotfixPerfNow;
+  // v2.2.2 hotfix §A.1: prestart:tick ラベル発火（5s throttle、開始/終了境界 2s は throttle 解除）
+  const _hotfixThrottleElapsed = _hotfixPerfNow - _hotfixPrestartTickLastLogAt;
+  const _hotfixForceUnthrottled = (remainingMs <= 2000) ||
+    (preStartTotalMs > 0 && remainingMs >= preStartTotalMs - 2000);
+  if (_hotfixThrottleElapsed >= 5000 || _hotfixForceUnthrottled) {
+    _hotfixPrestartTickLastLogAt = _hotfixPerfNow;
+    _hotfixLog('prestart:tick', { remainingMs, perfNow: _hotfixPerfNow, targetTime, status: getState().status });
+  }
   if (remainingMs <= 0) {
+    // v2.2.2 hotfix §A.1: 00:00 遷移の各段を確実に観測（throttle 対象外、必ず発火）
+    _hotfixLog('prestart:tick:zero-detected', { remainingMs, perfNow: _hotfixPerfNow, targetTime, overshootMs: -remainingMs });
     isPreStart = false;
     preStartTotalMs = 0;
+    _hotfixLog('prestart:tick:after-isPreStart-false', { status: getState().status });
     handlers.onPreStartEnd();
+    _hotfixLog('prestart:tick:after-onPreStartEnd', { status: getState().status });
     // v2.1.6: PRE_START → RUNNING 自動遷移時に hall 側 PRE_START 表示を解除
     try { handlers.onPreStartCancel(); } catch (_) {}
+    _hotfixLog('prestart:tick:after-onPreStartCancel', { status: getState().status });
     // RUNNING へ自動遷移（startAtLevel は内部で setState + startLoop を行う）
+    _hotfixLog('prestart:tick:before-startAtLevel', { status: getState().status });
     startAtLevel(0);
+    _hotfixLog('prestart:tick:after-startAtLevel', { status: getState().status, rafId, remainingMs: getState().remainingMs });
+    // 遷移後最初の 10 frame は throttle 解除（rAF chain 動作確認の決定的証拠）
+    _hotfixTickAfterPreStartFrameCount = 10;
+    _hotfixTickLastRafAt = 0;  // tick 側 rAF gap 計測リセット
     return;
   }
   setState({ remainingMs });
@@ -402,8 +459,28 @@ function tick() {
   const { status, currentLevelIndex } = getState();
   if (status !== States.RUNNING && status !== States.BREAK) return;
 
-  const remainingMs = targetTime - performance.now();
+  const _hotfixPerfNow = performance.now();
+  const remainingMs = targetTime - _hotfixPerfNow;
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.2 / §A.3: tick:enter + rAF gap 計測
+  //   - PRE_START → RUNNING 遷移直後の最初の 10 frame は throttle 解除（rAF chain 動作確認）
+  //   - 通常時は 5s throttle
+  //   - rAF gap 100ms 超過は OS suspend 復帰の決定的証拠
+  if (_hotfixTickLastRafAt > 0) {
+    const _gapMs = _hotfixPerfNow - _hotfixTickLastRafAt;
+    if (_gapMs >= 100) {
+      _hotfixLog('timer:tick:raf-gap', { gapMs: _gapMs, perfNow: _hotfixPerfNow, status, remainingMs });
+    }
+  }
+  _hotfixTickLastRafAt = _hotfixPerfNow;
+  const _hotfixThrottleElapsed = _hotfixPerfNow - _hotfixTickLastLogAt;
+  if (_hotfixTickAfterPreStartFrameCount > 0 || _hotfixThrottleElapsed >= 5000) {
+    _hotfixTickLastLogAt = _hotfixPerfNow;
+    _hotfixLog('timer:tick:enter', { remainingMs, perfNow: _hotfixPerfNow, status, postPreStartFrame: _hotfixTickAfterPreStartFrameCount });
+    if (_hotfixTickAfterPreStartFrameCount > 0) _hotfixTickAfterPreStartFrameCount--;
+  }
+
   if (remainingMs <= 0) {
+    _hotfixLog('timer:tick:zero-detected', { remainingMs, perfNow: _hotfixPerfNow, status });
     handlers.onLevelEnd(currentLevelIndex);
     advanceToNextLevel();
     return;
