@@ -241,7 +241,7 @@ test('T10: CHANGELOG.md v2.2.1 セクション存在 + package.json build 設定
   // 主要キーワード（CHANGELOG 確定版から抜粋）
   assert.match(CHANGELOG, /HDMI ケーブル抜き差し時のタイマー消失問題を根治/,
     'CHANGELOG.md v2.2.1 セクションに HDMI 根治説明がない');
-  assert.match(CHANGELOG, /配布元:\s*Yu Shitamachi/,
+  assert.match(CHANGELOG, /配布元:\s*Yu Shimomachi/,
     'CHANGELOG.md v2.2.1 セクション末尾の配布元クレジットがない');
 
   // package.json メタデータ

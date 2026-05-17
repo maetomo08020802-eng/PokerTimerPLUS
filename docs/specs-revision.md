@@ -5,14 +5,14 @@
 ## 方針変更サマリー
 1. **配布形態変更**: PLUS2専用 → 全国のポーカールーム向けフリー配布
 2. **アプリ名確定**: PokerTimerPLUS+
-3. **クレジット表記**: ユーザーが消せない場所に Yu Shitamachi / PLUS2 を埋め込み（控えめセット）
+3. **クレジット表記**: ユーザーが消せない場所に Yu Shimomachi / PLUS2 を埋め込み（控えめセット）
 4. **通知音仕様の修正**: 5秒前カウント追加（前回指摘事項）
 
 ## 具体的な修正箇所
 
 ### §1 アプリ概要
 - 「店舗 (PLUS2) のディスプレイで運用する」→「全国のポーカールーム・店舗のディスプレイで運用できる汎用ポーカークロック」
-- 「目的」を「ポーカートーナメントの進行管理を、各ポーカールームのディスプレイで運用する。Yu Shitamachi（PLUS2運営）が制作した無料配布アプリ」に変更
+- 「目的」を「ポーカートーナメントの進行管理を、各ポーカールームのディスプレイで運用する。Yu Shimomachi（PLUS2運営）が制作した無料配布アプリ」に変更
 - 「プロダクト名: PokerTimerPLUS+」を冒頭に追記
 
 ### §2 機能一覧
@@ -54,22 +54,22 @@
 - 「ロゴ」行を「PokerStars 固定」→「PLUS2 ロゴ初期値、ユーザーが任意ロゴに差し替え可能」に修正
 - 「通貨」行を「$」→「¥（デフォルト、ユーザーが変更可）」に修正
 - 新規行追加：「アプリ名 | (なし) | PokerTimerPLUS+」
-- 新規行追加：「制作・配布 | PokerStars | Yu Shitamachi（無料配布）」
+- 新規行追加：「制作・配布 | PokerStars | Yu Shimomachi（無料配布）」
 
 ### §15 ブランディング・クレジット仕様（新規追加）
 新たに§15を追加し、以下を記載：
 
 #### 15.1 配置箇所（変更不可）
-- A. ウィンドウタイトルバー: `PokerTimerPLUS+ — presented by Yu Shitamachi`
+- A. ウィンドウタイトルバー: `PokerTimerPLUS+ — presented by Yu Shimomachi`
 - C. About画面: 文字ロゴ + クレジット + コピーライト
-- E. インストーラ発行元: `Yu Shitamachi`、コピーライト `© 2026 Yu Shitamachi / PLUS2`
+- E. インストーラ発行元: `Yu Shimomachi`、コピーライト `© 2026 Yu Shimomachi / PLUS2`
 
 #### 15.2 About画面の表示要素
 - アプリ名 `PokerTimerPLUS+`
 - バージョン番号
 - 文字ロゴSVG（src/assets/logo-yushitamachi.svg）
-- クレジット: `制作: Yu Shitamachi（PLUS2運営）`
-- コピーライト: `© 2026 Yu Shitamachi / PLUS2. All rights reserved.`
+- クレジット: `制作: Yu Shimomachi（PLUS2運営）`
+- コピーライト: `© 2026 Yu Shimomachi / PLUS2. All rights reserved.`
 - 「このアプリは無料で配布されています」
 
 #### 15.3 アクセス導線
@@ -90,7 +90,7 @@
 
 ### §13 非機能要件
 - 「対応OS」に Windows 10/11、macOS 12 以降、（要望次第で）Linux AppImage を追記
-- 「配布」項目を新規追加：「electron-builder で .exe / .dmg を生成。インストーラ発行元はYu Shitamachi、コピーライトは © 2026 Yu Shitamachi / PLUS2」
+- 「配布」項目を新規追加：「electron-builder で .exe / .dmg を生成。インストーラ発行元はYu Shimomachi、コピーライトは © 2026 Yu Shimomachi / PLUS2」
 
 ## 完了条件
 - 上記すべての修正がspecs.mdに反映されている

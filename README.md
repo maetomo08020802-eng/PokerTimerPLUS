@@ -3,7 +3,7 @@
 全国のポーカールーム向けに無料配布する Electron 製ポーカートーナメントクロック。
 
 - **プロダクト名**: PokerTimerPLUS+
-- **制作**: Yu Shitamachi（PLUS2運営）
+- **制作**: Yu Shimomachi（PLUS2運営）
 - **配布形態**: 無料配布
 - **動作環境**: Windows 10/11、macOS 12 以降
 - **公開リポジトリ**: https://github.com/maetomo08020802-eng/PokerTimerPLUS
@@ -67,7 +67,7 @@ npm run build:mac   # macOS .dmg
 
 ## ライセンスとクレジット
 
-© 2026 Yu Shitamachi / PLUS2. All rights reserved.
+© 2026 Yu Shimomachi / PLUS2. All rights reserved.
 
 このアプリは無料で配布されています。
 

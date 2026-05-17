@@ -20,7 +20,7 @@ Full license texts are bundled in `src/assets/fonts/licenses/`.
 
 ## App Icon
 
-The application icon (build/icon.ico, build/icon.png) is an original work by Yu Shitamachi.
+The application icon (build/icon.ico, build/icon.png) is an original work by Yu Shimomachi.
 Design: black square with rounded corners + white "20:40" rendered as 7-segment LCD style
 geometric primitives (SVG `<rect>` shapes). No external font dependency — the digital clock
 look is built from manually-crafted vector segments for portability and consistent rendering
