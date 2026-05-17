@@ -150,7 +150,11 @@ test('T6 (Fix 3): timer.js PRE_START 経路で新 handler 発火（5 箇所）',
   // preStartTick 自動遷移時に onPreStartCancel 発火（PRE_START → RUNNING）
   const tickIdx = TIMER_JS.indexOf('function preStartTick');
   assert.ok(tickIdx >= 0, 'preStartTick 関数が見つからない');
-  const tickBody = TIMER_JS.slice(tickIdx, tickIdx + 1000);
+  // v2.2.2 hotfix Phase 2 第 1 段階: 観測ログ仕込みで preStartTick 本体が ~2500 chars 拡大。
+  //   handlers.onPreStartCancel 呼出は既存通り 00:00 遷移経路で発火されているが、
+  //   slice 窓 1000 → 3500 chars に拡張して検出可能化。
+  //   既存 onPreStartCancel 発火ロジック自体は touch ゼロ、純粋な slice 窓の緩和のみ。
+  const tickBody = TIMER_JS.slice(tickIdx, tickIdx + 3500);
   assert.ok(/handlers\.onPreStartCancel\(/.test(tickBody),
     'preStartTick 自動遷移時に handlers.onPreStartCancel 発火がない');
 });
@@ -268,7 +272,7 @@ test('T12 (保護): 致命バグ保護 5 件すべて維持', () => {
 // T13: package.json version + scripts.test 登録
 // ============================================================
 test('T13: package.json version 2.1.12 + scripts.test に v218 登録', () => {
-  assert.equal(PKG.version, '2.2.1', `version が ${PKG.version}（期待 2.1.18）`);
+  assert.equal(PKG.version, '2.2.2', `version が ${PKG.version}（期待 2.1.18）`);
   assert.ok(PKG.scripts.test.includes('v218-prestart-hall-sync.test.js'),
     'scripts.test に v218-prestart-hall-sync.test.js が登録されていない');
 });

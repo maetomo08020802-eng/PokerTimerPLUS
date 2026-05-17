@@ -97,9 +97,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('system:resume', () => callback());
   },
   // STEP 10 フェーズC.2.7-audit-fix: powerSaveBlocker（営業中ディスプレイスリープ抑止）
+  // v2.2.2 hotfix Phase 2 第 1 段階: prevent-app-suspension 並行採用（仮説 F = OS suspend 対策）
   power: {
-    preventDisplaySleep: () => _measuredInvoke('power:preventDisplaySleep'),
-    allowDisplaySleep:   () => _measuredInvoke('power:allowDisplaySleep')
+    preventDisplaySleep:  () => _measuredInvoke('power:preventDisplaySleep'),
+    allowDisplaySleep:    () => _measuredInvoke('power:allowDisplaySleep'),
+    preventAppSuspension: () => _measuredInvoke('power:preventAppSuspension'),
+    allowAppSuspension:   () => _measuredInvoke('power:allowAppSuspension')
   },
   // v2.0.0 STEP 2: 2 画面間の状態同期ブリッジ。
   //   - subscribeStateSync: hall 側で main からの差分を受信（イベント駆動、ポーリング禁止）

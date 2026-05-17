@@ -33,6 +33,57 @@ let rafId = null;          // requestAnimationFrame の戻り値
 let isPreStart = false;    // PRE_START 中（PAUSED に遷移しても true を維持し、resume の分岐に使う）
 let preStartTotalMs = 0;   // プレスタート選択値（renderer のフォーマット決定にも使われる）
 
+// v2.2.2 hotfix Phase 2 第 1 段階: 観測ログ仕込み（rAF chain breakage + OS suspend 捕捉）
+//   timer.js は renderer 側 ES module。window.api.log.write は preload 経由で
+//   ipcRenderer.send('rolling-log:write', ...) を発火。優先ログラベルは main.js 側
+//   PRIORITY_LOG_LABELS に登録済（priority-events.log への確実記録）。
+//   v247 T10 制約（reset() 関数本体は window.api?.log?.write?. を呼ばない）遵守 →
+//   reset() / cancelPreStart() 内ではログ発火せず、renderer.js 呼出側で caller log を発火。
+//   Phase 3 真因確定後に削除予定（仮 hotfix 用観測機構）。
+function _hotfixLog(label, data) {
+  try {
+    if (typeof window !== 'undefined' && window.api && window.api.log && typeof window.api.log.write === 'function') {
+      window.api.log.write(label, data || null);
+    }
+  } catch (_) { /* never throw from logging */ }
+}
+// throttle 用 closure 変数群（5 秒間隔、PRE_START 開始 / 終了境界 2 秒は throttle 解除）
+let _hotfixPrestartTickLastLogAt = 0;
+let _hotfixPrestartLastRafAt = 0;
+let _hotfixTickLastLogAt = 0;
+let _hotfixTickLastRafAt = 0;
+let _hotfixTickAfterPreStartFrameCount = 0;
+
+// v2.2.2 hotfix Phase 2 第 1.5 段階 §8.B-2: setTimeout フォールバック
+//   仮説 F（Windows OS レベルのプロセス suspension）が真因の場合、rAF chain が discard されて
+//   preStartTick が止まる可能性がある。これを冪等に救出するため、startPreStart 時に
+//   `targetTime + 1000ms` で setTimeout を仕掛け、rAF が先に 00:00 検出すれば cancel する設計。
+//   - 通常時: preStartTick が先に 00:00 検出 → preStartTick 経路で startAtLevel(0) → fallback は no-op early return
+//   - 異常時: rAF stuck → setTimeout 経由で fallback callback 発動 → 同等の遷移を実行
+//   既存 startPreStart / cancelPreStart / pause / resume / preStartTick の本体ロジックは touch ゼロ、
+//   並行で setTimeout 仕掛け / 解除を追加するのみ。Phase 3 真因確定後に維持 or 撤去判断。
+let preStartFallbackTimerId = null;
+function _preStartFallbackCallback() {
+  preStartFallbackTimerId = null;
+  // 早期 return ガード（既に preStartTick が 00:00 検出して startAtLevel(0) を完了している場合）
+  if (!isPreStart) return;
+  // pause 中（PAUSED 状態）は targetTime 不定のため no-op、resume で再仕掛け
+  if (getState().status === States.PAUSED) return;
+  // targetTime 未経過なら no-op（バッファ前、rAF が動いている）
+  if (performance.now() < targetTime) return;
+  // フォールバック発動（rAF chain breakage の決定的証拠ログ）
+  _hotfixLog('prestart:fallback:fired', {
+    perfNow: performance.now(),
+    targetTime,
+    overshootMs: performance.now() - targetTime
+  });
+  isPreStart = false;
+  preStartTotalMs = 0;
+  try { handlers.onPreStartEnd(); } catch (_) { /* never throw */ }
+  try { handlers.onPreStartCancel(); } catch (_) { /* never throw */ }
+  startAtLevel(0);
+}
+
 // イベントハンドラ登録
 export function setHandlers({ onTick, onLevelChange, onLevelEnd, onPreStartTick, onPreStartEnd, onPreStartStart, onPreStartCancel, onPreStartAdjust, onPreStartPause, onPreStartResume, onTournamentComplete }) {
   if (onTick) handlers.onTick = onTick;
@@ -62,6 +113,8 @@ export function getPreStartTotalMs() {
 
 // 指定インデックスのレベルにジャンプし、即時開始
 export function startAtLevel(index) {
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.2: startAtLevel 入口を観測
+  _hotfixLog('timer:startAtLevel:enter', { levelIndex: index, status: getState().status, isPreStart, isBreak: (index >= 0 && index < getLevelCount()) ? isBreakLevel(index) : null });
   if (index < 0 || index >= getLevelCount()) {
     console.warn(`無効なレベルインデックス: ${index}`);
     return;
@@ -76,7 +129,11 @@ export function startAtLevel(index) {
     totalMs,
     status: isBreakLevel(index) ? States.BREAK : States.RUNNING
   });
+  // v2.2.2 hotfix: RUNNING / BREAK setState 後の状態を観測
+  _hotfixLog('timer:startAtLevel:setState-running', { status: getState().status, remainingMs: totalMs, totalMs });
   handlers.onLevelChange(index);
+  // v2.2.2 hotfix: startLoop 呼出直前を観測（rafId が null か確認）
+  _hotfixLog('timer:startAtLevel:before-startLoop', { status: getState().status, rafId });
   startLoop();
 }
 
@@ -92,6 +149,13 @@ export function pause() {
   //   onPreStartCancel ではなく専用 onPreStartPause を呼ぶ理由: cancel は「PRE_START 終了」、
   //   pause は「PRE_START 一時停止」で意味が異なる。hall 側は isPaused=true を受信して自前 rAF を停止 + remainingMs 固定表示。
   if (isPreStart) {
+    // v2.2.2 hotfix Phase 2 第 1.5 段階: PRE_START 中の pause で setTimeout フォールバックを解除
+    //   pause 中は targetTime 不定（pausedRemainingMs で保持）、resume 時に再仕掛け
+    if (preStartFallbackTimerId !== null) {
+      try { clearTimeout(preStartFallbackTimerId); } catch (_) {}
+      preStartFallbackTimerId = null;
+      _hotfixLog('prestart:fallback:cleared', { ctx: 'pause' });
+    }
     try { handlers.onPreStartPause({ remainingMs: pausedRemainingMs }); } catch (_) { /* never throw */ }
   }
 }
@@ -105,6 +169,11 @@ export function resume() {
   if (isPreStart) {
     setState({ status: States.PRE_START });
     startPreStartLoop();
+    // v2.2.2 hotfix Phase 2 第 1.5 段階: PRE_START resume で setTimeout フォールバックを再仕掛け
+    //   pause 時に解除されているため、新しい targetTime に対して再スケジュール
+    const _fallbackDelayMs = Math.max(0, targetTime - performance.now()) + 1000;
+    preStartFallbackTimerId = setTimeout(_preStartFallbackCallback, _fallbackDelayMs);
+    _hotfixLog('prestart:fallback:scheduled', { delayMs: _fallbackDelayMs, targetTime });
     // v2.1.15 ① 根治: PRE_START 再開時に hall へ「一時停止解除（再開）」通知
     try { handlers.onPreStartResume({ remainingMs: resumedRemainingMs }); } catch (_) { /* never throw */ }
     return;
@@ -177,6 +246,11 @@ export function startPreStart(minutes) {
   // v2.1.6: hall に PRE_START 起動を通知（renderer 側で broadcast 経由）
   try { handlers.onPreStartStart({ totalMs, remainingMs: totalMs, startAtMs: Date.now() + totalMs }); } catch (_) {}
   startPreStartLoop();
+  // v2.2.2 hotfix Phase 2 第 1.5 段階 §8.B-2: setTimeout フォールバック仕掛け
+  //   既存 rAF chain が discard されても目標時刻 + 1000ms バッファで強制発動する別ルート確保
+  const _fallbackDelayMs = Math.max(0, targetTime - performance.now()) + 1000;
+  preStartFallbackTimerId = setTimeout(_preStartFallbackCallback, _fallbackDelayMs);
+  _hotfixLog('prestart:fallback:scheduled', { delayMs: _fallbackDelayMs, targetTime });
 }
 
 // v2.1.20-rc4: operator が dual-sync から PRE_START 状態を復元するための API。
@@ -215,6 +289,10 @@ export function restorePreStart(payload) {
       totalMs
     });
     startPreStartLoop();
+    // v2.2.2 hotfix Phase 2 第 1.5 段階: 復元後の PRE_START にも setTimeout フォールバックを仕掛け
+    const _fallbackDelayMs = Math.max(0, targetTime - performance.now()) + 1000;
+    preStartFallbackTimerId = setTimeout(_preStartFallbackCallback, _fallbackDelayMs);
+    _hotfixLog('prestart:fallback:scheduled', { delayMs: _fallbackDelayMs, targetTime });
   }
   // Lv1 情報を再描画させるため onLevelChange のみ発火（onPreStartStart は broadcast loop の原因になるため呼ばない）
   handlers.onLevelChange(0);
@@ -223,6 +301,12 @@ export function restorePreStart(payload) {
 // プレスタートを中断して IDLE に戻す（resetボタンと等価だが onPreStartEnd は鳴らさない）
 export function cancelPreStart() {
   if (!isPreStart) return;
+  // v2.2.2 hotfix Phase 2 第 1.5 段階: setTimeout フォールバックを解除
+  if (preStartFallbackTimerId !== null) {
+    try { clearTimeout(preStartFallbackTimerId); } catch (_) {}
+    preStartFallbackTimerId = null;
+    _hotfixLog('prestart:fallback:cleared', { ctx: 'cancel' });
+  }
   // v2.1.6: hall 側に PRE_START キャンセルを通知（reset() 内で isPreStart=false にされる前に発火）
   try { handlers.onPreStartCancel(); } catch (_) {}
   reset();
@@ -359,8 +443,11 @@ function advancePreStartBy(deltaMs) {
 
 // rAFループ開始
 function startLoop() {
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.2: startLoop 入口 + rafId 設定を観測
+  _hotfixLog('timer:startLoop:enter', { rafId, status: getState().status });
   if (rafId !== null) return;
   rafId = requestAnimationFrame(tick);
+  _hotfixLog('timer:startLoop:rafId-set', { rafId, perfNow: performance.now() });
 }
 
 // PRE_START 用 rAF ループ（status が PRE_START 以外になれば自然停止）
@@ -372,15 +459,49 @@ function startPreStartLoop() {
 function preStartTick() {
   rafId = null;
   if (getState().status !== States.PRE_START) return;
-  const remainingMs = targetTime - performance.now();
+  const _hotfixPerfNow = performance.now();
+  const remainingMs = targetTime - _hotfixPerfNow;
+  // v2.2.2 hotfix §A.3: rAF gap 計測（前回 callback からの経過時間、100ms 超過 = OS suspend 復帰の決定的証拠）
+  if (_hotfixPrestartLastRafAt > 0) {
+    const _gapMs = _hotfixPerfNow - _hotfixPrestartLastRafAt;
+    if (_gapMs >= 100) {
+      _hotfixLog('prestart:tick:raf-gap', { gapMs: _gapMs, perfNow: _hotfixPerfNow, targetTime, remainingMs });
+    }
+  }
+  _hotfixPrestartLastRafAt = _hotfixPerfNow;
+  // v2.2.2 hotfix §A.1: prestart:tick ラベル発火（5s throttle、開始/終了境界 2s は throttle 解除）
+  const _hotfixThrottleElapsed = _hotfixPerfNow - _hotfixPrestartTickLastLogAt;
+  const _hotfixForceUnthrottled = (remainingMs <= 2000) ||
+    (preStartTotalMs > 0 && remainingMs >= preStartTotalMs - 2000);
+  if (_hotfixThrottleElapsed >= 5000 || _hotfixForceUnthrottled) {
+    _hotfixPrestartTickLastLogAt = _hotfixPerfNow;
+    _hotfixLog('prestart:tick', { remainingMs, perfNow: _hotfixPerfNow, targetTime, status: getState().status });
+  }
   if (remainingMs <= 0) {
+    // v2.2.2 hotfix §A.1: 00:00 遷移の各段を確実に観測（throttle 対象外、必ず発火）
+    _hotfixLog('prestart:tick:zero-detected', { remainingMs, perfNow: _hotfixPerfNow, targetTime, overshootMs: -remainingMs });
+    // v2.2.2 hotfix Phase 2 第 1.5 段階: rAF が先に 0:00 検出 → setTimeout フォールバックを解除
+    //   通常時はこの経路で fallback が解除される（fallback callback は no-op early return で安全）
+    if (preStartFallbackTimerId !== null) {
+      try { clearTimeout(preStartFallbackTimerId); } catch (_) {}
+      preStartFallbackTimerId = null;
+      _hotfixLog('prestart:fallback:cleared', { ctx: 'tick-zero' });
+    }
     isPreStart = false;
     preStartTotalMs = 0;
+    _hotfixLog('prestart:tick:after-isPreStart-false', { status: getState().status });
     handlers.onPreStartEnd();
+    _hotfixLog('prestart:tick:after-onPreStartEnd', { status: getState().status });
     // v2.1.6: PRE_START → RUNNING 自動遷移時に hall 側 PRE_START 表示を解除
     try { handlers.onPreStartCancel(); } catch (_) {}
+    _hotfixLog('prestart:tick:after-onPreStartCancel', { status: getState().status });
     // RUNNING へ自動遷移（startAtLevel は内部で setState + startLoop を行う）
+    _hotfixLog('prestart:tick:before-startAtLevel', { status: getState().status });
     startAtLevel(0);
+    _hotfixLog('prestart:tick:after-startAtLevel', { status: getState().status, rafId, remainingMs: getState().remainingMs });
+    // 遷移後最初の 10 frame は throttle 解除（rAF chain 動作確認の決定的証拠）
+    _hotfixTickAfterPreStartFrameCount = 10;
+    _hotfixTickLastRafAt = 0;  // tick 側 rAF gap 計測リセット
     return;
   }
   setState({ remainingMs });
@@ -402,8 +523,28 @@ function tick() {
   const { status, currentLevelIndex } = getState();
   if (status !== States.RUNNING && status !== States.BREAK) return;
 
-  const remainingMs = targetTime - performance.now();
+  const _hotfixPerfNow = performance.now();
+  const remainingMs = targetTime - _hotfixPerfNow;
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.2 / §A.3: tick:enter + rAF gap 計測
+  //   - PRE_START → RUNNING 遷移直後の最初の 10 frame は throttle 解除（rAF chain 動作確認）
+  //   - 通常時は 5s throttle
+  //   - rAF gap 100ms 超過は OS suspend 復帰の決定的証拠
+  if (_hotfixTickLastRafAt > 0) {
+    const _gapMs = _hotfixPerfNow - _hotfixTickLastRafAt;
+    if (_gapMs >= 100) {
+      _hotfixLog('timer:tick:raf-gap', { gapMs: _gapMs, perfNow: _hotfixPerfNow, status, remainingMs });
+    }
+  }
+  _hotfixTickLastRafAt = _hotfixPerfNow;
+  const _hotfixThrottleElapsed = _hotfixPerfNow - _hotfixTickLastLogAt;
+  if (_hotfixTickAfterPreStartFrameCount > 0 || _hotfixThrottleElapsed >= 5000) {
+    _hotfixTickLastLogAt = _hotfixPerfNow;
+    _hotfixLog('timer:tick:enter', { remainingMs, perfNow: _hotfixPerfNow, status, postPreStartFrame: _hotfixTickAfterPreStartFrameCount });
+    if (_hotfixTickAfterPreStartFrameCount > 0) _hotfixTickAfterPreStartFrameCount--;
+  }
+
   if (remainingMs <= 0) {
+    _hotfixLog('timer:tick:zero-detected', { remainingMs, perfNow: _hotfixPerfNow, status });
     handlers.onLevelEnd(currentLevelIndex);
     advanceToNextLevel();
     return;

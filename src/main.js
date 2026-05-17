@@ -123,7 +123,41 @@ const PRIORITY_LOG_LABELS = new Set([
   // v2.1.20-rc10.1 追加（rc10-audit 高優先 #1 / #2 / #10）
   'hdmi:display-removed:dual-sync-stale',
   'hdmi:dialog-blocked:switchOperatorToSolo',
-  'timer:reset:race-window-entry'
+  'timer:reset:race-window-entry',
+  // v2.2.2 hotfix Phase 2 第 1 段階: 観測ログ仕込み（rAF chain breakage + OS suspend 捕捉）
+  //   詳細: NEXT_CC_PROMPT.md §A.1〜A.5、CC_REPORT.md §16 参照
+  //   仮 hotfix 用、Phase 3 真因確定後に削除予定
+  'prestart:tick',
+  'prestart:tick:zero-detected',
+  'prestart:tick:after-isPreStart-false',
+  'prestart:tick:after-onPreStartEnd',
+  'prestart:tick:after-onPreStartCancel',
+  'prestart:tick:before-startAtLevel',
+  'prestart:tick:after-startAtLevel',
+  'prestart:tick:raf-gap',
+  'timer:startAtLevel:enter',
+  'timer:startAtLevel:setState-running',
+  'timer:startAtLevel:before-startLoop',
+  'timer:startLoop:enter',
+  'timer:startLoop:rafId-set',
+  'timer:tick:enter',
+  'timer:tick:zero-detected',
+  'timer:tick:raf-gap',
+  'window:visibilitychange',
+  'window:blur',
+  'window:focus',
+  'window:rAF-gap',
+  'timer:reset:caller',
+  'timer:cancelPreStart:caller',
+  'power:blocker:app-suspension:start',
+  'power:blocker:app-suspension:stop',
+  'power:blocker:display-sleep:start',
+  'power:blocker:display-sleep:stop',
+  // v2.2.2 hotfix Phase 2 第 1.5 段階: §8.B-2 setTimeout フォールバック観測ラベル
+  //   prestart:fallback:fired が 1 件でも本番ログで発火 = 仮説 F が現実に発生した決定的証拠
+  'prestart:fallback:scheduled',
+  'prestart:fallback:cleared',
+  'prestart:fallback:fired'
 ]);
 let _priorityLogBuffer = [];
 let _priorityLogFilePath = null;
@@ -2671,6 +2705,8 @@ function registerIpcHandlers() {
         return { ok: true, alreadyActive: true };
       }
       _powerSaveBlockerId = powerSaveBlocker.start('prevent-display-sleep');
+      // v2.2.2 hotfix Phase 2 第 1 段階: blocker 状態変化を観測ログに記録
+      try { rollingLog('power:blocker:display-sleep:start', { blockerId: _powerSaveBlockerId, perfNow: Date.now() }); } catch (_) {}
       return { ok: true, alreadyActive: false };
     } catch (err) {
       return { ok: false, error: String(err && err.message || err) };
@@ -2680,8 +2716,41 @@ function registerIpcHandlers() {
     try {
       if (_powerSaveBlockerId !== null && powerSaveBlocker.isStarted(_powerSaveBlockerId)) {
         powerSaveBlocker.stop(_powerSaveBlockerId);
+        // v2.2.2 hotfix Phase 2 第 1 段階: blocker 状態変化を観測ログに記録
+        try { rollingLog('power:blocker:display-sleep:stop', { blockerId: _powerSaveBlockerId, perfNow: Date.now() }); } catch (_) {}
       }
       _powerSaveBlockerId = null;
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err && err.message || err) };
+    }
+  });
+
+  // v2.2.2 hotfix Phase 2 第 1 段階 §B: prevent-app-suspension 並行採用
+  //   仮説 F（Windows OS レベルのプロセス suspension）対策。PRE_START 中のみ発火、終了時に即解除。
+  //   既存 _powerSaveBlockerId（display-sleep 用）とは別の blocker ID で並行管理 = 副作用ゼロ。
+  //   Electron 公式仕様: powerSaveBlocker.start('prevent-app-suspension') は Windows / macOS で動作、
+  //   Linux は no-op（ただし副作用なし）。Phase 3 真因確定後に必要に応じて維持 or 撤去。
+  let _appSuspensionBlockerId = null;
+  ipcMain.handle('power:preventAppSuspension', () => {
+    try {
+      if (_appSuspensionBlockerId !== null && powerSaveBlocker.isStarted(_appSuspensionBlockerId)) {
+        return { ok: true, alreadyActive: true };
+      }
+      _appSuspensionBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+      try { rollingLog('power:blocker:app-suspension:start', { blockerId: _appSuspensionBlockerId, perfNow: Date.now() }); } catch (_) {}
+      return { ok: true, alreadyActive: false };
+    } catch (err) {
+      return { ok: false, error: String(err && err.message || err) };
+    }
+  });
+  ipcMain.handle('power:allowAppSuspension', () => {
+    try {
+      if (_appSuspensionBlockerId !== null && powerSaveBlocker.isStarted(_appSuspensionBlockerId)) {
+        powerSaveBlocker.stop(_appSuspensionBlockerId);
+        try { rollingLog('power:blocker:app-suspension:stop', { blockerId: _appSuspensionBlockerId, perfNow: Date.now() }); } catch (_) {}
+      }
+      _appSuspensionBlockerId = null;
       return { ok: true };
     } catch (err) {
       return { ok: false, error: String(err && err.message || err) };
@@ -2705,6 +2774,13 @@ function registerIpcHandlers() {
       }
     } catch (_) { /* ignore */ }
     _powerSaveBlockerId = null;
+    // v2.2.2 hotfix Phase 2 第 1 段階: app-suspension blocker も終了時に確実に解放
+    try {
+      if (_appSuspensionBlockerId !== null && powerSaveBlocker.isStarted(_appSuspensionBlockerId)) {
+        powerSaveBlocker.stop(_appSuspensionBlockerId);
+      }
+    } catch (_) { /* ignore */ }
+    _appSuspensionBlockerId = null;
     // 2 つ目の will-quit ハンドラから統合
     try { globalShortcut.unregisterAll(); } catch (_) { /* ignore */ }
     // v2.0.4-rc18 第 1 弾 タスク 3: 終了直前に最終 flush（fire-and-forget、5,000 件 buffer × 5 分 retention）

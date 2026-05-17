@@ -1905,6 +1905,10 @@ function generateUniqueTournamentName(list, base = '新規トーナメント') {
 // STEP 10 フェーズC.2.7-audit-fix: powerSaveBlocker — RUNNING/PRE_START/BREAK 中は
 //   ディスプレイスリープを抑止。営業中にスクリーンロックでタイマーが見えなくなる事故を防ぐ。
 //   PAUSED / IDLE / DONE では解除して、通常の OS 電源管理に従う。
+// v2.2.2 hotfix Phase 2 第 1 段階 §B.3: prevent-app-suspension 並行採用
+//   PRE_START 中のみ OS レベル process suspension も抑止（仮説 F = Windows Modern Standby 対策）。
+//   既存 preventDisplaySleep 経路（RUNNING / PRE_START / BREAK で発火）は touch ゼロ、
+//   新規 preventAppSuspension は PRE_START 中のみ並行発火、終了時に即解除。
 function syncPowerSaveBlocker(status) {
   const active = status === States.RUNNING || status === States.PRE_START || status === States.BREAK;
   try {
@@ -1912,6 +1916,15 @@ function syncPowerSaveBlocker(status) {
       window.api?.power?.preventDisplaySleep?.().catch(() => { /* ignore */ });
     } else {
       window.api?.power?.allowDisplaySleep?.().catch(() => { /* ignore */ });
+    }
+  } catch (_) { /* ignore */ }
+  // v2.2.2 hotfix Phase 2 第 1 段階: PRE_START 中のみ prevent-app-suspension 発火
+  const preventAppSuspension = status === States.PRE_START;
+  try {
+    if (preventAppSuspension) {
+      window.api?.power?.preventAppSuspension?.().catch(() => { /* ignore */ });
+    } else {
+      window.api?.power?.allowAppSuspension?.().catch(() => { /* ignore */ });
     }
   } catch (_) { /* ignore */ }
 }
@@ -3084,6 +3097,16 @@ function applyOperatorPreStartState(payload) {
   } else {
     // payload.isActive === false: PRE_START 終了状態を整合（既存 cancelPreStart 経路、冪等）
     if (typeof isPreStartActive === 'function' && isPreStartActive()) {
+      // v2.2.2 hotfix Phase 2 第 1 段階 §A.4: cancelPreStart 呼出元観測（caller log）
+      //   仮説 B 自己ループ起因の cancel 発火を観測ログで決定的に否定 / 補強する。
+      try {
+        window.api?.log?.write?.('timer:cancelPreStart:caller', {
+          ctx: 'applyOperatorPreStartState',
+          isPreStart: true,
+          payloadIsActive: false,
+          role: window.appRole
+        });
+      } catch (_) {}
       try { timerCancelPreStart(); } catch (_) {}
     }
   }
@@ -4403,7 +4426,18 @@ async function handleTournamentListReset(id, name) {
   if (!window.confirm(`「${name || '(無題)'}」のタイマーをリセットします。よろしいですか？`)) return;
   const idleState = { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
   await window.api.tournaments.setTimerState(id, idleState);
-  if (id === tournamentState.id) timerReset();
+  if (id === tournamentState.id) {
+    // v2.2.2 hotfix Phase 2 第 1 段階 §A.4: timerReset 呼出元観測（caller log）
+    try {
+      window.api?.log?.write?.('timer:reset:caller', {
+        ctx: 'handleTournamentListReset',
+        status: getState().status,
+        isPreStart: (typeof isPreStartActive === 'function') ? isPreStartActive() : null,
+        role: window.appRole
+      });
+    } catch (_) {}
+    timerReset();
+  }
   await renderTournamentListWithDedup();
 }
 
@@ -4593,6 +4627,15 @@ async function _handleTournamentNewImpl() {
   applyTournament(result.tournament);
   // STEP 6.21.1: 新 active 切替後に必ず timer.js を idle へリセット
   // → captureCurrentTimerState がライブで idle を返し、リスト UI に旧状態が映らない
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.4: timerReset 呼出元観測（caller log）
+  try {
+    window.api?.log?.write?.('timer:reset:caller', {
+      ctx: '_handleTournamentNewImpl',
+      status: getState().status,
+      isPreStart: (typeof isPreStartActive === 'function') ? isPreStartActive() : null,
+      role: window.appRole
+    });
+  } catch (_) {}
   timerReset();
   cancelPendingTimerStatePersist();
   await populateTournamentList();
@@ -4676,6 +4719,15 @@ async function _handleTournamentDuplicateImpl() {
   await window.api.tournaments.setActive(cloned.id);
   applyTournament(result.tournament);
   // STEP 6.21.1: timer.js も idle へリセット（旧 active の状態を新行に映さない）
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.4: timerReset 呼出元観測（caller log）
+  try {
+    window.api?.log?.write?.('timer:reset:caller', {
+      ctx: 'handleTournamentDuplicate',
+      status: getState().status,
+      isPreStart: (typeof isPreStartActive === 'function') ? isPreStartActive() : null,
+      role: window.appRole
+    });
+  } catch (_) {}
   timerReset();
   cancelPendingTimerStatePersist();
   await populateTournamentList();
@@ -7153,6 +7205,15 @@ function resetTournamentRuntime() {
 function handleReset() {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側はリセット操作不可
   resetTournamentRuntime();
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.4: timerReset 呼出元観測（caller log）
+  try {
+    window.api?.log?.write?.('timer:reset:caller', {
+      ctx: 'handleReset',
+      status: getState().status,
+      isPreStart: (typeof isPreStartActive === 'function') ? isPreStartActive() : null,
+      role: window.appRole
+    });
+  } catch (_) {}
   timerReset();
   // STEP 10 フェーズC.1.2 Fix 2: タイマーリセットで finished オーバーレイも解除
   el.clock?.classList.remove('clock--timer-finished');
@@ -7162,6 +7223,15 @@ function handleReset() {
 //   tournamentRuntime（playersInitial / playersRemaining / reentryCount / addOnCount）は保持する。
 //   8-8 致命バグ対策: PAUSED 中の「保存して適用→リセットして開始」で営業データが消える問題を解決。
 function resetBlindProgressOnly() {
+  // v2.2.2 hotfix Phase 2 第 1 段階 §A.4: timerReset 呼出元観測（caller log）
+  try {
+    window.api?.log?.write?.('timer:reset:caller', {
+      ctx: 'resetBlindProgressOnly',
+      status: getState().status,
+      isPreStart: (typeof isPreStartActive === 'function') ? isPreStartActive() : null,
+      role: window.appRole
+    });
+  } catch (_) {}
   timerReset();
   // STEP 10 フェーズC.1.2 Fix 2: ブラインドリセット時も finished オーバーレイを解除
   //   （新ブラインド構造での再開時は当然タイマー継続可能なので overlay 不要）
@@ -7515,6 +7585,35 @@ if (typeof window !== 'undefined') {
     window.addEventListener('focus', () => _logWindowState('focus'));
     window.addEventListener('blur', () => _logWindowState('blur'));
     window.addEventListener('resize', () => _logWindowState('resize'));
+
+    // v2.2.2 hotfix Phase 2 第 1 段階 §A.3: window:focus / blur / visibilitychange を専用ラベルで記録
+    //   既存 _logWindowState は 200ms debounce + renderer:window-state ラベル発火。
+    //   本観測は debounce なしで window:focus / window:blur / window:visibilitychange ラベルを即時発火し、
+    //   直前 blur からの経過時間（lastBlurMs）も記録（OS suspend / バックグラウンド時間推定の決定的証拠）。
+    //   Phase 3 真因確定後に削除予定（仮 hotfix 用観測機構）。
+    let _hotfixLastBlurAt = 0;
+    window.addEventListener('blur', () => {
+      const _perfNow = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+      _hotfixLastBlurAt = _perfNow;
+      try { window.api?.log?.write?.('window:blur', { perfNow: _perfNow }); } catch (_) {}
+    });
+    window.addEventListener('focus', () => {
+      const _perfNow = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+      const _lastBlurMs = _hotfixLastBlurAt > 0 ? _perfNow - _hotfixLastBlurAt : null;
+      try { window.api?.log?.write?.('window:focus', { perfNow: _perfNow, lastBlurMs: _lastBlurMs }); } catch (_) {}
+    });
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        const _perfNow = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        try {
+          window.api?.log?.write?.('window:visibilitychange', {
+            visibilityState: document.visibilityState,
+            hidden: !!document.hidden,
+            perfNow: _perfNow
+          });
+        } catch (_) {}
+      });
+    }
   } catch (_) { /* ignore, logging is non-critical */ }
 }
 
