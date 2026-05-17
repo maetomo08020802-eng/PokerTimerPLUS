@@ -1,5 +1,5 @@
 // PokerTimerPLUS+ メインプロセス
-// 制作: Yu Shitamachi (PLUS2運営)
+// 制作: Yu Shimomachi (PLUS2運営)
 
 const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain, screen, session, shell, powerMonitor, powerSaveBlocker } = require('electron');
 // STEP 10 フェーズC.1.2 Fix 3: electron-updater で GitHub Releases から自動更新。
@@ -29,7 +29,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 // ウィンドウタイトル（branding.md により固定、変更不可）
-const WINDOW_TITLE = 'PokerTimerPLUS+ — presented by Yu Shitamachi';
+const WINDOW_TITLE = 'PokerTimerPLUS+ — presented by Yu Shimomachi';
 
 const isDev = process.env.NODE_ENV === 'development';
 

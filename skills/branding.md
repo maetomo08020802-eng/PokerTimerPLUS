@@ -3,9 +3,9 @@
 ## アプリの基本情報（変更不可）
 
 - **プロダクト名**: PokerTimerPLUS+
-- **作者表記**: Yu Shitamachi
+- **作者表記**: Yu Shimomachi
 - **発行元組織**: PLUS2
-- **コピーライト**: © Yu Shitamachi / PLUS2
+- **コピーライト**: © Yu Shimomachi / PLUS2
 - **配布形態**: 全国のポーカールームへ無料配布
 
 ## クレジット配置（控えめセット：A + C + E）
@@ -13,10 +13,10 @@
 ### A. タイトルバー / アプリ識別情報
 | 場所 | 表記 | 実装 |
 |---|---|---|
-| ウィンドウタイトルバー | `PokerTimerPLUS+ — presented by Yu Shitamachi` | BrowserWindow.setTitle()で固定 |
+| ウィンドウタイトルバー | `PokerTimerPLUS+ — presented by Yu Shimomachi` | BrowserWindow.setTitle()で固定 |
 | package.json `productName` | `PokerTimerPLUS+` | 変更不可 |
-| package.json `author` | `Yu Shitamachi (PLUS2)` | 変更不可 |
-| package.json `description` | `Free poker tournament clock — presented by Yu Shitamachi / PLUS2` | 変更不可 |
+| package.json `author` | `Yu Shimomachi (PLUS2)` | 変更不可 |
+| package.json `description` | `Free poker tournament clock — presented by Yu Shimomachi / PLUS2` | 変更不可 |
 | アプリアイコン | アプリ独自アイコン（後日確定、初期はPLUS2ロゴ流用） | 変更不可 |
 
 ### C. About画面（F1キーガイドの最下部 or バージョン情報画面）
@@ -25,8 +25,8 @@
   - アプリ名 `PokerTimerPLUS+`
   - バージョン番号
   - 文字ロゴSVG（assets/logo-yushitamachi.svg）
-  - クレジットテキスト: `制作: Yu Shitamachi（PLUS2運営）`
-  - コピーライト: `© 2026 Yu Shitamachi / PLUS2. All rights reserved.`
+  - クレジットテキスト: `制作: Yu Shimomachi（PLUS2運営）`
+  - コピーライト: `© 2026 Yu Shimomachi / PLUS2. All rights reserved.`
   - 「このアプリは無料で配布されています」の一文
 - 削除・改変・非表示機能を実装してはならない
 
@@ -35,10 +35,10 @@
 |---|---|
 | electron-builder `productName` | `PokerTimerPLUS+` |
 | electron-builder `appId` | `com.shitamachi.pokertimerplus` |
-| インストーラ発行元 | `Yu Shitamachi` |
-| インストーラ著作権表記 | `© 2026 Yu Shitamachi / PLUS2` |
+| インストーラ発行元 | `Yu Shimomachi` |
+| インストーラ著作権表記 | `© 2026 Yu Shimomachi / PLUS2` |
 | Windows Add/Remove Programs表示名 | `PokerTimerPLUS+` |
-| Publisher | `Yu Shitamachi` |
+| Publisher | `Yu Shimomachi` |
 
 ## 配置しない場所（控えめセットの境界）
 - メインクロック画面のウォーターマーク（D）→ 配置しない
@@ -53,7 +53,7 @@
 - 用途: 初期ロゴとしてメインクロック画面に表示（ユーザーが設定画面で他のロゴに差し替え可能）
 - ライセンス: PLUS2提供素材、本アプリ同梱用に使用許諾済み
 
-### Yu Shitamachi文字ロゴ
+### Yu Shimomachi文字ロゴ
 - 配置: `src/assets/logo-yushitamachi.svg`
 - 用途: About画面のみ
 - 改変不可、ユーザーは差し替え不可
@@ -97,7 +97,7 @@
 - `custom` 画像は `%APPDATA%\PokerTimerPLUS+\custom-logo.{ext}` にコピーして保持。最大 5MB、PNG / JPG / SVG のみ
 
 クレジット保護はメイン画面以外で完全担保:
-- タイトルバー: `PokerTimerPLUS+ — presented by Yu Shitamachi`
-- インストーラ発行元: Yu Shitamachi
-- About 画面: Yu Shitamachi 文字ロゴ + © 2026 Yu Shitamachi / PLUS2
+- タイトルバー: `PokerTimerPLUS+ — presented by Yu Shimomachi`
+- インストーラ発行元: Yu Shimomachi
+- About 画面: Yu Shimomachi 文字ロゴ + © 2026 Yu Shimomachi / PLUS2
 - アプリアイコン: タイマー＋P（中立、PLUS2 ロゴは未使用、`build/icon-source.svg`）

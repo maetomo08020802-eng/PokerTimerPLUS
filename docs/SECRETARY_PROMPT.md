@@ -50,7 +50,7 @@ SKILL.md の「ロゴ挿入」セクション通り、全スライドに PLUS TW
 ### スライド 1: タイトル（テンプレート T01）
 - メインタイトル: **PokerTimerPLUS+ 取扱説明書**（40pt Noto Sans JP Bold White）
 - サブタイトル: **v1.3.0 / 2026.04**（22pt Snow）
-- 制作者: **Yu Shitamachi（PLUS2 運営）**（右下、14pt Fog）
+- 制作者: **Yu Shimomachi（PLUS2 運営）**（右下、14pt Fog）
 - 装飾: 左上にグロー楕円（Gold #F0C060 alpha:0.12、320×240pt）+ タイトル左に縦アクセントバー（Gold、4×56pt）
 - スクショ: なし
 - ロゴ: PLUS TWO ロゴ 75×52pt（右下）
@@ -176,7 +176,7 @@ SKILL.md の「ロゴ挿入」セクション通り、全スライドに PLUS TW
 ### スライド 11: クレジット / お問い合わせ
 - 見出し: **クレジット / お問い合わせ**
 - 構成（テンプレート T11 / T12 風、3 セクション）:
-  - **制作**: Yu Shitamachi（PLUS2 運営） / 2026 年制作
+  - **制作**: Yu Shimomachi（PLUS2 運営） / 2026 年制作
   - **配布形態**: 全国のポーカールーム向け無料配布
   - **使用フォント / ライセンス**: Barlow Condensed (SIL OFL 1.1) / Noto Sans JP / JetBrains Mono / Roboto Mono / Oswald 等
   - **お問い合わせ**: PLUS2 運営宛（具体的な連絡先は秘書エージェントが確認、不明なら空欄）
