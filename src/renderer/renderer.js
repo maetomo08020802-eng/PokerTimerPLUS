@@ -968,18 +968,26 @@ function renderControls(status) {
   }
 }
 
-// STEP 6: 動的計算ヘルパ（STEP 6.5: GTD 対応）
+// STEP 6: 動的計算ヘルパ（STEP 6.5: GTD 対応 / v2.4.0: プール率対応）
 //
-// 計算プール = buyIn.fee × playersInitial + reentry.fee × reentryCount + addOn.fee × addOnCount
+// 計算プール = Σ(各フィー × 件数 × プール率 / 100)
+//   = buyIn.fee × playersInitial × poolRates.buyIn / 100
+//   + reentry.fee × reentryCount × poolRates.reentry / 100
+//   + addOn.fee × addOnCount × poolRates.addOn / 100
 // 実効プール = max(計算プール, guarantee)  ※ guarantee = 0 は実質無効
 // STEP 6.9: 特殊スタックは fee がないため賞金プールには寄与しない（チップのみ加算 → AVG STACK 側で反映）
+// v2.4.0: poolRates 補完経路
+//   - STEP 2 migration により既存トーナメントは { buyIn: 100, reentry: 100, addOn: 100 }（旧式と完全一致）
+//   - 新規トーナメントは appConfig.poolRatesDefault（=0%）から積込まれる（安全側、景品表示法対応）
+//   - 万一 poolRates が state に不在の場合は防御的に 0% フォールバック（GTD のみ反映）
 function computeCalculatedPool() {
   const buyIn   = tournamentState.buyIn   || { fee: 0 };
   const reentry = tournamentState.reentry || { fee: 0 };
   const addOn   = tournamentState.addOn   || { fee: 0 };
-  return (buyIn.fee   || 0) * tournamentRuntime.playersInitial
-       + (reentry.fee || 0) * tournamentRuntime.reentryCount
-       + (addOn.fee   || 0) * tournamentRuntime.addOnCount;
+  const rates   = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
+  return (buyIn.fee   || 0) * tournamentRuntime.playersInitial * (Number(rates.buyIn)   || 0) / 100
+       + (reentry.fee || 0) * tournamentRuntime.reentryCount    * (Number(rates.reentry) || 0) / 100
+       + (addOn.fee   || 0) * tournamentRuntime.addOnCount      * (Number(rates.addOn)   || 0) / 100;
 }
 
 function computeTotalPool() {
@@ -4013,6 +4021,8 @@ function updatePayoutsSum() {
 
 // 編集中フォームからプール額を計算（プレイヤー人数は runtime を使う）
 // 金額モードでの合計バリデーションと、% → 金額換算の表示で使用
+// v2.4.0: プール率は STEP 3 時点ではフォーム入力欄が UI に未存在のため tournamentState.poolRates から読む。
+//   STEP 4 で UI 追加後、フォーム入力欄（el.tournamentBuyinPoolRate 等）から読む経路を追加予定。
 function computeTotalPoolFromForm() {
   const num = (e, def) => {
     const n = Number(e?.value);
@@ -4023,9 +4033,14 @@ function computeTotalPoolFromForm() {
   const reentryFee = num(el.tournamentReentryFee, tournamentState.reentry?.fee ?? 0);
   const addOnFee   = num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0);
   const guarantee  = num(el.tournamentGuarantee,  tournamentState.guarantee    ?? 0);
-  const calc = buyInFee   * tournamentRuntime.playersInitial
-             + reentryFee * tournamentRuntime.reentryCount
-             + addOnFee   * tournamentRuntime.addOnCount;
+  // v2.4.0: プール率（state から読む、STEP 4 で UI 入力欄経由に拡張予定）
+  const rates = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
+  const buyInRate   = Number(rates.buyIn)   || 0;
+  const reentryRate = Number(rates.reentry) || 0;
+  const addOnRate   = Number(rates.addOn)   || 0;
+  const calc = buyInFee   * tournamentRuntime.playersInitial * buyInRate   / 100
+             + reentryFee * tournamentRuntime.reentryCount    * reentryRate / 100
+             + addOnFee   * tournamentRuntime.addOnCount      * addOnRate   / 100;
   return Math.max(calc, guarantee);
 }
 
