@@ -48,11 +48,12 @@
 - 平均スタックの自動計算
 
 ### 2.4 賞金 (ペイアウト) 管理
-- 総プール額の自動計算 (バイイン×件数 + リバイ×件数 + アドオン×件数)
+- 総プール額の自動計算（v2.4.0 以降: `Σ(各フィー × 件数 × プール率 / 100)`）
 - 順位別賞金分配 (パーセンテージ or 固定額)
 - 残り人数に応じた ITM (In The Money) 表示
 - 賞金額の丸め (1円 / 100円 / 1000円単位)
 - ペイアウトプリセット (例: 9人時は3位まで、27人時は5位まで)
+- **v2.4.0: プール率対応**: フィー入力をデフォルト readonly + 🔒 化し、店舗ごとに設定可能なプール率（初期値 0%）× フィー × 件数で賞金プールを算出。景品表示法・風営法対応の安全側初期化。詳細は §3.4.1 参照
 
 ### 2.5 通知音
 - レベル終了時のチャイム
@@ -119,6 +120,57 @@
 | 入力 | 順位ごとの % または固定額、丸め単位 |
 | 出力 | 順位別賞金額、合計額 = 総プール |
 | 制約 | % 合計は 100.0% ± 0.1% (丸めによる誤差許容) |
+
+### 3.4.1 賞金プール計算（v2.4.0 プール率対応）
+
+景品表示法・風営法対応として、フィー入力をデフォルト編集不可（readonly + 🔒）にし、店舗ごとに設定可能なプール率（初期値 0%）でプライズプールを算出する。
+
+#### 計算式
+
+```
+prize = Σ(各フィー × 件数 × プール率 / 100)
+      = buyIn.fee × playersInitial × poolRates.buyIn / 100
+      + reentry.fee × reentryCount × poolRates.reentry / 100
+      + addOn.fee × addOnCount × poolRates.addOn / 100
+
+実効プール = max(prize, guarantee)   (GTD ロジック維持)
+```
+
+#### データモデル
+
+| 項目 | 構造 | 用途 |
+|---|---|---|
+| `tournamentState.poolRates` | `{ buyIn: 0-100, reentry: 0-100, addOn: 0-100 }` 整数 | トーナメント個別プール率 |
+| `appConfig.poolRatesDefault` | 同上 | 店舗デフォルト（新規トーナメント作成時の初期値、グローバル） |
+
+#### 初期値ポリシー（既存ユーザー保護）
+
+| シナリオ | poolRates 初期値 | 効果 |
+|---|---|---|
+| 既存トーナメント migration | `{ buyIn: 100, reentry: 100, addOn: 100 }` | 旧式 `Σ(fee × count)` と完全一致、TOTAL POOL 不変 |
+| 新規トーナメント作成 | `appConfig.poolRatesDefault` (初期 `{ 0, 0, 0 }`) | 安全側 0%、フィー入力してもプライズに反映されない |
+| 店舗デフォルト変更 | 既存個別値は不変 | オーナーが個別調整した内容を上書きしない |
+
+#### UI
+
+- フィー入力欄（バイイン / リエントリー / アドオン）はデフォルト readonly + 🔒
+- 🔒クリック → 確認ダイアログ「フィーを入力するとプライズプールが変動します」→ 「解除する」で編集可能 + 🔓
+- 🔓 状態で再クリック → 即時ロック復帰（クリック反転式）
+- **自動再ロックトリガー**: 保存 / トーナメント切替 / アプリ再起動の **すべて**
+- プール率入力欄: 各フィー隣に「反映率 [N]%」（0〜100 整数、step=1）
+- フィー欄真下の案内文言: 「フィー入力時はプライズに反映されます（反映率設定可）」
+- 店舗デフォルト編集: 設定ダイアログ「ハウス情報」タブで編集
+
+#### 互換性
+
+- export/import JSON フォーマット `EXPORT_VERSION = 2` のまま optional フィールド扱い
+- 旧版 import 時は `appConfig.poolRatesDefault` から poolRates が補完される
+
+#### 実装場所
+
+- 計算: `src/renderer/renderer.js` の `computeCalculatedPool()` / `computeTotalPoolFromForm()`
+- スキーマ / migration / sanitize / IPC: `src/main.js` の `DEFAULT_TOURNAMENT_EXT` / `migrateTournamentSchema()` / `sanitizePoolRates()` / `settings:setPoolRatesDefault`
+- UI / readonly 制御: `src/renderer/index.html` フィー 3 行 + 解除ダイアログ + 店舗デフォルト編集セクション、`src/renderer/renderer.js` の `_resolveFeeElements()` / `setFeeReadonly()` / `lockAllFees()` 等の独自 namespace（C.1-A2 ブラインド表 readonly 制御とは分離）
 
 ### 3.5 通知音
 | 項目 | 内容 |

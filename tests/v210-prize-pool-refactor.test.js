@@ -1,0 +1,356 @@
+/**
+ * v2.4.0 STEP 5 — 賞金プール計算改修テスト（v210 案件）
+ *
+ *   STEP 2: state スキーマ拡張 + migration（既存 100% / 新規 0%）
+ *   STEP 3: 計算ロジックをプール率対応に書換
+ *   STEP 4: UI 追加（readonly + 🔒 + 解除ダイアログ + プール率欄 + 案内文言 + 店舗デフォルト編集）
+ *   STEP 4 fix: 動的キー組立て撤廃（_resolveFeeElements switch case 化）→ 🔒 バグ構造的根治
+ *
+ *   検証範囲:
+ *     T1: tournamentState / DEFAULT_TOURNAMENT_EXT に poolRates フィールド存在（既存互換 100%）
+ *     T2: sanitizePoolRate / sanitizePoolRates ヘルパー存在（0〜100 整数 clamp）
+ *     T3: migrateTournamentSchema に poolRates 補完ロジック存在（既存 100% 補完、§11.2 解釈 B）
+ *     T4: computeCalculatedPool に poolRates 参照 + rate / 100 計算式
+ *     T5: computeTotalPoolFromForm にプール率入力欄経由読込み（state fallback あり）
+ *     T6: index.html フィー 3 入力に readonly 属性
+ *     T7: 解除ダイアログ <dialog id="js-fee-unlock-dialog"> 存在 + 確定文言
+ *     T8: プール率入力欄 3 件存在
+ *     T9: フィー欄真下の案内文言「フィー入力時はプライズに反映されます（反映率設定可）」存在
+ *     T10: 動作テスト — pool = Σ(fee × count × rate / 100) 計算正しさ
+ *     T11: 動作テスト — rate=0% で pool=0、GTD=N で pool=N（max(calc, gtd) 維持）
+ *     T12: 致命バグ保護 5 件 cross-check
+ *     T13: scripts.test 登録 + version 2.4.0
+ *     T14: STEP 4 バグ再発防止 — 🔒ボタン 3 件の DOM ID と JS 参照キー完全一致 + 動的キー組立て撤廃
+ *
+ *   実行: node tests/v210-prize-pool-refactor.test.js
+ */
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs     = require('node:fs');
+const path   = require('node:path');
+
+const ROOT     = path.join(__dirname, '..');
+const PKG      = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const MAIN_JS  = fs.readFileSync(path.join(ROOT, 'src', 'main.js'), 'utf8');
+const RENDERER = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'renderer.js'), 'utf8');
+const INDEX    = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'index.html'), 'utf8');
+const AUDIO_JS = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'audio.js'), 'utf8');
+const PRELOAD  = fs.readFileSync(path.join(ROOT, 'src', 'preload.js'), 'utf8');
+
+let pass = 0, fail = 0;
+function test(name, fn) {
+  try { fn(); console.log('PASS:', name); pass++; }
+  catch (err) { console.log('FAIL:', name, '\n  ', err.message); fail++; }
+}
+
+// ============================================================
+// T1: tournamentState / DEFAULT_TOURNAMENT_EXT に poolRates フィールド存在
+// ============================================================
+test('T1 (STEP 2): tournamentState / DEFAULT_TOURNAMENT_EXT に poolRates: { buyIn:100, reentry:100, addOn:100 } 存在', () => {
+  // renderer.js tournamentState 初期化
+  assert.match(RENDERER, /poolRates:\s*\{\s*buyIn:\s*100,\s*reentry:\s*100,\s*addOn:\s*100\s*\}/,
+    'renderer.js の tournamentState 初期定義に poolRates: { buyIn:100, reentry:100, addOn:100 } が見つからない');
+  // main.js DEFAULT_TOURNAMENT_EXT
+  assert.match(MAIN_JS, /poolRates:\s*\{\s*buyIn:\s*100,\s*reentry:\s*100,\s*addOn:\s*100\s*\}/,
+    'main.js の DEFAULT_TOURNAMENT_EXT に poolRates: { buyIn:100, reentry:100, addOn:100 } が見つからない');
+  // main.js store.defaults.appConfig.poolRatesDefault（新規 0%）
+  assert.match(MAIN_JS, /appConfig:\s*\{\s*poolRatesDefault:\s*\{\s*buyIn:\s*0,\s*reentry:\s*0,\s*addOn:\s*0\s*\}\s*\}/,
+    'main.js の store.defaults.appConfig.poolRatesDefault: { 0, 0, 0 } が見つからない');
+});
+
+// ============================================================
+// T2: sanitizePoolRate / sanitizePoolRates 関数定義存在
+// ============================================================
+test('T2 (STEP 2): sanitizePoolRate / sanitizePoolRates 関数定義存在（0〜100 整数 clamp）', () => {
+  assert.match(MAIN_JS, /function\s+sanitizePoolRate\s*\(/, 'sanitizePoolRate 関数定義が見つからない');
+  assert.match(MAIN_JS, /function\s+sanitizePoolRates\s*\(/, 'sanitizePoolRates 関数定義が見つからない');
+  // 0〜100 clamp + Math.floor 整数化
+  assert.match(MAIN_JS, /Math\.max\(0,\s*Math\.min\(100,\s*Math\.floor/,
+    'sanitizePoolRate 内の 0〜100 clamp + Math.floor 整数化が見つからない');
+});
+
+// ============================================================
+// T3: migrateTournamentSchema に poolRates 補完（既存 100%）
+// ============================================================
+test('T3 (STEP 2): migrateTournamentSchema に poolRates 100% 補完ロジック存在（§11.2 解釈 B）', () => {
+  // !m.poolRates → DEFAULT_TOURNAMENT_EXT.poolRates (=100%) で補完
+  assert.match(MAIN_JS, /if\s*\(\s*!m\.poolRates[\s\S]{0,200}DEFAULT_TOURNAMENT_EXT\.poolRates/,
+    'migrateTournamentSchema 内の poolRates 補完（DEFAULT_TOURNAMENT_EXT.poolRates フォールバック）が見つからない');
+  // touched = true で再保存
+  const migIdx = MAIN_JS.indexOf('function migrateTournamentSchema');
+  assert.ok(migIdx >= 0, 'migrateTournamentSchema 関数定義が見つからない');
+  // 関数本体内に poolRates 補完が含まれる（広めの slice で検証）
+  const migBody = MAIN_JS.slice(migIdx, migIdx + 6000);
+  assert.match(migBody, /m\.poolRates\s*=\s*\{\s*\.\.\.DEFAULT_TOURNAMENT_EXT\.poolRates\s*\}/,
+    'migrateTournamentSchema 内で m.poolRates = { ...DEFAULT_TOURNAMENT_EXT.poolRates } の補完式がない');
+});
+
+// ============================================================
+// T4: computeCalculatedPool に poolRates 参照 + rate / 100 計算式
+// ============================================================
+test('T4 (STEP 3): computeCalculatedPool に poolRates 参照 + rate / 100 計算式', () => {
+  const declIdx = RENDERER.indexOf('function computeCalculatedPool');
+  assert.ok(declIdx >= 0, 'computeCalculatedPool 関数定義が見つからない');
+  const body = RENDERER.slice(declIdx, declIdx + 1200);
+  // tournamentState.poolRates 参照
+  assert.match(body, /tournamentState\.poolRates/,
+    'computeCalculatedPool 内に tournamentState.poolRates 参照がない');
+  // rate / 100 を含む計算式（3 フィー分）
+  assert.match(body, /Number\(rates\.buyIn\)\s*\|\|\s*0\)\s*\/\s*100/,
+    'computeCalculatedPool 内に buyIn rate / 100 計算がない');
+  assert.match(body, /Number\(rates\.reentry\)\s*\|\|\s*0\)\s*\/\s*100/,
+    'computeCalculatedPool 内に reentry rate / 100 計算がない');
+  assert.match(body, /Number\(rates\.addOn\)\s*\|\|\s*0\)\s*\/\s*100/,
+    'computeCalculatedPool 内に addOn rate / 100 計算がない');
+  // 防御的 fallback（poolRates 不在時は { 0, 0, 0 }）
+  assert.match(body, /tournamentState\.poolRates\s*\|\|\s*\{\s*buyIn:\s*0,\s*reentry:\s*0,\s*addOn:\s*0\s*\}/,
+    'computeCalculatedPool 内の防御的 fallback ({ buyIn:0, reentry:0, addOn:0 }) がない');
+});
+
+// ============================================================
+// T5: computeTotalPoolFromForm がプール率入力欄経由 + state fallback
+// ============================================================
+test('T5 (STEP 3/4): computeTotalPoolFromForm がプール率入力欄経由読込み（state fallback あり）', () => {
+  const declIdx = RENDERER.indexOf('function computeTotalPoolFromForm');
+  assert.ok(declIdx >= 0, 'computeTotalPoolFromForm 関数定義が見つからない');
+  const body = RENDERER.slice(declIdx, declIdx + 1500);
+  // _readPoolRateFromInput 経由でフォーム入力欄からの読込み
+  assert.match(body, /_readPoolRateFromInput\(el\.tournamentBuyinPoolRate/,
+    'computeTotalPoolFromForm 内に el.tournamentBuyinPoolRate 読込み（_readPoolRateFromInput 経由）がない');
+  assert.match(body, /_readPoolRateFromInput\(el\.tournamentReentryPoolRate/,
+    'computeTotalPoolFromForm 内に el.tournamentReentryPoolRate 読込みがない');
+  assert.match(body, /_readPoolRateFromInput\(el\.tournamentAddonPoolRate/,
+    'computeTotalPoolFromForm 内に el.tournamentAddonPoolRate 読込みがない');
+  // state.poolRates フォールバック
+  assert.match(body, /tournamentState\.poolRates\s*\|\|/,
+    'computeTotalPoolFromForm 内の state.poolRates フォールバックがない');
+});
+
+// ============================================================
+// T6: index.html フィー 3 入力に readonly 属性
+// ============================================================
+test('T6 (STEP 4): index.html フィー 3 入力に readonly 属性存在', () => {
+  // 各 input element に readonly 属性
+  assert.match(INDEX, /<input[^>]*id="js-tournament-buyin-fee"[^>]*readonly/,
+    'js-tournament-buyin-fee に readonly 属性なし');
+  assert.match(INDEX, /<input[^>]*id="js-tournament-reentry-fee"[^>]*readonly/,
+    'js-tournament-reentry-fee に readonly 属性なし');
+  assert.match(INDEX, /<input[^>]*id="js-tournament-addon-fee"[^>]*readonly/,
+    'js-tournament-addon-fee に readonly 属性なし');
+});
+
+// ============================================================
+// T7: 解除ダイアログ <dialog id="js-fee-unlock-dialog"> 存在
+// ============================================================
+test('T7 (STEP 4): 解除確認ダイアログ <dialog id="js-fee-unlock-dialog"> 存在 + 確定文言', () => {
+  assert.match(INDEX, /<dialog[^>]*id="js-fee-unlock-dialog"/,
+    '解除確認ダイアログ <dialog id="js-fee-unlock-dialog"> が見つからない');
+  // 確定文言「フィーを入力するとプライズプールが変動します」
+  assert.ok(INDEX.includes('フィーを入力するとプライズプールが変動します'),
+    '解除ダイアログのメッセージ文言「フィーを入力するとプライズプールが変動します」が見つからない');
+  // 「解除する」「キャンセル」ボタンも存在
+  assert.match(INDEX, /id="js-fee-unlock-ok"/, '解除ダイアログの ok ボタン消失');
+  assert.match(INDEX, /id="js-fee-unlock-cancel"/, '解除ダイアログの cancel ボタン消失');
+});
+
+// ============================================================
+// T8: プール率入力欄 3 件存在
+// ============================================================
+test('T8 (STEP 4): プール率入力欄 3 件存在（buyin-pool-rate / reentry-pool-rate / addon-pool-rate）', () => {
+  assert.match(INDEX, /id="js-tournament-buyin-pool-rate"/,
+    'プール率入力欄 js-tournament-buyin-pool-rate 消失');
+  assert.match(INDEX, /id="js-tournament-reentry-pool-rate"/,
+    'プール率入力欄 js-tournament-reentry-pool-rate 消失');
+  assert.match(INDEX, /id="js-tournament-addon-pool-rate"/,
+    'プール率入力欄 js-tournament-addon-pool-rate 消失');
+  // min=0 max=100 step=1 整数制約
+  const poolRateInputs = INDEX.match(/id="js-tournament-(buyin|reentry|addon)-pool-rate"[^>]*/g) || [];
+  assert.equal(poolRateInputs.length, 3, `プール率入力欄が 3 件でない（${poolRateInputs.length} 件）`);
+  for (const inp of poolRateInputs) {
+    assert.match(inp, /min="0"/, `プール率入力欄に min="0" がない: ${inp}`);
+    assert.match(inp, /max="100"/, `プール率入力欄に max="100" がない: ${inp}`);
+    assert.match(inp, /step="1"/, `プール率入力欄に step="1" がない: ${inp}`);
+  }
+});
+
+// ============================================================
+// T9: 案内文言「フィー入力時はプライズに反映されます（反映率設定可）」存在
+// ============================================================
+test('T9 (STEP 4): 案内文言「フィー入力時はプライズに反映されます（反映率設定可）」存在', () => {
+  assert.ok(INDEX.includes('フィー入力時はプライズに反映されます（反映率設定可）'),
+    '案内文言「フィー入力時はプライズに反映されます（反映率設定可）」が見つからない');
+  // 案内文言用 CSS クラス
+  assert.match(INDEX, /class="form-row__hint\s+form-row__hint--pool-rates"/,
+    '案内文言の CSS クラス form-row__hint--pool-rates 消失');
+});
+
+// ============================================================
+// T10: 動作テスト — pool = Σ(fee × count × rate / 100) 計算正しさ
+// ============================================================
+function simulateComputeCalculatedPool(state, runtime) {
+  // renderer.js computeCalculatedPool の test 内再実装（v216-payouts と同パターン、renderer.js 依存排除）
+  const buyIn   = state.buyIn   || { fee: 0 };
+  const reentry = state.reentry || { fee: 0 };
+  const addOn   = state.addOn   || { fee: 0 };
+  const rates   = state.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
+  return (buyIn.fee   || 0) * runtime.playersInitial * (Number(rates.buyIn)   || 0) / 100
+       + (reentry.fee || 0) * runtime.reentryCount    * (Number(rates.reentry) || 0) / 100
+       + (addOn.fee   || 0) * runtime.addOnCount      * (Number(rates.addOn)   || 0) / 100;
+}
+
+function simulateComputeTotalPool(state, runtime) {
+  const calc = simulateComputeCalculatedPool(state, runtime);
+  const gtd  = Number(state.guarantee) || 0;
+  return Math.max(calc, gtd);
+}
+
+test('T10 (STEP 3 動作): pool = Σ(fee × count × rate / 100) 計算正しさ（rate=100% / 50% / 0%）', () => {
+  const runtime = { playersInitial: 24, reentryCount: 5, addOnCount: 3 };
+  const baseState = {
+    buyIn:   { fee: 3000 },
+    reentry: { fee: 2000 },
+    addOn:   { fee: 2000 },
+    guarantee: 0
+  };
+
+  // ケース 1: 全 100%（既存 migration 値）→ 旧式と完全一致
+  // = 3000*24*1.0 + 2000*5*1.0 + 2000*3*1.0 = 72000 + 10000 + 6000 = 88,000
+  const case1 = simulateComputeCalculatedPool({ ...baseState, poolRates: { buyIn: 100, reentry: 100, addOn: 100 } }, runtime);
+  assert.equal(case1, 88000, `全 rate 100% で 88000 期待、実 ${case1}`);
+
+  // ケース 2: buyIn 50%、他 100% → buyIn 分のみ半額
+  // = 3000*24*0.5 + 2000*5*1.0 + 2000*3*1.0 = 36000 + 10000 + 6000 = 52,000
+  const case2 = simulateComputeCalculatedPool({ ...baseState, poolRates: { buyIn: 50, reentry: 100, addOn: 100 } }, runtime);
+  assert.equal(case2, 52000, `buyIn rate 50% で 52000 期待、実 ${case2}`);
+
+  // ケース 3: 全 0%（新規デフォルト）→ pool=0
+  const case3 = simulateComputeCalculatedPool({ ...baseState, poolRates: { buyIn: 0, reentry: 0, addOn: 0 } }, runtime);
+  assert.equal(case3, 0, `全 rate 0% で 0 期待、実 ${case3}`);
+
+  // ケース 4: 部分 rate（buyIn 100%, reentry 50%, addOn 0%）
+  // = 3000*24*1.0 + 2000*5*0.5 + 2000*3*0.0 = 72000 + 5000 + 0 = 77,000
+  const case4 = simulateComputeCalculatedPool({ ...baseState, poolRates: { buyIn: 100, reentry: 50, addOn: 0 } }, runtime);
+  assert.equal(case4, 77000, `部分 rate で 77000 期待、実 ${case4}`);
+});
+
+// ============================================================
+// T11: 動作テスト — rate=0% で pool=0、GTD=N で pool=N
+// ============================================================
+test('T11 (STEP 3 動作): max(calc, GTD) ロジック維持 — rate=0% で GTD のみ反映', () => {
+  const runtime = { playersInitial: 24, reentryCount: 5, addOnCount: 3 };
+  const feeState = {
+    buyIn:   { fee: 3000 },
+    reentry: { fee: 2000 },
+    addOn:   { fee: 2000 }
+  };
+
+  // ケース 1: rate 全 0%, GTD=0 → pool=0
+  const c1 = simulateComputeTotalPool(
+    { ...feeState, poolRates: { buyIn: 0, reentry: 0, addOn: 0 }, guarantee: 0 }, runtime);
+  assert.equal(c1, 0, `rate 全 0% / GTD 0 で 0 期待、実 ${c1}`);
+
+  // ケース 2: rate 全 0%, GTD=50000 → pool=50000（GTD 優先、新規トーナメントの安全側挙動）
+  const c2 = simulateComputeTotalPool(
+    { ...feeState, poolRates: { buyIn: 0, reentry: 0, addOn: 0 }, guarantee: 50000 }, runtime);
+  assert.equal(c2, 50000, `rate 全 0% / GTD 50000 で 50000 期待、実 ${c2}`);
+
+  // ケース 3: rate 全 100%, GTD=50000, calc=88000 → pool=88000（calc > GTD）
+  const c3 = simulateComputeTotalPool(
+    { ...feeState, poolRates: { buyIn: 100, reentry: 100, addOn: 100 }, guarantee: 50000 }, runtime);
+  assert.equal(c3, 88000, `rate 全 100% / GTD 50000 / calc 88000 で 88000 期待、実 ${c3}`);
+
+  // ケース 4: rate 全 100%, GTD=200000, calc=88000 → pool=200000（GTD 優先）
+  const c4 = simulateComputeTotalPool(
+    { ...feeState, poolRates: { buyIn: 100, reentry: 100, addOn: 100 }, guarantee: 200000 }, runtime);
+  assert.equal(c4, 200000, `rate 全 100% / GTD 200000 / calc 88000 で 200000 期待、実 ${c4}`);
+});
+
+// ============================================================
+// T12: 致命バグ保護 5 件 cross-check
+// ============================================================
+test('T12 (保護): 致命バグ保護 5 件すべて完全維持', () => {
+  // C.2.7-A: resetBlindProgressOnly
+  assert.match(RENDERER, /function\s+resetBlindProgressOnly\s*\(/,
+    'C.2.7-A: resetBlindProgressOnly 関数消失');
+  // C.1-A2: ensureEditorEditableState
+  assert.match(RENDERER, /function\s+ensureEditorEditableState\s*\(/,
+    'C.1-A2: ensureEditorEditableState 関数消失');
+  // C.1.7: AudioContext.resume（audio.js _play() 内 suspended 検出）
+  assert.match(AUDIO_JS, /audioContext\.state\s*===\s*['"]suspended['"]/,
+    'C.1.7: AudioContext suspend 検出が audio.js から消失');
+  // C.1.8: schedulePersistRuntime 8 箇所以上
+  const persistCalls = (RENDERER.match(/schedulePersistRuntime\s*\(\s*\)/g) || []).length;
+  assert.ok(persistCalls >= 8, `C.1.8: schedulePersistRuntime 呼出が ${persistCalls} 件（期待 8 以上）`);
+  // C.2.7-D: tournaments:setDisplaySettings 経路
+  assert.match(MAIN_JS, /tournaments:setDisplaySettings/,
+    'C.2.7-D: tournaments:setDisplaySettings ハンドラ消失');
+});
+
+// ============================================================
+// T13: scripts.test 登録 + version 2.4.0
+// ============================================================
+test('T13: scripts.test 登録 + package.json version = 2.4.0', () => {
+  assert.equal(PKG.version, '2.4.0',
+    `package.json version が ${PKG.version}（期待 2.4.0）`);
+  assert.ok(PKG.scripts && typeof PKG.scripts.test === 'string', 'scripts.test がない');
+  assert.ok(PKG.scripts.test.includes('v210-prize-pool-refactor.test.js'),
+    'scripts.test に v210-prize-pool-refactor.test.js が登録されていない');
+});
+
+// ============================================================
+// T14: STEP 4 バグ再発防止 — 🔒ボタン 3 件の DOM ID と JS 参照キー完全一致
+//     + 動的キー組立て撤廃（_resolveFeeElements switch case 採用）
+// ============================================================
+test('T14 (STEP 4 fix): 🔒ボタン DOM ID ↔ JS 参照キー完全一致 + 動的キー組立て撤廃', () => {
+  // (a) HTML 側の id 3 件存在
+  assert.match(INDEX, /id="js-tournament-buyin-fee-lock"/,
+    'HTML: js-tournament-buyin-fee-lock id 消失');
+  assert.match(INDEX, /id="js-tournament-reentry-fee-lock"/,
+    'HTML: js-tournament-reentry-fee-lock id 消失');
+  assert.match(INDEX, /id="js-tournament-addon-fee-lock"/,
+    'HTML: js-tournament-addon-fee-lock id 消失');
+
+  // (b) renderer.js 側の el 参照 3 件存在（命名規約と完全一致）
+  assert.match(RENDERER, /tournamentBuyinFeeLockBtn:\s*document\.getElementById\(['"]js-tournament-buyin-fee-lock['"]\)/,
+    'RENDERER: tournamentBuyinFeeLockBtn DOM 参照消失');
+  assert.match(RENDERER, /tournamentReentryFeeLockBtn:\s*document\.getElementById\(['"]js-tournament-reentry-fee-lock['"]\)/,
+    'RENDERER: tournamentReentryFeeLockBtn DOM 参照消失');
+  assert.match(RENDERER, /tournamentAddonFeeLockBtn:\s*document\.getElementById\(['"]js-tournament-addon-fee-lock['"]\)/,
+    'RENDERER: tournamentAddonFeeLockBtn DOM 参照消失');
+
+  // (c) _resolveFeeElements 関数定義 + 3 ケース完全網羅（switch case で動的キー組立て撤廃）
+  assert.match(RENDERER, /function\s+_resolveFeeElements\s*\(/,
+    '_resolveFeeElements 関数消失（動的キー組立て撤廃が崩れた）');
+  assert.match(RENDERER, /case\s+['"]buyIn['"]\s*:\s*return\s*\{\s*inputEl:\s*el\.tournamentBuyinFee\s*,\s*btnEl:\s*el\.tournamentBuyinFeeLockBtn/,
+    '_resolveFeeElements buyIn case 消失（DOM ペア解決不能）');
+  assert.match(RENDERER, /case\s+['"]reentry['"]\s*:\s*return\s*\{\s*inputEl:\s*el\.tournamentReentryFee\s*,\s*btnEl:\s*el\.tournamentReentryFeeLockBtn/,
+    '_resolveFeeElements reentry case 消失');
+  assert.match(RENDERER, /case\s+['"]addOn['"]\s*:\s*return\s*\{\s*inputEl:\s*el\.tournamentAddonFee\s*,\s*btnEl:\s*el\.tournamentAddonFeeLockBtn/,
+    '_resolveFeeElements addOn case 消失');
+
+  // (d) 3 つの click listener 直接登録（forEach + 動的キー組立てパターンは撤廃済）
+  assert.match(RENDERER, /el\.tournamentBuyinFeeLockBtn\?\.addEventListener\(\s*['"]click['"]/,
+    'buyIn 🔒 ボタンの直接 listener 登録消失（forEach + 動的キー組立てに退行した可能性）');
+  assert.match(RENDERER, /el\.tournamentReentryFeeLockBtn\?\.addEventListener\(\s*['"]click['"]/,
+    'reentry 🔒 ボタンの直接 listener 登録消失');
+  assert.match(RENDERER, /el\.tournamentAddonFeeLockBtn\?\.addEventListener\(\s*['"]click['"]/,
+    'addOn 🔒 ボタンの直接 listener 登録消失');
+
+  // (e) 動的キー組立て関数 _capitalizeFeeTarget は撤廃（dead code 排除済）
+  assert.doesNotMatch(RENDERER, /function\s+_capitalizeFeeTarget\s*\(/,
+    '_capitalizeFeeTarget 関数が復活（STEP 4 fix で削除済の動的キー組立てパターン再導入）');
+
+  // (f) preload.js に setPoolRatesDefault API 公開（店舗デフォルト編集 IPC）
+  assert.match(PRELOAD, /setPoolRatesDefault:\s*\(value\)\s*=>\s*_measuredInvoke\(\s*['"]settings:setPoolRatesDefault['"]/,
+    'preload.js の setPoolRatesDefault API 公開消失');
+  // main.js に settings:setPoolRatesDefault IPC ハンドラ
+  assert.match(MAIN_JS, /ipcMain\.handle\(\s*['"]settings:setPoolRatesDefault['"]/,
+    'main.js の settings:setPoolRatesDefault IPC ハンドラ消失');
+});
+
+// ============================================================
+// 結果サマリ
+// ============================================================
+console.log(`\nv210-prize-pool-refactor: ${pass} pass, ${fail} fail`);
+if (fail > 0) process.exit(1);
