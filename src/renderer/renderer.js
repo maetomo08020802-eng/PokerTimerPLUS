@@ -179,7 +179,10 @@ const tournamentState = {
   titleColor: '#FFFFFF',
   // STEP 10 フェーズC.2.3: その他ゲーム種のカスタム名 / ブレイク後一時停止
   customGameName: '',
-  pauseAfterBreak: false
+  pauseAfterBreak: false,
+  // v2.4.0: プール率（賞金プール反映率、起動時に main 側 store からの load で上書きされる）
+  //   renderer 側初期ダミー値は 100%（main 側 migration が走らない異常時でも既存挙動維持）
+  poolRates: { buyIn: 100, reentry: 100, addOn: 100 }
 };
 
 // STEP 6.17: タイトル色 hex バリデーション（#RRGGBB のみ許可）
@@ -354,6 +357,25 @@ const el = {
   venueNameInput:  document.getElementById('js-venue-name'),
   venueNameError:  document.getElementById('js-venue-name-error'),
   venueSaveBtn:    document.getElementById('js-venue-save'),
+
+  // v2.4.0: フィー編集ロック制御（C.1-A2 ensureEditorEditableState / setBlindsTableReadonly とは別 namespace）
+  tournamentBuyinFeeLockBtn:    document.getElementById('js-tournament-buyin-fee-lock'),
+  tournamentReentryFeeLockBtn:  document.getElementById('js-tournament-reentry-fee-lock'),
+  tournamentAddonFeeLockBtn:    document.getElementById('js-tournament-addon-fee-lock'),
+  // v2.4.0: プール率入力欄（フィー隣、トーナメント個別）
+  tournamentBuyinPoolRate:      document.getElementById('js-tournament-buyin-pool-rate'),
+  tournamentReentryPoolRate:    document.getElementById('js-tournament-reentry-pool-rate'),
+  tournamentAddonPoolRate:      document.getElementById('js-tournament-addon-pool-rate'),
+  // v2.4.0: フィー解除確認ダイアログ
+  feeUnlockDialog:              document.getElementById('js-fee-unlock-dialog'),
+  feeUnlockOkBtn:               document.getElementById('js-fee-unlock-ok'),
+  feeUnlockCancelBtn:           document.getElementById('js-fee-unlock-cancel'),
+  // v2.4.0: 店舗デフォルト プール率（設定ダイアログ ハウス情報タブ、グローバル）
+  appPoolRateDefaultBuyin:      document.getElementById('js-app-pool-rate-default-buyin'),
+  appPoolRateDefaultReentry:    document.getElementById('js-app-pool-rate-default-reentry'),
+  appPoolRateDefaultAddon:      document.getElementById('js-app-pool-rate-default-addon'),
+  appPoolRateDefaultSaveBtn:    document.getElementById('js-app-pool-rate-default-save'),
+  appPoolRateDefaultError:      document.getElementById('js-app-pool-rate-default-error'),
 
   // STEP 9-B: 左上ロゴ関連
   clockLogo:           document.getElementById('js-clock-logo'),
@@ -965,18 +987,26 @@ function renderControls(status) {
   }
 }
 
-// STEP 6: 動的計算ヘルパ（STEP 6.5: GTD 対応）
+// STEP 6: 動的計算ヘルパ（STEP 6.5: GTD 対応 / v2.4.0: プール率対応）
 //
-// 計算プール = buyIn.fee × playersInitial + reentry.fee × reentryCount + addOn.fee × addOnCount
+// 計算プール = Σ(各フィー × 件数 × プール率 / 100)
+//   = buyIn.fee × playersInitial × poolRates.buyIn / 100
+//   + reentry.fee × reentryCount × poolRates.reentry / 100
+//   + addOn.fee × addOnCount × poolRates.addOn / 100
 // 実効プール = max(計算プール, guarantee)  ※ guarantee = 0 は実質無効
 // STEP 6.9: 特殊スタックは fee がないため賞金プールには寄与しない（チップのみ加算 → AVG STACK 側で反映）
+// v2.4.0: poolRates 補完経路
+//   - STEP 2 migration により既存トーナメントは { buyIn: 100, reentry: 100, addOn: 100 }（旧式と完全一致）
+//   - 新規トーナメントは appConfig.poolRatesDefault（=0%）から積込まれる（安全側、景品表示法対応）
+//   - 万一 poolRates が state に不在の場合は防御的に 0% フォールバック（GTD のみ反映）
 function computeCalculatedPool() {
   const buyIn   = tournamentState.buyIn   || { fee: 0 };
   const reentry = tournamentState.reentry || { fee: 0 };
   const addOn   = tournamentState.addOn   || { fee: 0 };
-  return (buyIn.fee   || 0) * tournamentRuntime.playersInitial
-       + (reentry.fee || 0) * tournamentRuntime.reentryCount
-       + (addOn.fee   || 0) * tournamentRuntime.addOnCount;
+  const rates   = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
+  return (buyIn.fee   || 0) * tournamentRuntime.playersInitial * (Number(rates.buyIn)   || 0) / 100
+       + (reentry.fee || 0) * tournamentRuntime.reentryCount    * (Number(rates.reentry) || 0) / 100
+       + (addOn.fee   || 0) * tournamentRuntime.addOnCount      * (Number(rates.addOn)   || 0) / 100;
 }
 
 function computeTotalPool() {
@@ -1197,6 +1227,14 @@ function applyTournament(t) {
       appliedCount: Math.max(0, Math.min(999, Math.floor(Number(t.specialStack.appliedCount)) || 0))
     };
   }
+  // v2.4.0: poolRates 取込（main 側 sanitize 済み、各値は整数 0〜100 を想定、防御的に再 clamp）
+  if (t.poolRates && typeof t.poolRates === 'object') {
+    tournamentState.poolRates = {
+      buyIn:   Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.buyIn)   || 0))),
+      reentry: Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.reentry) || 0))),
+      addOn:   Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.addOn)   || 0)))
+    };
+  }
   if (Array.isArray(t.payouts) && t.payouts.length > 0) {
     // v2.1.4 方針 A: amount フィールドがあればそれも引き継ぐ（精度損失回避）
     tournamentState.payouts = t.payouts.map((p) => {
@@ -1323,6 +1361,12 @@ function applyTournament(t) {
   //   （CSS .form-row[hidden] と二重防御。'other' 以外なら必ず非表示）
   if (el.tournamentCustomGameWrapper) {
     el.tournamentCustomGameWrapper.hidden = (tournamentState.gameType !== 'other');
+  }
+  // v2.4.0: トーナメント切替・保存・新規・複製・dual-sync 受信後にフィーを自動再ロック（§11.5 (D)）。
+  //   入力中保護: _typingGuard が true（フィー欄に入力中）の場合は skip して打鍵中の挙動を破壊しない。
+  //   ただし readonly 属性を再付与するだけで input.value は変更しないため、値消失リスクは元々ない。
+  if (!_typingGuard && typeof lockAllFees === 'function') {
+    lockAllFees();
   }
 }
 
@@ -2605,6 +2649,173 @@ async function handleVenueSave() {
 el.venueSaveBtn?.addEventListener('click', () => {
   try { window.api?.log?.write?.('ui:click:major', { id: 'venueSaveBtn' }); } catch (_) {}
   handleVenueSave();
+});
+
+// =============================================================================
+// v2.4.0: フィー編集ロック制御 + 解除確認ダイアログ + 店舗デフォルト プール率編集
+// =============================================================================
+//
+// 【C.1-A2 衝突回避】本機構（setFeeReadonly / feeLockState）はフィー input 単体の readonly 制御。
+//   ブラインド表 readonly 制御（C.1-A2 ensureEditorEditableState / setBlindsTableReadonly）とは
+//   別 DOM 階層・別 namespace で機能的に独立。混同しないよう関数名・変数名を明確に分離。
+
+// フィー編集ロック状態（起動時すべて true = readonly + 🔒、§11.5 仕様）
+const feeLockState = {
+  buyIn:   true,
+  reentry: true,
+  addOn:   true
+};
+
+// 解除ダイアログで「解除する」を押した時に対象となる feeLockState のキー
+let _feeUnlockTarget = null;
+
+// v2.4.0: フィー target → DOM 要素ペアの解決（switch case 化で動的キー組立てバグを完全排除）。
+//   旧実装の `el[\`tournament${_capitalizeFeeTarget(target)}Fee\`]` は 'buyIn' → 'BuyIn'（I 大文字残存）
+//   になり、`tournamentBuyinFeeLockBtn` (小文字 i) と不一致でバイイン / アドオン 🔒 が無反応になる
+//   バグが再発した（前原実機検証 2 回）。switch case 直結で再発不能化。
+function _resolveFeeElements(target) {
+  switch (target) {
+    case 'buyIn':   return { inputEl: el.tournamentBuyinFee,   btnEl: el.tournamentBuyinFeeLockBtn };
+    case 'reentry': return { inputEl: el.tournamentReentryFee, btnEl: el.tournamentReentryFeeLockBtn };
+    case 'addOn':   return { inputEl: el.tournamentAddonFee,   btnEl: el.tournamentAddonFeeLockBtn };
+    default:        return { inputEl: null, btnEl: null };
+  }
+}
+
+// v2.4.0: フィー input の readonly 切替 + 🔒/🔓 アイコン更新
+//   target: 'buyIn' | 'reentry' | 'addOn'
+//   locked: true（ロック、readonly + 🔒）/ false（解除、編集可 + 🔓）
+function setFeeReadonly(target, locked) {
+  const { inputEl, btnEl } = _resolveFeeElements(target);
+  if (!inputEl || !btnEl) return;
+  if (locked) {
+    inputEl.setAttribute('readonly', '');
+    btnEl.textContent = '🔒';
+    btnEl.setAttribute('aria-label', 'フィー編集を解除');
+  } else {
+    inputEl.removeAttribute('readonly');
+    btnEl.textContent = '🔓';
+    btnEl.setAttribute('aria-label', 'フィー編集をロック');
+  }
+  feeLockState[target] = locked;
+}
+
+// v2.4.0: 3 フィー一括ロック（保存・切替・再起動の自動再ロック契機で呼出）
+function lockAllFees() {
+  setFeeReadonly('buyIn',   true);
+  setFeeReadonly('reentry', true);
+  setFeeReadonly('addOn',   true);
+}
+
+// v2.4.0: 解除ダイアログを表示（target を保存して showModal）
+function openFeeUnlockDialog(target) {
+  _feeUnlockTarget = target;
+  if (el.feeUnlockDialog && typeof el.feeUnlockDialog.showModal === 'function') {
+    try { el.feeUnlockDialog.showModal(); } catch (_) { /* 既に open の場合は無視 */ }
+  }
+}
+
+// v2.4.0: 🔒/🔓 ボタン click ハンドラ群（target は data-fee-target で識別）
+//   動的キー組立て（forEach + _capitalizeFeeTarget）で reentry のみ動き buyIn/addOn 無反応のバグが
+//   再発したため、3 つの listener を直接登録に変更（動的キー組立てを完全排除）。
+//   ハンドラ本体は共通関数 _handleFeeLockBtnClick に集約。
+function _handleFeeLockBtnClick(target) {
+  try { window.api?.log?.write?.('ui:click:major', { id: `feeLockBtn:${target}`, locked: feeLockState[target] }); } catch (_) {}
+  if (feeLockState[target]) {
+    openFeeUnlockDialog(target);          // ロック中 → 解除確認ダイアログ
+  } else {
+    setFeeReadonly(target, true);          // 解除中 → 即時ロック復帰（§15.2 (A) クリック反転式）
+  }
+}
+el.tournamentBuyinFeeLockBtn?.addEventListener('click',   () => _handleFeeLockBtnClick('buyIn'));
+el.tournamentReentryFeeLockBtn?.addEventListener('click', () => _handleFeeLockBtnClick('reentry'));
+el.tournamentAddonFeeLockBtn?.addEventListener('click',   () => _handleFeeLockBtnClick('addOn'));
+
+// v2.4.0: 解除ダイアログの「解除する」ボタン
+el.feeUnlockOkBtn?.addEventListener('click', () => {
+  if (_feeUnlockTarget) {
+    setFeeReadonly(_feeUnlockTarget, false);
+    // フォーカスを該当フィー input に移して即編集可能に（_resolveFeeElements 経由で動的キー組立て排除）
+    const { inputEl } = _resolveFeeElements(_feeUnlockTarget);
+    inputEl?.focus();
+    inputEl?.select?.();
+    _feeUnlockTarget = null;
+  }
+  el.feeUnlockDialog?.close?.();
+});
+
+// v2.4.0: 解除ダイアログの「キャンセル」ボタン
+el.feeUnlockCancelBtn?.addEventListener('click', () => {
+  _feeUnlockTarget = null;
+  el.feeUnlockDialog?.close?.();
+});
+
+// v2.4.0: 店舗デフォルト プール率（appConfig.poolRatesDefault）の保存 + UI フィードバック
+function _appPoolRateDefaultHintReset() {
+  if (!el.appPoolRateDefaultError) return;
+  el.appPoolRateDefaultError.hidden = true;
+  el.appPoolRateDefaultError.classList.remove('settings-hint--error', 'settings-hint--success');
+}
+function _appPoolRateDefaultHintError(msg) {
+  if (!el.appPoolRateDefaultError) return;
+  el.appPoolRateDefaultError.textContent = msg;
+  el.appPoolRateDefaultError.classList.remove('settings-hint--success');
+  el.appPoolRateDefaultError.classList.add('settings-hint--error');
+  el.appPoolRateDefaultError.hidden = false;
+}
+function _appPoolRateDefaultHintSuccess(msg, ttlMs = 2500) {
+  if (!el.appPoolRateDefaultError) return;
+  el.appPoolRateDefaultError.textContent = msg;
+  el.appPoolRateDefaultError.classList.remove('settings-hint--error');
+  el.appPoolRateDefaultError.classList.add('settings-hint--success');
+  el.appPoolRateDefaultError.hidden = false;
+  setTimeout(() => {
+    if (el.appPoolRateDefaultError) {
+      el.appPoolRateDefaultError.hidden = true;
+      el.appPoolRateDefaultError.classList.remove('settings-hint--success');
+    }
+  }, ttlMs);
+}
+
+// プール率入力欄から整数 0〜100 を取得（不正値は fallback、Math.floor で整数化）
+function _readPoolRateFromInput(inputEl, fallback) {
+  const n = Number(inputEl?.value);
+  if (!Number.isFinite(n)) return Math.max(0, Math.min(100, Math.floor(Number(fallback) || 0)));
+  return Math.max(0, Math.min(100, Math.floor(n)));
+}
+
+async function handleAppPoolRateDefaultSave() {
+  _appPoolRateDefaultHintReset();
+  const payload = {
+    buyIn:   _readPoolRateFromInput(el.appPoolRateDefaultBuyin,   0),
+    reentry: _readPoolRateFromInput(el.appPoolRateDefaultReentry, 0),
+    addOn:   _readPoolRateFromInput(el.appPoolRateDefaultAddon,   0)
+  };
+  if (!window.api?.settings?.setPoolRatesDefault) {
+    _appPoolRateDefaultHintError('保存 API が利用できません');
+    return;
+  }
+  try {
+    const result = await window.api.settings.setPoolRatesDefault(payload);
+    if (!result?.ok) {
+      _appPoolRateDefaultHintError(result?.message || '保存に失敗しました');
+      return;
+    }
+    // 入力欄も sanitize 済み値に同期
+    if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(result.poolRatesDefault?.buyIn   ?? payload.buyIn);
+    if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(result.poolRatesDefault?.reentry ?? payload.reentry);
+    if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(result.poolRatesDefault?.addOn   ?? payload.addOn);
+    _appPoolRateDefaultHintSuccess('保存しました');
+  } catch (err) {
+    try { window.api?.log?.write?.('error:caught:handleAppPoolRateDefaultSave', { message: err?.message }); } catch (_) {}
+    console.warn('店舗デフォルト プール率保存失敗:', err);
+    _appPoolRateDefaultHintError('保存に失敗しました: ' + (err.message || err));
+  }
+}
+
+el.appPoolRateDefaultSaveBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'appPoolRateDefaultSaveBtn' }); } catch (_) {}
+  handleAppPoolRateDefaultSave();
 });
 
 // ===== STEP 6.23: PC間データ移行（エクスポート / インポート） =====
@@ -3925,6 +4136,11 @@ function syncTournamentFormFromState() {
   if (el.tournamentReentryChips)    el.tournamentReentryChips.value    = String(tournamentState.reentry?.chips ?? 0);
   if (el.tournamentAddonFee)        el.tournamentAddonFee.value        = String(tournamentState.addOn?.fee ?? 0);
   if (el.tournamentAddonChips)      el.tournamentAddonChips.value      = String(tournamentState.addOn?.chips ?? 0);
+  // v2.4.0: プール率入力欄同期（フィー隣、トーナメント個別 poolRates）
+  const _rates = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
+  if (el.tournamentBuyinPoolRate)   el.tournamentBuyinPoolRate.value   = String(_rates.buyIn   ?? 0);
+  if (el.tournamentReentryPoolRate) el.tournamentReentryPoolRate.value = String(_rates.reentry ?? 0);
+  if (el.tournamentAddonPoolRate)   el.tournamentAddonPoolRate.value   = String(_rates.addOn   ?? 0);
   // STEP 6.9: 特殊スタック フォーム
   const ss = tournamentState.specialStack || { enabled: false, label: '早期着席特典', chips: 5000, appliedCount: 0 };
   if (el.tournamentSpecialStackEnabled) el.tournamentSpecialStackEnabled.checked = !!ss.enabled;
@@ -4002,6 +4218,9 @@ function updatePayoutsSum() {
 
 // 編集中フォームからプール額を計算（プレイヤー人数は runtime を使う）
 // 金額モードでの合計バリデーションと、% → 金額換算の表示で使用
+// v2.4.0 STEP 4: プール率もフォーム入力欄（el.tournamentBuyinPoolRate 等）から読込み。
+//   フォーム入力欄が未存在の場合は tournamentState.poolRates にフォールバック（防御）。
+//   STEP 3 の state 経由のみから、UI 入力欄経由（即時反映）に拡張済。
 function computeTotalPoolFromForm() {
   const num = (e, def) => {
     const n = Number(e?.value);
@@ -4012,9 +4231,14 @@ function computeTotalPoolFromForm() {
   const reentryFee = num(el.tournamentReentryFee, tournamentState.reentry?.fee ?? 0);
   const addOnFee   = num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0);
   const guarantee  = num(el.tournamentGuarantee,  tournamentState.guarantee    ?? 0);
-  const calc = buyInFee   * tournamentRuntime.playersInitial
-             + reentryFee * tournamentRuntime.reentryCount
-             + addOnFee   * tournamentRuntime.addOnCount;
+  // v2.4.0: プール率もフォーム入力欄から読込み（state はフォールバック）
+  const stateRates = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
+  const buyInRate   = _readPoolRateFromInput(el.tournamentBuyinPoolRate,   stateRates.buyIn);
+  const reentryRate = _readPoolRateFromInput(el.tournamentReentryPoolRate, stateRates.reentry);
+  const addOnRate   = _readPoolRateFromInput(el.tournamentAddonPoolRate,   stateRates.addOn);
+  const calc = buyInFee   * tournamentRuntime.playersInitial * buyInRate   / 100
+             + reentryFee * tournamentRuntime.reentryCount    * reentryRate / 100
+             + addOnFee   * tournamentRuntime.addOnCount      * addOnRate   / 100;
   return Math.max(calc, guarantee);
 }
 
@@ -4187,7 +4411,9 @@ function readPayoutsFromFormAsPercent() {
 }
 
 // STEP 6.9: rebuy → reentry リネーム
-['tournamentGuarantee','tournamentBuyinFee','tournamentReentryFee','tournamentAddonFee'].forEach((key) => {
+// v2.4.0: プール率入力欄もリスナ対象に追加（rate 変更で TOTAL POOL リアルタイム反映）
+['tournamentGuarantee','tournamentBuyinFee','tournamentReentryFee','tournamentAddonFee',
+ 'tournamentBuyinPoolRate','tournamentReentryPoolRate','tournamentAddonPoolRate'].forEach((key) => {
   el[key]?.addEventListener('input', rerenderPayoutsEditorIfNeeded);
 });
 
@@ -4905,6 +5131,12 @@ function readTournamentForm() {
     addOn: {
       fee:   num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0),
       chips: num(el.tournamentAddonChips, tournamentState.addOn?.chips ?? 0)
+    },
+    // v2.4.0: poolRates をフォーム入力欄から読み出し（main 側で sanitizePoolRates 再 clamp）
+    poolRates: {
+      buyIn:   _readPoolRateFromInput(el.tournamentBuyinPoolRate,   tournamentState.poolRates?.buyIn   ?? 0),
+      reentry: _readPoolRateFromInput(el.tournamentReentryPoolRate, tournamentState.poolRates?.reentry ?? 0),
+      addOn:   _readPoolRateFromInput(el.tournamentAddonPoolRate,   tournamentState.poolRates?.addOn   ?? 0)
     },
     // STEP 6.9: specialStack
     specialStack: {
@@ -7346,6 +7578,13 @@ async function loadInitialSettings() {
       if (typeof all?.display?.bottomBarHidden === 'boolean') bottomBarHiddenInit = all.display.bottomBarHidden;
       // STEP 6.22: 店舗名（グローバル）
       if (typeof all?.venueName === 'string') venueNameInit = all.venueName;
+      // v2.4.0: 店舗デフォルト プール率（appConfig.poolRatesDefault）を設定ダイアログ初期値に反映
+      const appPRD = all?.appConfig?.poolRatesDefault;
+      if (appPRD && typeof appPRD === 'object') {
+        if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(appPRD.buyIn   ?? 0);
+        if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(appPRD.reentry ?? 0);
+        if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(appPRD.addOn   ?? 0);
+      }
       // STEP 9-B: ロゴ初期状態（グローバル）
       if (all?.logo && typeof all.logo === 'object') {
         applyLogo(all.logo);

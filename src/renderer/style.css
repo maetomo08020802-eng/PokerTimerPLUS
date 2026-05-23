@@ -2308,6 +2308,49 @@ body:not(.has-marquee) .marquee { display: none; }
   white-space: nowrap;     /* STEP 6.6: 「許可ブレイク」「許可レベル」が2段折返しせず1段表示 */
 }
 
+/* v2.4.0: フィー入力欄の readonly + 🔒アイコン視覚化（既存 .tournament-editor__inline-label を継承） */
+.tournament-editor__inline-label--locked {
+  /* 🔒ボタン用の余白は inline-flex の gap で自然に確保される */
+}
+
+/* v2.4.0: フィー編集解除ボタン（🔒 / 🔓 切替）。透明背景・小型・カーソル変更で視認性確保 */
+.tournament-editor__fee-lock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8vw;
+  height: 1.8vw;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1vw;
+  color: var(--text-secondary);
+  padding: 0;
+  border-radius: 4px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.tournament-editor__fee-lock-btn:hover {
+  color: var(--gold);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* v2.4.0: フィー input の readonly 視覚化（編集不可を明示） */
+.tournament-editor__input[readonly] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* v2.4.0: プール率（反映率）入力欄。既存 --narrow 幅を継承、末尾の % 記号と組合せ */
+.tournament-editor__pool-rate-input {
+  /* 既存 .tournament-editor__input--narrow を継承（幅・高さ・font）。追加調整なし */
+}
+
+.tournament-editor__pool-rate-unit {
+  margin-left: 0.2vw;
+  font-size: 0.95vw;
+  color: var(--text-muted);
+}
+
 /* STEP 6.6: フォーム行の補足説明（リバイ/アドオンの「許可レベル/ブレイク」の意味） */
 .form-row__hint {
   font-size: 0.85vw;
@@ -2316,6 +2359,12 @@ body:not(.has-marquee) .marquee { display: none; }
   margin-bottom: 1vh;
   font-style: italic;
   line-height: 1.4;
+}
+
+/* v2.4.0: フィー欄真下のプール率案内文言（既存 .form-row__hint 拡張、直前行との距離調整） */
+.form-row__hint--pool-rates {
+  margin-top: -0.2vh;
+  color: var(--text-secondary);
 }
 
 /* STEP 6: 賞金構造エディタ（順位×% テーブル） */
