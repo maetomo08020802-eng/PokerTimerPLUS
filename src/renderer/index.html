@@ -391,6 +391,17 @@
     </div>
   </dialog>
 
+  <!-- v2.4.0: フィー編集解除確認ダイアログ。既存 confirm-dialog 規約準拠（<dialog> に flex 禁止）。 -->
+  <dialog class="confirm-dialog confirm-dialog--fee-unlock" id="js-fee-unlock-dialog">
+    <h2 class="confirm-dialog__title">フィー編集を解除</h2>
+    <p class="confirm-dialog__message">フィーを入力するとプライズプールが変動します。</p>
+    <p class="confirm-dialog__hint">フィー入力時はプライズに反映されます（反映率設定可）</p>
+    <div class="confirm-dialog__actions">
+      <button type="button" class="btn btn--ghost" value="cancel" id="js-fee-unlock-cancel">キャンセル</button>
+      <button type="button" class="btn btn--primary" value="ok" id="js-fee-unlock-ok">解除する</button>
+    </div>
+  </dialog>
+
   <!-- 設定ダイアログ（S キー）: STEP 3a でタブ式に再構築
        タブ: トーナメント / ブラインド構造 / 背景・時計フォント / テロップ / 音 / ハウス情報
        STEP 10 フェーズC.1.6 Fix 1: dialog 直下に form-dialog__shell wrapper を挟むことで、
@@ -732,28 +743,53 @@
             <label class="form-row__label" for="js-tournament-starting-stack">スタートスタック</label>
             <input type="number" id="js-tournament-starting-stack" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000">
           </div>
+          <!-- v2.4.0: フィーは readonly + 🔒 デフォルト、🔒クリックで解除確認ダイアログ → 編集可能。
+                       保存・トーナメント切替・アプリ再起動で自動再ロック。プール率（反映率）入力欄を各フィー隣に配置。 -->
           <div class="form-row">
             <span class="form-row__label">バイイン</span>
             <div class="tournament-editor__inline-fields">
-              <label class="tournament-editor__inline-label">フィー <input type="number" id="js-tournament-buyin-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="3000"></label>
+              <label class="tournament-editor__inline-label tournament-editor__inline-label--locked">フィー
+                <input type="number" id="js-tournament-buyin-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="3000" readonly>
+                <button type="button" class="tournament-editor__fee-lock-btn" id="js-tournament-buyin-fee-lock" data-fee-target="buyIn" aria-label="フィー編集を解除">🔒</button>
+              </label>
               <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-buyin-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
+              <label class="tournament-editor__inline-label">反映率
+                <input type="number" id="js-tournament-buyin-pool-rate" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" max="100" step="1" value="0">
+                <span class="tournament-editor__pool-rate-unit">%</span>
+              </label>
             </div>
           </div>
           <!-- STEP 6.9: リバイ → リエントリー 改名（運用実態に合わせて） -->
           <div class="form-row">
             <span class="form-row__label">リエントリー</span>
             <div class="tournament-editor__inline-fields">
-              <label class="tournament-editor__inline-label">フィー <input type="number" id="js-tournament-reentry-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000"></label>
+              <label class="tournament-editor__inline-label tournament-editor__inline-label--locked">フィー
+                <input type="number" id="js-tournament-reentry-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000" readonly>
+                <button type="button" class="tournament-editor__fee-lock-btn" id="js-tournament-reentry-fee-lock" data-fee-target="reentry" aria-label="フィー編集を解除">🔒</button>
+              </label>
               <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-reentry-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="8000"></label>
+              <label class="tournament-editor__inline-label">反映率
+                <input type="number" id="js-tournament-reentry-pool-rate" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" max="100" step="1" value="0">
+                <span class="tournament-editor__pool-rate-unit">%</span>
+              </label>
             </div>
           </div>
           <div class="form-row">
             <span class="form-row__label">アドオン</span>
             <div class="tournament-editor__inline-fields">
-              <label class="tournament-editor__inline-label">フィー <input type="number" id="js-tournament-addon-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000"></label>
+              <label class="tournament-editor__inline-label tournament-editor__inline-label--locked">フィー
+                <input type="number" id="js-tournament-addon-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000" readonly>
+                <button type="button" class="tournament-editor__fee-lock-btn" id="js-tournament-addon-fee-lock" data-fee-target="addOn" aria-label="フィー編集を解除">🔒</button>
+              </label>
               <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-addon-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
+              <label class="tournament-editor__inline-label">反映率
+                <input type="number" id="js-tournament-addon-pool-rate" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" max="100" step="1" value="0">
+                <span class="tournament-editor__pool-rate-unit">%</span>
+              </label>
             </div>
           </div>
+          <!-- v2.4.0: フィー欄真下の案内文言（解除ダイアログ内にも同じ文を表示） -->
+          <p class="form-row__hint form-row__hint--pool-rates">フィー入力時はプライズに反映されます（反映率設定可）</p>
 
           <!-- STEP 6.9: 特殊スタック追加（早期着席特典・VIP特典等） -->
           <hr class="tournament-editor__divider">
@@ -1033,6 +1069,35 @@
             <button type="button" class="btn btn--primary" id="js-venue-save">保存</button>
           </div>
           <p class="settings-hint" id="js-venue-name-error" hidden></p>
+
+          <!-- v2.4.0: 店舗デフォルト プール率（appConfig.poolRatesDefault）。
+               新規トーナメント作成時の初期値として使われる。既存トーナメントには影響しない（migration で 100% 維持）。 -->
+          <hr class="form-divider">
+          <div class="form-row">
+            <span class="form-row__label">店舗デフォルト プール率</span>
+            <div class="tournament-editor__inline-fields">
+              <label class="tournament-editor__inline-label">バイイン
+                <input type="number" id="js-app-pool-rate-default-buyin" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" max="100" step="1" value="0">
+                <span class="tournament-editor__pool-rate-unit">%</span>
+              </label>
+              <label class="tournament-editor__inline-label">リエントリー
+                <input type="number" id="js-app-pool-rate-default-reentry" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" max="100" step="1" value="0">
+                <span class="tournament-editor__pool-rate-unit">%</span>
+              </label>
+              <label class="tournament-editor__inline-label">アドオン
+                <input type="number" id="js-app-pool-rate-default-addon" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" max="100" step="1" value="0">
+                <span class="tournament-editor__pool-rate-unit">%</span>
+              </label>
+            </div>
+          </div>
+          <p class="settings-hint">
+            新規トーナメント作成時の初期値として使われます（既存トーナメントには影響しません）。<br>
+            0%＝フィー入力してもプライズに反映されない（景品表示法・風営法対応の安全側初期値）。
+          </p>
+          <div class="form-dialog__actions">
+            <button type="button" class="btn btn--primary" id="js-app-pool-rate-default-save">保存</button>
+          </div>
+          <p class="settings-hint" id="js-app-pool-rate-default-error" hidden></p>
         </div>
       </section>
 

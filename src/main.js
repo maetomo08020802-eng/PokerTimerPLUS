@@ -1868,6 +1868,17 @@ function registerIpcHandlers() {
     return { ok: true, venueName: sanitized };
   });
 
+  // v2.4.0: 店舗デフォルト プール率の保存（appConfig.poolRatesDefault）
+  //   新規トーナメント作成時に normalizeTournament の既定補完で参照される（既存トーナメントは migration 100% 維持）。
+  //   value: { buyIn, reentry, addOn } の各 0〜100 整数（sanitizePoolRates が clamp）。
+  //   hall 側は計算しないため dual-sync broadcast 不要（operator / operator-solo の設定 UI 専用）。
+  ipcMain.handle('settings:setPoolRatesDefault', (_event, value) => {
+    const sanitized = sanitizePoolRates(value, { buyIn: 0, reentry: 0, addOn: 0 });
+    const cur = store.get('appConfig') || {};
+    store.set('appConfig', { ...cur, poolRatesDefault: sanitized });
+    return { ok: true, poolRatesDefault: sanitized };
+  });
+
   // ===== STEP 9-B: ロゴ設定 IPC =====
   // ファイル選択 + userData ディレクトリへコピー（custom モードへ即移行）
   ipcMain.handle('logo:selectFile', async () => {
