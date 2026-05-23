@@ -477,7 +477,11 @@ const DEFAULT_TOURNAMENT_EXT = Object.freeze({
   runtime: { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 },
   // STEP 6.22.1: トーナメント別テロップ設定
   // 新規作成時はその時点のグローバル marquee 値で初期化
-  marqueeSettings: { enabled: true, text: '', speed: 'normal' }
+  marqueeSettings: { enabled: true, text: '', speed: 'normal' },
+  // v2.4.0: プール率（賞金プール反映率、各フィー個別、0〜100 整数）
+  //   このデフォルト値（100%）は migration / fallback 経路で使われる「既存互換」用。
+  //   新規トーナメント作成時は store.appConfig.poolRatesDefault（=0%）から積込まれる。
+  poolRates: { buyIn: 100, reentry: 100, addOn: 100 }
 });
 
 // STEP 6.22.1: テロップ速度の許容値 + サニタイズ共通関数
@@ -496,6 +500,43 @@ function sanitizeMarqueeSettings(value, fallback) {
     enabled: typeof value.enabled === 'boolean' ? value.enabled : fb.enabled,
     text,
     speed: VALID_MARQUEE_SPEEDS.includes(value.speed) ? value.speed : fb.speed
+  };
+}
+
+// v2.4.0: プール率（0〜100 整数）の sanitize。
+//   - Number.isFinite なら Math.floor で整数化、Math.max/min で 0〜100 clamp
+//   - 不正値（NaN / Infinity / null / undefined / 文字列）は fallback を採用
+//   - 負値は 0、100 超は 100 に clamp（小数は切捨て）
+function sanitizePoolRate(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    const fb = Number(fallback);
+    if (!Number.isFinite(fb)) return 0;
+    return Math.max(0, Math.min(100, Math.floor(fb)));
+  }
+  return Math.max(0, Math.min(100, Math.floor(n)));
+}
+
+// v2.4.0: poolRates オブジェクト（{ buyIn, reentry, addOn }）の sanitize。
+//   - value が object でなければ fallback を全フィールド sanitize して返す
+//   - 各フィールドは sanitizePoolRate で個別 sanitize
+//   - 既存トーナメント migration は fallback=DEFAULT_TOURNAMENT_EXT.poolRates（100%）
+//   - 新規トーナメント作成は fallback=appConfig.poolRatesDefault（0%）
+function sanitizePoolRates(value, fallback) {
+  const fb = (fallback && typeof fallback === 'object')
+    ? fallback
+    : { buyIn: 0, reentry: 0, addOn: 0 };
+  if (!value || typeof value !== 'object') {
+    return {
+      buyIn:   sanitizePoolRate(fb.buyIn,   0),
+      reentry: sanitizePoolRate(fb.reentry, 0),
+      addOn:   sanitizePoolRate(fb.addOn,   0)
+    };
+  }
+  return {
+    buyIn:   sanitizePoolRate(value.buyIn,   fb.buyIn),
+    reentry: sanitizePoolRate(value.reentry, fb.reentry),
+    addOn:   sanitizePoolRate(value.addOn,   fb.addOn)
   };
 }
 
@@ -705,6 +746,11 @@ const store = new Store({
       // STEP 4 仕上げ④: 音色2バリアント切替（'default' | 'variant2'）
       levelEndVariant: 'default',
       countdownTickVariant: 'default'
+    },
+    // v2.4.0: 店舗デフォルトのプール率（賞金プール反映率、新規トーナメント作成時にコピーされる初期値）
+    //   0%＝安全側（景品表示法・風営法対応）。既存トーナメントは migration で 100% 補完されるため挙動完全維持。
+    appConfig: {
+      poolRatesDefault: { buyIn: 0, reentry: 0, addOn: 0 }
     }
   }
 });
@@ -820,6 +866,20 @@ function migrateTournamentSchema(s) {
       // 何か違っていたら差し替え
       if (next.enabled !== ss.enabled || next.label !== ss.label || next.chips !== ss.chips || next.appliedCount !== ss.appliedCount) {
         m.specialStack = next;
+        touched = true;
+      }
+    }
+    // v2.4.0: poolRates 補完（既存トーナメントには poolRates 不在 → 既存挙動完全維持のため 100% で補完）
+    //   §11.2 解釈 B 採用（既存 100%、新規 0%）。
+    //   新規作成経路は tournaments:save → normalizeTournament の既定補完が appConfig.poolRatesDefault を読む。
+    if (!m.poolRates || typeof m.poolRates !== 'object') {
+      m.poolRates = { ...DEFAULT_TOURNAMENT_EXT.poolRates };  // = { buyIn: 100, reentry: 100, addOn: 100 }
+      touched = true;
+    } else {
+      const before = JSON.stringify(m.poolRates);
+      const fixed = sanitizePoolRates(m.poolRates, DEFAULT_TOURNAMENT_EXT.poolRates);
+      if (JSON.stringify(fixed) !== before) {
+        m.poolRates = fixed;
         touched = true;
       }
     }
@@ -2183,6 +2243,13 @@ function registerIpcHandlers() {
         appliedCount: Math.min(999, Math.max(0, Math.floor(toNonNegNumber(ss.appliedCount, fb.appliedCount ?? 0))))
       };
     }
+    // v2.4.0: poolRates 取込（部分更新可、sanitize 経由）
+    if (t.poolRates && typeof t.poolRates === 'object') {
+      out.poolRates = sanitizePoolRates(
+        t.poolRates,
+        fallback.poolRates || DEFAULT_TOURNAMENT_EXT.poolRates
+      );
+    }
 
     // 既定値補完
     if (!out.name) out.name = 'ポーカートーナメント';
@@ -2214,6 +2281,17 @@ function registerIpcHandlers() {
     // STEP 10 フェーズC.2.3: customGameName / pauseAfterBreak の既定補完
     if (typeof out.customGameName !== 'string') out.customGameName = '';
     if (typeof out.pauseAfterBreak !== 'boolean') out.pauseAfterBreak = false;
+    // v2.4.0: poolRates 既定補完
+    //   優先順位: out.poolRates（取込済）> fallback.poolRates（既存上書き時の旧値）>
+    //             appConfig.poolRatesDefault（新規作成時、store.defaults で 0%）>
+    //             DEFAULT_TOURNAMENT_EXT.poolRates（最終 fallback、100%）
+    //   経路: 既存上書き save → fallback=list[idx] で 100% 維持、新規 save → fallback={id} で 0% 採用
+    if (!out.poolRates || typeof out.poolRates !== 'object') {
+      const fbRates = (fallback.poolRates && typeof fallback.poolRates === 'object')
+        ? fallback.poolRates
+        : ((store.get('appConfig') || {}).poolRatesDefault || { buyIn: 0, reentry: 0, addOn: 0 });
+      out.poolRates = sanitizePoolRates(undefined, fbRates);
+    }
     // STEP 6.21: timerState 既定補完
     out.timerState = normalizeTimerState(out.timerState ?? fallback.timerState);
     // STEP 10 フェーズC.1.8: runtime 既定補完
@@ -2271,6 +2349,8 @@ function registerIpcHandlers() {
       payoutRounding: t.payoutRounding ?? DEFAULT_TOURNAMENT_EXT.payoutRounding,
       prizeCategory: typeof t.prizeCategory === 'string' ? t.prizeCategory : '',
       specialStack: t.specialStack ?? { ...DEFAULT_TOURNAMENT_EXT.specialStack },
+      // v2.4.0: poolRates 同梱（renderer 側 applyTournament が読む）
+      poolRates: sanitizePoolRates(t.poolRates, DEFAULT_TOURNAMENT_EXT.poolRates),
       // STEP 6.17
       titleColor: TITLE_COLOR_RE.test(t.titleColor || '') ? t.titleColor : '#FFFFFF',
       // STEP 10 フェーズC.2.3

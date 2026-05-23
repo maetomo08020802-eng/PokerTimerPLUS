@@ -179,7 +179,10 @@ const tournamentState = {
   titleColor: '#FFFFFF',
   // STEP 10 フェーズC.2.3: その他ゲーム種のカスタム名 / ブレイク後一時停止
   customGameName: '',
-  pauseAfterBreak: false
+  pauseAfterBreak: false,
+  // v2.4.0: プール率（賞金プール反映率、起動時に main 側 store からの load で上書きされる）
+  //   renderer 側初期ダミー値は 100%（main 側 migration が走らない異常時でも既存挙動維持）
+  poolRates: { buyIn: 100, reentry: 100, addOn: 100 }
 };
 
 // STEP 6.17: タイトル色 hex バリデーション（#RRGGBB のみ許可）
@@ -1195,6 +1198,14 @@ function applyTournament(t) {
       label:  typeof t.specialStack.label === 'string' ? t.specialStack.label.slice(0, 20) : (cur.label || '早期着席特典'),
       chips:  Number.isFinite(Number(t.specialStack.chips)) ? Number(t.specialStack.chips) : (cur.chips ?? 5000),
       appliedCount: Math.max(0, Math.min(999, Math.floor(Number(t.specialStack.appliedCount)) || 0))
+    };
+  }
+  // v2.4.0: poolRates 取込（main 側 sanitize 済み、各値は整数 0〜100 を想定、防御的に再 clamp）
+  if (t.poolRates && typeof t.poolRates === 'object') {
+    tournamentState.poolRates = {
+      buyIn:   Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.buyIn)   || 0))),
+      reentry: Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.reentry) || 0))),
+      addOn:   Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.addOn)   || 0)))
     };
   }
   if (Array.isArray(t.payouts) && t.payouts.length > 0) {
