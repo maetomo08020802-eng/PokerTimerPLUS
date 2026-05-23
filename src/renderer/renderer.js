@@ -2669,21 +2669,24 @@ const feeLockState = {
 // 解除ダイアログで「解除する」を押した時に対象となる feeLockState のキー
 let _feeUnlockTarget = null;
 
-// 'buyIn' → 'Buyin', 'reentry' → 'Reentry', 'addOn' → 'Addon' に変換（DOM 参照キー名の組立て用）。
-// 注意: '.toLowerCase()' なしで 'buyIn' → 'BuyIn' になると tournamentBuyinFeeLockBtn (小文字 i) と不一致になり
-//   バイイン / アドオン の 🔒 ボタンが無反応になるバグの根治。既存 el.tournamentBuyinFee 等の命名規約と整合。
-function _capitalizeFeeTarget(s) {
-  if (typeof s !== 'string' || s.length === 0) return '';
-  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+// v2.4.0: フィー target → DOM 要素ペアの解決（switch case 化で動的キー組立てバグを完全排除）。
+//   旧実装の `el[\`tournament${_capitalizeFeeTarget(target)}Fee\`]` は 'buyIn' → 'BuyIn'（I 大文字残存）
+//   になり、`tournamentBuyinFeeLockBtn` (小文字 i) と不一致でバイイン / アドオン 🔒 が無反応になる
+//   バグが再発した（前原実機検証 2 回）。switch case 直結で再発不能化。
+function _resolveFeeElements(target) {
+  switch (target) {
+    case 'buyIn':   return { inputEl: el.tournamentBuyinFee,   btnEl: el.tournamentBuyinFeeLockBtn };
+    case 'reentry': return { inputEl: el.tournamentReentryFee, btnEl: el.tournamentReentryFeeLockBtn };
+    case 'addOn':   return { inputEl: el.tournamentAddonFee,   btnEl: el.tournamentAddonFeeLockBtn };
+    default:        return { inputEl: null, btnEl: null };
+  }
 }
 
 // v2.4.0: フィー input の readonly 切替 + 🔒/🔓 アイコン更新
 //   target: 'buyIn' | 'reentry' | 'addOn'
 //   locked: true（ロック、readonly + 🔒）/ false（解除、編集可 + 🔓）
 function setFeeReadonly(target, locked) {
-  const key = _capitalizeFeeTarget(target);
-  const inputEl = el[`tournament${key}Fee`];
-  const btnEl   = el[`tournament${key}FeeLockBtn`];
+  const { inputEl, btnEl } = _resolveFeeElements(target);
   if (!inputEl || !btnEl) return;
   if (locked) {
     inputEl.setAttribute('readonly', '');
@@ -2713,28 +2716,27 @@ function openFeeUnlockDialog(target) {
 }
 
 // v2.4.0: 🔒/🔓 ボタン click ハンドラ群（target は data-fee-target で識別）
-['buyIn', 'reentry', 'addOn'].forEach((target) => {
-  const key = _capitalizeFeeTarget(target);
-  const btn = el[`tournament${key}FeeLockBtn`];
-  btn?.addEventListener('click', () => {
-    try { window.api?.log?.write?.('ui:click:major', { id: `feeLockBtn:${target}`, locked: feeLockState[target] }); } catch (_) {}
-    if (feeLockState[target]) {
-      // ロック中 → 解除確認ダイアログ表示
-      openFeeUnlockDialog(target);
-    } else {
-      // 解除中 → 即時ロック復帰（§15.2 (A) 採用、クリック反転式）
-      setFeeReadonly(target, true);
-    }
-  });
-});
+//   動的キー組立て（forEach + _capitalizeFeeTarget）で reentry のみ動き buyIn/addOn 無反応のバグが
+//   再発したため、3 つの listener を直接登録に変更（動的キー組立てを完全排除）。
+//   ハンドラ本体は共通関数 _handleFeeLockBtnClick に集約。
+function _handleFeeLockBtnClick(target) {
+  try { window.api?.log?.write?.('ui:click:major', { id: `feeLockBtn:${target}`, locked: feeLockState[target] }); } catch (_) {}
+  if (feeLockState[target]) {
+    openFeeUnlockDialog(target);          // ロック中 → 解除確認ダイアログ
+  } else {
+    setFeeReadonly(target, true);          // 解除中 → 即時ロック復帰（§15.2 (A) クリック反転式）
+  }
+}
+el.tournamentBuyinFeeLockBtn?.addEventListener('click',   () => _handleFeeLockBtnClick('buyIn'));
+el.tournamentReentryFeeLockBtn?.addEventListener('click', () => _handleFeeLockBtnClick('reentry'));
+el.tournamentAddonFeeLockBtn?.addEventListener('click',   () => _handleFeeLockBtnClick('addOn'));
 
 // v2.4.0: 解除ダイアログの「解除する」ボタン
 el.feeUnlockOkBtn?.addEventListener('click', () => {
   if (_feeUnlockTarget) {
     setFeeReadonly(_feeUnlockTarget, false);
-    // フォーカスを該当フィー input に移して即編集可能に
-    const key = _capitalizeFeeTarget(_feeUnlockTarget);
-    const inputEl = el[`tournament${key}Fee`];
+    // フォーカスを該当フィー input に移して即編集可能に（_resolveFeeElements 経由で動的キー組立て排除）
+    const { inputEl } = _resolveFeeElements(_feeUnlockTarget);
     inputEl?.focus();
     inputEl?.select?.();
     _feeUnlockTarget = null;
