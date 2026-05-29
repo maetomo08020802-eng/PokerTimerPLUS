@@ -29,3 +29,21 @@ docs/slides_artifacts/
 
 # Claude Code ローカル設定
 .claude/settings.local.json
+
+# brief / plans / reports ハンドオフフォルダ(他2プロジェクトと統一、ハンドオフ md は git 管理外)
+.cc-briefs/*
+!.cc-briefs/.gitkeep
+!.cc-briefs/README.md
+!.cc-briefs/_template.md
+
+.cc-plans/*
+!.cc-plans/.gitkeep
+!.cc-plans/README.md
+
+.cc-reports/*
+!.cc-reports/.gitkeep
+!.cc-reports/README.md
+
+# アーカイブフォルダ(ローカル保管、git 管理外)
+.cc-archive/
+_archive/
