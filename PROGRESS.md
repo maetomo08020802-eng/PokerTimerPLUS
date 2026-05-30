@@ -17,7 +17,7 @@
 | (なし) | — | ✅ オープン作業なし（v2.4.1 配信完了 2026-05-30） | — | — | — |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
-> ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了。md の `.cc-archive/prestart-zero-stall/` 退避は構築士2 提案待ち。
+> ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
 
 ---
 
@@ -25,7 +25,7 @@
 
 | 配信日 | バージョン | 主要変更 | report |
 |--------|-----------|---------|--------|
-| 2026-05-30 | **v2.4.1**（hotfix） | 開始前カウントダウン 0 着地後のタイマー停止（症状①）根治。renderer 1 関数に RUNNING/BREAK stale-restore 破棄ガード追加。回帰テスト v252（10 件）追加、合計 1164 件全 PASS。merge `01626aa` / tag `v2.4.1` / GitHub Release（Latest、自動更新対応） | [release](.cc-reports/2026-05-30_prestart-zero-stall_release.md) + [step2](.cc-reports/2026-05-30_prestart-zero-stall_step2.md) |
+| 2026-05-30 | **v2.4.1**（hotfix） | 開始前カウントダウン 0 着地後のタイマー停止（症状①）根治。renderer 1 関数に RUNNING/BREAK stale-restore 破棄ガード追加。回帰テスト v252（10 件）追加、合計 1164 件全 PASS。merge `01626aa` / tag `v2.4.1` / GitHub Release（Latest、自動更新対応） | アーカイブ済 `.cc-archive/prestart-zero-stall/`（reports/release + reports/step2） |
 | 2026-05-24 | **v2.4.0** | 賞金プール計算改修(フィー × 件数 × プール率、店舗デフォルト + トーナメント個別、🔒 readonly + 解除ダイアログ)、配信実績、main HEAD `ee78652` | [release_cleanup](.cc-reports/2026-05-24_v210-prize-pool-refactor_release_cleanup.md) + (アーカイブ済 `.cc-archive/v210-prize-pool-refactor/`) |
 | 2026-05-01 | **v2.0.0** | HDMI 2 画面対応(ホール側モニター + PC 側操作 UI 分離、HDMI 抜き差し自動追従、起動時モニター選択)、合計 190 テスト全 PASS、致命バグ保護 5 件完全維持 | (履歴は古い形式の HANDOVER.md / CHANGELOG.md 参照) |
 | 2026-04-?? | **v1.3.0** | (詳細は CHANGELOG.md 参照) | (同上) |
@@ -42,6 +42,9 @@
 | **v2.3.0** | PRE_START 永続化(`feature/v2.3.0-prestart-persistence`)| 温存ブランチ | 待機中、再開タイミングは前原判断 |
 
 > v2.4.0 の前に着手していたが、v2.4.0 を先行配信したため温存。再開時は新ブランチ起こすか同ブランチ続行か要相談。
+> ⚠️ **v2.3.0 再開時の調査項目（prestart-zero-stall 案件 §4 より引継ぎ）**: v2.3.0 の PRE_START 永続化復元経路 `applyTimerStateToTimer` にも、v2.4.1 で renderer `applyOperatorPreStartState` に入れたのと同種の「RUNNING/BREAK 中の stale 復元ガード」が必要か再評価すること（main 取り込み時の二重実装・巻き戻し再発防止）。
+>
+> 📌 **別案件・将来候補（緊急性なし）**: cross-generation cancel hardening — 古い `{isActive:false}` が新しい PRE_START を誤キャンセルする別経路（世代番号 / targetTime 比較で対処可能）。v2.4.1 症状①とは独立、実機未観測。次回 PRE_START 系を触る案件で関連検討。
 
 ---
 
@@ -50,7 +53,7 @@
 | 指標 | 件数 |
 |------|------|
 | 配信済みリリース | 6 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1)|
-| アーカイブ済 案件(`.cc-archive/`)| 1 件(v210-prize-pool-refactor)|
+| アーカイブ済 案件(`.cc-archive/`)| 2 件(v210-prize-pool-refactor / prestart-zero-stall)|
 | オープン作業 | 0 件（v2.4.1 配信完了）|
 | 最新テスト件数 | 1164 件 全 PASS(v2.4.1 配信時点、v252 で +10)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
