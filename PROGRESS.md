@@ -14,7 +14,8 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| (なし) | 全リリース完了、次バージョン待機 | — | — | — | — |
+| v2.4.1（候補） | **prestart-zero-stall STEP 2**（症状①根治の実装: applyOperatorPreStartState に RUNNING/BREAK stale-restore 破棄ガード + 回帰テスト + v2.4.1 bump） | 🟡 実装完了・実機確認待ち（push/配信前で停止、1164 件全 PASS） | [step2_brief](.cc-briefs/2026-05-30_prestart-zero-stall_step2_brief.md) | [step1_plan](.cc-plans/2026-05-30_prestart-zero-stall_step1_plan.md) | [step2_report](.cc-reports/2026-05-30_prestart-zero-stall_step2.md) |
+| v2.4.1（候補） | prestart-zero-stall STEP 1（調査・investigation 完了） | ✅ Plan 承認済（構築士2 二重 review） | [step1_brief](.cc-briefs/2026-05-30_prestart-zero-stall_step1_brief.md) | [step1_plan](.cc-plans/2026-05-30_prestart-zero-stall_step1_plan.md) | [step1_review](.cc-briefs/2026-05-30_prestart-zero-stall_step1_review.md) |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
@@ -49,8 +50,8 @@
 |------|------|
 | 配信済みリリース | 5 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0)|
 | アーカイブ済 案件(`.cc-archive/`)| 1 件(v210-prize-pool-refactor)|
-| オープン作業 | 0 件 |
-| 最新テスト件数 | 1154 件 全 PASS(v2.4.0 配信時点)|
+| オープン作業 | 1 件（prestart-zero-stall STEP 2 = 実装完了・実機確認待ち、push 前で停止）|
+| 最新テスト件数 | 1164 件 全 PASS(v2.4.1 実装時点、v252 で +10)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
 > CC は完了報告のたびにこの表を Edit(リリース配信時はリリース履歴に新行追加、テスト件数更新)。
@@ -81,11 +82,12 @@
   3. 「CC は brief を書かない」明示(暗黙的発生時は `cc-kouchikushi2` サブエージェント代行)をルール4-A 直下に追記
   4. investigation 型 review.md 分量目安(50〜120 行が現実的下限)を追記
   5. セクション E 段階 2 を Phase 2 ON 完全自動化前提に更新、`AskUserQuestion` 立ち止まり禁止を再強調
+- **2026-05-30**: prestart-zero-stall STEP 1（investigation 型・コード変更ゼロ）完了。症状①（PRE_START 0 着地後の巻き戻し stall）の原因を operator 自己ループ再ブロードキャスト（main.js:1212）→ 古い `{isActive:true}` tick が restorePreStart で RUNNING 上に PRE_START 再点火 → 続く `{isActive:false}` が cancelPreStart、とコード段階レベルで確定。最小修正案 = renderer `applyOperatorPreStartState` の isActive:true 分岐に status（RUNNING/BREAK）ガード 1 つ追加（[step1_plan](.cc-plans/2026-05-30_prestart-zero-stall_step1_plan.md)）。実装は次 STEP（前原承認後）
 - **配信状況**: **v2.4.0 配信可能状態**。前原 GO で .exe ビルド + GitHub Release 実行可
 - **次のアクション(想定)**:
+  - prestart-zero-stall STEP 1 Plan の軽量 review → 前原承認 → 次 STEP 実装（v2.4.1 想定）
   - v2.4.0 の GitHub Release 配信実行(前原判断)
   - v2.3.0(PRE_START 永続化)再開、または新規バージョン起案
-  - poker-clock は他 2 プロジェクト(plus2-homepage / customer-app)と比べてホット度低、安定運用フェーズ
 
 ---
 

@@ -48,7 +48,7 @@ function test(name, fn) {
 // T1: package.json.version === '2.2.1'（本番版数、サフィックスなし）
 // ============================================================
 test('T1: package.json.version === 2.2.1 + サフィックスなし', () => {
-  assert.equal(PKG.version, '2.4.0', `期待 2.2.1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.4.1', `期待 2.2.1, 実際 ${PKG.version}`);
   assert.doesNotMatch(PKG.version, /-/, `本番版にサフィックスが残存: ${PKG.version}`);
 });
 

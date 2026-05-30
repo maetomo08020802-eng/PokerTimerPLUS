@@ -120,6 +120,9 @@ const PRIORITY_LOG_LABELS = new Set([
   'preStart:operator:send',
   'operator:preStartResync:sent',
   'operator:applyPreStartState:apply',
+  // prestart-zero-stall 根治（2026-05-30, v2.4.1）: 0 着地後に届いた古い PRE_START 復元 payload を
+  //   破棄した証拠ラベル（巻き戻し撲滅の決定的観測。これが出れば stale restore を弾けている）
+  'operator:applyPreStartState:discard-stale-restore',
   // v2.1.20-rc10.1 追加（rc10-audit 高優先 #1 / #2 / #10）
   'hdmi:display-removed:dual-sync-stale',
   'hdmi:dialog-blocked:switchOperatorToSolo',

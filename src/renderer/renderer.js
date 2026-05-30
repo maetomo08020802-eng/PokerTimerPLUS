@@ -3293,6 +3293,23 @@ function applyOperatorPreStartState(payload) {
   if (payload.isActive) {
     // 既に PRE_START 中なら no-op（重複復元防止、restorePreStart 側でも同等ガードあり）
     if (typeof isPreStartActive === 'function' && isPreStartActive()) return;
+    // prestart-zero-stall 根治（2026-05-30）: タイマーが既に本始動している（PRE_START が正規終了して
+    //   RUNNING / BREAK に遷移済）状態では、遅れて届いた古い PRE_START 同期 payload を破棄して巻き戻さない。
+    //   真因: operator(-solo) が publish した tick({isActive:true}) を main(line 1212) が自分に再送 →
+    //         0 着地後に届くと restorePreStart で RUNNING の上に PRE_START を再点火 → 続く {isActive:false}
+    //         が cancelPreStart を撃って IDLE へ巻き戻す（症状①: 0 着地でタイマーが動かない）。
+    //   正当な復元（HDMI 抜き差し / 再起動後）は必ず fresh IDLE renderer 起点（status===IDLE）のため無害。
+    //   0 着地後 status は startAtLevel(0) 由来の RUNNING / BREAK のみ → この 2 値で漏れなく捕捉。
+    const curStatus = (typeof getState === 'function') ? getState().status : null;
+    if (curStatus === States.RUNNING || curStatus === States.BREAK) {
+      try {
+        window.api?.log?.write?.('operator:applyPreStartState:discard-stale-restore', {
+          status: curStatus,
+          role: window.appRole
+        });
+      } catch (_) { /* never throw from logging */ }
+      return;
+    }
     // timer.js の復元 API を呼んで isPreStart + targetTime + state を整合
     if (typeof timerRestorePreStart === 'function') {
       try {
