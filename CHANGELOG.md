@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## v2.4.1 — 2026-05-30
+
+PokerTimerPLUS+ v2.4.1（hotfix）をリリースします。開始前カウントダウンが 0 に着地した「後」にタイマーが動かず手動起動が必要になる不具合（症状①）を根治しました。
+
+### 🐞 修正：開始前カウントダウン 0 着地後のタイマー停止（症状①）
+
+**症状**:
+- 開始前カウントダウンを設定して放置 → カウントが 0 になったがタイマーが動かず、手動で起動する必要があった
+
+**真因（PRE_START 0 着地レース）**:
+- operator（手元 PC）が送信した PRE_START の進行同期メッセージ（`{isActive:true}`）を main プロセスが自分自身に再送する経路があり、0 着地でタイマーが本始動（PRE_START → RUNNING）した「後」に、遅れて届いた古い同期メッセージがタイマーを PRE_START に巻き戻し、続く終了メッセージ（`{isActive:false}`）が `cancelPreStart` を呼んで IDLE まで戻していた（RUNNING → PRE_START → IDLE）
+
+**修正**:
+- `applyOperatorPreStartState` の復元分岐に、タイマーが既に本始動している（status が RUNNING / BREAK）ときは遅れて届いた古い PRE_START 同期 payload を破棄して巻き戻さないガードを追加（renderer 1 関数のみ）
+- 正当な復元（HDMI 抜き差し後 / 再起動後の PRE_START 復元）は必ず初期化直後の IDLE 状態から行われるため影響なし
+- 破棄を観測できる rolling-log ラベル `operator:applyPreStartState:discard-stale-restore` を追加
+
+### 🛡 既存機構の完全保持
+
+- 致命バグ保護 5 件（resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所）すべて無変更
+- `cancelPreStart` 経路・main.js の送信ロジック・timer.js・IPC は無変更（誤発火の抑止のみ）
+- 回帰テスト v252（10 件）を追加。既存テスト全 PASS 維持（合計 1164 件）
+
+---
+
 ## v2.4.0 — 2026-05-23
 
 PokerTimerPLUS+ v2.4.0 をリリースします。日本国内利用前提として、フィー入力をデフォルト編集不可にし、店舗ごとに設定可能なプール率（初期値 0%）で賞金プールを算出する仕組みに改修しました（景品表示法・風営法対応）。

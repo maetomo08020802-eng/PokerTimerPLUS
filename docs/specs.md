@@ -807,6 +807,14 @@ Yu Shimomachi が運営する PLUS2 をはじめ、HDMI 拡張モニターを備
 
 ホール側はローカル時刻計算（既存 `timer.js` の `performance.now` ベース）+ main からの「基準時刻 + 状態フラグ」のみ受信で実現。tick ごとの timer 値 broadcast は禁止（リスク 2 対策）。
 
+### PRE_START 0 着地ガード（v2.4.1、症状① 根治）
+
+開始前カウントダウン（PRE_START）は専用の `preStartState` 同期メッセージで配信され、operator(-solo) 自身にも main 経由で再送される。0 着地で PRE_START → RUNNING に本始動した「後」に、遅れて届いた古い `preStartState` メッセージがタイマーを巻き戻すレースを防ぐため、`applyOperatorPreStartState` の復元分岐に **タイマーが既に本始動している（status が RUNNING / BREAK）ときは古い PRE_START 復元 payload を破棄する** ガードを置く。
+
+- 正当な復元（HDMI 抜き差し後 / 再起動後）は必ず初期化直後の **IDLE 状態**から行われるため、本ガードの対象外（無害）。
+- 破棄は rolling-log ラベル `operator:applyPreStartState:discard-stale-restore` で観測可能。
+- `cancelPreStart` 経路・main 側送信・`timer.js`・IPC は無変更（誤発火の抑止のみ）。
+
 ### AudioContext 再初期化対応
 
 - C.1.7 で確立した `audio.js _play()` 内 suspend resume は維持
