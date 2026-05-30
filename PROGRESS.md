@@ -14,10 +14,10 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| v2.4.1（候補） | **prestart-zero-stall STEP 2**（症状①根治の実装: applyOperatorPreStartState に RUNNING/BREAK stale-restore 破棄ガード + 回帰テスト + v2.4.1 bump） | 🟡 実装完了・実機確認待ち（push/配信前で停止、1164 件全 PASS） | [step2_brief](.cc-briefs/2026-05-30_prestart-zero-stall_step2_brief.md) | [step1_plan](.cc-plans/2026-05-30_prestart-zero-stall_step1_plan.md) | [step2_report](.cc-reports/2026-05-30_prestart-zero-stall_step2.md) |
-| v2.4.1（候補） | prestart-zero-stall STEP 1（調査・investigation 完了） | ✅ Plan 承認済（構築士2 二重 review） | [step1_brief](.cc-briefs/2026-05-30_prestart-zero-stall_step1_brief.md) | [step1_plan](.cc-plans/2026-05-30_prestart-zero-stall_step1_plan.md) | [step1_review](.cc-briefs/2026-05-30_prestart-zero-stall_step1_review.md) |
+| (なし) | — | ✅ オープン作業なし（v2.4.1 配信完了 2026-05-30） | — | — | — |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
+> ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了。md の `.cc-archive/prestart-zero-stall/` 退避は構築士2 提案待ち。
 
 ---
 
@@ -25,6 +25,7 @@
 
 | 配信日 | バージョン | 主要変更 | report |
 |--------|-----------|---------|--------|
+| 2026-05-30 | **v2.4.1**（hotfix） | 開始前カウントダウン 0 着地後のタイマー停止（症状①）根治。renderer 1 関数に RUNNING/BREAK stale-restore 破棄ガード追加。回帰テスト v252（10 件）追加、合計 1164 件全 PASS。merge `01626aa` / tag `v2.4.1` / GitHub Release（Latest、自動更新対応） | [release](.cc-reports/2026-05-30_prestart-zero-stall_release.md) + [step2](.cc-reports/2026-05-30_prestart-zero-stall_step2.md) |
 | 2026-05-24 | **v2.4.0** | 賞金プール計算改修(フィー × 件数 × プール率、店舗デフォルト + トーナメント個別、🔒 readonly + 解除ダイアログ)、配信実績、main HEAD `ee78652` | [release_cleanup](.cc-reports/2026-05-24_v210-prize-pool-refactor_release_cleanup.md) + (アーカイブ済 `.cc-archive/v210-prize-pool-refactor/`) |
 | 2026-05-01 | **v2.0.0** | HDMI 2 画面対応(ホール側モニター + PC 側操作 UI 分離、HDMI 抜き差し自動追従、起動時モニター選択)、合計 190 テスト全 PASS、致命バグ保護 5 件完全維持 | (履歴は古い形式の HANDOVER.md / CHANGELOG.md 参照) |
 | 2026-04-?? | **v1.3.0** | (詳細は CHANGELOG.md 参照) | (同上) |
@@ -48,10 +49,10 @@
 
 | 指標 | 件数 |
 |------|------|
-| 配信済みリリース | 5 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0)|
+| 配信済みリリース | 6 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1)|
 | アーカイブ済 案件(`.cc-archive/`)| 1 件(v210-prize-pool-refactor)|
-| オープン作業 | 1 件（prestart-zero-stall STEP 2 = 実装完了・実機確認待ち、push 前で停止）|
-| 最新テスト件数 | 1164 件 全 PASS(v2.4.1 実装時点、v252 で +10)|
+| オープン作業 | 0 件（v2.4.1 配信完了）|
+| 最新テスト件数 | 1164 件 全 PASS(v2.4.1 配信時点、v252 で +10)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
 > CC は完了報告のたびにこの表を Edit(リリース配信時はリリース履歴に新行追加、テスト件数更新)。
@@ -73,9 +74,9 @@
 
 ## 直近の状態
 
-- **現在ブランチ**: main(`ee78652` v2.4.0 配信 commit、origin/main 完全同期)
-- **直前 commit**: `ee78652 docs(CLAUDE.md): CC は前原に直接作業を依頼しないルール追加(2026-05-24)`
-- **直前作業**: v2.4.0 配信後 最終 cleanup 完了(working tree 改行コード差分 discard、`.git/index.lock` 残骸削除、npm test 1154 件全 PASS 再確認)
+- **現在ブランチ**: main(`01626aa` v2.4.1 マージ commit、origin/main 完全同期)
+- **直前 commit**: `01626aa Merge: v2.4.1 - PRE_START 0 着地後の巻き戻し stall 根治（症状①）`（実装 commit `7d887c7`）
+- **直前作業**: v2.4.1 配信完了（merge `--no-ff` → tag `v2.4.1` → push → .exe ビルド → GitHub Release 公開[Latest・自動更新対応]）
 - **2026-05-28**: ハイブリッド自動化 Phase 2 段階 2 フロー完全実証(plus2-homepage homepage-performance-audit 案件) + CLAUDE.md 整合改訂 5 点反映(plus2-homepage に追随):
   1. Phase 2 ON / Stop hook 検出対象拡張(`.cc-plans/*.md` + `.cc-briefs/*_brief.md` 追加)を冒頭セクションに反映
   2. 自走必須ルール明文化(AskUserQuestion / ExitPlanMode / 進行方針確認禁止、安全側に倒して自走、実機確認は 6-B 行き)を「禁止事項(実装ルール)」末尾に追記
@@ -83,11 +84,12 @@
   4. investigation 型 review.md 分量目安(50〜120 行が現実的下限)を追記
   5. セクション E 段階 2 を Phase 2 ON 完全自動化前提に更新、`AskUserQuestion` 立ち止まり禁止を再強調
 - **2026-05-30**: prestart-zero-stall STEP 1（investigation 型・コード変更ゼロ）完了。症状①（PRE_START 0 着地後の巻き戻し stall）の原因を operator 自己ループ再ブロードキャスト（main.js:1212）→ 古い `{isActive:true}` tick が restorePreStart で RUNNING 上に PRE_START 再点火 → 続く `{isActive:false}` が cancelPreStart、とコード段階レベルで確定。最小修正案 = renderer `applyOperatorPreStartState` の isActive:true 分岐に status（RUNNING/BREAK）ガード 1 つ追加（[step1_plan](.cc-plans/2026-05-30_prestart-zero-stall_step1_plan.md)）。実装は次 STEP（前原承認後）
-- **配信状況**: **v2.4.0 配信可能状態**。前原 GO で .exe ビルド + GitHub Release 実行可
+- **2026-05-30（配信）**: prestart-zero-stall STEP 2（実装）→ v2.4.1 配信完了。renderer `applyOperatorPreStartState` に RUNNING/BREAK stale-restore 破棄ガード追加、回帰テスト v252（10 件）追加で合計 1164 件全 PASS。GitHub Release v2.4.1（asset: latest.yml + .exe + .blockmap、Latest 表示）。既存ユーザーは起動時に自動更新通知
+- **配信状況**: **v2.4.1 配信済み（最新）**。GitHub Release 公開済、自動更新有効
 - **次のアクション(想定)**:
-  - prestart-zero-stall STEP 1 Plan の軽量 review → 前原承認 → 次 STEP 実装（v2.4.1 想定）
-  - v2.4.0 の GitHub Release 配信実行(前原判断)
+  - prestart-zero-stall 案件 md の `.cc-archive/prestart-zero-stall/` 退避（構築士2 提案 → 前原確認）
   - v2.3.0(PRE_START 永続化)再開、または新規バージョン起案
+  - poker-clock は安定運用フェーズ
 
 ---
 
