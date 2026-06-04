@@ -23,6 +23,25 @@
   - 除外: `README.md` / `_template*.md` / `*_review.md` / `*_completion_review.md`
   - Plan 書出時点でも Stop hook → サブエージェント自動 review が走る（plus2-homepage homepage-performance-audit 案件で 2026-05-28 完全実証成功、3 段階フロー = plan 書出 → 自動 review → 実装 → report 書出 → 自動 completion review）
 
+## レビュー必読 INVARIANTS（致命ルール・サブエージェント必読）
+
+> この節はサブエージェント版 構築士2 が**レビューのたびに必ず全文読む**短い致命ルール一覧（review-rules.md §0-4）。
+> ここに違反する変更は DoD が全■でも承認しない。
+
+- **致命バグ保護 5 件は全件維持**: resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所。1 件でも壊す変更は禁止。report に全件「影響なし or 影響あり+対処」を明記。【標準制約 / DoD / 段階1 条件4】
+- **既存テスト全 PASS 維持**: skip / コメントアウト / 無効化は禁止。件数・PASS 状況に変化があれば構築士2 review 必須。【DoD「既存テスト全 PASS 維持」】
+- **tournamentRuntime は消さない**: 完全リセットは `handleReset()`（タイマーリセットボタン経由のみ）、ブラインド適用系は `resetBlindProgressOnly()`。runtime（人数・リエントリー・アドオン）消失は致命バグ。
+- **入力中保護**: DOM 再構築は `isUserTypingInInput()` でガード（打鍵中の値消失・フォーカス喪失の再発禁止）。
+- **編集モード readonly 解除**: 複製/新規作成は `ensureEditorEditableState()` を同期＋RAF 内で 2 回呼ぶ。
+- **ブランディング保護**: アプリ名 `PokerTimerPLUS+`・`presented by Yu Shimomachi`・About クレジット・発行元・`logo-yushitamachi.svg` を設定で変更/非表示/差し替え可能にしない。【禁止事項（ブランディング保護）】
+- **レイアウトシフト撲滅**: `__autoCheck()` drift 0、`transform: scale` 禁止、bottom-bar/marquee は flex column（position: fixed 禁止）、カード幅固定。【標準制約 / ui-layout.md】
+- **完全ローカル動作**: npm install 以外の外部ネットワーク通信を実装しない。ユーザーデータをアプリ外に送信しない。
+- **スコープ厳守**: `.cc-plans/` の Plan に明示された項目以外は実装しない。別問題は report「残作業」に提案記載のみ（自動修正禁止）。
+- **ライブラリ追加・既存破壊は承認制**（バニラ JS 優先）。**並列 sub-agent / Task は最大 3 体**（review 呼出は除外）。
+- **単画面後方互換（v2.x）**: HDMI 非接続 PC で v1.3.0 と完全同一動作。ホール側に設定/ボタン類を絶対表示しない。【v2.0.0 不変条件】
+- **賞金プール 既存ユーザー保護（v2.4.x）**: 既存トーナメントを開いた瞬間に TOTAL POOL が変わるのは禁止（migration 補完 100%、新規のみ 0%）。【v2.4.0 不変条件】
+- **リリースは前原 GO 後のみ**: main merge / tag / push / .exe ビルド / Release は前原 GO 前提。実機検証（HDMI・2 画面同期・音声・タイマー精度・ブランド主観）は 6-B 行きで自走を止めない。
+
 ## 参照ドキュメント
 - 機能仕様: docs/specs.md
 - パイプライン: PIPELINE.md
