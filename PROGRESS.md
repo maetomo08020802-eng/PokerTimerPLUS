@@ -14,8 +14,7 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| **v2.5.0** | **tournament-bloat STEP2**（画像分離・実装 + 移行）| 🟡 実機確認待ち（実装完了・1180 全 PASS、配信は前原実機 OK 後）| [step2_brief](.cc-briefs/2026-06-06_tournament-bloat_step2_brief.md) | [step2_plan](.cc-plans/2026-06-06_tournament-bloat_step2_plan.md) | [step2](.cc-reports/2026-06-06_tournament-bloat_step2.md) |
-| v2.5.0 | tournament-bloat STEP1（調査+計測+方式比較+計画）| ✅ 完了承認済 | [step1_brief](.cc-briefs/2026-06-06_tournament-bloat_step1_brief.md) | [step1_plan](.cc-plans/2026-06-06_tournament-bloat_step1_plan.md) | [step1](.cc-reports/2026-06-06_tournament-bloat_step1.md) |
+| (なし) | — | ✅ オープン作業なし（**v2.5.0 配信完了 2026-06-06**） | — | — | — |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -26,6 +25,7 @@
 
 | 配信日 | バージョン | 主要変更 | report |
 |--------|-----------|---------|--------|
+| 2026-06-06 | **v2.5.0** | トーナメント画像分離で保存激重を根治（背景画像・休憩スライドショーを別ファイル `tournament-images.json` へ分離、初回起動で自動移行＝backup→検証→strip 冪等）。実測: 部分保存 527ms→0.76ms / config 35.96MB→92KB。既存 1164 + 新規 16 = 1180 件全 PASS、致命バグ保護 5 件全維持。merge `e77fcce` / tag `v2.5.0` / GitHub Release（Latest・自動更新対応、アセット latest.yml+.exe+.blockmap） | [step2](.cc-reports/2026-06-06_tournament-bloat_step2.md) + [step4_release](.cc-reports/2026-06-06_tournament-bloat_step4_release.md) |
 | 2026-05-30 | **v2.4.1**（hotfix） | 開始前カウントダウン 0 着地後のタイマー停止（症状①）根治。renderer 1 関数に RUNNING/BREAK stale-restore 破棄ガード追加。回帰テスト v252（10 件）追加、合計 1164 件全 PASS。merge `01626aa` / tag `v2.4.1` / GitHub Release（Latest、自動更新対応） | アーカイブ済 `.cc-archive/prestart-zero-stall/`（reports/release + reports/step2） |
 | 2026-05-24 | **v2.4.0** | 賞金プール計算改修(フィー × 件数 × プール率、店舗デフォルト + トーナメント個別、🔒 readonly + 解除ダイアログ)、配信実績、main HEAD `ee78652` | [release_cleanup](.cc-reports/2026-05-24_v210-prize-pool-refactor_release_cleanup.md) + (アーカイブ済 `.cc-archive/v210-prize-pool-refactor/`) |
 | 2026-05-01 | **v2.0.0** | HDMI 2 画面対応(ホール側モニター + PC 側操作 UI 分離、HDMI 抜き差し自動追従、起動時モニター選択)、合計 190 テスト全 PASS、致命バグ保護 5 件完全維持 | (履歴は古い形式の HANDOVER.md / CHANGELOG.md 参照) |
@@ -53,10 +53,10 @@
 
 | 指標 | 件数 |
 |------|------|
-| 配信済みリリース | 6 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1)|
+| 配信済みリリース | 7 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0)|
 | アーカイブ済 案件(`.cc-archive/`)| 2 件(v210-prize-pool-refactor / prestart-zero-stall)|
-| オープン作業 | 0 件（v2.4.1 配信完了）|
-| 最新テスト件数 | 1164 件 全 PASS(v2.4.1 配信時点、v252 で +10)|
+| オープン作業 | 0 件（v2.5.0 配信完了）|
+| 最新テスト件数 | 1180 件 全 PASS(v2.5.0 配信時点、v253 で +16)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
 > CC は完了報告のたびにこの表を Edit(リリース配信時はリリース履歴に新行追加、テスト件数更新)。
@@ -78,9 +78,9 @@
 
 ## 直近の状態
 
-- **現在ブランチ**: main(`01626aa` v2.4.1 マージ commit、origin/main 完全同期)
-- **直前 commit**: `01626aa Merge: v2.4.1 - PRE_START 0 着地後の巻き戻し stall 根治（症状①）`（実装 commit `7d887c7`）
-- **直前作業**: v2.4.1 配信完了（merge `--no-ff` → tag `v2.4.1` → push → .exe ビルド → GitHub Release 公開[Latest・自動更新対応]）
+- **現在ブランチ**: main(`e77fcce` v2.5.0 マージ commit、origin/main 同期済 push 完了)
+- **直前 commit**: `e77fcce Merge: v2.5.0 - トーナメント画像分離で保存激重を根治`（実装 commit `c81a3cd`）
+- **直前作業**: **v2.5.0 配信完了**（merge `--no-ff` → tag `v2.5.0` → push → main から .exe 再ビルド → GitHub Release `v2.5.0` 公開[Latest・自動更新対応、アセット latest.yml+.exe+.blockmap]）。Release URL: https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.5.0
 - **2026-05-28**: ハイブリッド自動化 Phase 2 段階 2 フロー完全実証(plus2-homepage homepage-performance-audit 案件) + CLAUDE.md 整合改訂 5 点反映(plus2-homepage に追随):
   1. Phase 2 ON / Stop hook 検出対象拡張(`.cc-plans/*.md` + `.cc-briefs/*_brief.md` 追加)を冒頭セクションに反映
   2. 自走必須ルール明文化(AskUserQuestion / ExitPlanMode / 進行方針確認禁止、安全側に倒して自走、実機確認は 6-B 行き)を「禁止事項(実装ルール)」末尾に追記
@@ -90,11 +90,12 @@
 - **2026-05-30**: prestart-zero-stall STEP 1（investigation 型・コード変更ゼロ）完了。症状①（PRE_START 0 着地後の巻き戻し stall）の原因を operator 自己ループ再ブロードキャスト（main.js:1212）→ 古い `{isActive:true}` tick が restorePreStart で RUNNING 上に PRE_START 再点火 → 続く `{isActive:false}` が cancelPreStart、とコード段階レベルで確定。最小修正案 = renderer `applyOperatorPreStartState` の isActive:true 分岐に status（RUNNING/BREAK）ガード 1 つ追加（[step1_plan](.cc-plans/2026-05-30_prestart-zero-stall_step1_plan.md)）。実装は次 STEP（前原承認後）
 - **2026-05-30（配信）**: prestart-zero-stall STEP 2（実装）→ v2.4.1 配信完了。renderer `applyOperatorPreStartState` に RUNNING/BREAK stale-restore 破棄ガード追加、回帰テスト v252（10 件）追加で合計 1164 件全 PASS。GitHub Release v2.4.1（asset: latest.yml + .exe + .blockmap、Latest 表示）。既存ユーザーは起動時に自動更新通知
 - **2026-06-06**: tournament-bloat STEP1（investigation・src 無変更）完了 + STEP2（実装）完了。根因 = **休憩スライドショー画像 base64（57 枚 33.7MB / config.json の 99.7%）が tournaments 配列に inline 格納**され毎秒 list と毎操作の全件書込（527ms）を重くしていた。前原 GO 後、**方式 A（画像を別ファイル `tournament-images.json` へ分離）で実装**。実データ end-to-end 検証で画像 58 枚 35.86MB 全保全 + runtime/timerState/marquee 全件保全を確認。AFTER 実測: config 92KB / list 8.3KB / 部分保存 0.76ms（697 倍）/ IPC 搬送 0.19ms（485 倍）。既存 1164 件全 PASS + 新規 16 件 = 1180 件全 PASS。致命バグ保護 5 件全維持。ブランチ `feature/v2.5.0-tournament-image-split`、commit `c81a3cd`（STEP1 chore は main `7d20ffd`）。**配信は前原実機 OK + GO 後**（[step2_plan](.cc-plans/2026-06-06_tournament-bloat_step2_plan.md) / [step2](.cc-reports/2026-06-06_tournament-bloat_step2.md)）
-- **2026-06-06（STEP3 テストビルド）**: 前原実機 6-B 用に v2.5.0 インストーラを `--publish never` でローカルビルド成功（`dist\pokertimerplus-setup-2.5.0.exe` ≈80MB）。**公開・tag・main merge は一切なし**（GitHub Release は v2.4.1 が最新のまま）。app.asar に画像分離コード同梱確認。前原はこの .exe をインストールして 6-B ①〜④ を確認（[step3_testbuild](.cc-reports/2026-06-06_tournament-bloat_step3_testbuild.md)）
-- **配信状況**: **v2.4.1 配信済み（最新・公開中）**。v2.5.0 はテストビルド完成・前原実機確認待ち（OK 後に main merge → tag → push → Release publish）
+- **2026-06-06（STEP3 テストビルド → STEP4 配信）**: 前原実機 6-B ①〜④ 全 OK → 配信 GO 受領 → v2.5.0 公開配信完了。main merge（`e77fcce`）→ tag `v2.5.0` → push → main から .exe 再ビルド → GitHub Release `v2.5.0` 公開（Latest・自動更新有効）。既存ユーザーは次回起動で自動更新通知 → 初回起動で画像分離 migration（backup 自動生成）。tournament-bloat 案件クローズ（[step4_release](.cc-reports/2026-06-06_tournament-bloat_step4_release.md)）
+- **配信状況**: **v2.5.0 配信済み（最新・公開中）**。GitHub Release 公開済、自動更新有効
 - **次のアクション(想定)**:
-  - tournament-bloat v2.5.0: 前原が `dist\pokertimerplus-setup-2.5.0.exe` をインストール → 6-B ①〜④（移行無事 / 画像表示 / 体感速度 / エクスポート）確認 → OK なら配信 GO
+  - tournament-bloat 案件 md を `.cc-archive/tournament-bloat/` へ退避（構築士2 提案 → 前原確認）。merge 済 feature ブランチ `feature/v2.5.0-tournament-image-split` の削除も任意
   - v2.3.0(PRE_START 永続化)再開、または新規バージョン起案
+  - poker-clock は安定運用フェーズ
 
 ---
 
