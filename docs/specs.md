@@ -179,6 +179,35 @@ prize = Σ(各フィー × 件数 × プール率 / 100)
 | 出力 | スピーカー出力 |
 | 制約 | mp3 のみ対応、ファイルサイズ 5MB まで (推定) |
 
+### 3.6 画像保持と移行（v2.5.0 画像分離）
+
+保存トーナメント件数が増えると激重になる問題（背景画像・休憩スライドショーの base64 を `tournaments` 配列に inline 格納していたため、毎秒の一覧取得と毎操作の全件書込が巨大化）を根治するための仕組み。
+
+#### 保存レイアウト
+- **画像（背景画像 `backgroundImage` / 休憩スライドショー `breakImages`）は専用ファイル `tournament-images.json`（electron-store `imagesStore`、userData 配下）に `{ [tournamentId]: { backgroundImage, breakImages } }` 形式で保持**。
+- `tournaments` 配列の各 `displaySettings` は画像 2 フィールドを持たない（image-free。`background` / `timerFont` / `backgroundOverlay` / `breakImageInterval` / `pipSize` のみ）。
+- 画像はローカル専用（PC 間で引き継がない）。エクスポート `.json` は画像 2 フィールドを除外（テロップ `marqueeSettings` を含む他設定は引き継ぐ）。`EXPORT_VERSION` は 2 据置。旧形式（画像入り）import は画像を無視して非 crash。
+- 画像が要る経路（`loadTournamentIntoForm` / 起動初期化 / hall 表示）は IPC `tournaments:getImages(id)`、または `getActive` / `setActive` / `save` 戻り値の再マージ（`mergeImagesIntoDisplaySettings`）で取得する。`tournaments:list`（毎秒）は image-free。
+
+#### 既存データ移行（起動時 1 回・冪等、`migrateTournamentImages`）
+1. 冪等フラグ `imageSplitMigrated` が立っていれば何もしない。
+2. `config.json` を `config.pre-image-split.backup.json` にバックアップ（既存ならスキップ）。
+3. 各トーナメントの inline 画像を `tournament-images.json` へ移す。
+4. **検証**: 移行後の画像（枚数・総バイト）が移行前と一致するか確認。**不一致なら strip せず中断**（フラグを立てず次回起動で再試行）。
+5. 検証 OK のときだけ `tournaments` から画像 2 フィールドを除去（`runtime` / `timerState` / `marqueeSettings` 等は保持）し、冪等フラグを立てる。
+
+#### ロールバック手順（移行後に問題が起きた場合）
+1. アプリを終了する。
+2. userData（`%APPDATA%\PokerTimerPLUS+\`）の `config.pre-image-split.backup.json` を `config.json` に上書きコピーする（移行前の画像入り状態に戻る）。
+3. 同フォルダの `config.json` 内のキー `imageSplitMigrated` を削除する（または backup で上書きすれば自動的に存在しない状態に戻る）。
+4. 必要なら `tournament-images.json` を削除する。
+5. アプリを再起動すると、旧バージョン相当の挙動（画像 inline）に戻る。
+
+#### 実装場所
+- 画像ストア / ヘルパ / 移行 / IPC: `src/main.js` の `imagesStore` / `getTournamentImages()` / `setTournamentImages()` / `deleteTournamentImages()` / `mergeImagesIntoDisplaySettings()` / `migrateTournamentImages()` / `tournaments:getImages`
+- 画像書込: `tournaments:setDisplaySettings`（画像分岐を imagesStore へ）
+- 表示経路付け替え: `src/renderer/renderer.js` の `loadTournamentIntoForm()` / 起動初期化（`getImages` 経由）
+
 ---
 
 ## 4. 画面構成

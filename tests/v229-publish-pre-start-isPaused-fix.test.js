@@ -190,7 +190,7 @@ test('T8 (Fix 4): handlePipShowSlideshow の breakStartedAt = null 継続保持�
 // T9 (Fix 6): package.json version が 2.1.18（-rc2 サフィックスなし）
 // ============================================================
 test('T9 (Fix 6): package.json version が 2.1.17', () => {
-  assert.equal(PKG.version, '2.4.1', `package.json version が 2.1.17 ではない（実際: ${PKG.version}）`);
+  assert.equal(PKG.version, '2.5.0', `package.json version が 2.1.17 ではない（実際: ${PKG.version}）`);
 });
 
 // ============================================================

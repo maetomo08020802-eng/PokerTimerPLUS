@@ -574,10 +574,19 @@ const EXPORT_VERSION = 2;
 
 function buildExportPayload(kind, tournaments, userPresets) {
   // timerState を初期化（進行中の状態は別 PC に持っていかない）
-  const cleanTournaments = tournaments.map((t) => ({
-    ...t,
-    timerState: { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null }
-  }));
+  // v2.5.0: 背景画像 / 休憩スライドショー（backgroundImage / breakImages）は引き継がない（ローカル専用・軽量化）。
+  //   その他の設定（テロップ marqueeSettings 含む）は全て引き継ぐ。
+  const cleanTournaments = tournaments.map((t) => {
+    const ds = (t && t.displaySettings) || {};
+    const nextDs = { ...ds };
+    delete nextDs.backgroundImage;
+    delete nextDs.breakImages;
+    return {
+      ...t,
+      displaySettings: nextDs,
+      timerState: { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null }
+    };
+  });
   return {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
@@ -758,6 +767,119 @@ const store = new Store({
   }
 });
 
+// ===== v2.5.0: 画像専用ストア（tournament-bloat 根治）=====
+// 背景画像 / 休憩スライドショーの base64 を tournaments 配列から分離し、別ファイル
+// tournament-images.json に保持する。毎秒 tournaments:list・毎操作の全件書込から画像を外し、
+// config.json を 62KB 級に保つ（重さの根治）。画像はローカル専用（PC 間で引き継がない）。
+const imagesStore = new Store({ name: 'tournament-images', defaults: {} });
+
+// 画像取得（無ければ空）。返り値は常に { backgroundImage: string, breakImages: string[] }。
+function getTournamentImages(id) {
+  if (typeof id !== 'string' || !id) return { backgroundImage: '', breakImages: [] };
+  const rec = imagesStore.get(id) || {};
+  const sanImage = sanitizeBackgroundImage(rec.backgroundImage, '');
+  return {
+    backgroundImage: (sanImage === null) ? '' : sanImage,
+    breakImages: sanitizeBreakImages(rec.breakImages, [])
+  };
+}
+
+// 画像部分更新（backgroundImage / breakImages のうち渡されたものだけ更新）。
+//   両方とも空になったらキーごと削除して tournament-images.json を最小化。
+function setTournamentImages(id, patch) {
+  if (typeof id !== 'string' || !id) return;
+  const cur = imagesStore.get(id) || {};
+  const next = {
+    backgroundImage: (typeof cur.backgroundImage === 'string') ? cur.backgroundImage : '',
+    breakImages: Array.isArray(cur.breakImages) ? cur.breakImages : []
+  };
+  if (patch && 'backgroundImage' in patch) {
+    const s = sanitizeBackgroundImage(patch.backgroundImage, cur.backgroundImage || '');
+    next.backgroundImage = (s === null) ? (cur.backgroundImage || '') : s;
+  }
+  if (patch && 'breakImages' in patch) {
+    next.breakImages = sanitizeBreakImages(patch.breakImages, cur.breakImages || []);
+  }
+  if (!next.backgroundImage && next.breakImages.length === 0) {
+    imagesStore.delete(id);
+  } else {
+    imagesStore.set(id, next);
+  }
+}
+
+function deleteTournamentImages(id) {
+  if (typeof id !== 'string' || !id) return;
+  imagesStore.delete(id);
+}
+
+// displaySettings（image-free）に imagesStore の画像を再マージして返す。
+//   getActive / setActive / save の戻り値・hall への broadcast で使用（applyTournament 経路を無改造で動かす）。
+function mergeImagesIntoDisplaySettings(id, baseDs) {
+  const img = getTournamentImages(id);
+  return { ...(baseDs || {}), backgroundImage: img.backgroundImage, breakImages: img.breakImages };
+}
+
+// v2.5.0: 画像分離 migration（起動時 1 回・冪等）。inline 画像を imagesStore へ移し tournaments から strip。
+//   ① backup → ② imagesStore へ移行 → ③ 枚数・バイト一致検証 → ④ OK のみ strip → ⑤ 冪等フラグ。
+//   検証不一致 / backup 失敗は strip せず中断（フラグ立てず次回再試行）。runtime 等は保持。
+function migrateTournamentImages(s) {
+  try {
+    if (s.get('imageSplitMigrated')) return;
+    const list = s.get('tournaments') || [];
+    // 移行前の画像実数（検証用）
+    let srcCount = 0, srcBytes = 0;
+    for (const t of list) {
+      const ds = (t && t.displaySettings) || {};
+      if (typeof ds.backgroundImage === 'string' && ds.backgroundImage) { srcCount += 1; srcBytes += ds.backgroundImage.length; }
+      if (Array.isArray(ds.breakImages)) for (const im of ds.breakImages) if (typeof im === 'string' && im) { srcCount += 1; srcBytes += im.length; }
+    }
+    // backup（既存ならスキップ）
+    try {
+      const userData = app.getPath('userData');
+      const cfgPath = path.join(userData, 'config.json');
+      const backupPath = path.join(userData, 'config.pre-image-split.backup.json');
+      if (fs.existsSync(cfgPath) && !fs.existsSync(backupPath)) {
+        fs.copyFileSync(cfgPath, backupPath);
+      }
+    } catch (e) {
+      console.error('[image-split] backup 失敗、移行中断:', e && e.message);
+      return;
+    }
+    // 移行: imagesStore へ書込
+    let dstCount = 0, dstBytes = 0;
+    for (const t of list) {
+      const id = t && t.id;
+      const ds = (t && t.displaySettings) || {};
+      const bg = (typeof ds.backgroundImage === 'string') ? ds.backgroundImage : '';
+      const brk = Array.isArray(ds.breakImages) ? ds.breakImages.filter((im) => typeof im === 'string' && im) : [];
+      if (!id) continue;
+      if (bg || brk.length > 0) {
+        imagesStore.set(id, { backgroundImage: bg, breakImages: brk });
+        if (bg) { dstCount += 1; dstBytes += bg.length; }
+        for (const im of brk) { dstCount += 1; dstBytes += im.length; }
+      }
+    }
+    // 検証（移行漏れ / 破損があれば strip しない）
+    if (dstCount !== srcCount || dstBytes !== srcBytes) {
+      console.error(`[image-split] 検証不一致 src(${srcCount}/${srcBytes}) != dst(${dstCount}/${dstBytes})、strip 中断`);
+      return;  // フラグ立てない（次回再試行）
+    }
+    // strip（runtime 等は保持、displaySettings から画像 2 フィールドのみ除去）
+    const stripped = list.map((t) => {
+      const ds = (t && t.displaySettings) || {};
+      const nextDs = { ...ds };
+      delete nextDs.backgroundImage;
+      delete nextDs.breakImages;
+      return { ...t, displaySettings: nextDs };
+    });
+    s.set('tournaments', stripped);
+    s.set('imageSplitMigrated', true);
+    console.log(`[image-split] 移行完了: ${dstCount} 枚 / ${dstBytes} bytes を tournament-images.json へ分離`);
+  } catch (e) {
+    console.error('[image-split] migration 例外:', e && e.message);
+  }
+}
+
 // 旧 `tournament` キー（単一）が残っていれば配列構造へマイグレーション。
 // 既に tournaments が入っていれば触らない（多重実行安全）。
 function migrateTournament(s) {
@@ -778,6 +900,8 @@ function migrateTournament(s) {
   }
 }
 migrateTournament(store);
+// v2.5.0: 画像分離 migration は schema migration より前に実行（生の inline 画像を読むため）
+migrateTournamentImages(store);
 
 // STEP 6: 既存トーナメントに新規フィールドのデフォルト値を充填
 function migrateTournamentSchema(s) {
@@ -790,11 +914,8 @@ function migrateTournamentSchema(s) {
   const fallbackDisplay = {
     background: VALID_BACKGROUNDS.includes(globalDisplay.background) ? globalDisplay.background : 'navy',
     timerFont:  VALID_TIMER_FONTS.includes(globalDisplay.timerFont)   ? globalDisplay.timerFont  : 'jetbrains',
-    // STEP 10 フェーズC.1.3: backgroundImage / backgroundOverlay 既定値
-    backgroundImage: (typeof globalDisplay.backgroundImage === 'string') ? globalDisplay.backgroundImage : '',
     backgroundOverlay: VALID_BG_OVERLAYS.includes(globalDisplay.backgroundOverlay) ? globalDisplay.backgroundOverlay : 'mid',
-    // STEP 10 フェーズC.1.4: 休憩中スライドショー
-    breakImages: sanitizeBreakImages(globalDisplay.breakImages, []),
+    // v2.5.0: backgroundImage / breakImages は tournament-images.json へ分離（tournament displaySettings は image-free）
     breakImageInterval: sanitizeBreakImageInterval(globalDisplay.breakImageInterval, 10),
     pipSize: sanitizePipSize(globalDisplay.pipSize, 'medium')
   };
@@ -919,29 +1040,20 @@ function migrateTournamentSchema(s) {
       filledDisplaySettings += 1;
     } else {
       const ds = m.displaySettings;
-      // STEP 10 フェーズC.1.3: backgroundImage / backgroundOverlay も含めて補完。
-      //   不正値は fallbackDisplay 経由で既定に戻す。サイズ超過の data URL は空文字に切り捨て。
-      const sanImage = sanitizeBackgroundImage(ds.backgroundImage, fallbackDisplay.backgroundImage);
+      // v2.5.0: 画像 2 フィールド（backgroundImage / breakImages）は migrateTournamentImages で imagesStore へ分離済。
+      //   ここでは非画像フィールドのみ正規化し、万一画像フィールドが残存していても（migration abort 時の保険）保持する。
       const fixed = {
         background: VALID_BACKGROUNDS.includes(ds.background) ? ds.background : fallbackDisplay.background,
         timerFont:  VALID_TIMER_FONTS.includes(ds.timerFont)   ? ds.timerFont  : fallbackDisplay.timerFont,
-        backgroundImage: (sanImage === null) ? '' : sanImage,
         backgroundOverlay: sanitizeBackgroundOverlay(ds.backgroundOverlay, fallbackDisplay.backgroundOverlay),
-        // STEP 10 フェーズC.1.4: 休憩中スライドショー
-        breakImages: sanitizeBreakImages(ds.breakImages, fallbackDisplay.breakImages),
         breakImageInterval: sanitizeBreakImageInterval(ds.breakImageInterval, fallbackDisplay.breakImageInterval),
         pipSize: sanitizePipSize(ds.pipSize, fallbackDisplay.pipSize)
       };
-      // 等価判定（配列・プリミティブ混在）
-      const breakImagesUnchanged = Array.isArray(ds.breakImages)
-        && fixed.breakImages.length === ds.breakImages.length
-        && fixed.breakImages.every((v, i) => v === ds.breakImages[i]);
       if (fixed.background !== ds.background || fixed.timerFont !== ds.timerFont
-          || fixed.backgroundImage !== ds.backgroundImage || fixed.backgroundOverlay !== ds.backgroundOverlay
-          || !breakImagesUnchanged
+          || fixed.backgroundOverlay !== ds.backgroundOverlay
           || fixed.breakImageInterval !== ds.breakImageInterval
           || fixed.pipSize !== ds.pipSize) {
-        m.displaySettings = fixed;
+        m.displaySettings = { ...ds, ...fixed };  // 既存の画像フィールド（あれば）を保持してマージ
         touched = true;
       }
     }
@@ -2230,14 +2342,12 @@ function registerIpcHandlers() {
     if ('displaySettings' in t) {
       const ds = t.displaySettings;
       const fb = fallback.displaySettings || DEFAULT_TOURNAMENT_EXT.displaySettings;
-      const sanImage = sanitizeBackgroundImage(ds?.backgroundImage, fb.backgroundImage || '');
+      // v2.5.0: backgroundImage / breakImages は imagesStore へ分離（ここでは取り込まない = image-free）。
+      //   旧形式 import で画像が混ざっていても無視（前原方針: 画像はローカル専用・PC 間で非引継ぎ）。
       out.displaySettings = {
         background: VALID_BACKGROUNDS.includes(ds?.background) ? ds.background : (fb.background || 'navy'),
         timerFont:  VALID_TIMER_FONTS.includes(ds?.timerFont)   ? ds.timerFont  : (fb.timerFont  || 'jetbrains'),
-        backgroundImage: (sanImage === null) ? (fb.backgroundImage || '') : sanImage,
         backgroundOverlay: sanitizeBackgroundOverlay(ds?.backgroundOverlay, fb.backgroundOverlay || 'mid'),
-        // STEP 10 フェーズC.1.4: 休憩中スライドショー
-        breakImages: sanitizeBreakImages(ds?.breakImages, fb.breakImages || []),
         breakImageInterval: sanitizeBreakImageInterval(ds?.breakImageInterval, fb.breakImageInterval ?? 10),
         pipSize: sanitizePipSize(ds?.pipSize, fb.pipSize || 'medium')
       };
@@ -2314,13 +2424,11 @@ function registerIpcHandlers() {
     // STEP 10 フェーズC.1.3: backgroundImage / backgroundOverlay も補完
     if (!out.displaySettings || typeof out.displaySettings !== 'object') {
       const fb = fallback.displaySettings || getDefaultDisplaySettings();
+      // v2.5.0: image-free（backgroundImage / breakImages は imagesStore へ分離）
       out.displaySettings = {
         background: VALID_BACKGROUNDS.includes(fb.background) ? fb.background : 'navy',
         timerFont:  VALID_TIMER_FONTS.includes(fb.timerFont)   ? fb.timerFont  : 'jetbrains',
-        backgroundImage: (typeof fb.backgroundImage === 'string') ? fb.backgroundImage : '',
         backgroundOverlay: VALID_BG_OVERLAYS.includes(fb.backgroundOverlay) ? fb.backgroundOverlay : 'mid',
-        // STEP 10 フェーズC.1.4: 休憩中スライドショー
-        breakImages: sanitizeBreakImages(fb.breakImages, []),
         breakImageInterval: sanitizeBreakImageInterval(fb.breakImageInterval, 10),
         pipSize: sanitizePipSize(fb.pipSize, 'medium')
       };
@@ -2339,7 +2447,8 @@ function registerIpcHandlers() {
     const list = store.get('tournaments') || [];
     const found = list.find((t) => t.id === id) || list[0] || null;
     if (!found) return null;
-    return { ...found, title: found.name };
+    // v2.5.0: displaySettings に imagesStore の画像を再マージ（applyTournament の画像反映経路を無改造で動かす）
+    return { ...found, title: found.name, displaySettings: mergeImagesIntoDisplaySettings(found.id, found.displaySettings) };
   }
 
   // 一覧（フル）— STEP 6 で追加した拡張フィールドも含めて返す
@@ -2379,13 +2488,12 @@ function registerIpcHandlers() {
       // STEP 10 フェーズC.1.4: breakImages / breakImageInterval / pipSize も同梱
       displaySettings: (() => {
         const ds = t.displaySettings || {};
-        const sanImage = sanitizeBackgroundImage(ds.backgroundImage, '');
+        // v2.5.0: backgroundImage / breakImages は返さない（毎秒走る hot path を軽量化＝重さの根治）。
+        //   画像が要る経路（loadTournamentIntoForm 等）は tournaments:getImages で別途取得する。
         return {
           background: VALID_BACKGROUNDS.includes(ds.background) ? ds.background : 'navy',
           timerFont:  VALID_TIMER_FONTS.includes(ds.timerFont)   ? ds.timerFont  : 'jetbrains',
-          backgroundImage: (sanImage === null) ? '' : sanImage,
           backgroundOverlay: sanitizeBackgroundOverlay(ds.backgroundOverlay, 'mid'),
-          breakImages: sanitizeBreakImages(ds.breakImages, []),
           breakImageInterval: sanitizeBreakImageInterval(ds.breakImageInterval, 10),
           pipSize: sanitizePipSize(ds.pipSize, 'medium')
         };
@@ -2397,6 +2505,10 @@ function registerIpcHandlers() {
 
   // active 取得
   ipcMain.handle('tournaments:getActive', () => getActiveTournamentWithAliases());
+
+  // v2.5.0: 指定トーナメントの画像（背景 / 休憩スライドショー）を tournament-images.json から取得。
+  //   tournaments:list は image-free のため、画像が要る経路（loadTournamentIntoForm 等）が id 指定で取り直す。
+  ipcMain.handle('tournaments:getImages', (_event, id) => getTournamentImages(id));
 
   // active 切替（id が存在することを確認）
   ipcMain.handle('tournaments:setActive', (_event, id) => {
@@ -2413,7 +2525,8 @@ function registerIpcHandlers() {
       titleColor: found.titleColor, blindPresetId: found.blindPresetId
     });
     if (found.timerState)        _publishDualState('timerState',         normalizeTimerState(found.timerState));
-    if (found.displaySettings)   _publishDualState('displaySettings',    found.displaySettings);
+    // v2.5.0: hall へは画像を再マージした displaySettings を配信（hall 表示で画像が消えないように）
+    if (found.displaySettings)   _publishDualState('displaySettings',    mergeImagesIntoDisplaySettings(found.id, found.displaySettings));
     if (found.marqueeSettings)   _publishDualState('marqueeSettings',    found.marqueeSettings);
     if (found.runtime)           _publishDualState('tournamentRuntime',  found.runtime);
     // v2.1.14 Fix R1（穴 2 根治）: トーナメント切替時にも構造を hall に broadcast。
@@ -2431,7 +2544,8 @@ function registerIpcHandlers() {
         }
       } catch (_) { /* never throw from broadcast */ }
     }
-    return { ...found, title: found.name };
+    // v2.5.0: 戻り値の displaySettings に画像を再マージ（applyTournament 経路を無改造で動かす）
+    return { ...found, title: found.name, displaySettings: mergeImagesIntoDisplaySettings(found.id, found.displaySettings) };
   });
 
   // 保存（同 id があれば更新、なければ追加）
@@ -2468,11 +2582,13 @@ function registerIpcHandlers() {
         titleColor: validated.titleColor, blindPresetId: validated.blindPresetId,
         structure: validated.structure
       });
-      if (validated.displaySettings)  _publishDualState('displaySettings', validated.displaySettings);
+      // v2.5.0: hall へは画像を再マージした displaySettings を配信
+      if (validated.displaySettings)  _publishDualState('displaySettings', mergeImagesIntoDisplaySettings(validated.id, validated.displaySettings));
       if (validated.marqueeSettings)  _publishDualState('marqueeSettings', validated.marqueeSettings);
       if (validated.runtime)          _publishDualState('tournamentRuntime', validated.runtime);
     }
-    return { ok: true, tournament: { ...validated, title: validated.name } };
+    // v2.5.0: 戻り値の displaySettings に画像を再マージ（applyTournament 経路を無改造で動かす）
+    return { ok: true, tournament: { ...validated, title: validated.name, displaySettings: mergeImagesIntoDisplaySettings(validated.id, validated.displaySettings) } };
   });
 
   // STEP 6.21: timerState のみを部分更新（性能のため normalizeTournament を通さない）
@@ -2554,29 +2670,30 @@ function registerIpcHandlers() {
     if (idx < 0) return { ok: false, error: 'not-found' };
     const cur = list[idx].displaySettings || {};
     const ds = displaySettings || {};
-    // backgroundImage: 'in' で送られた場合のみ更新。サイズ超過は error で返し、永続化しない。
-    let nextImage = (typeof cur.backgroundImage === 'string') ? cur.backgroundImage : '';
+    // v2.5.0: 画像 2 フィールド（backgroundImage / breakImages）は tournament-images.json へ分離して保存。
+    //   tournaments 配列には書かない（毎操作の全件書込から画像を外す＝重さの根治）。
+    //   サイズ超過は error で返し、永続化しない（従来挙動維持）。
+    const imagePatch = {};
     if ('backgroundImage' in ds) {
-      const sanImage = sanitizeBackgroundImage(ds.backgroundImage, cur.backgroundImage || '');
+      const sanImage = sanitizeBackgroundImage(ds.backgroundImage, getTournamentImages(id).backgroundImage);
       if (sanImage === null) {
         return { ok: false, error: 'image-too-large', message: '画像が大きすぎます（5MB 以下）' };
       }
-      nextImage = sanImage;
+      imagePatch.backgroundImage = sanImage;
     }
+    if ('breakImages' in ds) {
+      imagePatch.breakImages = ds.breakImages;   // sanitize は setTournamentImages 内
+    }
+    if (Object.keys(imagePatch).length > 0) {
+      setTournamentImages(id, imagePatch);
+    }
+    // 非画像フィールドのみ tournaments へ（image-free・軽量）
     const nextDs = {
       background: VALID_BACKGROUNDS.includes(ds.background) ? ds.background : (cur.background || 'navy'),
       timerFont:  VALID_TIMER_FONTS.includes(ds.timerFont)   ? ds.timerFont  : (cur.timerFont  || 'jetbrains'),
-      backgroundImage: nextImage,
       backgroundOverlay: ('backgroundOverlay' in ds)
         ? sanitizeBackgroundOverlay(ds.backgroundOverlay, cur.backgroundOverlay || 'mid')
         : (VALID_BG_OVERLAYS.includes(cur.backgroundOverlay) ? cur.backgroundOverlay : 'mid'),
-      // STEP 10 フェーズC.1.4: 休憩中スライドショー
-      // v2.0.3 P3 fix: partial update に含まれない場合は既存値を直接維持
-      //   （以前は cur.breakImages を再 sanitize していたが、5MB 上限導入前の古い大きい
-      //   画像が silent drop される可能性があった。partial update では既存値を信頼する）。
-      breakImages: ('breakImages' in ds)
-        ? sanitizeBreakImages(ds.breakImages, cur.breakImages || [])
-        : (cur.breakImages || []),
       breakImageInterval: ('breakImageInterval' in ds)
         ? sanitizeBreakImageInterval(ds.breakImageInterval, cur.breakImageInterval ?? 10)
         : sanitizeBreakImageInterval(cur.breakImageInterval, 10),
@@ -2586,11 +2703,12 @@ function registerIpcHandlers() {
     };
     list[idx] = { ...list[idx], displaySettings: nextDs };
     store.set('tournaments', list);
-    // v2.0.0 STEP 2: hall に表示設定差分を broadcast（active トーナメントのみ）
+    // 戻り値・broadcast は画像を再マージした displaySettings（renderer の res.displaySettings.breakImages 読戻し / hall 表示と整合）
+    const merged = mergeImagesIntoDisplaySettings(id, nextDs);
     if (id === store.get('activeTournamentId')) {
-      _publishDualState('displaySettings', nextDs);
+      _publishDualState('displaySettings', merged);
     }
-    return { ok: true, displaySettings: nextDs };
+    return { ok: true, displaySettings: merged };
   });
 
   // ===== STEP 6.23: PC間データ移行 IPC =====
@@ -2722,7 +2840,7 @@ function registerIpcHandlers() {
         titleColor: activeAfterImport.titleColor, blindPresetId: activeAfterImport.blindPresetId
       });
       if (activeAfterImport.timerState)      _publishDualState('timerState',        normalizeTimerState(activeAfterImport.timerState));
-      if (activeAfterImport.displaySettings) _publishDualState('displaySettings',   activeAfterImport.displaySettings);
+      if (activeAfterImport.displaySettings) _publishDualState('displaySettings',   mergeImagesIntoDisplaySettings(activeAfterImport.id, activeAfterImport.displaySettings));
       if (activeAfterImport.marqueeSettings) _publishDualState('marqueeSettings',   activeAfterImport.marqueeSettings);
       if (activeAfterImport.runtime)         _publishDualState('tournamentRuntime', activeAfterImport.runtime);
     }
@@ -2736,6 +2854,8 @@ function registerIpcHandlers() {
     if (!list.find((t) => t.id === id)) return { ok: false, error: 'not-found' };
     list = list.filter((t) => t.id !== id);
     store.set('tournaments', list);
+    // v2.5.0: 削除トーナメントの画像も tournament-images.json から後片付け（孤児防止）
+    deleteTournamentImages(id);
     if (store.get('activeTournamentId') === id) {
       store.set('activeTournamentId', list[0].id);
     }
@@ -2748,7 +2868,7 @@ function registerIpcHandlers() {
         titleColor: newActive.titleColor, blindPresetId: newActive.blindPresetId
       });
       if (newActive.timerState)      _publishDualState('timerState',        normalizeTimerState(newActive.timerState));
-      if (newActive.displaySettings) _publishDualState('displaySettings',   newActive.displaySettings);
+      if (newActive.displaySettings) _publishDualState('displaySettings',   mergeImagesIntoDisplaySettings(newActive.id, newActive.displaySettings));
       if (newActive.marqueeSettings) _publishDualState('marqueeSettings',   newActive.marqueeSettings);
       if (newActive.runtime)         _publishDualState('tournamentRuntime', newActive.runtime);
     }
