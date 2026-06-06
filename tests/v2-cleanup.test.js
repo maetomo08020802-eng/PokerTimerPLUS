@@ -47,20 +47,19 @@ test('P2: refreshPresetList が meta 不在時に el.presetSelect.value = "" を
 });
 
 // ============================================================
-// P3: sanitizeBreakImages の else 分岐が cur.breakImages 直接代入
+// P3: 部分更新で breakImages 既存値を直接維持（v2.5.0: setTournamentImages へ移設）
 // ============================================================
-test('P3: setDisplaySettings の breakImages else 分岐が cur.breakImages を直接維持', () => {
-  // ('breakImages' in ds) ? sanitizeBreakImages(...) : (cur.breakImages || [])
-  // 旧: sanitizeBreakImages(cur.breakImages, []) — 既存値を再 sanitize
-  // 新: cur.breakImages || [] — 既存値を直接維持
-  const m = MAIN.match(/breakImages:\s*\(['"]breakImages['"]\s*in\s*ds\)\s*\?\s*sanitizeBreakImages\([^)]*\)\s*:\s*([^,]+),/);
-  assert.ok(m, 'breakImages の三項分岐が見つからない');
-  const elseBranch = m[1].trim();
-  // 期待: cur.breakImages || [] のような直接代入。sanitizeBreakImages を呼んでいない
-  assert.doesNotMatch(elseBranch, /sanitizeBreakImages/,
-    'else 分岐で sanitizeBreakImages を再呼出している（旧実装、5MB 上限導入前データの silent drop リスク）');
-  assert.match(elseBranch, /cur\.breakImages/,
-    'else 分岐で cur.breakImages を参照していない');
+test('P3: setTournamentImages の breakImages 部分更新が既存値を直接維持（v2.5.0 画像分離後）', () => {
+  // v2.5.0: 画像（backgroundImage / breakImages）は tournament-images.json へ分離。
+  //   旧 setDisplaySettings の breakImages 三項保護（partial update で既存値を再 sanitize せず直接維持し、
+  //   5MB 上限導入前データの silent drop を防ぐ）は setTournamentImages へ移設。保護意図は不変。
+  assert.match(MAIN, /function setTournamentImages\(/, 'setTournamentImages（画像専用ストア書込）が見つからない');
+  // 既定の next.breakImages は cur.breakImages を直接（Array.isArray チェックのみ、再 sanitize しない）
+  assert.match(MAIN, /breakImages:\s*Array\.isArray\(cur\.breakImages\)\s*\?\s*cur\.breakImages\s*:\s*\[\]/,
+    'breakImages 既定が cur.breakImages 直接維持になっていない（partial update での silent drop リスク）');
+  // sanitizeBreakImages は patch に breakImages が含まれる時のみ呼ぶ
+  assert.match(MAIN, /['"]breakImages['"]\s*in\s*patch/,
+    'breakImages の patch 判定（含まれる時のみ更新）が無い');
 });
 
 // ============================================================

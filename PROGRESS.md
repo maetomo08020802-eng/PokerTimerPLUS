@@ -14,7 +14,8 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| (未定/v2.5系候補) | **tournament-bloat STEP1**（調査+計測+方式比較+実装計画）| 🔵 レビュー待ち（STEP1 完了、STEP2 実装は前原 GO 後）| [step1_brief](.cc-briefs/2026-06-06_tournament-bloat_step1_brief.md) | [step1_plan](.cc-plans/2026-06-06_tournament-bloat_step1_plan.md) | [step1](.cc-reports/2026-06-06_tournament-bloat_step1.md) |
+| **v2.5.0** | **tournament-bloat STEP2**（画像分離・実装 + 移行）| 🟡 実機確認待ち（実装完了・1180 全 PASS、配信は前原実機 OK 後）| [step2_brief](.cc-briefs/2026-06-06_tournament-bloat_step2_brief.md) | [step2_plan](.cc-plans/2026-06-06_tournament-bloat_step2_plan.md) | [step2](.cc-reports/2026-06-06_tournament-bloat_step2.md) |
+| v2.5.0 | tournament-bloat STEP1（調査+計測+方式比較+計画）| ✅ 完了承認済 | [step1_brief](.cc-briefs/2026-06-06_tournament-bloat_step1_brief.md) | [step1_plan](.cc-plans/2026-06-06_tournament-bloat_step1_plan.md) | [step1](.cc-reports/2026-06-06_tournament-bloat_step1.md) |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -88,10 +89,11 @@
   5. セクション E 段階 2 を Phase 2 ON 完全自動化前提に更新、`AskUserQuestion` 立ち止まり禁止を再強調
 - **2026-05-30**: prestart-zero-stall STEP 1（investigation 型・コード変更ゼロ）完了。症状①（PRE_START 0 着地後の巻き戻し stall）の原因を operator 自己ループ再ブロードキャスト（main.js:1212）→ 古い `{isActive:true}` tick が restorePreStart で RUNNING 上に PRE_START 再点火 → 続く `{isActive:false}` が cancelPreStart、とコード段階レベルで確定。最小修正案 = renderer `applyOperatorPreStartState` の isActive:true 分岐に status（RUNNING/BREAK）ガード 1 つ追加（[step1_plan](.cc-plans/2026-05-30_prestart-zero-stall_step1_plan.md)）。実装は次 STEP（前原承認後）
 - **2026-05-30（配信）**: prestart-zero-stall STEP 2（実装）→ v2.4.1 配信完了。renderer `applyOperatorPreStartState` に RUNNING/BREAK stale-restore 破棄ガード追加、回帰テスト v252（10 件）追加で合計 1164 件全 PASS。GitHub Release v2.4.1（asset: latest.yml + .exe + .blockmap、Latest 表示）。既存ユーザーは起動時に自動更新通知
-- **2026-06-06**: tournament-bloat STEP1（investigation 型・src 無変更）完了。保存件数増で激重になる根因を実 config.json 計測で確定 = **休憩スライドショー画像 base64（57 枚 33.7MB / ファイルの 99.7%）が tournaments 配列に inline 格納**され、毎秒 list（74ms+93ms）と毎操作の全件書込（527ms）を掛け算で重くしている。前原方針「画像はローカル専用」を土台に**画像を別 electron-store ファイルへ分離する案 A を推奨**（list 8.9KB / 保存 2.5ms / 99.97%減を実測試算）。計測スクリプト `scripts/tournament-bloat-bench.js` 追加（build/test 対象外、原本 read-only）。1164 件全 PASS 維持。STEP2 実装は前原 GO 後（[step1_plan](.cc-plans/2026-06-06_tournament-bloat_step1_plan.md) / [step1](.cc-reports/2026-06-06_tournament-bloat_step1.md)）
-- **配信状況**: **v2.4.1 配信済み（最新）**。GitHub Release 公開済、自動更新有効
+- **2026-06-06**: tournament-bloat STEP1（investigation・src 無変更）完了 + STEP2（実装）完了。根因 = **休憩スライドショー画像 base64（57 枚 33.7MB / config.json の 99.7%）が tournaments 配列に inline 格納**され毎秒 list と毎操作の全件書込（527ms）を重くしていた。前原 GO 後、**方式 A（画像を別ファイル `tournament-images.json` へ分離）で実装**。実データ end-to-end 検証で画像 58 枚 35.86MB 全保全 + runtime/timerState/marquee 全件保全を確認。AFTER 実測: config 92KB / list 8.3KB / 部分保存 0.76ms（697 倍）/ IPC 搬送 0.19ms（485 倍）。既存 1164 件全 PASS + 新規 16 件 = 1180 件全 PASS。致命バグ保護 5 件全維持。ブランチ `feature/v2.5.0-tournament-image-split`、commit `c81a3cd`（STEP1 chore は main `7d20ffd`）。**配信は前原実機 OK + GO 後**（[step2_plan](.cc-plans/2026-06-06_tournament-bloat_step2_plan.md) / [step2](.cc-reports/2026-06-06_tournament-bloat_step2.md)）
+- **2026-06-06（STEP3 テストビルド）**: 前原実機 6-B 用に v2.5.0 インストーラを `--publish never` でローカルビルド成功（`dist\pokertimerplus-setup-2.5.0.exe` ≈80MB）。**公開・tag・main merge は一切なし**（GitHub Release は v2.4.1 が最新のまま）。app.asar に画像分離コード同梱確認。前原はこの .exe をインストールして 6-B ①〜④ を確認（[step3_testbuild](.cc-reports/2026-06-06_tournament-bloat_step3_testbuild.md)）
+- **配信状況**: **v2.4.1 配信済み（最新・公開中）**。v2.5.0 はテストビルド完成・前原実機確認待ち（OK 後に main merge → tag → push → Release publish）
 - **次のアクション(想定)**:
-  - tournament-bloat: 構築士2 が方式 A 採否を判定 → STEP2 brief 起案 → 実装（前原 GO 後）
+  - tournament-bloat v2.5.0: 前原が `dist\pokertimerplus-setup-2.5.0.exe` をインストール → 6-B ①〜④（移行無事 / 画像表示 / 体感速度 / エクスポート）確認 → OK なら配信 GO
   - v2.3.0(PRE_START 永続化)再開、または新規バージョン起案
 
 ---

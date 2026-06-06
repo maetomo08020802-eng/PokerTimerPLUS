@@ -49,7 +49,7 @@ const RESET_FN_BODY    = extractFnBody(TIMER_JS, /export\s+function\s+reset\s*\(
 // T1: package.json version === '2.2.1'
 // ============================================================
 test('T1: package.json.version === 2.2.1', () => {
-  assert.equal(PKG.version, '2.4.1', `version 不一致: ${PKG.version}`);
+  assert.equal(PKG.version, '2.5.0', `version 不一致: ${PKG.version}`);
 });
 
 // ============================================================

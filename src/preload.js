@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld('api', {
   tournaments: {
     list: () => _measuredInvoke('tournaments:list'),
     getActive: () => _measuredInvoke('tournaments:getActive'),
+    // v2.5.0: 画像分離。tournaments:list は image-free のため画像は id 指定で別取得する。
+    getImages: (id) => _measuredInvoke('tournaments:getImages', id),
     setActive: (id) => _measuredInvoke('tournaments:setActive', id),
     save: (t) => _measuredInvoke('tournaments:save', t),
     delete: (id) => _measuredInvoke('tournaments:delete', id),

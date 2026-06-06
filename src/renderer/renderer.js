@@ -4701,8 +4701,19 @@ async function loadTournamentIntoForm(id) {
   } catch (_) { /* ignore */ }
   const found = list.find((t) => t.id === id);
   if (!found) return;
+  // v2.5.0: tournaments:list は image-free のため、表示用に背景画像 / 休憩スライドショーを
+  //   id 指定で取り直して displaySettings に注入してから applyTournament へ渡す（見た目を現状維持）。
+  let _images = { backgroundImage: '', breakImages: [] };
+  try {
+    if (window.api?.tournaments?.getImages) _images = await window.api.tournaments.getImages(id) || _images;
+  } catch (_) { /* 画像取得失敗は無画像で続行 */ }
+  const foundWithImages = {
+    ...found,
+    title: found.name,
+    displaySettings: { ...(found.displaySettings || {}), backgroundImage: _images.backgroundImage, breakImages: _images.breakImages }
+  };
   // tournamentState を更新（メイン画面表示も applyTournament で同期）
-  applyTournament({ ...found, title: found.name });
+  applyTournament(foundWithImages);
   // STEP 10 フェーズB.fix9: 入力中ならフォーム上書きをスキップ（typing 中の文字消失防止）
   //   active 切替・新規作成・複製等の操作はユーザーがボタン/リスト項目をクリックした時点で
   //   focus がそこに移るため通常は false。typing 中に外部経路で呼ばれた race を救う。
@@ -7568,18 +7579,24 @@ async function loadInitialSettings() {
       // STEP 6.21.6 / 6.22.1: フォールバック順序 = active.{display,marquee}Settings → グローバル → ハードコード
       const activeId = all?.activeTournamentId;
       const activeT = (all?.tournaments || []).find((t) => t.id === activeId);
+      // v2.5.0: 画像（背景 / 休憩スライドショー）は tournament-images.json から id 指定で取得。
+      //   settings:getAll の tournaments は image-free のため、ここで getImages を await する。
+      let _initImages = { backgroundImage: '', breakImages: [] };
+      try {
+        if (activeId && window.api?.tournaments?.getImages) _initImages = await window.api.tournaments.getImages(activeId) || _initImages;
+      } catch (_) { /* 無画像で続行 */ }
       // displaySettings
       if (activeT?.displaySettings?.background)      bgInit = activeT.displaySettings.background;
       else if (all?.display?.background)             bgInit = all.display.background;
       if (activeT?.displaySettings?.timerFont)       fontInit = activeT.displaySettings.timerFont;
       else if (all?.display?.timerFont)              fontInit = all.display.timerFont;
-      // STEP 10 フェーズC.1.3: backgroundImage / backgroundOverlay の初期取込
-      const dsImage   = activeT?.displaySettings?.backgroundImage   ?? all?.display?.backgroundImage   ?? '';
+      // STEP 10 フェーズC.1.3 / v2.5.0: backgroundImage は imagesStore、overlay は displaySettings
+      const dsImage   = (typeof _initImages.backgroundImage === 'string') ? _initImages.backgroundImage : '';
       const dsOverlay = activeT?.displaySettings?.backgroundOverlay ?? all?.display?.backgroundOverlay ?? 'mid';
       if (typeof dsImage === 'string')   bgImageState.dataUrl = dsImage;
       if (BG_OVERLAY_ALPHA[dsOverlay])   bgImageState.overlay = dsOverlay;
-      // STEP 10 フェーズC.1.4: 休憩中スライドショーの初期取込
-      const dsBreakImages   = activeT?.displaySettings?.breakImages       ?? all?.display?.breakImages       ?? [];
+      // STEP 10 フェーズC.1.4 / v2.5.0: breakImages は imagesStore、interval / pipSize は displaySettings
+      const dsBreakImages   = Array.isArray(_initImages.breakImages) ? _initImages.breakImages : [];
       const dsBreakInterval = activeT?.displaySettings?.breakImageInterval ?? all?.display?.breakImageInterval ?? 10;
       const dsPipSize       = activeT?.displaySettings?.pipSize           ?? all?.display?.pipSize           ?? 'medium';
       if (Array.isArray(dsBreakImages))         breakImagesState.images = dsBreakImages;
