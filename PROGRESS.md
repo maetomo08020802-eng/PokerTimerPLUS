@@ -47,6 +47,8 @@
 > ⚠️ **v2.3.0 再開時の調査項目（prestart-zero-stall 案件 §4 より引継ぎ）**: v2.3.0 の PRE_START 永続化復元経路 `applyTimerStateToTimer` にも、v2.4.1 で renderer `applyOperatorPreStartState` に入れたのと同種の「RUNNING/BREAK 中の stale 復元ガード」が必要か再評価すること（main 取り込み時の二重実装・巻き戻し再発防止）。
 >
 > 📌 **別案件・将来候補（緊急性なし）**: cross-generation cancel hardening — 古い `{isActive:false}` が新しい PRE_START を誤キャンセルする別経路（世代番号 / targetTime 比較で対処可能）。v2.4.1 症状①とは独立、実機未観測。次回 PRE_START 系を触る案件で関連検討。
+>
+> 📌 **settings-scope-clarity 配信前監査の軽微5件（v2.5.1 配信後送り・緊急性なし、別 brief 化）**: ① copy-on-write の MAX_USER_PRESETS(100件) 上限時メッセージ改善 / ② hidden `js-preset-select` の到達不能 change リスナのデッドコード整理 / ③ トーナメント折りたたみサマリの IDLE 鮮度（毎秒更新範囲の見直し）/ ④ 「保存して適用」モーダルが稀に2連発する経路 / ⑤ 4K でブラインド表フッタが body スクロール側に出る体感（vh キャップの主観調整）。いずれも配信済 v2.5.1 の挙動を壊さない範囲の改善で、まとめて or 個別に別 brief 起案可。
 
 ---
 
@@ -55,7 +57,7 @@
 | 指標 | 件数 |
 |------|------|
 | 配信済みリリース | 8 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0 / **v2.5.1**)|
-| アーカイブ済 案件(`.cc-archive/`)| 3 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat)※ settings-scope-clarity は構築士2 クローズ判定後に追加予定|
+| アーカイブ済 案件(`.cc-archive/`)| 4 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat / settings-scope-clarity)|
 | オープン作業 | 0 件（v2.5.1 配信完了）|
 | 最新テスト件数 | 1261 件 全 PASS(v2.5.1 配信時点、settings-scope-clarity で +81＝v254〜v259)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
@@ -104,10 +106,11 @@
 - **2026-06-07（再テストビルド3・配信前最終）**: dirty-switch-guard 反映版の v2.5.1 再テストビルド完了（HEAD `a3abb69`＝実装 `504e35c` 含む）。事前確認で v2.5.0 画像分離を土台に含むこと再確認。`npx electron-builder --win --publish never`（exit 0）。成果物 `dist\pokertimerplus-setup-2.5.1.exe`（83,042,018 bytes、ProductVersion 2.5.1.0）。asar に dirty-switch-guard（confirmDiscardBlindsDirtyIfNeeded ×5 / js-blinds-dirty-switch-dialog ×2 / showBlindsDirtySwitchModal ×2）+ バグ①修正（42vh/66vh）+ STEP1〜4 全マーカー焼き込み確認。起動スモーク OK（致命エラーなし・自動更新誤作動なし）。**main 非merge / tag 無し / GitHub Release 非接触**。**配信前 最終テストビルド**。前原 6-B（切替ガード①〜⑥ + STEP1〜4 退行⑦〜⑩、約15分）用（[testbuild3 report](.cc-reports/2026-06-07_settings-scope-clarity_testbuild3.md)）
 - **2026-06-07（再テストビルド・2回目）**: ブラインド表0段修正反映版の v2.5.1 再テストビルド完了（commit `1d9850f`＝旧 px420 コメント整理[値無変更]含む HEAD）。事前確認で v2.5.0 画像分離を土台に含むこと再確認。`npx electron-builder --win --publish never`（exit 0）。成果物 `dist\pokertimerplus-setup-2.5.1.exe`（83,040,140 bytes、ProductVersion 2.5.1.0）。asar にバグ①修正（min-height:42vh / max-height:66vh / min(1100px）+ STEP1〜4 全マーカー焼き込み確認。起動スモーク OK（致命エラーなし・自動更新誤作動なし）。**main 非merge / tag 無し / GitHub Release 非接触**。前原実機 6-B（STEP1〜4＋バグ①修正 合算 0〜10、約20分）用（[testbuild2 report](.cc-reports/2026-06-07_settings-scope-clarity_testbuild2.md)）
 - **2026-06-07（一括テストビルド・初回）**: settings-scope-clarity STEP1〜4 合算の v2.5.1 テストビルド完了。事前確認で feature ブランチが v2.5.0（画像分離 `e77fcce`）を土台に含むことを確認（祖先＋main.js マーカー12件）。`npx electron-builder --win --publish never`（exit 0）。成果物 `dist\pokertimerplus-setup-2.5.1.exe`（83,039,604 bytes ≈83MB、ProductVersion 2.5.1.0）。asar に STEP1〜4 全マーカー焼き込み確認。起動スモークテスト OK（Electron 5プロセス生存・致命エラーなし、`Update for 2.5.1 not available (latest 2.5.0, downgrade disallowed)` ＝自動更新誤作動なし）。**main 非merge / tag 無し / GitHub Release 非接触（最新は v2.5.0 のまま）**。前原実機 6-B（STEP1〜4 合算 0〜8、約20分）用（[testbuild report](.cc-reports/2026-06-07_settings-scope-clarity_testbuild.md)）
+- **2026-06-07（settings-scope-clarity 案件クローズ）**: v2.5.1 配信完了を受けて案件クローズ。関連 md（reports 11 / plans 6 / briefs 28 = 計45件）を `.cc-archive/settings-scope-clarity/`（briefs/plans/reports）へ退避完了。merge 済 `feature/settings-scope-clarity`（33d2846）をローカル削除完了（origin は未push のため remote 削除不要）。軽微5件は「温存中の次期候補」へ記載済（配信後 別 brief 化）
 - **配信状況**: **v2.5.1 配信済み（最新・公開中）**。GitHub Release v2.5.1 = Latest、自動更新有効。既存ユーザーは次回起動で v2.5.1 自動更新通知
 - **次のアクション(想定)**:
-  - tournament-bloat 案件クローズ済（md 14 件を `.cc-archive/tournament-bloat/` へ退避完了、merge 済 feature ブランチ削除完了）
-  - v2.3.0(PRE_START 永続化)再開、または新規バージョン起案
+  - settings-scope-clarity 案件クローズ済（md 45 件 `.cc-archive/settings-scope-clarity/` 退避 + feature ブランチ削除完了）
+  - 軽微5件（温存候補）の別 brief 化（緊急性なし、前原判断）、または v2.3.0(PRE_START 永続化)再開、または新規バージョン起案
   - poker-clock は安定運用フェーズ
 
 ---
