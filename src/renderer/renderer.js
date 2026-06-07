@@ -185,7 +185,9 @@ const tournamentState = {
   pauseAfterBreak: false,
   // v2.4.0: プール率（賞金プール反映率、起動時に main 側 store からの load で上書きされる）
   //   renderer 側初期ダミー値は 100%（main 側 migration が走らない異常時でも既存挙動維持）
-  poolRates: { buyIn: 100, reentry: 100, addOn: 100 }
+  poolRates: { buyIn: 100, reentry: 100, addOn: 100 },
+  // v2.6.0: POT（店内通貨 $ の1件あたり拠出、¥フィー独立）。pool = Σ(potAmounts × 件数)。applyTournament で保存値に同期
+  potAmounts: { buyIn: 0, reentry: 0, addOn: 0 }
 };
 
 // STEP 6.17: タイトル色 hex バリデーション（#RRGGBB のみ許可）
@@ -1020,14 +1022,14 @@ function renderControls(status) {
 //   - STEP 2 migration により既存トーナメントは { buyIn: 100, reentry: 100, addOn: 100 }（旧式と完全一致）
 //   - 新規トーナメントは appConfig.poolRatesDefault（=0%）から積込まれる（安全側、景品表示法対応）
 //   - 万一 poolRates が state に不在の場合は防御的に 0% フォールバック（GTD のみ反映）
+// v2.6.0: 計算プール = Σ(POT × 件数)。potAmounts（店内通貨 $ の1件あたり拠出）を ¥フィー独立で積み上げ。
+//   $整数 × 整数件数 ＝ 端数原理的ゼロ。poolRates%（v2.4.0）は廃止（migration で POT へ変換済、dormant 温存）。
+//   既存トーナメントは migration で POT=round(fee×poolRate/100) 済 → 100%/0% は旧 pool と数値厳密一致。
 function computeCalculatedPool() {
-  const buyIn   = tournamentState.buyIn   || { fee: 0 };
-  const reentry = tournamentState.reentry || { fee: 0 };
-  const addOn   = tournamentState.addOn   || { fee: 0 };
-  const rates   = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
-  return (buyIn.fee   || 0) * tournamentRuntime.playersInitial * (Number(rates.buyIn)   || 0) / 100
-       + (reentry.fee || 0) * tournamentRuntime.reentryCount    * (Number(rates.reentry) || 0) / 100
-       + (addOn.fee   || 0) * tournamentRuntime.addOnCount      * (Number(rates.addOn)   || 0) / 100;
+  const pot = tournamentState.potAmounts || { buyIn: 0, reentry: 0, addOn: 0 };
+  return (Number(pot.buyIn)   || 0) * tournamentRuntime.playersInitial
+       + (Number(pot.reentry) || 0) * tournamentRuntime.reentryCount
+       + (Number(pot.addOn)   || 0) * tournamentRuntime.addOnCount;
 }
 
 function computeTotalPool() {
@@ -1255,12 +1257,20 @@ function applyTournament(t) {
       appliedCount: Math.max(0, Math.min(999, Math.floor(Number(t.specialStack.appliedCount)) || 0))
     };
   }
-  // v2.4.0: poolRates 取込（main 側 sanitize 済み、各値は整数 0〜100 を想定、防御的に再 clamp）
+  // v2.4.0: poolRates 取込（main 側 sanitize 済み、各値は整数 0〜100 を想定、防御的に再 clamp）。v2.6.0 で dormant
   if (t.poolRates && typeof t.poolRates === 'object') {
     tournamentState.poolRates = {
       buyIn:   Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.buyIn)   || 0))),
       reentry: Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.reentry) || 0))),
       addOn:   Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.addOn)   || 0)))
+    };
+  }
+  // v2.6.0: potAmounts 取込（店内通貨 $ の1件あたり拠出、非負整数。防御的に再 sanitize）
+  if (t.potAmounts && typeof t.potAmounts === 'object') {
+    tournamentState.potAmounts = {
+      buyIn:   Math.max(0, Math.floor(Number(t.potAmounts.buyIn)   || 0)),
+      reentry: Math.max(0, Math.floor(Number(t.potAmounts.reentry) || 0)),
+      addOn:   Math.max(0, Math.floor(Number(t.potAmounts.addOn)   || 0))
     };
   }
   if (Array.isArray(t.payouts) && t.payouts.length > 0) {
@@ -5309,11 +5319,19 @@ function readTournamentForm() {
       fee:   num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0),
       chips: num(el.tournamentAddonChips, tournamentState.addOn?.chips ?? 0)
     },
-    // v2.4.0: poolRates をフォーム入力欄から読み出し（main 側で sanitizePoolRates 再 clamp）
+    // v2.4.0: poolRates をフォーム入力欄から読み出し（main 側で sanitizePoolRates 再 clamp）。v2.6.0 で dormant
     poolRates: {
       buyIn:   _readPoolRateFromInput(el.tournamentBuyinPoolRate,   tournamentState.poolRates?.buyIn   ?? 0),
       reentry: _readPoolRateFromInput(el.tournamentReentryPoolRate, tournamentState.poolRates?.reentry ?? 0),
       addOn:   _readPoolRateFromInput(el.tournamentAddonPoolRate,   tournamentState.poolRates?.addOn   ?? 0)
+    },
+    // v2.6.0 STEP 1（経過措置）: pool 計算は potAmounts に切替済だが、UI はまだ % 入力（STEP 2 で $ 入力へ）。
+    //   保存時に現 % 入力 × フィーから POT を派生（POT = round(fee × poolRate / 100)）して potAmounts を最新化。
+    //   ＝ % 編集が pool に反映され続ける（数値中立）。STEP 2 で本派生を撤去し $ 入力直読みに置換。
+    potAmounts: {
+      buyIn:   Math.max(0, Math.round(num(el.tournamentBuyinFee,   tournamentState.buyIn?.fee   ?? 0) * _readPoolRateFromInput(el.tournamentBuyinPoolRate,   tournamentState.poolRates?.buyIn   ?? 0) / 100)),
+      reentry: Math.max(0, Math.round(num(el.tournamentReentryFee, tournamentState.reentry?.fee ?? 0) * _readPoolRateFromInput(el.tournamentReentryPoolRate, tournamentState.poolRates?.reentry ?? 0) / 100)),
+      addOn:   Math.max(0, Math.round(num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0) * _readPoolRateFromInput(el.tournamentAddonPoolRate,   tournamentState.poolRates?.addOn   ?? 0) / 100))
     },
     // STEP 6.9: specialStack
     specialStack: {
