@@ -20,6 +20,7 @@
 | v2.5.1 | settings-scope-clarity STEP3（ブラインドのレベル表を縦に広げる：6段→10〜12段、フッタ常時可視） | 🟡 実機確認待ち（前原 6-B ①〜⑥・最終一括） | `.cc-briefs/2026-06-07_settings-scope-clarity_step3_brief.md` | `.cc-plans/2026-06-07_settings-scope-clarity_step3_plan.md` | `.cc-reports/2026-06-07_settings-scope-clarity_step3.md` |
 | v2.5.1 | settings-scope-clarity STEP4（トーナメント選択を折りたたみドロップダウン化） | 🟡 実機確認待ち（前原 6-B ①〜⑦・最終一括） | `.cc-briefs/2026-06-07_settings-scope-clarity_step4_brief.md` | `.cc-plans/2026-06-07_settings-scope-clarity_step4_plan.md` | `.cc-reports/2026-06-07_settings-scope-clarity_step4.md` |
 | v2.5.1 | settings-scope-clarity 一括テストビルド（STEP1〜4 合算 .exe、前原実機6-B用、--publish never・main非merge） | 🟡 実機確認待ち（前原 6-B 合算 0〜8） | `.cc-briefs/2026-06-07_settings-scope-clarity_testbuild_brief.md` | （ビルドのみ・plan省略） | `.cc-reports/2026-06-07_settings-scope-clarity_testbuild.md` |
+| v2.5.1 | settings-scope-clarity 実機バグ修正（ブラインド表0段＝STEP3退行の根治） | 🟡 再テストビルド待ち（修正完了・実測検証済） | `.cc-briefs/2026-06-07_settings-scope-clarity_blinds-table-fix_brief.md` | `.cc-plans/2026-06-07_settings-scope-clarity_blinds-table-fix_plan.md` | `.cc-reports/2026-06-07_settings-scope-clarity_blinds-table-fix.md` |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -60,8 +61,8 @@
 |------|------|
 | 配信済みリリース | 7 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0)|
 | アーカイブ済 案件(`.cc-archive/`)| 3 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat)|
-| オープン作業 | 1 件（settings-scope-clarity STEP1〜STEP4 完了、v2.5.1、最終一括実機確認待ち）|
-| 最新テスト件数 | 1235 件 全 PASS(settings-scope-clarity STEP4 時点、v254 +13 / v255 +15 / v256 +11 / v257 +16)|
+| オープン作業 | 1 件（settings-scope-clarity STEP1〜4 + 実機バグ修正、v2.5.1、再テストビルド待ち）|
+| 最新テスト件数 | 1246 件 全 PASS(blinds-table-fix 時点、v254 +13 / v255 +15 / v256 +11 / v257 +16 / v258 +11)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
 > CC は完了報告のたびにこの表を Edit(リリース配信時はリリース履歴に新行追加、テスト件数更新)。
@@ -83,8 +84,9 @@
 
 ## 直近の状態
 
-- **現在ブランチ**: `feature/settings-scope-clarity`（main `8eecebb` から分岐、実装 commit STEP1 `29ad4a3` / STEP2 `d82e982` / STEP3 `fe3d464` / STEP4 `64caa8f`、未 push）
-- **直前 commit**: `64caa8f feat(tournament): トーナメント選択を折りたたみドロップダウン化`
+- **現在ブランチ**: `feature/settings-scope-clarity`（main `8eecebb` から分岐、実装 commit STEP1 `29ad4a3` / STEP2 `d82e982` / STEP3 `fe3d464` / STEP4 `64caa8f` / 実機バグ修正 `d9bd78b`、未 push）
+- **直前 commit**: `d9bd78b fix(blinds): レベル表0段＝STEP3退行を根治（vh フロア+キャップで大画面でも潰れない）`
+- **2026-06-07（実機バグ修正）**: 一括テストビルド実機で発覚した致命バグ「ブラインド表が大画面で0段（STEP3退行）」を CSS のみで根治。根因＝固定px/vh ダイアログ高 vs vw chrome ＋ table-wrap フロア無し（min-height:0）で唯一の収縮要素が0に潰れた。修正＝table-wrap を **vh フロア(min-height:42vh)+vh キャップ(max-height:66vh)** で bound（16:9 で段数一定・内側スクロール/sticky thead 維持）、blinds タブ rigid height:100%→min-height:100%（body スクロール経路復活）、editor flex:1 0 auto、ダイアログ既定高 920→1100px。**Preview/Chromium で FHD/1440p/4K/極端短の実 clientHeight を実測**（FHD 711px/10段・1440p 933px/10段・4K 1409px/10段・極端短 368px/5段＝**0段に絶対ならず**、フッタ到達可）＝机上+実測の二重ゲート。バグ②(A)＝機能変更なし（自分の構造直接編集可・同梱は複製、新ボタンなし）。致命バグ保護5件全件影響なし、index.html/renderer.js/main.js 無変更。version 2.5.1 据え置き。c13 T15/v256 T1-2 を本修正値に追従。**既存1235 + 新規v258 11 = 1246件全PASS**。Plan 軽量 review（段階2）承認済（[blinds-table-fix plan](.cc-plans/2026-06-07_settings-scope-clarity_blinds-table-fix_plan.md) / [report](.cc-reports/2026-06-07_settings-scope-clarity_blinds-table-fix.md)）
 - **2026-06-07（STEP4）**: settings-scope-clarity STEP4 実装完了。設定トーナメントタブの一覧（毎秒 innerHTML='' で再構築される `<ul>`）を**折りたたみドロップダウン化**。既定＝選択中1件サマリ（名前＋ライブ badge＋「他に実行中◯件」）＋▼、トグルで全件展開。サマリ・トグルを `<ul>` 外の安定要素（`#js-tournament-picker[data-expanded]`）に置き、module 変数 `_tournamentListExpanded`＋冪等再適用で**毎秒再描画をまたいで開閉保持**（勝手に畳まれない）。委譲 install-once 非破壊、入力中保護維持、行アクション本体（timerState/runtime/rebase）無変更、hidden `js-tournament-select` 温存。`<dialog>` flex 非追加・position:fixed/scale 不使用・chevron は文字差替。致命バグ保護5件全件影響なし。**main.js 無変更**。version **2.5.1 据え置き**。**既存1219 + 新規 v257 16 = 1235件全PASS**。Plan 軽量 review（段階2）承認済。**settings-scope-clarity STEP1〜4 全完了**、配信・実機 6-B は最終一括まで保留（[step4_plan](.cc-plans/2026-06-07_settings-scope-clarity_step4_plan.md) / [step4](.cc-reports/2026-06-07_settings-scope-clarity_step4.md)）
 - **2026-06-07（STEP3）**: settings-scope-clarity STEP3 実装完了。ブラインド構造タブのレベル表が約6段しか見えない問題を **CSS のみ**で解消。`.blinds-editor__table-wrap` の `max-height:36vh`（約6段固定）を撤廃し、blinds タブにスコープした flex 連動（`.settings-tab[data-tab="blinds"].is-active` を flex column 化、属性セレクタで他タブ非破壊）で table-wrap が余剰高を吸収・内側スクロール。footer/add-row は flex-shrink:0 で常時可視。既定ダイアログ高 700→920px で通常表示 10〜12 段。sticky thead 維持・`<dialog>` flex 非追加・position:fixed/scale 不使用。**index.html/renderer.js/main.js 無変更**。致命バグ保護5件全件影響なし。version **2.5.1 据え置き**。c13 T15 の既定高 pin を 700→920px 追従。**既存1208 + 新規 v256 11 = 1219件全PASS**。Plan 軽量 review（段階2）承認済。**配信・実機 6-B は STEP1〜3 最終一括まで保留**（前原方針）（[step3_plan](.cc-plans/2026-06-07_settings-scope-clarity_step3_plan.md) / [step3](.cc-reports/2026-06-07_settings-scope-clarity_step3.md)）
 - **2026-06-07（STEP2）**: settings-scope-clarity STEP2 実装完了。ブラインド構造タブの編集対象を選択中トーナメント構造に固定（任意プリセット選択 `js-preset-select` を hidden 化 + 編集対象ラベル）+ 共有構造保存時の3択モーダル（すべてに反映=同ID上書き / このトーナメントだけ変更=copy-on-write 新ID付替 / やめる=保存中止で編集保持）。共有なしは従来どおりモーダルなし保存。**main.js スキーマ・presets:saveUser 無変更（参照方式維持）**、`_savePresetCore` に共有分岐。timerState 除外（巻き戻り防止）を copy 経路含め維持。致命バグ保護5件全件影響なし。version **2.5.1 据え置き**（bump せず、package.json は scripts.test 1行追記のみ＝git diff で version 行 unchanged 確認）。**既存1193 + 新規 v255 15 = 1208件全PASS**。Plan 軽量 review（段階2）承認済。配信は前原 6-B ①〜⑦ OK + GO 後（[step2_plan](.cc-plans/2026-06-07_settings-scope-clarity_step2_plan.md) / [step2](.cc-reports/2026-06-07_settings-scope-clarity_step2.md)）
