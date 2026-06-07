@@ -1928,6 +1928,31 @@ body:not(.has-marquee) .marquee { display: none; }
   font-size: 1.6vw;
 }
 
+/* settings-scope-clarity STEP1: 設定ダイアログ上部の「編集中：◯◯」現在トーナメント名表示 */
+.form-dialog__title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2vh;
+  min-width: 0;
+}
+.settings-current-tournament {
+  margin: 0;
+  font-size: 0.95vw;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.settings-current-tournament__name {
+  font-weight: 700;
+  color: var(--gold);
+}
+
+/* settings-scope-clarity STEP1: ブラインド構造タブの「共有テンプレート」注記 */
+.settings-scope-note {
+  color: var(--text-muted);
+}
+
 .form-dialog__close {
   background: transparent;
   border: none;
@@ -1947,9 +1972,49 @@ body:not(.has-marquee) .marquee { display: none; }
   /* STEP 9.fix3: タブ7個を1段強制（折り返し禁止）+ はみ出し時は横スクロール（最終フォールバック） */
   flex-wrap: nowrap;
   overflow-x: auto;
-  gap: var(--space-xs);
+  /* settings-scope-clarity STEP1: グループ列（見出し+ボタン行）を底辺揃えで並べる */
+  align-items: flex-end;
+  gap: var(--space-md);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 0 var(--space-md);
+  padding: var(--space-xs) var(--space-md) 0;
+}
+
+/* settings-scope-clarity STEP1: タブを「適用範囲（スコープ）」で2グループに視覚分割。
+   見出しはクリック不可の説明ラベル。ボタン自体は従来どおり .settings-tab-btn。 */
+.settings-tab-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3vh;
+  flex-shrink: 0;
+}
+.settings-tab-group__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4vw;
+  padding: 0 1.2vw;
+  font-family: var(--font-label);
+  font-size: 0.82vw;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.settings-tab-group__sub {
+  font-weight: 400;
+  font-size: 0.72vw;
+  opacity: 0.78;
+}
+.settings-tab-group__row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-xs);
+}
+.settings-tab-group__sep {
+  align-self: stretch;
+  width: 1px;
+  flex-shrink: 0;
+  margin: 0 var(--space-xs);
+  background: var(--border-subtle);
 }
 
 .settings-tab-btn {

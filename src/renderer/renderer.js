@@ -427,6 +427,8 @@ const el = {
   // タブ系
   settingsTabBtns: document.querySelectorAll('.settings-tab-btn'),
   settingsTabPanels: document.querySelectorAll('.settings-tab'),
+  // settings-scope-clarity STEP1: 設定ダイアログ上部「編集中：◯◯」現在トーナメント名表示先
+  settingsCurrentTournamentName: document.getElementById('js-settings-current-tournament-name'),
 
   // トーナメントエディタ（STEP 3b、設定タブ「トーナメント」）
   // STEP 3b 拡張: 複数保存対応のセレクタ・操作ボタン
@@ -1368,6 +1370,10 @@ function applyTournament(t) {
   if (!_typingGuard && typeof lockAllFees === 'function') {
     lockAllFees();
   }
+  // settings-scope-clarity STEP1: 設定ダイアログ上部の現在トーナメント名ヘッダを更新。
+  //   applyTournament は active 切替 / 新規 / 複製 / 起動復元 / dual-sync 受信すべての合流点のため、
+  //   ここ 1 点で「トーナメント切替で即更新」を満たす（タブ閉時はヘルパが no-op）。
+  updateSettingsCurrentTournamentLabel();
 }
 
 // STEP 6.8: 賞金端数 <select> の option ラベルを現在の通貨記号で再構築
@@ -3876,11 +3882,23 @@ function openSettingsDialog() {
     // STEP 6.22.fix: 開く度に「トーナメント」タブをデフォルト active（最左との整合性）
     activateSettingsTab('tournament');
     syncMarqueeTabFormFromCurrent();
+    // settings-scope-clarity STEP1: 開いた瞬間に現在トーナメント名ヘッダを最新化
+    updateSettingsCurrentTournamentLabel();
     el.settingsDialog.showModal();
   }
 }
 
 // ===== 設定ダイアログのタブ切替 =====
+
+// settings-scope-clarity STEP1: 設定ダイアログ上部の「編集中：◯◯」を現在トーナメント名で更新。
+//   表示専用（textContent 代入のみ）。保存・IPC・各タブ中身には一切触れない。
+function updateSettingsCurrentTournamentLabel() {
+  if (!el.settingsCurrentTournamentName) return;
+  const n = (typeof tournamentState.name === 'string' && tournamentState.name.trim())
+    ? tournamentState.name.trim()
+    : (typeof tournamentState.title === 'string' && tournamentState.title.trim() ? tournamentState.title.trim() : '');
+  el.settingsCurrentTournamentName.textContent = n || '（無名のトーナメント）';
+}
 
 function activateSettingsTab(tabName) {
   el.settingsTabBtns.forEach((btn) => {

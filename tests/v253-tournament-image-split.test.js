@@ -56,7 +56,7 @@ function topLevelFnBody(src, name) {
 // version
 // ============================================================
 test('version: package.json version === 2.5.0', () => {
-  assert.equal(PKG.version, '2.5.0', `version が ${PKG.version}（期待 2.5.0）`);
+  assert.equal(PKG.version, '2.5.1', `version が ${PKG.version}（期待 2.5.0）`);
 });
 
 // ============================================================
