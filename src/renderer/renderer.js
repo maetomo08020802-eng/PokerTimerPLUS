@@ -524,6 +524,10 @@ const el = {
   blindShareAll: document.getElementById('js-blind-share-all'),
   blindShareCopy: document.getElementById('js-blind-share-copy'),
   blindShareCancel: document.getElementById('js-blind-share-cancel'),
+  // settings-scope-clarity dirty-switch-guard: 未保存編集中の切替確認ダイアログ
+  blindsDirtySwitchDialog: document.getElementById('js-blinds-dirty-switch-dialog'),
+  blindsDirtySwitchDiscard: document.getElementById('js-blinds-dirty-switch-discard'),
+  blindsDirtySwitchCancel: document.getElementById('js-blinds-dirty-switch-cancel'),
   blindsTbody: document.getElementById('js-blinds-tbody'),
   // STEP 10 フェーズB: 構造型に応じて thead を動的生成するため要素参照を追加
   blindsThead: document.getElementById('js-blinds-thead'),
@@ -4856,6 +4860,13 @@ async function handleTournamentSelectChange() {
   const newId = el.tournamentSelect.value;
   if (!newId || newId === tournamentState.id) return;
 
+  // settings-scope-clarity dirty-switch-guard: ブラインド未保存編集中なら破棄/やめる確認。
+  //   やめる時は dropdown 値を現 active に戻す（既存 payouts キャンセルと同パターン）。
+  if (!(await confirmDiscardBlindsDirtyIfNeeded())) {
+    el.tournamentSelect.value = tournamentState.id;
+    return;
+  }
+
   // STEP 10 フェーズC.2 中 2: 切替前に賞金 % 合計が不正なら確認ダイアログ
   //   現状の form の payouts が 100% でないまま silent save される問題（fix11 B-1）対策
   if (!isPayoutsValid()) {
@@ -4944,6 +4955,8 @@ function generateUniqueId(prefix) {
 async function handleTournamentNew() {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は新規作成不可
   if (!window.api?.tournaments) return;
+  // settings-scope-clarity dirty-switch-guard: 新規作成は新卓を active 化する切替経路 → 未保存編集確認
+  if (!(await confirmDiscardBlindsDirtyIfNeeded())) return;
   // STEP 10 フェーズC.2 軽 11: 連打ガード（async 中の重複実行で複数の新規が作られないよう）
   if (handleTournamentNew._inFlight) return;
   handleTournamentNew._inFlight = true;
@@ -5035,6 +5048,8 @@ async function _handleTournamentNewImpl() {
 async function handleTournamentDuplicate() {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は複製不可
   if (!window.api?.tournaments) return;
+  // settings-scope-clarity dirty-switch-guard: 複製は複製卓を active 化する切替経路 → 未保存編集確認
+  if (!(await confirmDiscardBlindsDirtyIfNeeded())) return;
   // v2.0.4 D-1 fix: 連打ガード（async 中の重複実行で複数の複製が作られないよう、
   //   handleTournamentNew と同じ _inFlight パターンを適用）
   if (handleTournamentDuplicate._inFlight) return;
@@ -5158,6 +5173,9 @@ async function handleTournamentRowDelete(id, name) {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は削除不可
   if (!window.api?.tournaments) return;
   if (_tournamentDeleteInFlight) return;   // ダイアログまたは IPC 進行中
+  // settings-scope-clarity dirty-switch-guard: active 卓を削除すると別卓へ active が切り替わる経路。
+  //   その時だけ未保存編集確認（非 active 卓削除や非 dirty では不要 prompt を出さない）。
+  if (id === tournamentState.id && !(await confirmDiscardBlindsDirtyIfNeeded())) return;
   _tournamentDeleteInFlight = true;
   try {
     const confirmed = await showTournamentDeleteConfirm(name);
@@ -6674,17 +6692,67 @@ function showBlindShareModal(otherNames) {
   });
 }
 
+// settings-scope-clarity dirty-switch-guard: 未保存編集中の切替確認モーダル。
+//   Promise<boolean>（true=破棄して切り替える / false=やめる）。既存 confirm-dialog 様式（hall 自動非表示）。
+function showBlindsDirtySwitchModal() {
+  return new Promise((resolve) => {
+    const dlg = el.blindsDirtySwitchDialog;
+    if (!dlg || typeof dlg.showModal !== 'function') {
+      // ダイアログ不在のフォールバック: 従来挙動（切替続行＝破棄相当）
+      resolve(true);
+      return;
+    }
+    let settled = false;
+    const finish = (v) => {
+      if (settled) return;
+      settled = true;
+      el.blindsDirtySwitchDiscard?.removeEventListener('click', onDiscard);
+      el.blindsDirtySwitchCancel?.removeEventListener('click', onCancel);
+      dlg.removeEventListener('cancel', onEsc);
+      try { dlg.close(); } catch (_) { /* 既に閉じている場合は無視 */ }
+      resolve(v);
+    };
+    const onDiscard = () => finish(true);
+    const onCancel = () => finish(false);
+    const onEsc = (ev) => { ev.preventDefault(); finish(false); };   // Esc キー → やめる扱い
+    el.blindsDirtySwitchDiscard?.addEventListener('click', onDiscard);
+    el.blindsDirtySwitchCancel?.addEventListener('click', onCancel);
+    dlg.addEventListener('cancel', onEsc);
+    try { dlg.showModal(); } catch (_) { finish(true); }
+  });
+}
+
+// settings-scope-clarity dirty-switch-guard: トーナメント切替前の共通ガード。
+//   ブラインドエディタが未保存(dirty)でなければ即 true（切替続行）。dirty なら確認 →
+//   「破棄して切り替える」で blinds 編集状態をクリアして true、「やめる」で false（切替中止）。
+//   ★クリアするのは blinds エディタの未保存「構造編集」のみ（draft/meta/dirty/initialized）。
+//     tournamentRuntime / timerState / トーナメントフォーム値には一切触れない（別 namespace）。
+async function confirmDiscardBlindsDirtyIfNeeded() {
+  if (!blindsEditor.isDirty) return true;
+  const discard = await showBlindsDirtySwitchModal();
+  if (discard) {
+    setDirty(false);
+    blindsEditor.draft = null;
+    blindsEditor.meta = null;
+    blindsEditor.initialized = false;   // 次回 ensureBlindsEditorLoaded で新卓の構造を追従ロード
+  }
+  return discard;
+}
+
 // settings-scope-clarity STEP2: blinds タブ上部の「編集中の構造：◯◯（このトーナメント『△△』が使用）」ラベルを更新。
 //   textContent ベースで XSS 安全に構築。
 function updateBlindsEditingTargetLabel() {
   if (!el.blindsEditingTarget) return;
   const structName = (blindsEditor.meta?.name || blindsEditor.draft?.name || '').trim() || '（未選択）';
   const tName = (tournamentState.name || tournamentState.title || '').trim();
+  // dirty-switch-guard: 表示中の構造(meta.id)が選択中トーナメントの構造(blindPresetId)と一致する時だけ
+  //   「このトーナメント『X』が使用」ペアを出す。不一致（嘘ペア）は構造名のみ表示し誤誘導を防ぐ。
+  const pairMatches = !!blindsEditor.meta?.id && blindsEditor.meta.id === tournamentState.blindPresetId;
   el.blindsEditingTarget.textContent = '編集中の構造：';
   const strong = document.createElement('strong');
   strong.textContent = structName;
   el.blindsEditingTarget.append(strong);
-  if (tName) el.blindsEditingTarget.append(`（このトーナメント『${tName}』が使用）`);
+  if (tName && pairMatches) el.blindsEditingTarget.append(`（このトーナメント『${tName}』が使用）`);
 }
 
 async function _savePresetCore() {

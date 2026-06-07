@@ -416,6 +416,18 @@
     </div>
   </dialog>
 
+  <!-- settings-scope-clarity dirty-switch-guard: ブラインド未保存編集中にトーナメントを切り替える時の確認。
+       既存 confirm-dialog 規約準拠（<dialog> に flex 禁止、actions のみ flex）。
+       [data-role="hall"] .confirm-dialog で hall 側は自動非表示。 -->
+  <dialog class="confirm-dialog confirm-dialog--blinds-dirty-switch" id="js-blinds-dirty-switch-dialog">
+    <h2 class="confirm-dialog__title">ブラインド構造に未保存の編集があります</h2>
+    <p class="confirm-dialog__message">編集中のブラインド構造を保存していません。別のトーナメントに切り替えると、この編集は破棄されます。</p>
+    <div class="confirm-dialog__actions">
+      <button type="button" class="btn btn--ghost"   value="cancel"  id="js-blinds-dirty-switch-cancel">やめる</button>
+      <button type="button" class="btn btn--primary" value="discard" id="js-blinds-dirty-switch-discard">破棄して切り替える</button>
+    </div>
+  </dialog>
+
   <!-- 設定ダイアログ（S キー）: STEP 3a でタブ式に再構築
        タブ: トーナメント / ブラインド構造 / 背景・時計フォント / テロップ / 音 / ハウス情報
        STEP 10 フェーズC.1.6 Fix 1: dialog 直下に form-dialog__shell wrapper を挟むことで、
