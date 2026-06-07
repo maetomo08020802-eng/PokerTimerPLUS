@@ -171,6 +171,9 @@ const tournamentState = {
   // STEP 6.5
   guarantee: 0,
   payoutRounding: 100,
+  // v2.5.2: 賞金傾斜モード（'percent'=プール比例 / 'amount'=入力額固定）。
+  //   applyTournament で保存値に同期。新規トーナメントは 'amount'（main 側 newT が送信）。
+  payoutMode: 'percent',
   // STEP 6.7
   prizeCategory: '',
   // STEP 6.9: 特殊スタック（早期着席特典・VIP特典など）
@@ -1061,11 +1064,14 @@ function computeAvgStack() {
 // STEP 6.5: 配当金額丸め単位の許容値（main.js の VALID_PAYOUT_ROUNDINGS と同期）
 const VALID_PAYOUT_ROUNDINGS_RENDERER = [1, 10, 100, 1000];
 
-// STEP 6.5: 配当金額を計算（端数処理 + 余りを1位に上乗せ）
-// 戻り値: payouts と同順の数値配列（円単位）
-// v2.1.4 方針 A: amount フィールドが全順位に有効値で存在し、合計が pool と完全一致するなら、
-//   それを直接返す（金額モードで保存した絶対金額を精度損失なく復元）。
-//   pool 変動 / amount 不在 の場合は既存の % 計算にフォールバック（後方互換）。
+// STEP 6.5 / v2.5.2: 配当金額を計算。戻り値は payouts と同順の数値配列（円単位）。
+//   - 金額モード（payoutMode === 'amount'）: 保存された各 amount を「正（source of truth）」として
+//     そのまま返す（pool で逆算しない＝開き直し・人数増減でドリフトしない）。amount 欠損ランクは
+//     防御的に floor(pool×%) で補完（通常データでは発生しない）。
+//   - ％モード: pool×% を「最大剰余法（largest-remainder）」で丸め、合計 === pool を厳密維持。
+//     旧実装の「余り全部を1位上乗せ」が 100005/49995 等のズレを生んでいたのを是正
+//     （rounding≥100 では per-rank が綺麗な単位に着地。¥1 は % の精度ロスが残る＝金額モードで回避）。
+//   ※ pool 計算・poolRates・guarantee ロジックは不変（§5 の TOTAL POOL 表示分岐は前原確定後に別途）。
 function computeRoundedAmounts() {
   const pool = computeTotalPool();
   const rounding = VALID_PAYOUT_ROUNDINGS_RENDERER.includes(tournamentState.payoutRounding)
@@ -1073,25 +1079,29 @@ function computeRoundedAmounts() {
   const payouts = tournamentState.payouts || [];
   if (payouts.length === 0 || pool <= 0) return payouts.map(() => 0);
 
-  // v2.1.4: 全順位に有効な amount があり、合計 === pool ならそれを使う
-  const allHaveAmount = payouts.every((p) => Number.isFinite(p.amount) && p.amount >= 0);
-  if (allHaveAmount) {
-    const amountSum = payouts.reduce((s, p) => s + p.amount, 0);
-    if (amountSum === pool) {
-      return payouts.map((p) => p.amount);
-    }
+  // v2.5.2: 金額モード = 入力額を固定（amount をそのまま返す）
+  if (tournamentState.payoutMode === 'amount') {
+    return payouts.map((p) =>
+      (Number.isFinite(p.amount) && p.amount >= 0)
+        ? p.amount
+        : Math.floor(pool * (Number(p.percentage) || 0) / 100 / rounding) * rounding
+    );
   }
 
-  // 既存の % 計算（amount 不在 or pool 変動時のフォールバック）
-  const amounts = payouts.map((p) => {
-    const raw = pool * (Number(p.percentage) || 0) / 100;
-    return Math.floor(raw / rounding) * rounding;
-  });
-  // 端数の合計（pool - sum）を 1 位に上乗せ
-  const sum = amounts.reduce((s, v) => s + v, 0);
-  const remainder = pool - sum;
-  if (remainder > 0 && amounts.length > 0) {
-    amounts[0] += remainder;
+  // ％モード: pool×% を floor で丸め、端数を最大剰余法で配分（合計 === pool を厳密維持）
+  const raws    = payouts.map((p) => pool * (Number(p.percentage) || 0) / 100);
+  const amounts = raws.map((raw) => Math.floor(raw / rounding) * rounding);
+  const remainders = raws.map((raw, i) => raw - amounts[i]); // 0 .. rounding（切り捨てられた端数）
+  // 大きい remainder のランクから 1 rounding 単位ずつ配分
+  const order = payouts.map((_, i) => i).sort((a, b) => remainders[b] - remainders[a]);
+  let units = Math.floor((pool - amounts.reduce((s, v) => s + v, 0)) / rounding);
+  for (let k = 0; units > 0 && order.length > 0; k++, units--) {
+    amounts[order[k % order.length]] += rounding;
+  }
+  // pool が rounding の倍数でない時の割り切れない端数は最上位 remainder（なければ1位）へ → 合計 === pool 保証
+  const residual = pool - amounts.reduce((s, v) => s + v, 0);
+  if (residual !== 0 && amounts.length > 0) {
+    amounts[order.length > 0 ? order[0] : 0] += residual;
   }
   return amounts;
 }
@@ -1260,6 +1270,10 @@ function applyTournament(t) {
       if (Number.isFinite(p.amount) && p.amount >= 0) out.amount = p.amount;
       return out;
     });
+  }
+  // v2.5.2: 賞金傾斜モード（'percent'/'amount'）を保存値に同期。不正値は percent 扱い（安全側）
+  if (t.payoutMode === 'amount' || t.payoutMode === 'percent') {
+    tournamentState.payoutMode = t.payoutMode;
   }
   // STEP 6.5
   if (typeof t.guarantee === 'number' && t.guarantee >= 0) {
@@ -4218,11 +4232,11 @@ function syncTournamentFormFromState() {
   updateSubtitleCounter();
   // STEP 6.17: タイトル色 UI 同期（プリセットの選択ハイライト + カラーピッカー値）
   syncTitleColorPicker();
-  // 入力モードは常に % をデフォルトに戻す（保存値ではない、UI 状態）
-  payoutInputMode = 'percent';
+  // v2.5.2: 入力モードは保存された payoutMode に同期（新規トーナメントは既定 'amount'）
+  payoutInputMode = (tournamentState.payoutMode === 'amount') ? 'amount' : 'percent';
   if (el.tournamentPayoutMode) {
     const radios = el.tournamentPayoutMode.querySelectorAll('input[name="payout-mode"]');
-    for (const r of radios) r.checked = (r.value === 'percent');
+    for (const r of radios) r.checked = (r.value === payoutInputMode);
   }
   // 賞金構造エディタの再構築
   renderPayoutsEditor(tournamentState.payouts || []);
@@ -4992,6 +5006,8 @@ async function _handleTournamentNewImpl() {
     subtitle: '',
     currencySymbol: tournamentState.currencySymbol || '¥',
     blindPresetId: el.tournamentBlindPreset?.value || tournamentState.blindPresetId || 'demo-fast',
+    // v2.5.2: 新規トーナメントは賞金傾斜の初期値＝金額モード（入力額固定）
+    payoutMode: 'amount',
     // STEP 6.21: 新規は idle 状態で開始
     timerState: { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null }
   };
@@ -5307,6 +5323,8 @@ function readTournamentForm() {
       appliedCount: Math.max(0, Math.min(999, Math.floor(num(el.tournamentSpecialStackCount, tournamentState.specialStack?.appliedCount ?? 0))))
     },
     payouts: readPayoutsFromForm(),
+    // v2.5.2: 賞金傾斜モード（現在の入力モードを永続化）
+    payoutMode: (payoutInputMode === 'amount') ? 'amount' : 'percent',
     // STEP 6.5
     guarantee: num(el.tournamentGuarantee, tournamentState.guarantee ?? 0),
     payoutRounding: (() => {

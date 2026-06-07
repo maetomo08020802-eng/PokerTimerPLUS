@@ -452,6 +452,10 @@ const DEFAULT_TOURNAMENT_EXT = Object.freeze({
   // STEP 6.5
   guarantee: 0,            // GTD保証賞金（0 なら無効、計算プールがそのまま使われる）
   payoutRounding: 100,     // 配当端数の丸め単位（1 / 10 / 100 / 1000 円）
+  // v2.5.2: 賞金傾斜モード（'percent'=プール比例 / 'amount'=入力額固定）。
+  //   migration は payouts の amount 有無から推論、新規 save は renderer が 'amount' を送信。
+  //   ここ（DEFAULT）は最終 fallback 用で 'percent'（既存挙動＝プール比例を安全側に維持）。
+  payoutMode: 'percent',
   // STEP 6.7: 賞金区分（自由入力、空文字なら表示しない）
   // 例: 「ハウスチケット」「ポイント」「景品」「賞品」など、店舗運用に応じて
   prizeCategory: '',
@@ -940,6 +944,14 @@ function migrateTournamentSchema(s) {
     if (!m.addOn  || typeof m.addOn  !== 'object') { m.addOn  = { ...DEFAULT_TOURNAMENT_EXT.addOn  }; touched = true; }
     if (!Array.isArray(m.payouts) || m.payouts.length === 0) {
       m.payouts = DEFAULT_TOURNAMENT_EXT.payouts.map((p) => ({ ...p }));
+      touched = true;
+    }
+    // v2.5.2: payoutMode 補完（既存トーナメント）。amount 全ランク保持 → 'amount'（固定）、
+    //   それ以外 → 'percent'（プール比例、既存挙動維持）。TOTAL POOL 総額は変えない。
+    if (m.payoutMode !== 'amount' && m.payoutMode !== 'percent') {
+      const allHaveAmount = Array.isArray(m.payouts) && m.payouts.length > 0
+        && m.payouts.every((p) => p && Number.isFinite(Number(p.amount)) && Number(p.amount) >= 0);
+      m.payoutMode = allHaveAmount ? 'amount' : 'percent';
       touched = true;
     }
     if (typeof m.gameType !== 'string' || !VALID_GAME_TYPES.includes(m.gameType)) {
@@ -2310,6 +2322,10 @@ function registerIpcHandlers() {
       const n = Number(t.payoutRounding);
       out.payoutRounding = VALID_PAYOUT_ROUNDINGS.includes(n) ? n : (fallback.payoutRounding ?? DEFAULT_TOURNAMENT_EXT.payoutRounding);
     }
+    // v2.5.2: 賞金傾斜モード（whitelist 検証。不正値は percent 扱い）
+    if ('payoutMode' in t) {
+      out.payoutMode = (t.payoutMode === 'amount') ? 'amount' : 'percent';
+    }
     // STEP 6.7: 賞金区分（空文字も許容、最大20文字）
     if ('prizeCategory' in t) {
       const s = (typeof t.prizeCategory === 'string') ? t.prizeCategory.slice(0, 20) : '';
@@ -2395,6 +2411,11 @@ function registerIpcHandlers() {
     if (typeof out.payoutRounding !== 'number' || !VALID_PAYOUT_ROUNDINGS.includes(out.payoutRounding)) {
       out.payoutRounding = DEFAULT_TOURNAMENT_EXT.payoutRounding;
     }
+    // v2.5.2: payoutMode 既定補完（fallback 優先、なければ percent）
+    if (out.payoutMode !== 'amount' && out.payoutMode !== 'percent') {
+      out.payoutMode = (fallback.payoutMode === 'amount' || fallback.payoutMode === 'percent')
+        ? fallback.payoutMode : 'percent';
+    }
     if (typeof out.prizeCategory !== 'string') out.prizeCategory = '';
     if (!out.specialStack || typeof out.specialStack !== 'object') {
       out.specialStack = { ...DEFAULT_TOURNAMENT_EXT.specialStack };
@@ -2470,6 +2491,8 @@ function registerIpcHandlers() {
         : DEFAULT_TOURNAMENT_EXT.payouts.map((p) => ({ ...p })),
       guarantee: t.guarantee ?? DEFAULT_TOURNAMENT_EXT.guarantee,
       payoutRounding: t.payoutRounding ?? DEFAULT_TOURNAMENT_EXT.payoutRounding,
+      // v2.5.2: 賞金傾斜モード（renderer applyTournament が読む）
+      payoutMode: (t.payoutMode === 'amount' || t.payoutMode === 'percent') ? t.payoutMode : 'percent',
       prizeCategory: typeof t.prizeCategory === 'string' ? t.prizeCategory : '',
       specialStack: t.specialStack ?? { ...DEFAULT_TOURNAMENT_EXT.specialStack },
       // v2.4.0: poolRates 同梱（renderer 側 applyTournament が読む）

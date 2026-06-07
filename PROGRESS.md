@@ -14,7 +14,7 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| (なし) | — | ✅ オープン作業なし（**v2.5.1 配信完了 2026-06-07**、settings-scope-clarity 全完了） | — | — | — |
+| v2.5.2（予定） | payout-amount-default 修正（金額固定＋初期値金額＋％端数根治） | 🟢 確定部分1〜4 実装完了・1280件全PASS／**§5 前原 escalate 待ち** | `.cc-briefs/2026-06-07_payout-amount-default_brief.md` | `.cc-plans/2026-06-07_payout-amount-default_plan.md` | `.cc-reports/2026-06-07_payout-amount-default.md` |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -108,7 +108,10 @@
 - **2026-06-07（一括テストビルド・初回）**: settings-scope-clarity STEP1〜4 合算の v2.5.1 テストビルド完了。事前確認で feature ブランチが v2.5.0（画像分離 `e77fcce`）を土台に含むことを確認（祖先＋main.js マーカー12件）。`npx electron-builder --win --publish never`（exit 0）。成果物 `dist\pokertimerplus-setup-2.5.1.exe`（83,039,604 bytes ≈83MB、ProductVersion 2.5.1.0）。asar に STEP1〜4 全マーカー焼き込み確認。起動スモークテスト OK（Electron 5プロセス生存・致命エラーなし、`Update for 2.5.1 not available (latest 2.5.0, downgrade disallowed)` ＝自動更新誤作動なし）。**main 非merge / tag 無し / GitHub Release 非接触（最新は v2.5.0 のまま）**。前原実機 6-B（STEP1〜4 合算 0〜8、約20分）用（[testbuild report](.cc-reports/2026-06-07_settings-scope-clarity_testbuild.md)）
 - **2026-06-07（settings-scope-clarity 案件クローズ）**: v2.5.1 配信完了を受けて案件クローズ。関連 md（reports 11 / plans 6 / briefs 28 = 計45件）を `.cc-archive/settings-scope-clarity/`（briefs/plans/reports）へ退避完了。merge 済 `feature/settings-scope-clarity`（33d2846）をローカル削除完了（origin は未push のため remote 削除不要）。軽微5件は「温存中の次期候補」へ記載済（配信後 別 brief 化）
 - **配信状況**: **v2.5.1 配信済み（最新・公開中）**。GitHub Release v2.5.1 = Latest、自動更新有効。既存ユーザーは次回起動で v2.5.1 自動更新通知
+- **2026-06-08（payout-amount-default 実装・確定部分1〜4）**: ％プライズ端数ズレを根治。**①金額モード＝入力額固定**（tournament に `payoutMode` 永続化＋`computeRoundedAmounts` を「amount をそのまま返す」分岐に。pool 変動・¥1丸めでもドリフトなし。`amountSum===pool` 厳密一致条件を撤廃）**②初期値＝金額**（新規 `newT` に `payoutMode:'amount'`、編集開きは保存モード同期、旧 percent 固定リセット撤廃）**③％モード＝従来どおり比例**（computeCalculatedPool/poolRates 無改造）**④％端数根治＝最大剰余法**（per-rank 綺麗着地・合計=pool 厳密維持・既存%も移行不要で綺麗。¥1 は%精度ロス残＝金額モードで回避）。永続化は P1（schema＋migration 推論[amount有→amount/無→percent]＋normalize＋list 同梱、total 不変）。**TOTAL POOL 表示・computeTotalPool・isPayoutsValid は無改造（§5 のため温存）→ v2.4.0 不変条件維持**。致命バグ保護5件全件影響なし、並列0体、version 2.5.1 据え置き。**既存1261＋新規 v260 19件＝1280件全PASS**（v216 は新挙動へ期待値更新）。Plan 軽量 review（段階2）承認済。**§5（金額固定×poolRate>0 併用の TOTAL POOL/validation/法令）は構築士2 が段階3 escalate→前原 Cowork 確定待ち**。ブランチ `feature/payout-amount-default`（[plan](.cc-plans/2026-06-07_payout-amount-default_plan.md) / [review](.cc-briefs/2026-06-07_payout-amount-default_review.md) / [report](.cc-reports/2026-06-07_payout-amount-default.md)）
+- **2026-06-07（payout-amount-default 調査）**: ％プライズが開き直しで端数ズレ（100000→100005 / 50000→49995）する真因を investigation 型で確定（**コード変更ゼロ**）。真因＝表示金額を毎回「保存％ × 現在プール」で逆算する `computeRoundedAmounts()`（renderer.js:1069-1097）の％フォールバック。保存値が `toFixed(2)` 丸めの％（66.67 等）なので `150000×66.67%=100005` と round number に着地しない。再現 A（pool=150000 / [66.67%,33.33%] / 丸め¥1）で症状値完全一致。v2.1.4 の amount 絶対値保持は「amount 合計===プール 厳密一致」時のみ効き、①％モードは amount 非保存 ②金額モードもライブ人数でプールが動くと即フォールバックでズレ再発。結論：**金額デフォルト化は新規・プール固定なら有効、既存％トーナメント＋プール変動ケースは未解決**。対応案 (A) デフォルト金額化（最小・新規のみ・低リスク）/ (B) ％丸め根治（根本だが敏感経路・v2.4.0 不変条件と緊張・要承認）/ (C) 既存は据え置き推奨。致命バグ保護5件影響なし、並列0体。**方針判断（A最小 or B根治）は構築士2 / 前原**（[investigation report](.cc-reports/2026-06-07_payout-amount-default_investigation.md)）
 - **次のアクション(想定)**:
+  - payout-amount-default：調査完了 → 方針判断（(A) 金額デフォルト化最小 or (B) ％丸め根治）→ 決定後に実装 brief 起案
   - settings-scope-clarity 案件クローズ済（md 45 件 `.cc-archive/settings-scope-clarity/` 退避 + feature ブランチ削除完了）
   - 軽微5件（温存候補）の別 brief 化（緊急性なし、前原判断）、または v2.3.0(PRE_START 永続化)再開、または新規バージョン起案
   - poker-clock は安定運用フェーズ
