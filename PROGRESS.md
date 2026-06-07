@@ -15,6 +15,7 @@
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
 | v2.5.1 | settings-scope-clarity STEP1（設定タブのスコープ可視化 + 現在トーナメント名常時表示） | 🟡 実機確認待ち（前原 6-B ①〜⑤ → GO で配信） | `.cc-briefs/2026-06-07_settings-scope-clarity_step1_brief.md` | `.cc-plans/2026-06-07_settings-scope-clarity_step1_plan.md` | `.cc-reports/2026-06-07_settings-scope-clarity_step1.md` |
+| v2.5.1 | settings-scope-clarity STEP1 テストビルド（v2.5.1 .exe、前原実機6-B用、--publish never・main非merge） | 🟡 実機確認待ち（前原 6-B ①〜⑥） | `.cc-briefs/2026-06-07_settings-scope-clarity_step1_testbuild_brief.md` | （ビルドのみ・plan なし） | `.cc-reports/2026-06-07_settings-scope-clarity_step1_testbuild.md` |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -81,6 +82,7 @@
 - **現在ブランチ**: `feature/settings-scope-clarity`（main `8eecebb` から分岐、実装 commit `29ad4a3`、未 push）
 - **直前 commit**: `29ad4a3 feat(settings): 設定タブをスコープ別2グループに視覚分割 + 編集中トーナメント名を常時表示 (v2.5.1)`
 - **2026-06-07**: settings-scope-clarity STEP1（設定タブのスコープ可視化 + 現在トーナメント名常時表示）実装完了。設定ダイアログ7タブを「このトーナメント専用[トーナメント/ブラインド構造/背景・時計フォント/テロップ] / アプリ全体で共通[ロゴ/音/ハウス情報]」の2グループに視覚分割、ダイアログ上部に「編集中：◯◯」常時表示（切替即更新・無名フォールバック）、ブラインドタブに共有テンプレート注記。**データ構造・保存ロジック・各タブ中身・`data-tab` 識別子は無変更**＝UI/CSS/ラベル/現在名表示のみ。致命バグ保護5件全件影響なし。v2.5.0→2.5.1 bump + version-pin カスケード追従（全58ファイル）+ 新規 v254 テスト13件。**既存1180 + 新規13 = 1193件全PASS**。Plan 軽量 review（段階2 サブエージェント）承認済。**配信は前原実機 6-B ①〜⑤ OK + GO 後**（[step1_plan](.cc-plans/2026-06-07_settings-scope-clarity_step1_plan.md) / [step1](.cc-reports/2026-06-07_settings-scope-clarity_step1.md)）
+- **2026-06-07（テストビルド）**: settings-scope-clarity STEP1 テストビルド完了。feature ブランチ（コード凍結 `da6516e`）から `npx electron-builder --win --publish never` で v2.5.1 インストーラを1本生成（exit 0）。成果物 `dist\pokertimerplus-setup-2.5.1.exe`（≈83MB、ProductVersion 2.5.1.0）。asar に本実装（settings-tab-group / 現在名ヘッダ / 注記）焼き込み確認済。**main 非merge / tag 無し / GitHub Release 非公開（最新 Release は v2.5.0 のまま）**。前原実機 6-B ①〜⑥ 用。CC 自走でビルドまで実施（BUILD_INSTRUCTIONS 旧前提「CC 環境では不可」を customer-app 同様に覆した）（[testbuild report](.cc-reports/2026-06-07_settings-scope-clarity_step1_testbuild.md)）
 - **旧 v2.5.0 配信状態（参考）**: main `e77fcce` v2.5.0 マージ commit、origin/main 同期済。GitHub Release `v2.5.0` 公開済（Latest・自動更新有効）
 - **直前作業**: **v2.5.0 配信完了**（merge `--no-ff` → tag `v2.5.0` → push → main から .exe 再ビルド → GitHub Release `v2.5.0` 公開[Latest・自動更新対応、アセット latest.yml+.exe+.blockmap]）。Release URL: https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.5.0
 - **2026-05-28**: ハイブリッド自動化 Phase 2 段階 2 フロー完全実証(plus2-homepage homepage-performance-audit 案件) + CLAUDE.md 整合改訂 5 点反映(plus2-homepage に追随):
