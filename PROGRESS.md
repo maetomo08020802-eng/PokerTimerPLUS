@@ -16,6 +16,7 @@
 |------------|-------------|------|-------|------|--------|
 | v2.5.1 | settings-scope-clarity STEP1（設定タブのスコープ可視化 + 現在トーナメント名常時表示） | 🟡 実機確認待ち（前原 6-B ①〜⑤ → GO で配信） | `.cc-briefs/2026-06-07_settings-scope-clarity_step1_brief.md` | `.cc-plans/2026-06-07_settings-scope-clarity_step1_plan.md` | `.cc-reports/2026-06-07_settings-scope-clarity_step1.md` |
 | v2.5.1 | settings-scope-clarity STEP1 テストビルド（v2.5.1 .exe、前原実機6-B用、--publish never・main非merge） | 🟡 実機確認待ち（前原 6-B ①〜⑥） | `.cc-briefs/2026-06-07_settings-scope-clarity_step1_testbuild_brief.md` | （ビルドのみ・plan なし） | `.cc-reports/2026-06-07_settings-scope-clarity_step1_testbuild.md` |
+| v2.5.1 | settings-scope-clarity STEP2（ブラインド編集を選択中トーナメントに固定 + 共有時3択確認モーダル） | 🟡 実機確認待ち（前原 6-B ①〜⑦） | `.cc-briefs/2026-06-07_settings-scope-clarity_step2_brief.md` | `.cc-plans/2026-06-07_settings-scope-clarity_step2_plan.md` | `.cc-reports/2026-06-07_settings-scope-clarity_step2.md` |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -56,8 +57,8 @@
 |------|------|
 | 配信済みリリース | 7 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0)|
 | アーカイブ済 案件(`.cc-archive/`)| 3 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat)|
-| オープン作業 | 1 件（settings-scope-clarity STEP1、v2.5.1、実機確認待ち）|
-| 最新テスト件数 | 1193 件 全 PASS(settings-scope-clarity STEP1 時点、v254 で +13)|
+| オープン作業 | 1 件（settings-scope-clarity STEP1+STEP2、v2.5.1、実機確認待ち）|
+| 最新テスト件数 | 1208 件 全 PASS(settings-scope-clarity STEP2 時点、v254 で +13 / v255 で +15)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
 > CC は完了報告のたびにこの表を Edit(リリース配信時はリリース履歴に新行追加、テスト件数更新)。
@@ -79,8 +80,9 @@
 
 ## 直近の状態
 
-- **現在ブランチ**: `feature/settings-scope-clarity`（main `8eecebb` から分岐、実装 commit `29ad4a3`、未 push）
-- **直前 commit**: `29ad4a3 feat(settings): 設定タブをスコープ別2グループに視覚分割 + 編集中トーナメント名を常時表示 (v2.5.1)`
+- **現在ブランチ**: `feature/settings-scope-clarity`（main `8eecebb` から分岐、実装 commit STEP1 `29ad4a3` / STEP2 `d82e982`、未 push）
+- **直前 commit**: `d82e982 feat(blinds): ブラインド編集を選択中トーナメントに固定 + 共有時3択確認モーダル`
+- **2026-06-07（STEP2）**: settings-scope-clarity STEP2 実装完了。ブラインド構造タブの編集対象を選択中トーナメント構造に固定（任意プリセット選択 `js-preset-select` を hidden 化 + 編集対象ラベル）+ 共有構造保存時の3択モーダル（すべてに反映=同ID上書き / このトーナメントだけ変更=copy-on-write 新ID付替 / やめる=保存中止で編集保持）。共有なしは従来どおりモーダルなし保存。**main.js スキーマ・presets:saveUser 無変更（参照方式維持）**、`_savePresetCore` に共有分岐。timerState 除外（巻き戻り防止）を copy 経路含め維持。致命バグ保護5件全件影響なし。version **2.5.1 据え置き**（bump せず、package.json は scripts.test 1行追記のみ＝git diff で version 行 unchanged 確認）。**既存1193 + 新規 v255 15 = 1208件全PASS**。Plan 軽量 review（段階2）承認済。配信は前原 6-B ①〜⑦ OK + GO 後（[step2_plan](.cc-plans/2026-06-07_settings-scope-clarity_step2_plan.md) / [step2](.cc-reports/2026-06-07_settings-scope-clarity_step2.md)）
 - **2026-06-07**: settings-scope-clarity STEP1（設定タブのスコープ可視化 + 現在トーナメント名常時表示）実装完了。設定ダイアログ7タブを「このトーナメント専用[トーナメント/ブラインド構造/背景・時計フォント/テロップ] / アプリ全体で共通[ロゴ/音/ハウス情報]」の2グループに視覚分割、ダイアログ上部に「編集中：◯◯」常時表示（切替即更新・無名フォールバック）、ブラインドタブに共有テンプレート注記。**データ構造・保存ロジック・各タブ中身・`data-tab` 識別子は無変更**＝UI/CSS/ラベル/現在名表示のみ。致命バグ保護5件全件影響なし。v2.5.0→2.5.1 bump + version-pin カスケード追従（全58ファイル）+ 新規 v254 テスト13件。**既存1180 + 新規13 = 1193件全PASS**。Plan 軽量 review（段階2 サブエージェント）承認済。**配信は前原実機 6-B ①〜⑤ OK + GO 後**（[step1_plan](.cc-plans/2026-06-07_settings-scope-clarity_step1_plan.md) / [step1](.cc-reports/2026-06-07_settings-scope-clarity_step1.md)）
 - **2026-06-07（テストビルド）**: settings-scope-clarity STEP1 テストビルド完了。feature ブランチ（コード凍結 `da6516e`）から `npx electron-builder --win --publish never` で v2.5.1 インストーラを1本生成（exit 0）。成果物 `dist\pokertimerplus-setup-2.5.1.exe`（≈83MB、ProductVersion 2.5.1.0）。asar に本実装（settings-tab-group / 現在名ヘッダ / 注記）焼き込み確認済。**main 非merge / tag 無し / GitHub Release 非公開（最新 Release は v2.5.0 のまま）**。前原実機 6-B ①〜⑥ 用。CC 自走でビルドまで実施（BUILD_INSTRUCTIONS 旧前提「CC 環境では不可」を customer-app 同様に覆した）（[testbuild report](.cc-reports/2026-06-07_settings-scope-clarity_step1_testbuild.md)）
 - **旧 v2.5.0 配信状態（参考）**: main `e77fcce` v2.5.0 マージ commit、origin/main 同期済。GitHub Release `v2.5.0` 公開済（Latest・自動更新有効）
