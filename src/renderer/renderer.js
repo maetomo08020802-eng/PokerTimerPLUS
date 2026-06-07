@@ -435,6 +435,11 @@ const el = {
   tournamentSelect: document.getElementById('js-tournament-select'),
   // STEP 6.21: 状態バッジ + 操作ボタン付きリスト
   tournamentList: document.getElementById('js-tournament-list'),
+  // settings-scope-clarity STEP4: 折りたたみドロップダウン（サマリ＋トグルは <ul> 外の安定要素）
+  tournamentPicker: document.getElementById('js-tournament-picker'),
+  tournamentPickerToggle: document.getElementById('js-tournament-picker-toggle'),
+  tournamentPickerSummary: document.getElementById('js-tournament-picker-summary'),
+  tournamentPickerChevron: document.getElementById('js-tournament-picker-chevron'),
   tournamentNew: document.getElementById('js-tournament-new'),
   tournamentDuplicate: document.getElementById('js-tournament-duplicate'),
   // STEP 7.x ③-a: tournamentDelete（ヘッダー削除ボタン）は撤去。各行の🗑ボタンに移行
@@ -3891,6 +3896,9 @@ function openSettingsDialog() {
     syncMarqueeTabFormFromCurrent();
     // settings-scope-clarity STEP1: 開いた瞬間に現在トーナメント名ヘッダを最新化
     updateSettingsCurrentTournamentLabel();
+    // settings-scope-clarity STEP4: フレッシュに開くたびトーナメント一覧は折りたたみ既定に戻す
+    _tournamentListExpanded = false;
+    applyTournamentPickerExpanded();
     el.settingsDialog.showModal();
   }
 }
@@ -4513,6 +4521,74 @@ function formatLevelTime(elapsedSec) {
 
 // v2.1.0 Fix 1（M4 Perf-3）: イベント委譲を 1 度だけ親要素に登録するフラグ
 let _tournamentListDelegationInstalled = false;
+// settings-scope-clarity STEP4: トーナメント一覧の折りたたみドロップダウン状態。
+//   _tournamentListExpanded を source of truth とし、毎秒の renderTournamentList 再描画末尾で
+//   applyTournamentPickerExpanded() を冪等再適用 → innerHTML='' をまたいでも勝手に畳まれない。
+let _tournamentListExpanded = false;            // 既定＝折りたたみ
+let _tournamentPickerToggleInstalled = false;   // トグル listener install-once（毎秒再登録しない）
+
+// 開閉状態を安定要素（<ul> 外）へ反映。chevron は文字差し替え（transform 不使用＝レイアウトシフト撲滅）。
+function applyTournamentPickerExpanded() {
+  if (el.tournamentPicker) el.tournamentPicker.dataset.expanded = String(_tournamentListExpanded);
+  if (el.tournamentPickerToggle) el.tournamentPickerToggle.setAttribute('aria-expanded', String(_tournamentListExpanded));
+  if (el.tournamentPickerChevron) el.tournamentPickerChevron.textContent = _tournamentListExpanded ? '▲' : '▼';
+}
+
+// トグルボタンへ install-once でリスナ登録（安定要素のため毎秒再登録は不要）。
+function ensureTournamentPickerToggle() {
+  if (_tournamentPickerToggleInstalled) return;
+  if (!el.tournamentPickerToggle) return;
+  _tournamentPickerToggleInstalled = true;
+  el.tournamentPickerToggle.addEventListener('click', () => {
+    _tournamentListExpanded = !_tournamentListExpanded;
+    applyTournamentPickerExpanded();
+  });
+}
+
+// 折りたたみサマリ（選択中1件の名前＋ライブ status badge、必要時「他に実行中◯件」）を更新。
+//   render ループで算出済の ts を流用（追加 IPC ゼロ）。textContent ベースで XSS 安全。
+//   badge 文言は buildTournamentListItem と同一ロジック（PRE_START は active で Lv0）。
+function updateTournamentPickerSummary({ activeName, activeTs, runningOthers, total }) {
+  const host = el.tournamentPickerSummary;
+  if (!host) return;
+  host.textContent = '';
+  // status badge
+  const badge = document.createElement('span');
+  badge.className = 'tournament-status-badge';
+  const ts = activeTs || { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0 };
+  const isPreStart = (getState().status === States.PRE_START);
+  const displayLevel = isPreStart ? 0 : ts.currentLevel;
+  if (ts.status === 'running') {
+    badge.classList.add('is-running');
+    badge.textContent = `実行中 Lv${displayLevel} / ${formatLevelTime(ts.elapsedSecondsInLevel)}`;
+  } else if (ts.status === 'paused') {
+    badge.classList.add('is-paused');
+    badge.textContent = `一時停止中 Lv${displayLevel} / ${formatLevelTime(ts.elapsedSecondsInLevel)}`;
+  } else {
+    badge.textContent = '未開始';
+  }
+  host.appendChild(badge);
+  // 選択中トーナメント名
+  const name = document.createElement('span');
+  name.className = 'tournament-picker__name';
+  name.textContent = activeName || (tournamentState.name || tournamentState.title || '(無題)');
+  host.appendChild(name);
+  // 他に実行中◯件（選択中以外で live status===running の件数）
+  if (runningOthers > 0) {
+    const others = document.createElement('span');
+    others.className = 'tournament-picker__others';
+    others.textContent = `他に実行中 ${runningOthers} 件`;
+    host.appendChild(others);
+  }
+  // 折りたたみ時に総件数の手掛かり（任意・控えめ）
+  if (typeof total === 'number' && total > 1) {
+    const count = document.createElement('span');
+    count.className = 'tournament-picker__total';
+    count.textContent = `（全 ${total} 件）`;
+    host.appendChild(count);
+  }
+}
+
 function ensureTournamentListDelegation() {
   if (_tournamentListDelegationInstalled) return;
   if (!el.tournamentList) return;
@@ -4546,6 +4622,8 @@ async function renderTournamentList(prefetched) {
   if (isUserTypingInInput()) return;
   // v2.1.0 Fix 1（M4 Perf-3）: 親要素 1 個に click delegation を登録（毎秒の listener 再登録を撲滅）
   ensureTournamentListDelegation();
+  // settings-scope-clarity STEP4: 折りたたみトグルも install-once（毎秒再登録なし）
+  ensureTournamentPickerToggle();
   let list = prefetched;
   if (!Array.isArray(list)) {
     try { list = await _tournamentsListDedup() || []; } catch (_) { list = []; }
@@ -4553,6 +4631,8 @@ async function renderTournamentList(prefetched) {
   el.tournamentList.innerHTML = '';
   // v2.1.20-rc1: Fix 2-A — DocumentFragment で reflow 回数を N → 1 に削減
   const fragment = document.createDocumentFragment();
+  // settings-scope-clarity STEP4: 折りたたみサマリ用にループ内で集計（追加 IPC なし）
+  let activeTs = null, activeName = '', runningOthers = 0;
   for (const t of list) {
     const isActive = (t.id === tournamentState.id);
     let ts;
@@ -4568,10 +4648,20 @@ async function renderTournamentList(prefetched) {
         ? computeLiveTimerStateMemoized(stored, levels)
         : stored;
     }
+    if (isActive) {
+      activeTs = ts;
+      activeName = t.name || '(無題)';
+    } else if (ts && ts.status === 'running') {
+      runningOthers++;
+    }
     // STEP 7.x ③-e: list.length を渡して、最後の1件は🗑ボタンを disabled に
     fragment.appendChild(buildTournamentListItem(t, ts, isActive, list.length));
   }
+  // 折りたたみ時も <ul> は常に再構築（空リスト退行を作らない。CSS で表示/非表示のみ切替）
   el.tournamentList.appendChild(fragment);
+  // settings-scope-clarity STEP4: 折りたたみサマリ更新（毎秒ライブ追従）+ 開閉状態の冪等再適用
+  updateTournamentPickerSummary({ activeName, activeTs, runningOthers, total: list.length });
+  applyTournamentPickerExpanded();
 }
 
 function buildTournamentListItem(t, ts, isActive, listLength = 99) {

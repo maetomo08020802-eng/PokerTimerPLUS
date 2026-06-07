@@ -2631,6 +2631,60 @@ body:not(.has-marquee) .marquee { display: none; }
 
 /* STEP 6.21: トーナメント一覧（状態バッジ + 操作ボタン） */
 /* STEP 6.21.5: 件数増加でタブが伸びすぎないようスクロール化（約15行で打ち止め） */
+/* settings-scope-clarity STEP4: トーナメント一覧の折りたたみドロップダウン。
+   サマリ＋トグルは <ul> 外の安定要素（毎秒 innerHTML='' で破棄されない）。
+   折りたたみ時は <ul> を非表示にするだけ（<ul> は常に再構築され空リスト退行なし）。
+   transform / position:fixed 不使用（chevron は文字差し替え）。 */
+.tournament-picker {
+  margin-top: var(--space-sm);
+}
+.tournament-picker__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 0.7vh 0.9vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1.0vw;
+  cursor: pointer;
+  text-align: left;
+}
+.tournament-picker__summary:hover {
+  border-color: var(--gold);
+}
+.tournament-picker__summary-body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tournament-picker__name {
+  font-weight: 700;
+}
+.tournament-picker__others {
+  color: var(--text-secondary);
+  font-size: 0.9vw;
+}
+.tournament-picker__total {
+  color: var(--text-muted);
+  font-size: 0.85vw;
+}
+.tournament-picker__chevron {
+  flex-shrink: 0;
+  color: var(--gold);
+  font-size: 0.85vw;
+}
+/* 折りたたみ時は全件リストを隠す（<ul> は再構築され続けるが表示のみ切替） */
+.tournament-picker[data-expanded="false"] .tournament-list {
+  display: none;
+}
+
 .tournament-list {
   list-style: none;
   margin: var(--space-sm) 0 0;

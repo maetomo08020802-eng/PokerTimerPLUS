@@ -685,8 +685,19 @@
               <!-- STEP 7.x ③-a: ヘッダーの「削除」ボタンは撤去（各行の🗑ボタンへ移行、Y案） -->
             </div>
           </div>
-          <!-- STEP 6.21: 状態バッジ + 経過情報 + 操作ボタンの構造化リスト -->
-          <ul class="tournament-list" id="js-tournament-list" aria-label="トーナメント一覧"></ul>
+          <!-- settings-scope-clarity STEP4: 折りたたみドロップダウン化。
+               サマリ（選択中1件＋ライブbadge＋「他に実行中◯件」）とトグル▼は <ul> の外の安定要素。
+               renderTournamentList の毎秒 innerHTML='' 再構築では <ul> の中身だけ破棄され、
+               picker コンテナ・サマリ・トグルは破棄されない＝開閉状態を毎秒またいで保持。 -->
+          <div class="tournament-picker" id="js-tournament-picker" data-expanded="false">
+            <button type="button" class="tournament-picker__summary" id="js-tournament-picker-toggle"
+                    aria-expanded="false" aria-controls="js-tournament-list">
+              <span class="tournament-picker__summary-body" id="js-tournament-picker-summary">—</span>
+              <span class="tournament-picker__chevron" id="js-tournament-picker-chevron" aria-hidden="true">▼</span>
+            </button>
+            <!-- STEP 6.21: 状態バッジ + 経過情報 + 操作ボタンの構造化リスト（展開時の中身、id/class 不変） -->
+            <ul class="tournament-list" id="js-tournament-list" aria-label="トーナメント一覧"></ul>
+          </div>
           <hr class="tournament-editor__divider">
 
           <div class="form-row">
