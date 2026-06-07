@@ -402,6 +402,20 @@
     </div>
   </dialog>
 
+  <!-- settings-scope-clarity STEP2: ブラインド構造の共有保存 3択確認モーダル。
+       既存 confirm-dialog 規約準拠（<dialog> に flex 禁止、actions のみ flex）。
+       [data-role="hall"] .confirm-dialog で hall 側は自動非表示。
+       メッセージ（使用中トーナメント名）は JS が textContent で設定（XSS 安全）。 -->
+  <dialog class="confirm-dialog confirm-dialog--blind-share" id="js-blind-share-dialog">
+    <h2 class="confirm-dialog__title">このブラインド構造は他でも使われています</h2>
+    <p class="confirm-dialog__message" id="js-blind-share-message"></p>
+    <div class="confirm-dialog__actions confirm-dialog__actions--blind-share">
+      <button type="button" class="btn btn--primary" value="all"    id="js-blind-share-all">すべてに反映して保存</button>
+      <button type="button" class="btn"              value="copy"   id="js-blind-share-copy">このトーナメントだけ変更</button>
+      <button type="button" class="btn btn--ghost"   value="cancel" id="js-blind-share-cancel">やめる</button>
+    </div>
+  </dialog>
+
   <!-- 設定ダイアログ（S キー）: STEP 3a でタブ式に再構築
        タブ: トーナメント / ブラインド構造 / 背景・時計フォント / テロップ / 音 / ハウス情報
        STEP 10 フェーズC.1.6 Fix 1: dialog 直下に form-dialog__shell wrapper を挟むことで、
@@ -586,10 +600,16 @@
             📋 このテンプレートは元のまま編集できません。変更したい場合は「<strong>複製して編集</strong>」を押してコピーを作ってください。
           </div>
 
+          <!-- settings-scope-clarity STEP2: 編集対象は「選択中トーナメントの構造」に固定。
+               任意プリセット選択ドロップダウン（js-preset-select）は hidden 化し DOM 互換のため残置
+               （既存 JS の el.presetSelect.value 参照・内部 dispatch 経路を壊さない）。
+               代わりに編集中の構造名 + 使用トーナメントを示す読み取り専用ラベルを表示。 -->
+          <p class="blinds-editor__editing-target" id="js-blinds-editing-target">編集中の構造：<strong>—</strong></p>
+
           <!-- テンプレート選択行 -->
           <div class="blinds-editor__header">
-            <label class="blinds-editor__preset-label" for="js-preset-select">テンプレート</label>
-            <select id="js-preset-select" class="blinds-editor__preset-select"></select>
+            <label class="blinds-editor__preset-label" for="js-preset-select" hidden>テンプレート</label>
+            <select id="js-preset-select" class="blinds-editor__preset-select" hidden></select>
             <!-- STEP 6.7: 保存済みテンプレート数表示 -->
             <span class="blinds-editor__count" id="js-preset-count">保存済みテンプレート: 0/100 件</span>
             <div class="blinds-editor__preset-actions">

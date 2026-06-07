@@ -512,6 +512,13 @@ const el = {
   presetDirty: document.getElementById('js-preset-dirty'),
   // STEP 6.21.5: ブラインド共有 / フォーマット化ヒント
   blindsShareHint: document.getElementById('js-blinds-share-hint'),
+  // settings-scope-clarity STEP2: blinds タブの編集対象ラベル + 共有保存3択モーダル
+  blindsEditingTarget: document.getElementById('js-blinds-editing-target'),
+  blindShareDialog: document.getElementById('js-blind-share-dialog'),
+  blindShareMessage: document.getElementById('js-blind-share-message'),
+  blindShareAll: document.getElementById('js-blind-share-all'),
+  blindShareCopy: document.getElementById('js-blind-share-copy'),
+  blindShareCancel: document.getElementById('js-blind-share-cancel'),
   blindsTbody: document.getElementById('js-blinds-tbody'),
   // STEP 10 フェーズB: 構造型に応じて thead を動的生成するため要素参照を追加
   blindsThead: document.getElementById('js-blinds-thead'),
@@ -5507,15 +5514,12 @@ async function doApplyTournament({ form, newPreset }, mode) {
   }
 }
 
-// 「このブラインド構造を編集」: ブラインド構造タブへ切替 + 同じプリセットを選択
+// 「このブラインド構造を編集」: ブラインド構造タブへ切替。
+//   settings-scope-clarity STEP2: 編集対象固定により、ロードは activateSettingsTab('blinds') 経由の
+//   ensureBlindsEditorLoaded が tournamentBlindPreset 値（＝このトーナメントが参照する構造）で実施。
+//   hidden 化したドロップダウンへの change dispatch 依存を廃止し、単一ロード経路に統一（race 回避）。
 el.tournamentEditBlinds?.addEventListener('click', () => {
-  const presetId = el.tournamentBlindPreset?.value || tournamentState.blindPresetId;
   activateSettingsTab('blinds');
-  if (presetId && el.presetSelect && el.presetSelect.value !== presetId) {
-    el.presetSelect.value = presetId;
-    // change イベントを手動発火 → loadPresetIntoDraft が起動
-    el.presetSelect.dispatchEvent(new Event('change'));
-  }
 });
 
 el.tournamentSave?.addEventListener('click', handleTournamentSave);
@@ -5733,6 +5737,7 @@ async function loadPresetIntoDraft(presetId) {
   setBlindsHint('');
   syncEditorUIFromDraft();
   updatePresetActions();
+  updateBlindsEditingTargetLabel();   // settings-scope-clarity STEP2: ロードした構造名でラベル更新
 }
 
 // 編集系ボタン (削除) の活性/非活性を更新
@@ -5779,7 +5784,7 @@ function updatePresetActions() {
   if (el.blindsShareHint) {
     el.blindsShareHint.textContent = isBuiltin
       ? '※ このブラインドはフォーマットです。「複製して編集」でコピーを作ってから編集してください'
-      : '※ このブラインドを使用する全てのトーナメントで変更が反映されます';
+      : '※ この構造を共有する他のトーナメントがある場合、保存時に反映範囲（すべて／このトーナメントだけ）を選べます';
   }
   // STEP 7.x ①: 同梱プリセット編集警告枠の表示制御（updatePresetActions が builtin 判定の唯一の経路）
   if (el.blindsBuiltinWarning) {
@@ -6529,6 +6534,69 @@ async function persistActiveTournamentBlindPresetId(newPresetId) {
   await window.api.tournaments.save(updated);
 }
 
+// settings-scope-clarity STEP2: この構造を「選択中トーナメント以外」のトーナメントが使っているか調べる。
+//   共有判定は brief 指定どおり既存の使用状況（_tournamentsListDedup）を流用。
+//   戻り値: 選択中以外で同 blindPresetId を参照するトーナメント名の配列（空なら共有なし）。
+async function findOtherTournamentsUsingPreset(presetId) {
+  if (!presetId) return [];
+  let list = [];
+  try { list = await _tournamentsListDedup() || []; } catch (_) { return []; }
+  return list
+    .filter((t) => t && t.blindPresetId === presetId && t.id !== tournamentState.id)
+    .map((t) => t.name || t.title || '(無題)');
+}
+
+// settings-scope-clarity STEP2: 共有保存の3択モーダル。Promise<'all'|'copy'|'cancel'> を返す。
+//   既存 confirm-dialog 様式（<dialog showModal>、position:fixed 不使用、hall 側は CSS で自動非表示）。
+function showBlindShareModal(otherNames) {
+  return new Promise((resolve) => {
+    const dlg = el.blindShareDialog;
+    if (!dlg || typeof dlg.showModal !== 'function') {
+      // ダイアログ不在のフォールバック: 安全側で「すべてに反映」（＝従来挙動の同 ID 上書き）
+      resolve('all');
+      return;
+    }
+    const names = (otherNames || []).map((n) => `『${n}』`).join('');
+    if (el.blindShareMessage) {
+      el.blindShareMessage.textContent =
+        `このブラインド構造は ${names} でも使われています。変更するとそちらにも反映されます。`;
+    }
+    let settled = false;
+    const finish = (choice) => {
+      if (settled) return;
+      settled = true;
+      el.blindShareAll?.removeEventListener('click', onAll);
+      el.blindShareCopy?.removeEventListener('click', onCopy);
+      el.blindShareCancel?.removeEventListener('click', onCancel);
+      dlg.removeEventListener('cancel', onDialogCancel);
+      try { dlg.close(); } catch (_) { /* 既に閉じている場合は無視 */ }
+      resolve(choice);
+    };
+    const onAll = () => finish('all');
+    const onCopy = () => finish('copy');
+    const onCancel = () => finish('cancel');
+    const onDialogCancel = (ev) => { ev.preventDefault(); finish('cancel'); };  // Esc キー → やめる扱い
+    el.blindShareAll?.addEventListener('click', onAll);
+    el.blindShareCopy?.addEventListener('click', onCopy);
+    el.blindShareCancel?.addEventListener('click', onCancel);
+    dlg.addEventListener('cancel', onDialogCancel);
+    try { dlg.showModal(); } catch (_) { finish('all'); }
+  });
+}
+
+// settings-scope-clarity STEP2: blinds タブ上部の「編集中の構造：◯◯（このトーナメント『△△』が使用）」ラベルを更新。
+//   textContent ベースで XSS 安全に構築。
+function updateBlindsEditingTargetLabel() {
+  if (!el.blindsEditingTarget) return;
+  const structName = (blindsEditor.meta?.name || blindsEditor.draft?.name || '').trim() || '（未選択）';
+  const tName = (tournamentState.name || tournamentState.title || '').trim();
+  el.blindsEditingTarget.textContent = '編集中の構造：';
+  const strong = document.createElement('strong');
+  strong.textContent = structName;
+  el.blindsEditingTarget.append(strong);
+  if (tName) el.blindsEditingTarget.append(`（このトーナメント『${tName}』が使用）`);
+}
+
 async function _savePresetCore() {
   let presetToSave;
   if (blindsEditor.meta?.builtin) {
@@ -6548,8 +6616,26 @@ async function _savePresetCore() {
     presetToSave.id = generateUniqueId('user');   // STEP 10 フェーズC.1.1 Fix 7: ID 衝突防止
     presetToSave.name = inputName;
   } else {
-    // ユーザー → そのまま上書き保存
+    // ユーザー → 既定は同 ID 上書き保存
     presetToSave = cloneStructure(blindsEditor.draft);
+    // settings-scope-clarity STEP2: 構造を「選択中以外」のトーナメントも使っている場合は3択モーダル。
+    const others = await findOtherTournamentsUsingPreset(blindsEditor.meta?.id);
+    if (others.length > 0) {
+      const choice = await showBlindShareModal(others);
+      if (choice === 'cancel') {
+        // やめる: 保存中止。編集中の draft / dirty は保持（モーダルを閉じてエディタに戻るだけ）。
+        setBlindsHint('保存をやめました（編集内容は保持されています）');
+        setTimeout(() => setBlindsHint(''), 2500);
+        return false;
+      }
+      if (choice === 'copy') {
+        // このトーナメントだけ変更 = copy-on-write: 新 ID にコピー。
+        //   保存後の persistActiveTournamentBlindPresetId が選択中トーナメントのみ新 ID へ付け替え、
+        //   他トーナメントは元の構造（元 ID）のまま不変。
+        presetToSave.id = generateUniqueId('user');
+      }
+      // 'all' → 同 ID 上書き（presetToSave.id は draft の元 ID のまま）＝共有する全トーナメントに反映。
+    }
   }
 
   try {
@@ -6573,6 +6659,7 @@ async function _savePresetCore() {
     el.presetName.value = presetToSave.name;
     setDirty(false);
     updatePresetActions();   // 同梱→ユーザーへ昇格時の readOnly 連動
+    updateBlindsEditingTargetLabel();   // settings-scope-clarity STEP2: 保存後の構造名でラベル更新
 
     // ★ STEP 10 フェーズB.fix4: 保存したプリセットを active トーナメントに自動紐付け ★
     //   - 次回このトーナメントを再選択した際、自動的に保存したプリセットが復元される
@@ -6805,32 +6892,42 @@ el.presetApply?.addEventListener('click', handlePresetApply);
 async function ensureBlindsEditorLoaded() {
   if (!window.api?.presets) return;
   await refreshPresetList();
+  // settings-scope-clarity STEP2: 編集対象は「選択中トーナメントが参照する構造」に固定。
+  //   トーナメントタブのひな形ドロップダウン値を優先（未保存の選択も反映）、無ければ tournamentState。
+  //   未保存編集中（isDirty）は保護してクロバーしない（入力中保護の趣旨）。
+  const targetId = (el.tournamentBlindPreset && el.tournamentBlindPreset.value) || tournamentState.blindPresetId;
+  const targetExists = !!targetId && blindsEditor.presetList.some((p) => p.id === targetId);
   if (!blindsEditor.initialized) {
-    // 初回: 現在の active 構造（起動時に loadPreset した demo-fast）を draft に流し込む
-    const active = getStructure();
-    if (active) {
-      blindsEditor.draft = cloneStructure(active);
-      blindsEditor.draft.levels = renumberLevels(blindsEditor.draft.levels);
-      blindsEditor.meta = {
-        id: active.id,
-        name: active.name,
-        builtin: blindsEditor.presetList.find((p) => p.id === active.id)?.builtin ?? false
-      };
-      el.presetSelect.value = active.id || '';
-      el.presetName.value = active.name || '';
-      renderBlindsTable();
-      updatePresetActions();
+    if (targetExists) {
+      await loadPresetIntoDraft(targetId);
+    } else {
+      // フォールバック: 現在の active 構造（起動時に loadPreset した demo-fast）を draft に流し込む
+      const active = getStructure();
+      if (active) {
+        blindsEditor.draft = cloneStructure(active);
+        blindsEditor.draft.levels = renumberLevels(blindsEditor.draft.levels);
+        blindsEditor.meta = {
+          id: active.id,
+          name: active.name,
+          builtin: blindsEditor.presetList.find((p) => p.id === active.id)?.builtin ?? false
+        };
+        el.presetSelect.value = active.id || '';
+        el.presetName.value = active.name || '';
+        renderBlindsTable();
+        updatePresetActions();
+      }
     }
     blindsEditor.initialized = true;
+  } else if (!blindsEditor.isDirty && targetExists && blindsEditor.meta?.id !== targetId) {
+    // 既に初期化済 + 未編集 + 選択中トーナメントの構造と表示中が食い違う → 選択中の構造へ追従ロード
+    await loadPresetIntoDraft(targetId);
   } else if (blindsEditor.draft) {
-    // 既に初期化済み: ドロップダウンの選択状態だけ復元
+    // 編集中（dirty 保護）or 既に同じ構造を表示中: 選択状態・editable state の再保証のみ
     el.presetSelect.value = blindsEditor.meta?.id || '';
-    // STEP 7.x ①: タブ再表示時も同梱警告の表示状態を最新化（meta が変わっていれば反映）
     updatePresetActions();
-    // STEP 10 フェーズC.1.2-bugfix: タブ再表示時も editable state を再保証
-    //   （meta.builtin===true なら no-op、user preset 時のみ確実に readonly クリア）
     ensureEditorEditableState();
   }
+  updateBlindsEditingTargetLabel();   // settings-scope-clarity STEP2
 }
 
 // ===== STEP 4: 音タブ =====

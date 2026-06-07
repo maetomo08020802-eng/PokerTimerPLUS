@@ -3755,6 +3755,28 @@ body.bottom-bar-hidden .marquee-content {
   cursor: not-allowed;
 }
 
+/* settings-scope-clarity STEP2: ブラインド共有保存 3択モーダル。
+   既存 confirm-dialog 様式流用（<dialog> 自体に flex は当てない）。3択を縦並びで見やすく。 */
+.confirm-dialog--blind-share {
+  min-width: 38vw;
+  max-width: 560px;
+}
+.confirm-dialog__actions--blind-share {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-sm);
+}
+
+/* settings-scope-clarity STEP2: blinds タブ上部の「編集中の構造：◯◯」ラベル */
+.blinds-editor__editing-target {
+  margin: 0 0 var(--space-sm);
+  font-size: 1.0vw;
+  color: var(--text-secondary);
+}
+.blinds-editor__editing-target strong {
+  color: var(--gold);
+}
+
 /* ===== STEP 6.11: REENTRY / ADDON 行は 0 のとき非表示、0→1 でフェードイン =====
    visibility: hidden で領域占有のみ → layout shift しない。
    transform: scale は禁止のため filter: blur で「ぼわーん」感を表現。 */
