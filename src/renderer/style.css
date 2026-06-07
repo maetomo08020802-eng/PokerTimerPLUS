@@ -1906,11 +1906,12 @@ body:not(.has-marquee) .marquee { display: none; }
      見えにくい問題を解消。width / height を画面より一回り小さい固定値（min で画面サイズに頭打ち）に。
      ユーザーは resize: both のハンドルでさらに max-width / max-height まで拡大できる。 */
   width: min(1000px, 92vw);
-  /* settings-scope-clarity STEP3: ブラインドのレベル表が通常表示で 10〜12 段見えるよう既定高を
-     700px → 920px に引き上げ（blinds タブの flex 連動で table-wrap が余剰を吸収、footer は flex-shrink:0 で常時可視）。
-     min(920px, 92vh) で小型画面でも 92vh 頭打ち＝画面外にはみ出さない。
-     他タブは内容上揃え＋body 一元スクロールのためレイアウト破壊なし。 */
-  height: min(920px, 92vh);
+  /* settings-scope-clarity STEP3 → blinds-table-fix で再調整: ブラインドのレベル表領域を確保するため既定高を
+     700px → 920px → ★1100px に引き上げ。固定 px 上限が大画面で vw chrome に食われ table が 0 段に潰れる主因
+     だったため、px 上限のみ引き上げて大画面の table 領域を確保し body スクロール量を抑制。
+     min(1100px, 92vh) で小型画面では 92vh 頭打ち＝画面外にはみ出さない。
+     他タブは内容上揃え＋body 一元スクロールのためレイアウト破壊なし（縦に余裕が増えるのみ）。 */
+  height: min(1100px, 92vh);
   max-width: 95vw;
   min-height: 400px;
   max-height: 95vh;
@@ -2085,16 +2086,17 @@ body:not(.has-marquee) .marquee { display: none; }
    レベル表（table-wrap）が body 余剰高を吸収して縦に伸び、フッタ常時可視にする。
    属性セレクタの高 specificity で .settings-tab.is-active{display:block} を blinds のみ上書き。
    他タブ（tournament/display/marquee/logo/audio/about）は display:block のまま＝副作用なし。 */
+/* ★blinds-table-fix: STEP3 の rigid height:100% を min-height:100% に変更（body スクロール経路復活＝
+   vw chrome がダイアログ高を超えてもクリップせず .form-dialog__body の overflow-y:auto に逃がす）。
+   editor は flex:1 0 auto（grow して埋めるが shrink 0＝content 未満に潰れずクリップ防止）。 */
 .settings-tab[data-tab="blinds"].is-active {
   display: flex;
   flex-direction: column;
-  height: 100%;       /* form-dialog__body が確定高のため 100% が解決（border-box で padding 込み） */
-  min-height: 0;      /* 子の overflow を効かせる */
+  min-height: 100%;   /* content 超過時はタブが伸び body がスクロール（旧: rigid 100% 固定） */
 }
 .settings-tab[data-tab="blinds"].is-active .blinds-editor {
-  flex: 1 1 auto;
+  flex: 1 0 auto;     /* grow して余剰を埋めるが shrink 0＝content 未満に潰れない（クリップ防止） */
   min-height: 0;
-  height: 100%;
 }
 
 .settings-placeholder {
@@ -2899,12 +2901,20 @@ body:not(.has-marquee) .marquee { display: none; }
 .blinds-editor__dirty-flag[hidden] { display: none; }
 
 /* テーブル */
-/* settings-scope-clarity STEP3: 約6段固定（旧 max-height:36vh）を撤廃し、blinds タブの
-   flex column 内で余剰高を吸収して縦に伸びる内側スクロール領域に変更。
-   min-height:0 で行数多/小ダイアログでも footer を押し出さない。sticky thead は維持。 */
+/* settings-scope-clarity STEP3 → blinds-table-fix で修正: 余剰高を吸収して縦に伸びる内側スクロール領域。
+   ★blinds-table-fix（致命退行 0段の根治）: STEP3 の min-height:0（フロア無し＝唯一の収縮要素ゆえ
+     大画面 vw chrome 肥大で高さ0に潰れた）を撤回し、★画面幅で縮まない px 固定フロア min-height:420px を付与。
+     min-height は flex-shrink に優先＝flex がどう振る舞っても 420px 未満にならず 0/数段潰れが CSS 仕様レベルで不可能。
+     収まらない分は親 .form-dialog__body(overflow-y:auto) のスクロールに逃げる。sticky thead は維持。 */
 .blinds-editor__table-wrap {
   flex: 1 1 auto;
-  min-height: 0;
+  /* ★下限フロア（vh）: 行高は vw 依存のため、16:9 では vh 比例で段数が一定（FHD/1440p/4K とも約6.6段）。
+     min-height は flex-shrink に優先＝0/数段 collapse が CSS 仕様レベルで不可能。 */
+  min-height: 42vh;
+  /* ★上限キャップ（vh）: table-wrap を bound して内側スクロールを成立させる＝sticky thead 維持。
+     これを超える分は table-wrap 内スクロール、editor 全体が body 高を超えれば .form-dialog__body がスクロール。
+     66vh で通常表示 約10段（実測: FHD/1440p/4K とも段数一定）。 */
+  max-height: 66vh;
   overflow-y: auto;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);

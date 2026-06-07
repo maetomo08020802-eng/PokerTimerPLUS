@@ -36,10 +36,16 @@ function cssBlock(selectorRegexSource) {
 test('T1: .blinds-editor__table-wrap から max-height:36vh が撤廃され flex 連動に', () => {
   const block = cssBlock('\\.blinds-editor__table-wrap');
   assert.ok(block, '.blinds-editor__table-wrap ブロックがない');
-  assert.doesNotMatch(block[0], /max-height:\s*36vh/, '約6段固定（max-height:36vh）が残存');
-  assert.doesNotMatch(block[0], /max-height:/, 'table-wrap に max-height が残存（段数制限の恐れ）');
+  assert.doesNotMatch(block[0], /max-height:\s*36vh/, '約6段固定（旧 max-height:36vh）が残存');
+  // blinds-table-fix: 内側スクロール（sticky thead）成立のため max-height:66vh キャップを再導入済。
+  //   旧 36vh のような小さな固定キャップ（段数制限）でないこと、min-height フロアとセットであることを確認。
+  const mx = block[0].match(/max-height:\s*(\d+)vh/);
+  if (mx) assert.ok(parseInt(mx[1], 10) >= 60, `max-height キャップが ${mx[1]}vh（60vh 未満は段数制限の恐れ）`);
   assert.match(block[0], /flex:\s*1\s+1\s+auto/, 'flex:1 1 auto がない（余剰高を吸収しない）');
-  assert.match(block[0], /min-height:\s*0/, 'min-height:0 がない（footer 押し出しの恐れ）');
+  // blinds-table-fix: STEP3 の min-height:0（フロア無し＝0段 collapse の原因）を vh 固定フロアへ変更。
+  //   0段 collapse 不可の厳密検証は v258。ここは「フロア(min-height>0)がある」ことのみ追従確認。
+  assert.match(block[0], /min-height:\s*\d+(px|vh)/, '固定フロア min-height がない（0段 collapse 防止）');
+  assert.doesNotMatch(block[0], /min-height:\s*0\b/, 'min-height:0（フロア無し）が残存');
   assert.match(block[0], /overflow-y:\s*auto/, '内側スクロール（overflow-y:auto）がない');
 });
 
@@ -51,7 +57,8 @@ test('T2: blinds タブのみ flex column 化（属性セレクタで is-active 
   assert.ok(block, '.settings-tab[data-tab="blinds"].is-active ブロックがない');
   assert.match(block[0], /display:\s*flex/, 'blinds タブが flex 化されていない');
   assert.match(block[0], /flex-direction:\s*column/, 'flex-direction:column がない');
-  assert.match(block[0], /min-height:\s*0/, 'min-height:0 がない');
+  // blinds-table-fix: rigid height:100%/min-height:0 を min-height:100% に変更（body スクロール経路復活）。
+  assert.match(block[0], /min-height:\s*100%/, 'min-height:100% がない（body スクロール経路）');
 });
 
 test('T3: 他タブ非破壊 — 素の .settings-tab.is-active は display:block のまま', () => {
