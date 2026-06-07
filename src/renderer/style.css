@@ -1906,7 +1906,11 @@ body:not(.has-marquee) .marquee { display: none; }
      見えにくい問題を解消。width / height を画面より一回り小さい固定値（min で画面サイズに頭打ち）に。
      ユーザーは resize: both のハンドルでさらに max-width / max-height まで拡大できる。 */
   width: min(1000px, 92vw);
-  height: min(700px, 92vh);
+  /* settings-scope-clarity STEP3: ブラインドのレベル表が通常表示で 10〜12 段見えるよう既定高を
+     700px → 920px に引き上げ（blinds タブの flex 連動で table-wrap が余剰を吸収、footer は flex-shrink:0 で常時可視）。
+     min(920px, 92vh) で小型画面でも 92vh 頭打ち＝画面外にはみ出さない。
+     他タブは内容上揃え＋body 一元スクロールのためレイアウト破壊なし。 */
+  height: min(920px, 92vh);
   max-width: 95vw;
   min-height: 400px;
   max-height: 95vh;
@@ -2076,6 +2080,22 @@ body:not(.has-marquee) .marquee { display: none; }
 }
 
 .settings-tab.is-active { display: block; }
+
+/* settings-scope-clarity STEP3: ブラインド構造タブのみ flex column 化し、
+   レベル表（table-wrap）が body 余剰高を吸収して縦に伸び、フッタ常時可視にする。
+   属性セレクタの高 specificity で .settings-tab.is-active{display:block} を blinds のみ上書き。
+   他タブ（tournament/display/marquee/logo/audio/about）は display:block のまま＝副作用なし。 */
+.settings-tab[data-tab="blinds"].is-active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;       /* form-dialog__body が確定高のため 100% が解決（border-box で padding 込み） */
+  min-height: 0;      /* 子の overflow を効かせる */
+}
+.settings-tab[data-tab="blinds"].is-active .blinds-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
 
 .settings-placeholder {
   color: var(--text-muted);
@@ -2825,8 +2845,12 @@ body:not(.has-marquee) .marquee { display: none; }
 .blinds-editor__dirty-flag[hidden] { display: none; }
 
 /* テーブル */
+/* settings-scope-clarity STEP3: 約6段固定（旧 max-height:36vh）を撤廃し、blinds タブの
+   flex column 内で余剰高を吸収して縦に伸びる内側スクロール領域に変更。
+   min-height:0 で行数多/小ダイアログでも footer を押し出さない。sticky thead は維持。 */
 .blinds-editor__table-wrap {
-  max-height: 36vh;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -3006,6 +3030,8 @@ body:not(.has-marquee) .marquee { display: none; }
 .blinds-editor__add-row {
   display: flex;
   gap: var(--space-sm);
+  /* settings-scope-clarity STEP3: table-wrap が伸縮を引き受け、行追加ボタンは常時可視 */
+  flex-shrink: 0;
 }
 
 /* フッタ: 左にエクスポート/インポート、右に「保存」「適用」を justify-content: space-between で配置 */
@@ -3017,6 +3043,8 @@ body:not(.has-marquee) .marquee { display: none; }
   padding-top: var(--space-sm);
   border-top: 1px solid var(--border-subtle);
   flex-wrap: wrap;
+  /* settings-scope-clarity STEP3: 保存/適用フッタは常時可視（table-wrap が伸縮を引き受ける） */
+  flex-shrink: 0;
 }
 
 .blinds-editor__footer-left,
