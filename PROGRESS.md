@@ -14,7 +14,7 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| (なし) | — | ✅ オープン作業なし（**v2.5.0 配信完了 2026-06-06**） | — | — | — |
+| v2.5.1 | settings-scope-clarity STEP1（設定タブのスコープ可視化 + 現在トーナメント名常時表示） | 🟡 実機確認待ち（前原 6-B ①〜⑤ → GO で配信） | `.cc-briefs/2026-06-07_settings-scope-clarity_step1_brief.md` | `.cc-plans/2026-06-07_settings-scope-clarity_step1_plan.md` | `.cc-reports/2026-06-07_settings-scope-clarity_step1.md` |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -55,8 +55,8 @@
 |------|------|
 | 配信済みリリース | 7 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0)|
 | アーカイブ済 案件(`.cc-archive/`)| 3 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat)|
-| オープン作業 | 0 件（v2.5.0 配信完了）|
-| 最新テスト件数 | 1180 件 全 PASS(v2.5.0 配信時点、v253 で +16)|
+| オープン作業 | 1 件（settings-scope-clarity STEP1、v2.5.1、実機確認待ち）|
+| 最新テスト件数 | 1193 件 全 PASS(settings-scope-clarity STEP1 時点、v254 で +13)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
 > CC は完了報告のたびにこの表を Edit(リリース配信時はリリース履歴に新行追加、テスト件数更新)。
@@ -78,8 +78,10 @@
 
 ## 直近の状態
 
-- **現在ブランチ**: main(`e77fcce` v2.5.0 マージ commit、origin/main 同期済 push 完了)
-- **直前 commit**: `e77fcce Merge: v2.5.0 - トーナメント画像分離で保存激重を根治`（実装 commit `c81a3cd`）
+- **現在ブランチ**: `feature/settings-scope-clarity`（main `8eecebb` から分岐、実装 commit `29ad4a3`、未 push）
+- **直前 commit**: `29ad4a3 feat(settings): 設定タブをスコープ別2グループに視覚分割 + 編集中トーナメント名を常時表示 (v2.5.1)`
+- **2026-06-07**: settings-scope-clarity STEP1（設定タブのスコープ可視化 + 現在トーナメント名常時表示）実装完了。設定ダイアログ7タブを「このトーナメント専用[トーナメント/ブラインド構造/背景・時計フォント/テロップ] / アプリ全体で共通[ロゴ/音/ハウス情報]」の2グループに視覚分割、ダイアログ上部に「編集中：◯◯」常時表示（切替即更新・無名フォールバック）、ブラインドタブに共有テンプレート注記。**データ構造・保存ロジック・各タブ中身・`data-tab` 識別子は無変更**＝UI/CSS/ラベル/現在名表示のみ。致命バグ保護5件全件影響なし。v2.5.0→2.5.1 bump + version-pin カスケード追従（全58ファイル）+ 新規 v254 テスト13件。**既存1180 + 新規13 = 1193件全PASS**。Plan 軽量 review（段階2 サブエージェント）承認済。**配信は前原実機 6-B ①〜⑤ OK + GO 後**（[step1_plan](.cc-plans/2026-06-07_settings-scope-clarity_step1_plan.md) / [step1](.cc-reports/2026-06-07_settings-scope-clarity_step1.md)）
+- **旧 v2.5.0 配信状態（参考）**: main `e77fcce` v2.5.0 マージ commit、origin/main 同期済。GitHub Release `v2.5.0` 公開済（Latest・自動更新有効）
 - **直前作業**: **v2.5.0 配信完了**（merge `--no-ff` → tag `v2.5.0` → push → main から .exe 再ビルド → GitHub Release `v2.5.0` 公開[Latest・自動更新対応、アセット latest.yml+.exe+.blockmap]）。Release URL: https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.5.0
 - **2026-05-28**: ハイブリッド自動化 Phase 2 段階 2 フロー完全実証(plus2-homepage homepage-performance-audit 案件) + CLAUDE.md 整合改訂 5 点反映(plus2-homepage に追随):
   1. Phase 2 ON / Stop hook 検出対象拡張(`.cc-plans/*.md` + `.cc-briefs/*_brief.md` 追加)を冒頭セクションに反映
