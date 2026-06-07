@@ -402,6 +402,32 @@
     </div>
   </dialog>
 
+  <!-- settings-scope-clarity STEP2: ブラインド構造の共有保存 3択確認モーダル。
+       既存 confirm-dialog 規約準拠（<dialog> に flex 禁止、actions のみ flex）。
+       [data-role="hall"] .confirm-dialog で hall 側は自動非表示。
+       メッセージ（使用中トーナメント名）は JS が textContent で設定（XSS 安全）。 -->
+  <dialog class="confirm-dialog confirm-dialog--blind-share" id="js-blind-share-dialog">
+    <h2 class="confirm-dialog__title">このブラインド構造は他でも使われています</h2>
+    <p class="confirm-dialog__message" id="js-blind-share-message"></p>
+    <div class="confirm-dialog__actions confirm-dialog__actions--blind-share">
+      <button type="button" class="btn btn--primary" value="all"    id="js-blind-share-all">すべてに反映して保存</button>
+      <button type="button" class="btn"              value="copy"   id="js-blind-share-copy">このトーナメントだけ変更</button>
+      <button type="button" class="btn btn--ghost"   value="cancel" id="js-blind-share-cancel">やめる</button>
+    </div>
+  </dialog>
+
+  <!-- settings-scope-clarity dirty-switch-guard: ブラインド未保存編集中にトーナメントを切り替える時の確認。
+       既存 confirm-dialog 規約準拠（<dialog> に flex 禁止、actions のみ flex）。
+       [data-role="hall"] .confirm-dialog で hall 側は自動非表示。 -->
+  <dialog class="confirm-dialog confirm-dialog--blinds-dirty-switch" id="js-blinds-dirty-switch-dialog">
+    <h2 class="confirm-dialog__title">ブラインド構造に未保存の編集があります</h2>
+    <p class="confirm-dialog__message">編集中のブラインド構造を保存していません。別のトーナメントに切り替えると、この編集は破棄されます。</p>
+    <div class="confirm-dialog__actions">
+      <button type="button" class="btn btn--ghost"   value="cancel"  id="js-blinds-dirty-switch-cancel">やめる</button>
+      <button type="button" class="btn btn--primary" value="discard" id="js-blinds-dirty-switch-discard">破棄して切り替える</button>
+    </div>
+  </dialog>
+
   <!-- 設定ダイアログ（S キー）: STEP 3a でタブ式に再構築
        タブ: トーナメント / ブラインド構造 / 背景・時計フォント / テロップ / 音 / ハウス情報
        STEP 10 フェーズC.1.6 Fix 1: dialog 直下に form-dialog__shell wrapper を挟むことで、
@@ -410,21 +436,37 @@
   <dialog class="form-dialog form-dialog--tabs" id="js-settings-dialog">
     <div class="form-dialog__shell">
     <header class="form-dialog__header">
-      <h2 class="form-dialog__title">設定</h2>
+      <!-- settings-scope-clarity STEP1: 現在編集中（＝選択中）のトーナメント名を常時表示。
+           トーナメント切替で即更新（renderer.js updateSettingsCurrentTournamentLabel、applyTournament / openSettingsDialog 経路）。 -->
+      <div class="form-dialog__title-wrap">
+        <h2 class="form-dialog__title">設定</h2>
+        <p class="settings-current-tournament">編集中：<span class="settings-current-tournament__name" id="js-settings-current-tournament-name">—</span></p>
+      </div>
       <button type="button" class="form-dialog__close" id="js-settings-close" aria-label="閉じる">×</button>
     </header>
 
     <nav class="settings-tab-nav" role="tablist">
-      <!-- STEP 6.22.fix: 順序変更（トーナメント最左）+ 「アプリ情報」→「ハウス情報」リネーム。
-           data-tab 属性値はロジック識別子のため不変、ボタン並び順とラベルのみ変更 -->
-      <button type="button" class="settings-tab-btn is-active" data-tab="tournament" role="tab">トーナメント</button>
-      <button type="button" class="settings-tab-btn"           data-tab="blinds"     role="tab">ブラインド構造</button>
-      <button type="button" class="settings-tab-btn"           data-tab="display"    role="tab">背景・時計フォント</button>
-      <!-- STEP 9-B: ロゴタブ（display と marquee の間） -->
-      <button type="button" class="settings-tab-btn"           data-tab="logo"       role="tab">ロゴ</button>
-      <button type="button" class="settings-tab-btn"           data-tab="marquee"    role="tab">テロップ</button>
-      <button type="button" class="settings-tab-btn"           data-tab="audio"      role="tab">音</button>
-      <button type="button" class="settings-tab-btn"           data-tab="about"      role="tab">ハウス情報</button>
+      <!-- settings-scope-clarity STEP1: タブを「適用範囲（スコープ）」で2グループに視覚分割。
+           data-tab 属性値はロジック識別子のため不変（activateSettingsTab は data-tab 一致で切替・DOM 順非依存）。
+           グループ化・並び順・ラベルのみ変更。logo を「アプリ全体で共通」グループへ移動（旧 display/marquee 間から）。 -->
+      <div class="settings-tab-group" data-scope="tournament">
+        <span class="settings-tab-group__heading">このトーナメント専用<span class="settings-tab-group__sub">選ぶたびに内容が変わる</span></span>
+        <div class="settings-tab-group__row">
+          <button type="button" class="settings-tab-btn is-active" data-tab="tournament" role="tab">トーナメント</button>
+          <button type="button" class="settings-tab-btn"           data-tab="blinds"     role="tab">ブラインド構造</button>
+          <button type="button" class="settings-tab-btn"           data-tab="display"    role="tab">背景・時計フォント</button>
+          <button type="button" class="settings-tab-btn"           data-tab="marquee"    role="tab">テロップ</button>
+        </div>
+      </div>
+      <div class="settings-tab-group__sep" aria-hidden="true"></div>
+      <div class="settings-tab-group" data-scope="app">
+        <span class="settings-tab-group__heading">アプリ全体で共通<span class="settings-tab-group__sub">全トーナメントで同じ</span></span>
+        <div class="settings-tab-group__row">
+          <button type="button" class="settings-tab-btn"           data-tab="logo"       role="tab">ロゴ</button>
+          <button type="button" class="settings-tab-btn"           data-tab="audio"      role="tab">音</button>
+          <button type="button" class="settings-tab-btn"           data-tab="about"      role="tab">ハウス情報</button>
+        </div>
+      </div>
     </nav>
 
     <div class="form-dialog__body">
@@ -570,10 +612,16 @@
             📋 このテンプレートは元のまま編集できません。変更したい場合は「<strong>複製して編集</strong>」を押してコピーを作ってください。
           </div>
 
+          <!-- settings-scope-clarity STEP2: 編集対象は「選択中トーナメントの構造」に固定。
+               任意プリセット選択ドロップダウン（js-preset-select）は hidden 化し DOM 互換のため残置
+               （既存 JS の el.presetSelect.value 参照・内部 dispatch 経路を壊さない）。
+               代わりに編集中の構造名 + 使用トーナメントを示す読み取り専用ラベルを表示。 -->
+          <p class="blinds-editor__editing-target" id="js-blinds-editing-target">編集中の構造：<strong>—</strong></p>
+
           <!-- テンプレート選択行 -->
           <div class="blinds-editor__header">
-            <label class="blinds-editor__preset-label" for="js-preset-select">テンプレート</label>
-            <select id="js-preset-select" class="blinds-editor__preset-select"></select>
+            <label class="blinds-editor__preset-label" for="js-preset-select" hidden>テンプレート</label>
+            <select id="js-preset-select" class="blinds-editor__preset-select" hidden></select>
             <!-- STEP 6.7: 保存済みテンプレート数表示 -->
             <span class="blinds-editor__count" id="js-preset-count">保存済みテンプレート: 0/100 件</span>
             <div class="blinds-editor__preset-actions">
@@ -589,6 +637,10 @@
             <input type="text" id="js-preset-name" class="blinds-editor__name-input" maxlength="50">
             <span class="blinds-editor__dirty-flag" id="js-preset-dirty" hidden>● 未保存の変更があります</span>
           </div>
+
+          <!-- settings-scope-clarity STEP1: 共有テンプレート参照である旨の軽い1行注記（静的）。
+               本格的な整理・使用中件数の警告は STEP2 で扱う。 -->
+          <p class="form-row__hint settings-scope-note">※ ブラインド構造は全トーナメントで共有のテンプレートです（複数のトーナメントから参照されます）。</p>
 
           <!-- STEP 6.21.5: ブラインド共有 / フォーマット化のヒント。状況により文言を切替 -->
           <p class="form-row__hint blinds-editor__share-hint" id="js-blinds-share-hint"></p>
@@ -645,8 +697,19 @@
               <!-- STEP 7.x ③-a: ヘッダーの「削除」ボタンは撤去（各行の🗑ボタンへ移行、Y案） -->
             </div>
           </div>
-          <!-- STEP 6.21: 状態バッジ + 経過情報 + 操作ボタンの構造化リスト -->
-          <ul class="tournament-list" id="js-tournament-list" aria-label="トーナメント一覧"></ul>
+          <!-- settings-scope-clarity STEP4: 折りたたみドロップダウン化。
+               サマリ（選択中1件＋ライブbadge＋「他に実行中◯件」）とトグル▼は <ul> の外の安定要素。
+               renderTournamentList の毎秒 innerHTML='' 再構築では <ul> の中身だけ破棄され、
+               picker コンテナ・サマリ・トグルは破棄されない＝開閉状態を毎秒またいで保持。 -->
+          <div class="tournament-picker" id="js-tournament-picker" data-expanded="false">
+            <button type="button" class="tournament-picker__summary" id="js-tournament-picker-toggle"
+                    aria-expanded="false" aria-controls="js-tournament-list">
+              <span class="tournament-picker__summary-body" id="js-tournament-picker-summary">—</span>
+              <span class="tournament-picker__chevron" id="js-tournament-picker-chevron" aria-hidden="true">▼</span>
+            </button>
+            <!-- STEP 6.21: 状態バッジ + 経過情報 + 操作ボタンの構造化リスト（展開時の中身、id/class 不変） -->
+            <ul class="tournament-list" id="js-tournament-list" aria-label="トーナメント一覧"></ul>
+          </div>
           <hr class="tournament-editor__divider">
 
           <div class="form-row">

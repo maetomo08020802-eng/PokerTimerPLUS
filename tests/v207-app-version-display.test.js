@@ -131,10 +131,10 @@ test('T5: main.js の ipcMain.handle("app:getVersion", () => app.getVersion()) �
 // version assertion
 // ============================================================
 
-test('version: package.json は 2.0.11', () => {
+test('version: package.json は 2.5.1', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.5.0',
-    `package.json version が ${pkg.version}（期待 2.0.11）`);
+  assert.equal(pkg.version, '2.5.1',
+    `package.json version が ${pkg.version}（期待 2.5.1）`);
 });
 
 test('version: scripts.test に v207-app-version-display.test.js が含まれる', () => {

@@ -1906,7 +1906,12 @@ body:not(.has-marquee) .marquee { display: none; }
      見えにくい問題を解消。width / height を画面より一回り小さい固定値（min で画面サイズに頭打ち）に。
      ユーザーは resize: both のハンドルでさらに max-width / max-height まで拡大できる。 */
   width: min(1000px, 92vw);
-  height: min(700px, 92vh);
+  /* settings-scope-clarity STEP3 → blinds-table-fix で再調整: ブラインドのレベル表領域を確保するため既定高を
+     700px → 920px → ★1100px に引き上げ。固定 px 上限が大画面で vw chrome に食われ table が 0 段に潰れる主因
+     だったため、px 上限のみ引き上げて大画面の table 領域を確保し body スクロール量を抑制。
+     min(1100px, 92vh) で小型画面では 92vh 頭打ち＝画面外にはみ出さない。
+     他タブは内容上揃え＋body 一元スクロールのためレイアウト破壊なし（縦に余裕が増えるのみ）。 */
+  height: min(1100px, 92vh);
   max-width: 95vw;
   min-height: 400px;
   max-height: 95vh;
@@ -1928,6 +1933,31 @@ body:not(.has-marquee) .marquee { display: none; }
   font-size: 1.6vw;
 }
 
+/* settings-scope-clarity STEP1: 設定ダイアログ上部の「編集中：◯◯」現在トーナメント名表示 */
+.form-dialog__title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2vh;
+  min-width: 0;
+}
+.settings-current-tournament {
+  margin: 0;
+  font-size: 0.95vw;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.settings-current-tournament__name {
+  font-weight: 700;
+  color: var(--gold);
+}
+
+/* settings-scope-clarity STEP1: ブラインド構造タブの「共有テンプレート」注記 */
+.settings-scope-note {
+  color: var(--text-muted);
+}
+
 .form-dialog__close {
   background: transparent;
   border: none;
@@ -1947,9 +1977,49 @@ body:not(.has-marquee) .marquee { display: none; }
   /* STEP 9.fix3: タブ7個を1段強制（折り返し禁止）+ はみ出し時は横スクロール（最終フォールバック） */
   flex-wrap: nowrap;
   overflow-x: auto;
-  gap: var(--space-xs);
+  /* settings-scope-clarity STEP1: グループ列（見出し+ボタン行）を底辺揃えで並べる */
+  align-items: flex-end;
+  gap: var(--space-md);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 0 var(--space-md);
+  padding: var(--space-xs) var(--space-md) 0;
+}
+
+/* settings-scope-clarity STEP1: タブを「適用範囲（スコープ）」で2グループに視覚分割。
+   見出しはクリック不可の説明ラベル。ボタン自体は従来どおり .settings-tab-btn。 */
+.settings-tab-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3vh;
+  flex-shrink: 0;
+}
+.settings-tab-group__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4vw;
+  padding: 0 1.2vw;
+  font-family: var(--font-label);
+  font-size: 0.82vw;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.settings-tab-group__sub {
+  font-weight: 400;
+  font-size: 0.72vw;
+  opacity: 0.78;
+}
+.settings-tab-group__row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-xs);
+}
+.settings-tab-group__sep {
+  align-self: stretch;
+  width: 1px;
+  flex-shrink: 0;
+  margin: 0 var(--space-xs);
+  background: var(--border-subtle);
 }
 
 .settings-tab-btn {
@@ -2011,6 +2081,23 @@ body:not(.has-marquee) .marquee { display: none; }
 }
 
 .settings-tab.is-active { display: block; }
+
+/* settings-scope-clarity STEP3: ブラインド構造タブのみ flex column 化し、
+   レベル表（table-wrap）が body 余剰高を吸収して縦に伸び、フッタ常時可視にする。
+   属性セレクタの高 specificity で .settings-tab.is-active{display:block} を blinds のみ上書き。
+   他タブ（tournament/display/marquee/logo/audio/about）は display:block のまま＝副作用なし。 */
+/* ★blinds-table-fix: STEP3 の rigid height:100% を min-height:100% に変更（body スクロール経路復活＝
+   vw chrome がダイアログ高を超えてもクリップせず .form-dialog__body の overflow-y:auto に逃がす）。
+   editor は flex:1 0 auto（grow して埋めるが shrink 0＝content 未満に潰れずクリップ防止）。 */
+.settings-tab[data-tab="blinds"].is-active {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;   /* content 超過時はタブが伸び body がスクロール（旧: rigid 100% 固定） */
+}
+.settings-tab[data-tab="blinds"].is-active .blinds-editor {
+  flex: 1 0 auto;     /* grow して余剰を埋めるが shrink 0＝content 未満に潰れない（クリップ防止） */
+  min-height: 0;
+}
 
 .settings-placeholder {
   color: var(--text-muted);
@@ -2546,6 +2633,60 @@ body:not(.has-marquee) .marquee { display: none; }
 
 /* STEP 6.21: トーナメント一覧（状態バッジ + 操作ボタン） */
 /* STEP 6.21.5: 件数増加でタブが伸びすぎないようスクロール化（約15行で打ち止め） */
+/* settings-scope-clarity STEP4: トーナメント一覧の折りたたみドロップダウン。
+   サマリ＋トグルは <ul> 外の安定要素（毎秒 innerHTML='' で破棄されない）。
+   折りたたみ時は <ul> を非表示にするだけ（<ul> は常に再構築され空リスト退行なし）。
+   transform / position:fixed 不使用（chevron は文字差し替え）。 */
+.tournament-picker {
+  margin-top: var(--space-sm);
+}
+.tournament-picker__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 0.7vh 0.9vw;
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1.0vw;
+  cursor: pointer;
+  text-align: left;
+}
+.tournament-picker__summary:hover {
+  border-color: var(--gold);
+}
+.tournament-picker__summary-body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tournament-picker__name {
+  font-weight: 700;
+}
+.tournament-picker__others {
+  color: var(--text-secondary);
+  font-size: 0.9vw;
+}
+.tournament-picker__total {
+  color: var(--text-muted);
+  font-size: 0.85vw;
+}
+.tournament-picker__chevron {
+  flex-shrink: 0;
+  color: var(--gold);
+  font-size: 0.85vw;
+}
+/* 折りたたみ時は全件リストを隠す（<ul> は再構築され続けるが表示のみ切替） */
+.tournament-picker[data-expanded="false"] .tournament-list {
+  display: none;
+}
+
 .tournament-list {
   list-style: none;
   margin: var(--space-sm) 0 0;
@@ -2760,8 +2901,21 @@ body:not(.has-marquee) .marquee { display: none; }
 .blinds-editor__dirty-flag[hidden] { display: none; }
 
 /* テーブル */
+/* settings-scope-clarity STEP3 → blinds-table-fix で修正: レベル表は vh で上下限を bound した内側スクロール領域。
+   ★blinds-table-fix（致命退行 0段の根治）: STEP3 の min-height:0（フロア無し＝唯一の収縮要素ゆえ
+     大画面 vw chrome 肥大で高さ0に潰れた）を撤回し、vh 下限フロア + vh 上限キャップを付与（下記プロパティ参照）。
+     行高は vw 依存のため vh フロアにより 16:9 では段数が解像度で一定（実測 FHD/1440p/4K とも約10段）。
+     min-height は flex-shrink に優先＝0/数段 collapse が CSS 仕様レベルで不可能。収まらない分は親
+     .form-dialog__body(overflow-y:auto) のスクロールに逃げ、フッタは到達可。sticky thead は維持。 */
 .blinds-editor__table-wrap {
-  max-height: 36vh;
+  flex: 1 1 auto;
+  /* ★下限フロア（vh）: 行高は vw 依存のため、16:9 では vh 比例で段数が一定（FHD/1440p/4K とも約6.6段）。
+     min-height は flex-shrink に優先＝0/数段 collapse が CSS 仕様レベルで不可能。 */
+  min-height: 42vh;
+  /* ★上限キャップ（vh）: table-wrap を bound して内側スクロールを成立させる＝sticky thead 維持。
+     これを超える分は table-wrap 内スクロール、editor 全体が body 高を超えれば .form-dialog__body がスクロール。
+     66vh で通常表示 約10段（実測: FHD/1440p/4K とも段数一定）。 */
+  max-height: 66vh;
   overflow-y: auto;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
@@ -2941,6 +3095,8 @@ body:not(.has-marquee) .marquee { display: none; }
 .blinds-editor__add-row {
   display: flex;
   gap: var(--space-sm);
+  /* settings-scope-clarity STEP3: table-wrap が伸縮を引き受け、行追加ボタンは常時可視 */
+  flex-shrink: 0;
 }
 
 /* フッタ: 左にエクスポート/インポート、右に「保存」「適用」を justify-content: space-between で配置 */
@@ -2952,6 +3108,8 @@ body:not(.has-marquee) .marquee { display: none; }
   padding-top: var(--space-sm);
   border-top: 1px solid var(--border-subtle);
   flex-wrap: wrap;
+  /* settings-scope-clarity STEP3: 保存/適用フッタは常時可視（table-wrap が伸縮を引き受ける） */
+  flex-shrink: 0;
 }
 
 .blinds-editor__footer-left,
@@ -3688,6 +3846,28 @@ body.bottom-bar-hidden .marquee-content {
 .confirm-dialog__actions--apply .btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* settings-scope-clarity STEP2: ブラインド共有保存 3択モーダル。
+   既存 confirm-dialog 様式流用（<dialog> 自体に flex は当てない）。3択を縦並びで見やすく。 */
+.confirm-dialog--blind-share {
+  min-width: 38vw;
+  max-width: 560px;
+}
+.confirm-dialog__actions--blind-share {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-sm);
+}
+
+/* settings-scope-clarity STEP2: blinds タブ上部の「編集中の構造：◯◯」ラベル */
+.blinds-editor__editing-target {
+  margin: 0 0 var(--space-sm);
+  font-size: 1.0vw;
+  color: var(--text-secondary);
+}
+.blinds-editor__editing-target strong {
+  color: var(--gold);
 }
 
 /* ===== STEP 6.11: REENTRY / ADDON 行は 0 のとき非表示、0→1 でフェードイン =====
