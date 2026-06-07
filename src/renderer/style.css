@@ -2901,11 +2901,12 @@ body:not(.has-marquee) .marquee { display: none; }
 .blinds-editor__dirty-flag[hidden] { display: none; }
 
 /* テーブル */
-/* settings-scope-clarity STEP3 → blinds-table-fix で修正: 余剰高を吸収して縦に伸びる内側スクロール領域。
+/* settings-scope-clarity STEP3 → blinds-table-fix で修正: レベル表は vh で上下限を bound した内側スクロール領域。
    ★blinds-table-fix（致命退行 0段の根治）: STEP3 の min-height:0（フロア無し＝唯一の収縮要素ゆえ
-     大画面 vw chrome 肥大で高さ0に潰れた）を撤回し、★画面幅で縮まない px 固定フロア min-height:420px を付与。
-     min-height は flex-shrink に優先＝flex がどう振る舞っても 420px 未満にならず 0/数段潰れが CSS 仕様レベルで不可能。
-     収まらない分は親 .form-dialog__body(overflow-y:auto) のスクロールに逃げる。sticky thead は維持。 */
+     大画面 vw chrome 肥大で高さ0に潰れた）を撤回し、vh 下限フロア + vh 上限キャップを付与（下記プロパティ参照）。
+     行高は vw 依存のため vh フロアにより 16:9 では段数が解像度で一定（実測 FHD/1440p/4K とも約10段）。
+     min-height は flex-shrink に優先＝0/数段 collapse が CSS 仕様レベルで不可能。収まらない分は親
+     .form-dialog__body(overflow-y:auto) のスクロールに逃げ、フッタは到達可。sticky thead は維持。 */
 .blinds-editor__table-wrap {
   flex: 1 1 auto;
   /* ★下限フロア（vh）: 行高は vw 依存のため、16:9 では vh 比例で段数が一定（FHD/1440p/4K とも約6.6段）。
