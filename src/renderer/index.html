@@ -793,19 +793,16 @@
 
           <!-- STEP 6: バイイン・リバイ・アドオン -->
           <hr class="tournament-editor__divider">
-          <div class="form-row">
-            <label class="form-row__label" for="js-tournament-starting-stack">スタートスタック</label>
-            <input type="number" id="js-tournament-starting-stack" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000">
-          </div>
-          <!-- v2.4.0: フィーは readonly + 🔒 デフォルト、🔒クリックで解除確認ダイアログ → 編集可能。
-                       保存・トーナメント切替・アプリ再起動で自動再ロック。プール率（反映率）入力欄を各フィー隣に配置。 -->
+          <!-- stack-unify（2026-06-08）: 独立「スタートスタック」欄は廃止。初期スタックはバイインの
+               「チップ（スタック）」欄に統一（バイイン/リエントリー/アドオンが全部フィー＋チップで一貫）。 -->
+          <!-- v2.6.0: フィー（買込¥）は自由編集。1件あたり拠出（POT$）入力欄を各フィー隣に配置。 -->
           <div class="form-row">
             <span class="form-row__label">バイイン</span>
             <div class="tournament-editor__inline-fields">
               <label class="tournament-editor__inline-label">フィー（買込¥）
                 <input type="number" id="js-tournament-buyin-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="3000">
               </label>
-              <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-buyin-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
+              <label class="tournament-editor__inline-label">チップ（スタック） <input type="number" id="js-tournament-buyin-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
               <label class="tournament-editor__inline-label">1件あたり拠出
                 <input type="number" id="js-tournament-buyin-pool-rate" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
                 <span class="tournament-editor__pool-rate-unit js-pot-unit">$</span>
@@ -918,6 +915,8 @@
             </select>
             <button type="button" class="btn btn--ghost" id="js-tournament-payout-preset">プリセット適用</button>
           </div>
+          <!-- stack-unify+preset-hint（2026-06-08、③/A）: プリセット適用の役割を1行説明（機能変更なし）。 -->
+          <p class="tournament-editor__hint-inline">選んだ順位数の定番配分（例：3位なら50/30/20）で各順位の金額を自動入力します（現在のプール額が基準・既存の入力は上書き）</p>
           <!-- v2.6.0: 配当は金額（店内通貨）固定。% 入力モードは撤去（アプリから % は消滅）。 -->
           <p class="form-row__hint">配当は金額（店内通貨）で入力します。合計をプール額に合わせてください。</p>
           <div class="payouts-editor" id="js-tournament-payouts-editor"></div>

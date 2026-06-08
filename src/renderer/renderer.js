@@ -481,7 +481,7 @@ const el = {
   tournamentCustomGame:        document.getElementById('js-tournament-custom-game'),
   tournamentCustomGameWrapper: document.getElementById('js-tournament-custom-game-wrapper'),
   tournamentPauseAfterBreak:   document.getElementById('js-tournament-pause-after-break'),
-  tournamentStartingStack: document.getElementById('js-tournament-starting-stack'),
+  // stack-unify（2026-06-08）: 独立スタートスタック欄は廃止。初期スタックは buyIn.chips（下記）に統一。
   tournamentBuyinFee:    document.getElementById('js-tournament-buyin-fee'),
   tournamentBuyinChips:  document.getElementById('js-tournament-buyin-chips'),
   // STEP 6.9: rebuy → reentry リネーム
@@ -1060,15 +1060,17 @@ function isGuaranteeActive() {
 }
 
 // STEP 6.9: AVG STACK 計算に specialStack（chips × appliedCount）を加算
-// TOTAL チップ = startingStack × playersInitial + reentry.chips × reentryCount
+// stack-unify（2026-06-08）: 初期スタックの正を buyIn.chips に統一（独立 startingStack 欄は廃止）。
+//   既存トーナメントは migration で buyIn.chips := startingStack 済のため AVG STACK の数値は不変。
+// TOTAL チップ = buyIn.chips × playersInitial + reentry.chips × reentryCount
 //              + addOn.chips × addOnCount + (specialStack.enabled ? chips × appliedCount : 0)
 function computeAvgStack() {
-  const startingStack = Number(tournamentState.startingStack) || 0;
+  const buyInChips = Number(tournamentState.buyIn?.chips) || 0;
   const reentry = tournamentState.reentry || { chips: 0 };
   const addOn   = tournamentState.addOn   || { chips: 0 };
   const ss      = tournamentState.specialStack || { enabled: false };
   const ssChips = (ss.enabled ? (Number(ss.chips) || 0) * (Number(ss.appliedCount) || 0) : 0);
-  const totalChips = startingStack * tournamentRuntime.playersInitial
+  const totalChips = buyInChips * tournamentRuntime.playersInitial
                    + (reentry.chips || 0) * tournamentRuntime.reentryCount
                    + (addOn.chips   || 0) * tournamentRuntime.addOnCount
                    + ssChips;
@@ -4138,7 +4140,7 @@ function syncTournamentFormFromState() {
   el.tournamentCurrency.value = tournamentState.currencySymbol || '$';
   // STEP 6: 拡張フィールド
   if (el.tournamentGameType)        el.tournamentGameType.value        = tournamentState.gameType || 'nlh';
-  if (el.tournamentStartingStack)   el.tournamentStartingStack.value   = String(tournamentState.startingStack ?? 10000);
+  // stack-unify（2026-06-08）: 独立スタートスタック欄は廃止。初期スタックは buyIn.chips に統一。
   if (el.tournamentBuyinFee)        el.tournamentBuyinFee.value        = String(tournamentState.buyIn?.fee ?? 0);
   if (el.tournamentBuyinChips)      el.tournamentBuyinChips.value      = String(tournamentState.buyIn?.chips ?? 0);
   // STEP 6.9: rebuy → reentry リネーム
@@ -5189,7 +5191,9 @@ function readTournamentForm() {
     blindPresetId: el.tournamentBlindPreset?.value || tournamentState.blindPresetId,
     // STEP 6: 拡張フィールド
     gameType: el.tournamentGameType?.value || tournamentState.gameType || 'nlh',
-    startingStack: num(el.tournamentStartingStack, tournamentState.startingStack ?? 10000),
+    // stack-unify（2026-06-08）: 独立スタートスタック欄は廃止。startingStack は dormant 値を凍結
+    //   pass-through（入力欄を読まない）。初期スタックは buyIn.chips（下記）が正。
+    startingStack: tournamentState.startingStack ?? 10000,
     buyIn: {
       fee:   num(el.tournamentBuyinFee,   tournamentState.buyIn?.fee   ?? 0),
       chips: num(el.tournamentBuyinChips, tournamentState.buyIn?.chips ?? 0)

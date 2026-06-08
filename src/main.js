@@ -968,6 +968,16 @@ function migrateTournamentSchema(s) {
     let touched = false;
     if (typeof m.startingStack !== 'number') { m.startingStack = DEFAULT_TOURNAMENT_EXT.startingStack; touched = true; }
     if (!m.buyIn  || typeof m.buyIn  !== 'object') { m.buyIn  = { ...DEFAULT_TOURNAMENT_EXT.buyIn  }; touched = true; }
+    // stack-unify（2026-06-08）: 初期スタックを buyIn.chips に統一。未 unified の各トーナメントに
+    //   buyIn.chips := startingStack（旧 AVG STACK が使っていた値）を一度きり設定 → 移行後も AVG STACK
+    //   数値を完全保全。startingStack は dormant 温存（削除しない＝downgrade ロールバック安全）。
+    //   marker stackModel='unified' で再変換しない（後続のスタック編集を巻き戻さない）。
+    //   旧形式 export の import は normalizeTournament 側の同 gated ブロックで unify。
+    if (m.stackModel !== 'unified') {
+      m.buyIn.chips = Number(m.startingStack) || 0;
+      m.stackModel = 'unified';
+      touched = true;
+    }
     // STEP 6.9: rebuy → reentry リネーム（旧データ存在時は移行 + 旧キー削除）
     if (m.rebuy && typeof m.rebuy === 'object' && !m.reentry) {
       m.reentry = { fee: m.rebuy.fee || 0, chips: m.rebuy.chips || 0 };
@@ -2500,6 +2510,15 @@ function registerIpcHandlers() {
     if (!out.buyIn)   out.buyIn   = { ...DEFAULT_TOURNAMENT_EXT.buyIn };
     if (!out.reentry) out.reentry = { ...DEFAULT_TOURNAMENT_EXT.reentry };
     if (!out.addOn)   out.addOn   = { ...DEFAULT_TOURNAMENT_EXT.addOn };
+    // stack-unify（2026-06-08）: 初期スタックを buyIn.chips に統一。入力（t）も fallback も未 unified の
+    //   場合のみ buyIn.chips := startingStack を実施し AVG STACK を保全（旧形式 export の import 救済）。
+    //   既 unified（renderer 保存は stackModel='unified' を送る / 既存 store は migration 済）は再変換しない
+    //   ＝後続のスタック編集を巻き戻さない。startingStack は dormant 温存。正規化後は必ず unified。
+    {
+      const wasUnified = (t.stackModel === 'unified') || (fallback.stackModel === 'unified');
+      if (!wasUnified) out.buyIn.chips = Number(out.startingStack) || 0;
+      out.stackModel = 'unified';
+    }
     if (!Array.isArray(out.payouts) || out.payouts.length === 0) {
       out.payouts = DEFAULT_TOURNAMENT_EXT.payouts.map((p) => ({ ...p }));
     }
