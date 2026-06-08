@@ -2503,29 +2503,7 @@ body:not(.has-marquee) .marquee { display: none; }
   font-weight: 700;
 }
 
-/* STEP 6.5: 入力モード切替（% / 金額） */
-.payouts-mode-row {
-  align-items: center;
-}
-
-.payouts-mode-toggle {
-  display: flex;
-  gap: var(--space-md);
-  align-items: center;
-}
-
-.payouts-mode-toggle label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4vw;
-  cursor: pointer;
-  font-size: 1vw;
-  color: var(--text-secondary);
-}
-
-.payouts-mode-toggle input[type="radio"] {
-  accent-color: var(--gold);
-}
+/* v2.6.0: 入力モード切替（% / 金額）の toggle CSS は撤去（配当は金額固定） */
 
 /* STEP 6: プレスタートダイアログの参加人数入力行 */
 .prestart-players-row {

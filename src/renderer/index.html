@@ -930,16 +930,10 @@
             </select>
             <button type="button" class="btn btn--ghost" id="js-tournament-payout-preset">プリセット適用</button>
           </div>
-          <!-- 入力モード切替（% or 金額）。内部スキーマは常に % を保持 -->
-          <div class="form-row payouts-mode-row">
-            <span class="form-row__label">入力モード</span>
-            <div class="payouts-mode-toggle" id="js-tournament-payout-mode">
-              <label><input type="radio" name="payout-mode" value="percent" checked> <span>% で入力</span></label>
-              <label><input type="radio" name="payout-mode" value="amount"> <span>金額で入力</span></label>
-            </div>
-          </div>
+          <!-- v2.6.0: 配当は金額（店内通貨）固定。% 入力モードは撤去（アプリから % は消滅）。 -->
+          <p class="form-row__hint">配当は金額（店内通貨）で入力します。合計をプール額に合わせてください。</p>
           <div class="payouts-editor" id="js-tournament-payouts-editor"></div>
-          <p class="payouts-editor__sum" id="js-tournament-payouts-sum">合計: 100% ✓</p>
+          <p class="payouts-editor__sum" id="js-tournament-payouts-sum">合計: —</p>
 
           <!-- STEP 10 フェーズC.2.3: ブレイク終了後に一時停止 -->
           <div class="form-row">

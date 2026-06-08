@@ -61,16 +61,14 @@ test('T1 (Fix 1): normalizePayouts() が amount フィールド対応', () => {
 // ============================================================
 // T2 (Fix 2): readPayoutsFromForm が金額モード時に amount 同梱
 // ============================================================
-test('T2 (Fix 2): readPayoutsFromForm() 金額モードで amount 同梱', () => {
+test('T2 (Fix 2 / v2.6.0): readPayoutsFromForm() が金額（amount 同梱）で取出し（% モード撤去）', () => {
   const declIdx = RENDERER.indexOf('function readPayoutsFromForm()');
   assert.ok(declIdx >= 0, 'readPayoutsFromForm 関数が見つからない');
   const nextFnIdx = RENDERER.indexOf('\n}', declIdx);
   const body = RENDERER.slice(declIdx, nextFnIdx + 2);
-  assert.ok(/payoutInputMode\s*===\s*['"]amount['"]/.test(body),
-    'readPayoutsFromForm に金額モード判定がない');
+  // v2.6.0: 金額固定なので payoutInputMode 分岐は撤去。amount 同梱は維持
   assert.ok(/rank:\s*i\s*\+\s*1\s*,\s*percentage:\s*pct\s*,\s*amount:\s*amt/.test(body),
-    'readPayoutsFromForm の金額モード分岐で amount フィールド同梱がない');
-  // Math.floor で整数化
+    'readPayoutsFromForm で amount フィールド同梱がない');
   assert.ok(/Math\.floor\(Number\(inp\?\.value\)/.test(body),
     'readPayoutsFromForm で amt の Math.floor 整数化がない');
 });

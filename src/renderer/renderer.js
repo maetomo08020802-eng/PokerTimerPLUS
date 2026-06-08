@@ -227,7 +227,7 @@ function getNextSB(currentSB) {
 }
 
 // 賞金構造エディタの入力モード（'percent' | 'amount'）。内部スキーマは常に % を保持
-let payoutInputMode = 'percent';
+let payoutInputMode = 'amount';   // v2.6.0: 配当は金額（店内通貨）固定。% 入力モードは撤去（常に 'amount'）
 
 // ゲーム種コード → 表示文字列
 // STEP 10 フェーズA: 新コード（'nlh' 等）と旧コード（'NLHE' 等）の両対応マップ。
@@ -487,7 +487,7 @@ const el = {
   // STEP 6.5
   tournamentGuarantee:      document.getElementById('js-tournament-guarantee'),
   tournamentPayoutRounding: document.getElementById('js-tournament-payout-rounding'),
-  tournamentPayoutMode:     document.getElementById('js-tournament-payout-mode'),
+  // v2.6.0: 配当 % 入力モード toggle（js-tournament-payout-mode）は撤去（金額固定）
   // STEP 6.7
   tournamentPrizeCategory:  document.getElementById('js-tournament-prize-category'),
   tournamentTitleCounter:   document.getElementById('js-tournament-title-counter'),
@@ -4254,12 +4254,9 @@ function syncTournamentFormFromState() {
   updateSubtitleCounter();
   // STEP 6.17: タイトル色 UI 同期（プリセットの選択ハイライト + カラーピッカー値）
   syncTitleColorPicker();
-  // v2.5.2: 入力モードは保存された payoutMode に同期（新規トーナメントは既定 'amount'）
-  payoutInputMode = (tournamentState.payoutMode === 'amount') ? 'amount' : 'percent';
-  if (el.tournamentPayoutMode) {
-    const radios = el.tournamentPayoutMode.querySelectorAll('input[name="payout-mode"]');
-    for (const r of radios) r.checked = (r.value === payoutInputMode);
-  }
+  // v2.6.0: 配当は金額（店内通貨 $）固定。% 入力 UI は撤去済みのため入力モードは常に 'amount'。
+  //   既存 % トーナメント（payoutMode='percent'）も金額エディタで開き、保存時に amount へ移行（by use）。
+  payoutInputMode = 'amount';
   // 賞金構造エディタの再構築
   renderPayoutsEditor(tournamentState.payouts || []);
   // ブラインド構造プルダウンを最新の同梱+ユーザー一覧で再構築（タブ表示時に毎回呼ぶ）
@@ -4271,36 +4268,23 @@ function syncTournamentFormFromState() {
 
 // ===== STEP 6: 賞金構造エディタ =====
 
-// 入力値の合計を計算 + 100% / プール合致 のバリデーション表示
-// %モード: 合計が 100% でなければ NG
-// 金額モード: 合計が pool 以下なら OK（pool は editor 上のプール額をフォーム値から計算）
+// v2.6.0: 配当（金額・店内通貨）の合計 vs プール額のバリデーション表示。% モードは撤去済。
+//   合計 = pool で OK、pool 0 のときは編集途中扱い（不足/超過は出すが保存は isPayoutsValid 側で許容）。
 function updatePayoutsSum() {
   if (!el.tournamentPayoutsEditor || !el.tournamentPayoutsSum) return 0;
   const inputs = el.tournamentPayoutsEditor.querySelectorAll('.payouts-editor__pct-input');
   let sum = 0;
   for (const inp of inputs) sum += Number(inp.value) || 0;
-  if (payoutInputMode === 'amount') {
-    const pool = computeTotalPoolFromForm();
-    const rounded = Math.round(sum);
-    if (pool > 0 && Math.abs(rounded - pool) < 1) {
-      el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)} ✓`;
-      el.tournamentPayoutsSum.classList.remove('is-invalid');
-    } else if (pool > 0 && rounded < pool) {
-      el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)}（不足）`;
-      el.tournamentPayoutsSum.classList.add('is-invalid');
-    } else {
-      el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)}（超過）`;
-      el.tournamentPayoutsSum.classList.add('is-invalid');
-    }
-    return rounded;
-  }
-  // % モード（既存）
-  const rounded = Math.round(sum * 100) / 100;
-  if (Math.abs(rounded - 100) < 0.01) {
-    el.tournamentPayoutsSum.textContent = `合計: ${rounded}% ✓`;
+  const pool = computeTotalPoolFromForm();
+  const rounded = Math.round(sum);
+  if (pool > 0 && Math.abs(rounded - pool) < 1) {
+    el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)} ✓`;
     el.tournamentPayoutsSum.classList.remove('is-invalid');
+  } else if (pool > 0 && rounded < pool) {
+    el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)}（不足）`;
+    el.tournamentPayoutsSum.classList.add('is-invalid');
   } else {
-    el.tournamentPayoutsSum.textContent = `合計: ${rounded}%（100% にしてください）`;
+    el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)}（超過）`;
     el.tournamentPayoutsSum.classList.add('is-invalid');
   }
   return rounded;
@@ -4325,14 +4309,15 @@ function computeTotalPoolFromForm() {
   return Math.max(calc, guarantee);
 }
 
-// 賞金構造エディタを描画（モードに応じて %値 or 金額値 を入力欄に流す）
+// v2.6.0: 賞金構造エディタを金額（店内通貨 $）で描画。% 入力モードは撤去済。
+//   amount 保持があれば優先表示、無ければ pool×%（内部 %）から逆算（既存 % トーナメントの後方表示 / プリセット）。
 function renderPayoutsEditor(payouts) {
   if (!el.tournamentPayoutsEditor) return;
   // STEP 10 フェーズC.2 Fix 0: 入力中なら payouts editor の再構築をスキップ。
   //   各行 input にフォーカスがある状態で innerHTML='' すると入力中の値が消える。
   if (isUserTypingInInput()) return;
   el.tournamentPayoutsEditor.innerHTML = '';
-  const pool = (payoutInputMode === 'amount') ? computeTotalPoolFromForm() : 0;
+  const pool = computeTotalPoolFromForm();
   payouts.forEach((p) => {
     const row = document.createElement('div');
     row.className = 'payouts-editor__row';
@@ -4343,18 +4328,11 @@ function renderPayoutsEditor(payouts) {
     input.type = 'number';
     input.className = 'payouts-editor__pct-input';
     input.min = '0';
-    if (payoutInputMode === 'amount') {
-      input.step = '100';
-      // v2.1.4: amount 保持があれば優先表示、無ければ % から逆算（後方互換）
-      const hasAmt = Number.isFinite(p.amount) && p.amount >= 0;
-      input.value = hasAmt
-        ? String(p.amount)
-        : String(Math.floor(pool * (Number(p.percentage) || 0) / 100));
-    } else {
-      input.max = '100';
-      input.step = '0.5';
-      input.value = String(p.percentage ?? 0);
-    }
+    input.step = '100';
+    const hasAmt = Number.isFinite(p.amount) && p.amount >= 0;
+    input.value = hasAmt
+      ? String(p.amount)
+      : String(Math.floor(pool * (Number(p.percentage) || 0) / 100));
     input.addEventListener('input', updatePayoutsSum);
     row.append(rank, input);
     el.tournamentPayoutsEditor.append(row);
@@ -4408,27 +4386,19 @@ function setPayoutRankCount(n, applyPreset = false) {
   renderPayoutsEditor(next);
 }
 
-// フォームから現在の賞金構造を取り出す（内部スキーマは常に %）
-// 金額モードの場合: 各順位の入力金額 ÷ プール × 100 で % へ換算して保存
-// v2.1.4 方針 A: 金額モード時は amount フィールドも同梱して精度損失（toFixed(2) 丸め）を回避
+// v2.6.0: フォームから賞金構造を取り出す（金額・店内通貨 $ 固定。% モード撤去済）。
+//   amount を正として保存し、percentage は内部互換用に amt/pool×100 で併記（表示はしない）。
 function readPayoutsFromForm() {
   if (!el.tournamentPayoutsEditor) return tournamentState.payouts || [];
   const rows = el.tournamentPayoutsEditor.querySelectorAll('.payouts-editor__row');
   const out = [];
-  if (payoutInputMode === 'amount') {
-    const pool = computeTotalPoolFromForm();
-    rows.forEach((row, i) => {
-      const inp = row.querySelector('.payouts-editor__pct-input');
-      const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
-      const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
-      out.push({ rank: i + 1, percentage: pct, amount: amt });
-    });
-  } else {
-    rows.forEach((row, i) => {
-      const inp = row.querySelector('.payouts-editor__pct-input');
-      out.push({ rank: i + 1, percentage: Number(inp?.value) || 0 });
-    });
-  }
+  const pool = computeTotalPoolFromForm();
+  rows.forEach((row, i) => {
+    const inp = row.querySelector('.payouts-editor__pct-input');
+    const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
+    const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
+    out.push({ rank: i + 1, percentage: pct, amount: amt });
+  });
   return out;
 }
 
@@ -4454,41 +4424,28 @@ el.tournamentPayoutPreset?.addEventListener('click', () => {
   setPayoutRankCount(n, true);
 });
 
-// STEP 6.5: 入力モード切替（% / 金額）
-el.tournamentPayoutMode?.addEventListener('change', (event) => {
-  const target = event.target;
-  if (!target || target.name !== 'payout-mode') return;
-  // 切替前に現在の入力値を % に正規化（金額モードからの切替なら換算）してから再描画
-  const currentPayouts = readPayoutsFromForm();
-  payoutInputMode = (target.value === 'amount') ? 'amount' : 'percent';
-  renderPayoutsEditor(currentPayouts);
-});
+// v2.6.0: 入力モード切替（% / 金額）の toggle は撤去。配当は常に金額（店内通貨）入力。
 
-// STEP 6.5: GTD / 端数 / バイインフィー等が変わったら、金額モード表示を即時再描画
+// GTD / 端数 / POT 拠出 / 件数 等が変わったら、金額表示（pool 連動の amount 逆算分）を即時再描画。
 function rerenderPayoutsEditorIfNeeded() {
-  if (payoutInputMode === 'amount' && el.tournamentPayoutsEditor) {
-    // 現在の % を保持して金額表示だけ再計算（プール額が変わったため）
+  if (el.tournamentPayoutsEditor) {
+    // 現在の入力金額を保持しつつ pool 変動を反映して再描画
     renderPayoutsEditor(readPayoutsFromFormAsPercent());
   } else {
     updatePayoutsSum();
   }
 }
 
-// 金額モード時でも、内部 % で取り出すヘルパ（再描画用）
-// v2.1.4 方針 A: 金額モード時は amount フィールドも同梱して精度損失を回避
+// 再描画用に現在のフォーム値を {rank, percentage, amount} で取り出す（金額固定・% は内部互換用）。
 function readPayoutsFromFormAsPercent() {
   const rows = el.tournamentPayoutsEditor?.querySelectorAll('.payouts-editor__row') || [];
   const pool = computeTotalPoolFromForm();
   const out = [];
   rows.forEach((row, i) => {
     const inp = row.querySelector('.payouts-editor__pct-input');
-    if (payoutInputMode === 'amount') {
-      const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
-      const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
-      out.push({ rank: i + 1, percentage: pct, amount: amt });
-    } else {
-      out.push({ rank: i + 1, percentage: Number(inp?.value) || 0 });
-    }
+    const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
+    const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
+    out.push({ rank: i + 1, percentage: pct, amount: amt });
   });
   return out;
 }
@@ -5397,15 +5354,14 @@ function updateSubtitleCounter() {
 
 // 賞金構造の合計バリデーション（保存時のガード）
 // % モード: 合計 100% ±0.01
-// 金額モード: 合計 ≦ プール（プール 0 のときはスキップ＝OK扱い）
+// v2.6.0: 配当（金額・店内通貨）の合計 ≒ プール（max(Σ POT×件数, GTD)）でOK。
+//   pool 0（拠出 / GTD なし）のときはスキップ＝OK扱い（賞金プール未形成）。% モードは撤去済。
+//   ＝ §5（旧 金額固定×プール食い違い）は pool が具体 $ になることで自然解消（合計===pool 流用、法令判断不要）。
 function isPayoutsValid() {
   const sum = updatePayoutsSum();
-  if (payoutInputMode === 'amount') {
-    const pool = computeTotalPoolFromForm();
-    if (pool <= 0) return true;
-    return Math.abs(sum - pool) < 1;
-  }
-  return Math.abs(sum - 100) < 0.01;
+  const pool = computeTotalPoolFromForm();
+  if (pool <= 0) return true;
+  return Math.abs(sum - pool) < 1;
 }
 
 // 「保存」: 現在の active トーナメントへ上書き保存。タイマー無変更、メイン画面の表示のみ更新
@@ -5417,7 +5373,7 @@ async function handleTournamentSave() {
     return;
   }
   if (!isPayoutsValid()) {
-    setTournamentHint('賞金構造の合計を 100% にしてください', 'error');
+    setTournamentHint('賞金配当の合計をプール額に合わせてください', 'error');
     return;
   }
   // STEP 10 フェーズC.2 中 7: トーナメント名空で保存阻止
@@ -5493,7 +5449,7 @@ async function handleTournamentSaveApply() {
     return;
   }
   if (!isPayoutsValid()) {
-    setTournamentHint('賞金構造の合計を 100% にしてください', 'error');
+    setTournamentHint('賞金配当の合計をプール額に合わせてください', 'error');
     return;
   }
   // STEP 10 フェーズC.2.1 中 7 統合: トーナメント名空で阻止（save と同じガード）
