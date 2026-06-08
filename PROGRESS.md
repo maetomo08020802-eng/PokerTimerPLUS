@@ -14,7 +14,7 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| (なし) | — | **v2.6.0 配信完了（2026-06-08、Latest 公開中）。オープン作業 0 件・構築士2 クローズ判定待ち** | — | — | `.cc-reports/2026-06-08_v260-release.md` |
+| (なし) | — | **v2.6.0 配信完了（2026-06-08、Latest 公開中）。案件群クローズ済（md アーカイブ + feature ブランチ削除完了）。オープン作業 0 件・安定運用フェーズ** | — | — | `.cc-archive/v260-release/reports/2026-06-08_v260-release.md` |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -58,8 +58,8 @@
 | 指標 | 件数 |
 |------|------|
 | 配信済みリリース | 9 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0 / v2.5.1 / **v2.6.0**)|
-| アーカイブ済 案件(`.cc-archive/`)| 4 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat / settings-scope-clarity)※v2.6.0 関連はクローズ判定後に追加|
-| オープン作業 | 0 件（**v2.6.0 配信完了・公開中**。構築士2 クローズ判定 → md アーカイブ + feature ブランチ整理待ち）|
+| アーカイブ済 案件(`.cc-archive/`)| 10 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat / settings-scope-clarity / payout-amount-default / fee-pot-yen / perf-heaviness / stack-unify-preset-hint / perf-dialog-backdrop / v260-release)|
+| オープン作業 | 0 件（**v2.6.0 配信完了・公開中、案件群クローズ済**。安定運用フェーズ）|
 | 最新テスト件数 | **1358 件 全 PASS**(v2.6.0: payout-amount-default v260 / fee-pot-yen v261〜264 / perf-heaviness v265 / stack-unify v266 / perf-dialog-backdrop v267)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
@@ -84,8 +84,8 @@
 
 ### 🔖 引き継ぎサマリ（2026-06-08 v2.6.0 配信完了時点）
 - **v2.6.0 を全国配信完了（2026-06-08、GitHub Release Latest・公開中）**。前原実機 6-B 全 OK + GO → CHANGELOG 最終化 → feature/payout-amount-default → main merge（`--no-ff` `a1bce57`）→ tag `v2.6.0` → push → main から本番 .exe 再ビルド → GitHub Release `v2.6.0` 公開（Latest・自動更新、アセット latest.yml+setup.exe+.blockmap）。GitHub 独立確認済（API Latest=v2.6.0 / tag=main HEAD=a1bce57 / アセット3点 / 公開 latest.yml version=2.6.0・sha512 一致 / repo PUBLIC）。**1358件全PASS**、致命バグ保護5件全維持。**データ移行安全（実store13件検証済）**。Release URL: https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.6.0
-- **残: 構築士2 クローズ判定 → 関連 md アーカイブ（fee-pot-yen / payout-amount-default / perf-heaviness / stack-unify-preset-hint / perf-dialog-backdrop / v260-release）+ merge 済 feature/payout-amount-default のローカル整理**（クローズ判定後）。
-- **現在ブランチ**: `main`（`a1bce57`、origin 同期済）。
+- **案件群クローズ完了（2026-06-08）**: 構築士2 クローズ承認 → 関連 md 41 件を案件別 `.cc-archive/{payout-amount-default,fee-pot-yen,perf-heaviness,stack-unify-preset-hint,perf-dialog-backdrop,v260-release}/{briefs,plans,reports}/` へ退避 + merge 済 `feature/payout-amount-default` をローカル削除（origin 未push のため remote 不要）。
+- **現在ブランチ**: `main`（origin 同期済）。**オープン作業 0 件・安定運用フェーズ**。
 - **（参考・配信済の旧最優先）v2.6.0 fee-pot-yen（賞金を店内通貨$・1件あたり拠出モデルへ刷新／%全廃）**: STEP1〜5 全完了 → 上記 v2.6.0 として配信済。
 - **2026-06-08 追加（perf-dialog-backdrop、同 v2.6.0 に同梱）**: 設定ダイアログ（S キー）激重の主因＝ダイアログ `::backdrop` の `backdrop-filter: blur(4px)`（中央のみ覆い外周は backdrop 下で動く 60fps メイン画面が透け→全画面ぼかし毎フレーム再計算）を撤去（`.confirm-dialog::backdrop` / `.form-dialog::backdrop` の2規則）。暗幕 rgba(0,0,0,0.7) 維持＝見た目ほぼ不変・レイアウト不変。`.card` blur 撤去（v2.1.0）と同轍。致命バグ保護5件・payout/pool 非接触。**1358件全PASS**（v267 +5）。version 据置。軽量フロー（段階1スキップ4条件 met）。
 - **2026-06-08 追加（stack-unify + preset-hint、同 v2.6.0 に同梱）**: バイインの初期スタックを `buyIn.chips` に統一し独立「スタートスタック」欄を UI 撤去（B）+ 配当プリセット適用に説明 hint 追加（③）。`computeAvgStack` を buyIn.chips ベース化、migration（per-tournament marker `stackModel:'unified'`）で `buyIn.chips := startingStack`（AVG STACK 数値保全・startingStack dormant 温存）。**実 store 13 トーナメントで AVG 移行前後 mismatch=0**（既に buyIn.chips===startingStack で実質 no-op）。致命バグ保護5件・payout/pool 非接触。**1353件全PASS**（v266 +12）。version 据置。**perf-heaviness と renderer.js 別領域で非衝突**。
