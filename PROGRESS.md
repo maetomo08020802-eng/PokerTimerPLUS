@@ -14,11 +14,7 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| v2.5.2（予定） | payout-amount-default 修正（金額固定＋初期値金額＋％端数根治） | 🟢 確定部分1〜4 実装完了・1280件全PASS／**§5 前原 escalate 待ち** | `.cc-briefs/2026-06-07_payout-amount-default_brief.md` | `.cc-plans/2026-06-07_payout-amount-default_plan.md` | `.cc-reports/2026-06-07_payout-amount-default.md` |
-| v2.6.0 | fee-pot-yen 実装（店内通貨$・1件あたり拠出モデル／%全廃） | 📦 STEP1〜5 全完了・version 2.6.0 bump 済・テストビルド OK・1328件全PASS／**前原 6-B → 配信 GO 待ち** | `.cc-briefs/2026-06-07_fee-pot-yen_impl_brief.md` | `.cc-plans/2026-06-07_fee-pot-yen_plan.md` | `.cc-reports/2026-06-07_fee-pot-yen_step5_testbuild.md` |
-| v2.6.0 | perf-heaviness（アプリ激重・他アプリ巻き込みの安全な軽量化） | 📦 実装完了・完了承認・統合 testbuild 済・1341件全PASS／**前原 6-B（実 GPU 体感・他アプリ巻き込み・見た目不変）待ち** | `.cc-briefs/2026-06-08_perf-heaviness_brief.md` | `.cc-plans/2026-06-08_perf-heaviness_plan.md` | `.cc-reports/2026-06-08_perf-heaviness.md` |
-| v2.6.0 | stack-unify + preset-hint（初期スタックを buyIn.chips に統一／プリセット説明追加） | 🟡 実装完了・1353件全PASS・実store AVG検算 mismatch=0／**前原 6-B（perf と統合）待ち** | `.cc-briefs/2026-06-08_stack-unify-preset-hint_brief.md` | `.cc-plans/2026-06-08_stack-unify-preset-hint_plan.md` | `.cc-reports/2026-06-08_stack-unify-preset-hint.md` |
-| v2.6.0 | perf-dialog-backdrop（設定ダイアログ激重 → ::backdrop blur 撤去） | 🟡 実装完了・1358件全PASS／**前原 6-B（perf と統合）待ち** | `.cc-briefs/2026-06-08_perf-dialog-backdrop_brief.md` | `.cc-plans/2026-06-08_perf-dialog-backdrop_plan.md` | `.cc-reports/2026-06-08_perf-dialog-backdrop.md` |
+| (なし) | — | **v2.6.0 配信完了（2026-06-08、Latest 公開中）。オープン作業 0 件・構築士2 クローズ判定待ち** | — | — | `.cc-reports/2026-06-08_v260-release.md` |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -29,6 +25,7 @@
 
 | 配信日 | バージョン | 主要変更 | report |
 |--------|-----------|---------|--------|
+| 2026-06-08 | **v2.6.0** | 4ピース同梱: ① fee-pot-yen（賞金プールを店内通貨$・1件あたり拠出×件数モデルへ刷新／%全廃／配当は金額固定でドリフトなし／🔒・モーダル廃止）② perf-heaviness（背景 fixed→scroll／marquee will-change 撤去／operator のみ backgroundThrottling:true、hall 据置）③ stack-unify+preset-hint（初期スタックを buyIn.chips に統一・スタートスタック欄廃止／プリセット適用に説明）④ perf-dialog-backdrop（設定ダイアログ ::backdrop の blur 撤去で激重解消、暗幕維持）。**データ移行安全**（poolRate%→POT$ で TOTAL POOL 数値不変／¥→$ リテラル読替／AVG STACK は buyIn.chips:=startingStack で保全、実store13件 mismatch=0）。既存1261→**1358件全PASS**、致命バグ保護5件全維持。merge `a1bce57` / tag `v2.6.0` / GitHub Release v2.6.0（Latest・自動更新、アセット latest.yml+.exe+.blockmap）。前原実機6-B全OK + GO 後に配信 | `.cc-reports/2026-06-08_v260-release.md` |
 | 2026-06-07 | **v2.5.1** | settings-scope-clarity: 設定タブを適用範囲で2グループ視覚分割 + 編集中トーナメント名常時表示(STEP1) / ブラインド編集を選択中卓に固定 + 共有時3択モーダル(copy-on-write)(STEP2) / レベル表縦拡張・フッタ常時可視(STEP3) / トーナメント選択を折りたたみ化(STEP4) / 大画面でブラインド表0段の退行を vh フロア+キャップで根治(実測検証) / 未保存編集中の卓切替に破棄確認(嘘ラベル+黙って再ポイント根治)。**データ構造・保存ロジック・migration 無変更**＝既存ユーザー破壊的影響なし。既存1180 + 新規81 = 1261件全PASS、致命バグ保護5件全維持。merge `f804114` / tag `v2.5.1` / GitHub Release v2.5.1（Latest・自動更新対応、アセット latest.yml+.exe+.blockmap）。テストビルド3回 + 前原実機6-B全OK後に配信 | `.cc-reports/2026-06-07_settings-scope-clarity_release.md` |
 | 2026-06-06 | **v2.5.0** | トーナメント画像分離で保存激重を根治（背景画像・休憩スライドショーを別ファイル `tournament-images.json` へ分離、初回起動で自動移行＝backup→検証→strip 冪等）。実測: 部分保存 527ms→0.76ms / config 35.96MB→92KB。既存 1164 + 新規 16 = 1180 件全 PASS、致命バグ保護 5 件全維持。merge `e77fcce` / tag `v2.5.0` / GitHub Release（Latest・自動更新対応、アセット latest.yml+.exe+.blockmap） | アーカイブ済 `.cc-archive/tournament-bloat/`（reports/step2 + reports/step4_release 他） |
 | 2026-05-30 | **v2.4.1**（hotfix） | 開始前カウントダウン 0 着地後のタイマー停止（症状①）根治。renderer 1 関数に RUNNING/BREAK stale-restore 破棄ガード追加。回帰テスト v252（10 件）追加、合計 1164 件全 PASS。merge `01626aa` / tag `v2.4.1` / GitHub Release（Latest、自動更新対応） | アーカイブ済 `.cc-archive/prestart-zero-stall/`（reports/release + reports/step2） |
@@ -60,10 +57,10 @@
 
 | 指標 | 件数 |
 |------|------|
-| 配信済みリリース | 8 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0 / **v2.5.1**)|
-| アーカイブ済 案件(`.cc-archive/`)| 4 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat / settings-scope-clarity)|
-| オープン作業 | 4 件（**v2.6.0 fee-pot-yen：配信 GO 待ち** / **perf-heaviness** / **stack-unify+preset-hint** / **perf-dialog-backdrop**：いずれも 6-B 待ち、すべて同一 v2.6.0 配信に同梱）|
-| 最新テスト件数 | **1358 件 全 PASS**(perf-dialog-backdrop +5[v267]、stack-unify +12[v266]、perf-heaviness +13[v265])|
+| 配信済みリリース | 9 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0 / v2.5.1 / **v2.6.0**)|
+| アーカイブ済 案件(`.cc-archive/`)| 4 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat / settings-scope-clarity)※v2.6.0 関連はクローズ判定後に追加|
+| オープン作業 | 0 件（**v2.6.0 配信完了・公開中**。構築士2 クローズ判定 → md アーカイブ + feature ブランチ整理待ち）|
+| 最新テスト件数 | **1358 件 全 PASS**(v2.6.0: payout-amount-default v260 / fee-pot-yen v261〜264 / perf-heaviness v265 / stack-unify v266 / perf-dialog-backdrop v267)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
 > CC は完了報告のたびにこの表を Edit(リリース配信時はリリース履歴に新行追加、テスト件数更新)。
@@ -85,8 +82,11 @@
 
 ## 直近の状態
 
-### 🔖 引き継ぎサマリ（2026-06-08 セッションクリア時点）
-- **進行中の最優先案件**: **v2.6.0 fee-pot-yen（賞金を店内通貨$・1件あたり拠出モデルへ刷新／%全廃）**。**STEP1〜5（実装＋テストビルド）全完了**、**前原 6-B 実機確認 → 配信 GO 待ち**の段階。
+### 🔖 引き継ぎサマリ（2026-06-08 v2.6.0 配信完了時点）
+- **v2.6.0 を全国配信完了（2026-06-08、GitHub Release Latest・公開中）**。前原実機 6-B 全 OK + GO → CHANGELOG 最終化 → feature/payout-amount-default → main merge（`--no-ff` `a1bce57`）→ tag `v2.6.0` → push → main から本番 .exe 再ビルド → GitHub Release `v2.6.0` 公開（Latest・自動更新、アセット latest.yml+setup.exe+.blockmap）。GitHub 独立確認済（API Latest=v2.6.0 / tag=main HEAD=a1bce57 / アセット3点 / 公開 latest.yml version=2.6.0・sha512 一致 / repo PUBLIC）。**1358件全PASS**、致命バグ保護5件全維持。**データ移行安全（実store13件検証済）**。Release URL: https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.6.0
+- **残: 構築士2 クローズ判定 → 関連 md アーカイブ（fee-pot-yen / payout-amount-default / perf-heaviness / stack-unify-preset-hint / perf-dialog-backdrop / v260-release）+ merge 済 feature/payout-amount-default のローカル整理**（クローズ判定後）。
+- **現在ブランチ**: `main`（`a1bce57`、origin 同期済）。
+- **（参考・配信済の旧最優先）v2.6.0 fee-pot-yen（賞金を店内通貨$・1件あたり拠出モデルへ刷新／%全廃）**: STEP1〜5 全完了 → 上記 v2.6.0 として配信済。
 - **2026-06-08 追加（perf-dialog-backdrop、同 v2.6.0 に同梱）**: 設定ダイアログ（S キー）激重の主因＝ダイアログ `::backdrop` の `backdrop-filter: blur(4px)`（中央のみ覆い外周は backdrop 下で動く 60fps メイン画面が透け→全画面ぼかし毎フレーム再計算）を撤去（`.confirm-dialog::backdrop` / `.form-dialog::backdrop` の2規則）。暗幕 rgba(0,0,0,0.7) 維持＝見た目ほぼ不変・レイアウト不変。`.card` blur 撤去（v2.1.0）と同轍。致命バグ保護5件・payout/pool 非接触。**1358件全PASS**（v267 +5）。version 据置。軽量フロー（段階1スキップ4条件 met）。
 - **2026-06-08 追加（stack-unify + preset-hint、同 v2.6.0 に同梱）**: バイインの初期スタックを `buyIn.chips` に統一し独立「スタートスタック」欄を UI 撤去（B）+ 配当プリセット適用に説明 hint 追加（③）。`computeAvgStack` を buyIn.chips ベース化、migration（per-tournament marker `stackModel:'unified'`）で `buyIn.chips := startingStack`（AVG STACK 数値保全・startingStack dormant 温存）。**実 store 13 トーナメントで AVG 移行前後 mismatch=0**（既に buyIn.chips===startingStack で実質 no-op）。致命バグ保護5件・payout/pool 非接触。**1353件全PASS**（v266 +12）。version 据置。**perf-heaviness と renderer.js 別領域で非衝突**。
 - **2026-06-08 追加（perf-heaviness、同 v2.6.0 に同梱）**: アプリ激重・他アプリ巻き込みの安全な軽量化を実装完了＋構築士2 完了承認。背景 `background-attachment: fixed→scroll`／marquee `will-change` 撤去／operator のみ `backgroundThrottling:true`（hall・operator-solo は false 据置）＋ PERF_METRICS env ゲートの計測ハーネス（本番無害）。**視覚・タイマー精度・2画面同期・音声・致命保護5件すべて不変**。CC 自走 IDLE 実測（GPU≈2.5%常駐／rAF=0 自己停止裏取り）、**定量 GPU 比較・体感は前原 6-B 委譲**（単画面 PC・実 GPU の制約）。**1341件全PASS**（v265 +13）。version 2.6.0 据置。commit `f593ad1`。**perf 反映版の統合 testbuild 再生成済**（下記）。
