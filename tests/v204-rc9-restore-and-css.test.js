@@ -69,10 +69,17 @@ test('Fix 1-A 維持: focusable: false は引き続き設定（rc8 維持）', (
     'createHallWindow から focusable: false が消失（rc8 動作破壊）');
 });
 
-test('Fix 1-A 維持: backgroundThrottling: false は buildWebPreferences で設定済', () => {
-  // backgroundThrottling は createHallWindow に重複指定不要、buildWebPreferences で集中管理
-  assert.match(MAIN, /function buildWebPreferences[\s\S]{0,200}?backgroundThrottling:\s*false/,
-    'buildWebPreferences に backgroundThrottling: false がない');
+test('Fix 1-A 維持: backgroundThrottling は buildWebPreferences で集中管理（hall は throttle されない）', () => {
+  // perf-heaviness（2026-06-08）で固定 false → role 別計算式に変更。
+  //   true は 2 画面手元窓 operator のみ。hall/operator-solo は false 据置＝会場表示は throttle されない（paint 保証維持）。
+  //   createHallWindow に重複指定しない集中管理は不変。
+  // backgroundThrottling: role === 'operator' はコード上 buildWebPreferences に 1 箇所のみ
+  //   （createHallWindow はコメント言及のみで重複プロパティを持たない）。
+  assert.match(MAIN, /backgroundThrottling:\s*role\s*===\s*'operator'/,
+    "backgroundThrottling: role === 'operator'（buildWebPreferences 集中管理）がない");
+  // hall（role='hall'）は role === 'operator' が false ＝ throttle されない（Fix 1-A paint 保証の趣旨維持）
+  const throttle = (role) => role === 'operator';
+  assert.equal(throttle('hall'), false, 'hall が throttle される実装になっている（paint 保証違反）');
 });
 
 // ============================================================

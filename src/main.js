@@ -1425,10 +1425,19 @@ function buildWebPreferences(role) {
     nodeIntegration: false,
     sandbox: true,
     devTools: true,
-    backgroundThrottling: false,
+    // perf-heaviness（2026-06-08）: 背面/最小化時の省電力化。
+    //   true は 2 画面モードの手元制御窓 operator のみ。
+    //   hall（会場表示）と operator-solo（単画面で会場表示を兼務／HDMI 抜き時に動的にこの role へ）は
+    //   会場表示窓のカクつきを避けるため false 据置（review 2026-06-08 確定）。
+    //   ※ Chromium の backgroundThrottling は window が hidden/minimized/occluded のときのみ
+    //     rAF/timer を絞る（visible-but-unfocused では絞らない）→ 可視運用時は挙動完全不変。
+    backgroundThrottling: role === 'operator',
     // v2.0.0 STEP 1: preload.js が process.argv から `--role=...` を抽出して
     //   document.documentElement に data-role 属性を付与する。CSP 不変、inline script 不要。
-    additionalArguments: [`--role=${role}`]
+    // perf-heaviness: PERF_METRICS env 時のみ `--perf-metrics=1` も渡す（renderer rAF Hz 計測ゲート、本番無効）。
+    additionalArguments: process.env.PERF_METRICS === '1'
+      ? [`--role=${role}`, '--perf-metrics=1']
+      : [`--role=${role}`]
   };
 }
 
@@ -1572,7 +1581,8 @@ function createHallWindow(targetDisplay) {
     focusable: false,
     // v2.0.4-rc9 Fix 1-A: focusable:false が描画優先度を下げる Windows 挙動を回避するため、
     //   show:true を明示化 + paintWhenInitiallyHidden:true（webPreferences）で初期描画を保証。
-    //   backgroundThrottling:false は buildWebPreferences で既に設定済（重複指定なし）。
+    //   省電力スロットルは buildWebPreferences(role) 側で role 別に決定し、hall は据置（会場表示の
+    //   カクつき回避、perf-heaviness 2026-06-08）。ここでは重複指定しない。
     show: true,
     backgroundColor: '#000000',
     autoHideMenuBar: true,
@@ -3310,6 +3320,10 @@ function registerIpcHandlers() {
       if (!payload || typeof payload !== 'object') return;
       const label = (typeof payload.label === 'string') ? payload.label : 'renderer:unknown';
       rollingLog(label, payload.data || null);
+      // perf-heaviness: PERF_METRICS 時のみ renderer の perf:* ラベル（rAF Hz 等）を perf-metrics.log に合流。本番無効。
+      if (_PERF_METRICS_ON && label.indexOf('perf:') === 0) {
+        _perfLogAppend({ ts: new Date().toISOString(), label, data: payload.data || null });
+      }
     } catch (_) { /* never throw from logging */ }
   });
   // 'ログフォルダを開く' ボタンから呼ばれる。shell.openPath で OS のファイルマネージャで logs/ を表示。
@@ -3332,6 +3346,41 @@ function _resolveLogsDir() {
     fs.mkdirSync(dir, { recursive: true });
     return dir;
   } catch (_) { return null; }
+}
+
+// ============================================================
+// perf-heaviness 計測ハーネス（2026-06-08、PERF_METRICS env ゲート＝本番完全無効）
+//   PERF_METRICS=1 のときだけ app.getAppMetrics() を 2s 間隔でサンプリングし、
+//   各プロセス（Browser[main] / Tab[renderer] / GPU / Utility）の CPU% / 物理メモリを
+//   <userData>/logs/perf-metrics.log に JSON 1 行ずつ追記する。
+//   renderer の rAF Hz は 'rolling-log:write' 経由 'perf:raf-hz' を同ファイルに合流（下の IPC 分岐）。
+//   未設定（通常起動・本番）では一切動かない＝「念のためコード追加禁止」原則に合致。
+// ============================================================
+const _PERF_METRICS_ON = process.env.PERF_METRICS === '1';
+let _perfMetricsTimer = null;
+function _perfLogAppend(entry) {
+  try {
+    const dir = _resolveLogsDir();
+    if (!dir) return;
+    fs.appendFileSync(path.join(dir, 'perf-metrics.log'), JSON.stringify(entry) + '\n');
+  } catch (_) { /* never throw from perf log */ }
+}
+function _startPerfMetricsSampler() {
+  if (!_PERF_METRICS_ON || _perfMetricsTimer) return;
+  _perfLogAppend({ ts: new Date().toISOString(), label: 'perf:session', data: { electron: process.versions.electron, platform: process.platform } });
+  _perfMetricsTimer = setInterval(() => {
+    try {
+      const metrics = (typeof app.getAppMetrics === 'function') ? app.getAppMetrics() : [];
+      const snapshot = metrics.map((m) => ({
+        pid: m.pid,
+        type: m.type,
+        cpu: (m.cpu && typeof m.cpu.percentCPUUsage === 'number') ? Math.round(m.cpu.percentCPUUsage * 100) / 100 : null,
+        // workingSetSize は KB 単位 → MB（小数 1 桁）
+        memMB: (m.memory && typeof m.memory.workingSetSize === 'number') ? Math.round(m.memory.workingSetSize / 1024 * 10) / 10 : null
+      }));
+      _perfLogAppend({ ts: new Date().toISOString(), label: 'perf:metrics', data: snapshot });
+    } catch (_) { /* never throw from perf sampler */ }
+  }, 2000);
 }
 
 app.whenReady().then(async () => {
@@ -3382,6 +3431,8 @@ app.whenReady().then(async () => {
   // v2.0.0 STEP 4: createMainWindow が async（モニター選択ダイアログを await）になったため、
   //   shortcuts 登録より前に await して mainWindow が確実に生成された状態にする。
   await createMainWindow();
+  // perf-heaviness 計測ハーネス起動（PERF_METRICS env ゲート、本番無効）。ウィンドウ生成後に開始。
+  _startPerfMetricsSampler();
   registerShortcuts();
   // v2.0.0 STEP 5: HDMI 抜き差しイベント駆動追従の購読開始（ポーリング禁止、screen API のみ）
   setupDisplayChangeListeners();

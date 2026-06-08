@@ -286,7 +286,10 @@
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
+  /* perf-heaviness（2026-06-08）: fixed → scroll。本アプリは body 全体が固定 viewport flex で
+     スクロールしない（ui-layout.md）ため見た目は完全に同一だが、fixed は GPU 再合成・
+     全画面再ペイントを誘発しやすく、scroll は通常レイヤとしてキャッシュされ軽い。 */
+  background-attachment: scroll;
 }
 :root[data-bg="image"] body::before,
 :root[data-bg="image"] body::after {
@@ -1599,7 +1602,10 @@ body:not(.has-marquee) .marquee { display: none; }
   animation-duration: var(--marquee-duration, 20s);
   animation-timing-function: linear;
   animation-iteration-count: infinite;
-  will-change: transform;
+  /* perf-heaviness（2026-06-08）: will-change: transform を削除。
+     marquee は infinite アニメ中の transform でブラウザが自動的にコンポジタ層化するため、
+     明示 will-change がなくてもスクロールは滑らかなまま（効果は限定的だが常駐層ヒントを 1 枚削減）。
+     表示制御 display:none（body:not(.has-marquee)）時はそもそも非描画。 */
 }
 
 @keyframes marquee-scroll {

@@ -137,8 +137,29 @@ const _RafLabel = {
   TIMER_PRE_START_TICK: 'timer-pre-start-tick',
   RENDERER_MISC: 'renderer-misc'
 };
+// perf-heaviness（2026-06-08）: rAF 発火 Hz カウンタ（window.__PERF_METRICS true 時のみ作動）。
+//   _wrappedRAF のコールバック発火時にラベル別カウントを加算し、1s ごとに 'perf:raf-hz' で main に flush。
+//   ★ rAF の発火条件・頻度・自己停止ロジックには一切触れない（計測フックのみ）。本番（フラグ未付与）では完全無作動。
+const _perfRafCounts = Object.create(null);
+let _perfRafFlushTimer = null;
+function _perfMetricsEnabled() {
+  try { return typeof window !== 'undefined' && window.__PERF_METRICS === true; } catch (_) { return false; }
+}
+function _startPerfRafFlush() {
+  if (!_perfMetricsEnabled() || _perfRafFlushTimer) return;
+  _perfRafFlushTimer = setInterval(() => {
+    try {
+      const hz = {};
+      for (const k in _perfRafCounts) { hz[k] = _perfRafCounts[k]; _perfRafCounts[k] = 0; }
+      window.api?.log?.write?.('perf:raf-hz', { role: (typeof window !== 'undefined' && window.appRole) || null, hz });
+    } catch (_) { /* never throw from perf flush */ }
+  }, 1000);
+}
 function _wrappedRAF(label, fn) {
   return requestAnimationFrame((t) => {
+    if (_perfMetricsEnabled()) {
+      try { _perfRafCounts[label] = (_perfRafCounts[label] || 0) + 1; } catch (_) { /* never throw from perf count */ }
+    }
     try { fn(t); } catch (e) {
       try { window.api?.log?.write?.('error:caught:wrappedRAF', { label, message: e?.message }); } catch (_) {}
     }
@@ -7908,6 +7929,8 @@ async function initialize() {
       });
     }
   } catch (_) { /* ignore */ }
+  // perf-heaviness: rAF Hz 計測 flush 起動（window.__PERF_METRICS true 時のみ。本番は no-op）。
+  _startPerfRafFlush();
   renderStaticInfo();
   renderPayouts();
   // loadInitialSettings は trueを返す＝blindPresetId からの復元成功

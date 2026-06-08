@@ -25,6 +25,12 @@ if (typeof document !== 'undefined') {
 // renderer 側からも参照できるよう expose（read-only、STEP 3 以降の役割分岐ロジックで利用）
 contextBridge.exposeInMainWorld('appRole', _role);
 
+// perf-heaviness（2026-06-08）: main が PERF_METRICS env 時のみ渡す `--perf-metrics=1` を検出して
+//   renderer に window.__PERF_METRICS（boolean）として公開。renderer 側 rAF Hz カウンタのゲート。
+//   フラグ未付与（通常起動・本番）では false ＝ 計測フックは一切作動しない。
+const _perfMetricsOn = (process.argv || []).some((a) => a === '--perf-metrics=1');
+contextBridge.exposeInMainWorld('__PERF_METRICS', _perfMetricsOn);
+
 // v2.2.1: IPC 往復計測撤去。`_measuredInvoke` は名前だけ維持し ipcRenderer.invoke の薄ラッパとして残す
 //   （preload 内全 API が経由する設計のため）。計測ラベル発火は本番版で完全撤去。
 function _measuredInvoke(channel, ...args) {
