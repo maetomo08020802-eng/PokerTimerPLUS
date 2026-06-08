@@ -1699,9 +1699,11 @@ body:not(.has-marquee) .marquee { display: none; }
 }
 
 .confirm-dialog::backdrop {
+  /* perf-dialog-backdrop（2026-06-08）: backdrop-filter: blur(4px) を撤去。ダイアログは中央のみ覆い、
+     外周は backdrop 下で動き続けるメイン画面（RUNNING 中はタイマー60fps＋marquee 無限アニメ）が透けるため、
+     全画面ぼかしを毎フレーム再計算し続け非力 GPU で激重だった。.card の blur 撤去（v2.1.0、style.css:1018）と同轍。
+     暗幕 rgba(0,0,0,0.7) は維持＝十分暗く設定は読みやすい（ぼかしの奥行きが消えるのみ・レイアウト不変）。 */
   background-color: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .confirm-dialog__message {
@@ -1790,9 +1792,10 @@ body:not(.has-marquee) .marquee { display: none; }
 }
 
 .form-dialog::backdrop {
+  /* perf-dialog-backdrop（2026-06-08）: 設定ダイアログ（S キー）激重の主因 backdrop-filter: blur(4px) を撤去。
+     RUNNING 中は backdrop 下のメイン画面が 60fps で動き続け全画面ぼかしを毎フレーム再計算 → 非力 GPU で激重。
+     .card の blur 撤去（v2.1.0、style.css:1018）と同轍。暗幕 rgba(0,0,0,0.7) は維持（レイアウト不変・見た目ほぼ不変）。 */
   background-color: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .form-dialog__title {

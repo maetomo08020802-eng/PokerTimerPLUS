@@ -18,6 +18,7 @@
 | v2.6.0 | fee-pot-yen 実装（店内通貨$・1件あたり拠出モデル／%全廃） | 📦 STEP1〜5 全完了・version 2.6.0 bump 済・テストビルド OK・1328件全PASS／**前原 6-B → 配信 GO 待ち** | `.cc-briefs/2026-06-07_fee-pot-yen_impl_brief.md` | `.cc-plans/2026-06-07_fee-pot-yen_plan.md` | `.cc-reports/2026-06-07_fee-pot-yen_step5_testbuild.md` |
 | v2.6.0 | perf-heaviness（アプリ激重・他アプリ巻き込みの安全な軽量化） | 📦 実装完了・完了承認・統合 testbuild 済・1341件全PASS／**前原 6-B（実 GPU 体感・他アプリ巻き込み・見た目不変）待ち** | `.cc-briefs/2026-06-08_perf-heaviness_brief.md` | `.cc-plans/2026-06-08_perf-heaviness_plan.md` | `.cc-reports/2026-06-08_perf-heaviness.md` |
 | v2.6.0 | stack-unify + preset-hint（初期スタックを buyIn.chips に統一／プリセット説明追加） | 🟡 実装完了・1353件全PASS・実store AVG検算 mismatch=0／**前原 6-B（perf と統合）待ち** | `.cc-briefs/2026-06-08_stack-unify-preset-hint_brief.md` | `.cc-plans/2026-06-08_stack-unify-preset-hint_plan.md` | `.cc-reports/2026-06-08_stack-unify-preset-hint.md` |
+| v2.6.0 | perf-dialog-backdrop（設定ダイアログ激重 → ::backdrop blur 撤去） | 🟡 実装完了・1358件全PASS／**前原 6-B（perf と統合）待ち** | `.cc-briefs/2026-06-08_perf-dialog-backdrop_brief.md` | `.cc-plans/2026-06-08_perf-dialog-backdrop_plan.md` | `.cc-reports/2026-06-08_perf-dialog-backdrop.md` |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -61,8 +62,8 @@
 |------|------|
 | 配信済みリリース | 8 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0 / **v2.5.1**)|
 | アーカイブ済 案件(`.cc-archive/`)| 4 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat / settings-scope-clarity)|
-| オープン作業 | 3 件（**v2.6.0 fee-pot-yen：配信 GO 待ち** / **perf-heaviness：6-B 待ち** / **stack-unify+preset-hint：6-B 待ち**、すべて同一 v2.6.0 配信に同梱）|
-| 最新テスト件数 | **1353 件 全 PASS**(stack-unify+preset-hint +12[v266]、perf-heaviness +13[v265])|
+| オープン作業 | 4 件（**v2.6.0 fee-pot-yen：配信 GO 待ち** / **perf-heaviness** / **stack-unify+preset-hint** / **perf-dialog-backdrop**：いずれも 6-B 待ち、すべて同一 v2.6.0 配信に同梱）|
+| 最新テスト件数 | **1358 件 全 PASS**(perf-dialog-backdrop +5[v267]、stack-unify +12[v266]、perf-heaviness +13[v265])|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
 > CC は完了報告のたびにこの表を Edit(リリース配信時はリリース履歴に新行追加、テスト件数更新)。
@@ -86,6 +87,7 @@
 
 ### 🔖 引き継ぎサマリ（2026-06-08 セッションクリア時点）
 - **進行中の最優先案件**: **v2.6.0 fee-pot-yen（賞金を店内通貨$・1件あたり拠出モデルへ刷新／%全廃）**。**STEP1〜5（実装＋テストビルド）全完了**、**前原 6-B 実機確認 → 配信 GO 待ち**の段階。
+- **2026-06-08 追加（perf-dialog-backdrop、同 v2.6.0 に同梱）**: 設定ダイアログ（S キー）激重の主因＝ダイアログ `::backdrop` の `backdrop-filter: blur(4px)`（中央のみ覆い外周は backdrop 下で動く 60fps メイン画面が透け→全画面ぼかし毎フレーム再計算）を撤去（`.confirm-dialog::backdrop` / `.form-dialog::backdrop` の2規則）。暗幕 rgba(0,0,0,0.7) 維持＝見た目ほぼ不変・レイアウト不変。`.card` blur 撤去（v2.1.0）と同轍。致命バグ保護5件・payout/pool 非接触。**1358件全PASS**（v267 +5）。version 据置。軽量フロー（段階1スキップ4条件 met）。
 - **2026-06-08 追加（stack-unify + preset-hint、同 v2.6.0 に同梱）**: バイインの初期スタックを `buyIn.chips` に統一し独立「スタートスタック」欄を UI 撤去（B）+ 配当プリセット適用に説明 hint 追加（③）。`computeAvgStack` を buyIn.chips ベース化、migration（per-tournament marker `stackModel:'unified'`）で `buyIn.chips := startingStack`（AVG STACK 数値保全・startingStack dormant 温存）。**実 store 13 トーナメントで AVG 移行前後 mismatch=0**（既に buyIn.chips===startingStack で実質 no-op）。致命バグ保護5件・payout/pool 非接触。**1353件全PASS**（v266 +12）。version 据置。**perf-heaviness と renderer.js 別領域で非衝突**。
 - **2026-06-08 追加（perf-heaviness、同 v2.6.0 に同梱）**: アプリ激重・他アプリ巻き込みの安全な軽量化を実装完了＋構築士2 完了承認。背景 `background-attachment: fixed→scroll`／marquee `will-change` 撤去／operator のみ `backgroundThrottling:true`（hall・operator-solo は false 据置）＋ PERF_METRICS env ゲートの計測ハーネス（本番無害）。**視覚・タイマー精度・2画面同期・音声・致命保護5件すべて不変**。CC 自走 IDLE 実測（GPU≈2.5%常駐／rAF=0 自己停止裏取り）、**定量 GPU 比較・体感は前原 6-B 委譲**（単画面 PC・実 GPU の制約）。**1341件全PASS**（v265 +13）。version 2.6.0 据置。commit `f593ad1`。**perf 反映版の統合 testbuild 再生成済**（下記）。
 - **現在ブランチ**: `feature/payout-amount-default`（**main 未merge**）。**直前 commit `f593ad1`**（perf-heaviness）。チェーン: `f593ad1`(perf) → `ec16e7f`(STEP5) → `80dab52`(STEP4 fee E-1) → `03a2b08`(STEP3 配当%撤去+§5解消) → `470da37`(STEP2 $UI+通貨$) → `83d59ff`(STEP1 potAmounts基盤) → `994d3eb`(payout-amount-default ①〜④)。土台は main `f804114`(v2.5.1)。
