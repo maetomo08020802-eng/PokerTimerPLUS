@@ -103,8 +103,8 @@ test('P1 (保護): 致命バグ保護 5 件すべて維持', () => {
   assert.ok(calls >= 8, `schedulePersistRuntime 呼出が ${calls} 件（8 以上期待）`);
 });
 
-test('P2: version 据え置き（2.5.1）+ v264 登録', () => {
-  assert.equal(PKG.version, '2.5.1', `version が ${PKG.version}`);
+test('P2: version 2.6.0（配信 bump 済）+ v264 登録', () => {
+  assert.equal(PKG.version, '2.6.0', `version が ${PKG.version}`);
   assert.ok(PKG.scripts.test.includes('v264-fee-pot-yen-step4.test.js'), 'v264 未登録');
 });
 

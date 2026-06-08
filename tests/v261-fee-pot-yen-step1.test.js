@@ -143,8 +143,8 @@ test('S8 (保護): 致命バグ保護 5 件すべて維持', () => {
   assert.ok(calls >= 8, `schedulePersistRuntime 呼出が ${calls} 件（8 以上期待）`);
 });
 
-test('S9: version 据え置き（実装中 2.5.1、配信時 2.6.0）', () => {
-  assert.equal(PKG.version, '2.5.1', `version が ${PKG.version}（実装中据え置き）`);
+test('S9: version 2.6.0（配信 bump 済）', () => {
+  assert.equal(PKG.version, '2.6.0', `version が ${PKG.version}`);
 });
 
 test('S10: scripts.test に v261 登録', () => {

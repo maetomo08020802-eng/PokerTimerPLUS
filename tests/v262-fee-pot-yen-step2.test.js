@@ -123,8 +123,8 @@ test('S1 (保護): 致命バグ保護（resetBlindProgressOnly / ensureEditorEdi
   // 注: fee-lock（🔒）は STEP 4（E-1）で撤去済。本 STEP2 テストでは存続を要求しない（v264 が撤去を担保）。
 });
 
-test('S2: version 据え置き（2.5.1）+ v262 登録', () => {
-  assert.equal(PKG.version, '2.5.1', `version が ${PKG.version}`);
+test('S2: version 2.6.0（配信 bump 済）+ v262 登録', () => {
+  assert.equal(PKG.version, '2.6.0', `version が ${PKG.version}`);
   assert.ok(PKG.scripts.test.includes('v262-fee-pot-yen-step2.test.js'), 'v262 未登録');
 });
 

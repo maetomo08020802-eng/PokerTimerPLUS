@@ -183,7 +183,7 @@ test('S11 (保護): プール計算（computeCalculatedPool / poolRates）は不
 });
 
 test('S12: version 据え置き（実装中は bump しない）', () => {
-  assert.equal(PKG.version, '2.5.1', `version が ${PKG.version}（実装中は 2.5.1 据え置き、配信時 2.5.2）`);
+  assert.equal(PKG.version, '2.6.0', `version が ${PKG.version}（実装中は 2.5.1 据え置き、配信時 2.5.2）`);
 });
 
 test('S13: scripts.test に v260 が登録', () => {
