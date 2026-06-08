@@ -14,9 +14,9 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| (内部整理・配信なし) | legacy-id-rename（`*-pool-rate`→`*-pot` 純粋リネーム） | 🟢 実装完了・**構築士2 完了承認**・1358件全PASS・orphan0/null参照0／ブランチ `chore/legacy-id-rename`（`18bd8fc`）／**前原 GO で main merge（`--no-ff`・Release なし）** | `.cc-briefs/2026-06-08_legacy-id-rename_brief.md` | `.cc-plans/2026-06-08_legacy-id-rename_plan.md` | `.cc-reports/2026-06-08_legacy-id-rename.md` |
+| (なし) | — | **オープン作業 0 件・安定運用フェーズ**。v2.6.0 配信済（Latest 公開中）+ legacy-id-rename（内部整理）main 取込済・クローズ | — | — | — |
 
-> ※ v2.6.0 は配信完了（2026-06-08、Latest 公開中）・案件群クローズ済（md アーカイブ + feature ブランチ削除）。詳細は `.cc-archive/v260-release/`。
+> ※ v2.6.0 は配信完了（2026-06-08、Latest 公開中）・案件群クローズ済。**legacy-id-rename（内部命名整理）は前原 GO で main merge `95c7621`（`--no-ff`・Release なし・version 2.6.0 据置）→ ブランチ `chore/legacy-id-rename` 削除済**。関連 md は `.cc-archive/v2.6.0-payout-model/` に統合退避（briefs27/plans6/reports13=46件）。
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
