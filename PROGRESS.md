@@ -16,7 +16,7 @@
 |------------|-------------|------|-------|------|--------|
 | v2.5.2（予定） | payout-amount-default 修正（金額固定＋初期値金額＋％端数根治） | 🟢 確定部分1〜4 実装完了・1280件全PASS／**§5 前原 escalate 待ち** | `.cc-briefs/2026-06-07_payout-amount-default_brief.md` | `.cc-plans/2026-06-07_payout-amount-default_plan.md` | `.cc-reports/2026-06-07_payout-amount-default.md` |
 | v2.6.0 | fee-pot-yen 実装（店内通貨$・1件あたり拠出モデル／%全廃） | 📦 STEP1〜5 全完了・version 2.6.0 bump 済・テストビルド OK・1328件全PASS／**前原 6-B → 配信 GO 待ち** | `.cc-briefs/2026-06-07_fee-pot-yen_impl_brief.md` | `.cc-plans/2026-06-07_fee-pot-yen_plan.md` | `.cc-reports/2026-06-07_fee-pot-yen_step5_testbuild.md` |
-| v2.6.0 | perf-heaviness（アプリ激重・他アプリ巻き込みの安全な軽量化） | 🟡 実装完了・1341件全PASS／**前原 6-B（実 GPU 体感・他アプリ巻き込み・見た目不変）待ち** | `.cc-briefs/2026-06-08_perf-heaviness_brief.md` | `.cc-plans/2026-06-08_perf-heaviness_plan.md` | `.cc-reports/2026-06-08_perf-heaviness.md` |
+| v2.6.0 | perf-heaviness（アプリ激重・他アプリ巻き込みの安全な軽量化） | 📦 実装完了・完了承認・統合 testbuild 済・1341件全PASS／**前原 6-B（実 GPU 体感・他アプリ巻き込み・見た目不変）待ち** | `.cc-briefs/2026-06-08_perf-heaviness_brief.md` | `.cc-plans/2026-06-08_perf-heaviness_plan.md` | `.cc-reports/2026-06-08_perf-heaviness.md` |
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。
@@ -85,9 +85,9 @@
 
 ### 🔖 引き継ぎサマリ（2026-06-08 セッションクリア時点）
 - **進行中の最優先案件**: **v2.6.0 fee-pot-yen（賞金を店内通貨$・1件あたり拠出モデルへ刷新／%全廃）**。**STEP1〜5（実装＋テストビルド）全完了**、**前原 6-B 実機確認 → 配信 GO 待ち**の段階。
-- **2026-06-08 追加（perf-heaviness、同 v2.6.0 に同梱）**: アプリ激重・他アプリ巻き込みの安全な軽量化を実装完了。背景 `background-attachment: fixed→scroll`／marquee `will-change` 撤去／operator のみ `backgroundThrottling:true`（hall・operator-solo は false 据置）＋ PERF_METRICS env ゲートの計測ハーネス（本番無害）。**視覚・タイマー精度・2画面同期・音声・致命保護5件すべて不変**。CC 自走 IDLE 実測（GPU≈2.5%常駐／rAF=0 自己停止裏取り）、**定量 GPU 比較・体感は前原 6-B 委譲**（単画面 PC・実 GPU の制約）。**1341件全PASS**（v265 +13）。version 2.6.0 据置。**まだ testbuild 未再生成**（前原 6-B 前に perf 反映版を再ビルドするか要判断）。
-- **現在ブランチ**: `feature/payout-amount-default`（**main 未merge**）。**直前 commit `ec16e7f`**（v2.6.0 bump + cascade + docs）。チェーン: `ec16e7f`(STEP5) → `80dab52`(STEP4 fee E-1) → `03a2b08`(STEP3 配当%撤去+§5解消) → `470da37`(STEP2 $UI+通貨$) → `83d59ff`(STEP1 potAmounts基盤) → `994d3eb`(payout-amount-default ①〜④)。土台は main `f804114`(v2.5.1)。perf-heaviness commit はこの後。
-- **テスト**: 1341件全PASS（version 2.6.0、perf-heaviness +13）。**テストインストーラ生成済（perf 反映前）**: `dist\pokertimerplus-setup-2.6.0.exe`（≈79MB、--publish never）。
+- **2026-06-08 追加（perf-heaviness、同 v2.6.0 に同梱）**: アプリ激重・他アプリ巻き込みの安全な軽量化を実装完了＋構築士2 完了承認。背景 `background-attachment: fixed→scroll`／marquee `will-change` 撤去／operator のみ `backgroundThrottling:true`（hall・operator-solo は false 据置）＋ PERF_METRICS env ゲートの計測ハーネス（本番無害）。**視覚・タイマー精度・2画面同期・音声・致命保護5件すべて不変**。CC 自走 IDLE 実測（GPU≈2.5%常駐／rAF=0 自己停止裏取り）、**定量 GPU 比較・体感は前原 6-B 委譲**（単画面 PC・実 GPU の制約）。**1341件全PASS**（v265 +13）。version 2.6.0 据置。commit `f593ad1`。**perf 反映版の統合 testbuild 再生成済**（下記）。
+- **現在ブランチ**: `feature/payout-amount-default`（**main 未merge**）。**直前 commit `f593ad1`**（perf-heaviness）。チェーン: `f593ad1`(perf) → `ec16e7f`(STEP5) → `80dab52`(STEP4 fee E-1) → `03a2b08`(STEP3 配当%撤去+§5解消) → `470da37`(STEP2 $UI+通貨$) → `83d59ff`(STEP1 potAmounts基盤) → `994d3eb`(payout-amount-default ①〜④)。土台は main `f804114`(v2.5.1)。
+- **テスト**: 1341件全PASS（version 2.6.0、perf-heaviness +13）。**統合テストインストーラ生成済（fee-pot-yen + perf 両方焼込）**: `dist\pokertimerplus-setup-2.6.0.exe`（≈83MB、--publish never、HEAD `f593ad1`）。asar 焼込確認（bg-scroll=1 / operator-throttle=1 / __PERF_METRICS=5 / fixed残留=0 / potAmounts=42 / 1件あたり拠出=23）＋ packaged 起動スモーク OK（8秒生存・クラッシュなし）。**main 非merge / tag 無し / GitHub Release 非接触（最新 Release は v2.5.1 のまま）**。
 - **配信ガード**: **main 非merge / tag 無し / GitHub Release 非接触**（最新 Release は v2.5.1 のまま）。配信は前原 6-B OK + GO 後。
 - **次にやること（GO 受領後、CC 自走）**: feature/payout-amount-default → main merge（`--no-ff`）→ tag `v2.6.0` → push → main から .exe 再ビルド → GitHub Release `v2.6.0` 公開（Latest・自動更新、アセット latest.yml+setup.exe+.blockmap）→ 案件クローズ + md を `.cc-archive/fee-pot-yen/` へ退避 + feature ブランチ整理。
 - **前原 6-B（テストビルド `dist\pokertimerplus-setup-2.6.0.exe`）**: ①店内通貨$表示 / ②1件あたり$拠出×件数でプール / ③配当金額固定（ドリフトなし）/ ④%がどこにも無い / ⑤既存トーナメント移行（TOTAL POOL 数値不変・$表示、起動ログで中間%0/13 runtime 確認済）/ ⑥🔒・モーダル無し・¥フィー自由編集 / 追：2画面・音声・タイマー（v2.5.1 同等）。
