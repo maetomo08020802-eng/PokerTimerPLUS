@@ -14,7 +14,7 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| (内部整理・配信なし) | legacy-id-rename（`*-pool-rate`→`*-pot` 純粋リネーム） | 🟡 実装完了・1358件全PASS・orphan0/null参照0／**完了 review → main merge 待ち（Release なし）** | `.cc-briefs/2026-06-08_legacy-id-rename_brief.md` | `.cc-plans/2026-06-08_legacy-id-rename_plan.md` | `.cc-reports/2026-06-08_legacy-id-rename.md` |
+| (内部整理・配信なし) | legacy-id-rename（`*-pool-rate`→`*-pot` 純粋リネーム） | 🟢 実装完了・**構築士2 完了承認**・1358件全PASS・orphan0/null参照0／ブランチ `chore/legacy-id-rename`（`18bd8fc`）／**前原 GO で main merge（`--no-ff`・Release なし）** | `.cc-briefs/2026-06-08_legacy-id-rename_brief.md` | `.cc-plans/2026-06-08_legacy-id-rename_plan.md` | `.cc-reports/2026-06-08_legacy-id-rename.md` |
 
 > ※ v2.6.0 は配信完了（2026-06-08、Latest 公開中）・案件群クローズ済（md アーカイブ + feature ブランチ削除）。詳細は `.cc-archive/v260-release/`。
 
