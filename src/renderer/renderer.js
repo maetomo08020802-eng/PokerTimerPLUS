@@ -363,18 +363,11 @@ const el = {
   venueNameError:  document.getElementById('js-venue-name-error'),
   venueSaveBtn:    document.getElementById('js-venue-save'),
 
-  // v2.4.0: フィー編集ロック制御（C.1-A2 ensureEditorEditableState / setBlindsTableReadonly とは別 namespace）
-  tournamentBuyinFeeLockBtn:    document.getElementById('js-tournament-buyin-fee-lock'),
-  tournamentReentryFeeLockBtn:  document.getElementById('js-tournament-reentry-fee-lock'),
-  tournamentAddonFeeLockBtn:    document.getElementById('js-tournament-addon-fee-lock'),
-  // v2.4.0: プール率入力欄（フィー隣、トーナメント個別）
+  // v2.6.0: 🔒fee-lock 関連 el（FeeLockBtn / feeUnlockDialog 系）は撤去（E-1）
+  // POT 入力欄（フィー隣、トーナメント個別。legacy id *-pool-rate だが値は店内通貨 $ の1件あたり拠出）
   tournamentBuyinPoolRate:      document.getElementById('js-tournament-buyin-pool-rate'),
   tournamentReentryPoolRate:    document.getElementById('js-tournament-reentry-pool-rate'),
   tournamentAddonPoolRate:      document.getElementById('js-tournament-addon-pool-rate'),
-  // v2.4.0: フィー解除確認ダイアログ
-  feeUnlockDialog:              document.getElementById('js-fee-unlock-dialog'),
-  feeUnlockOkBtn:               document.getElementById('js-fee-unlock-ok'),
-  feeUnlockCancelBtn:           document.getElementById('js-fee-unlock-cancel'),
   // v2.4.0: 店舗デフォルト プール率（設定ダイアログ ハウス情報タブ、グローバル）
   appPoolRateDefaultBuyin:      document.getElementById('js-app-pool-rate-default-buyin'),
   appPoolRateDefaultReentry:    document.getElementById('js-app-pool-rate-default-reentry'),
@@ -1404,12 +1397,7 @@ function applyTournament(t) {
   if (el.tournamentCustomGameWrapper) {
     el.tournamentCustomGameWrapper.hidden = (tournamentState.gameType !== 'other');
   }
-  // v2.4.0: トーナメント切替・保存・新規・複製・dual-sync 受信後にフィーを自動再ロック（§11.5 (D)）。
-  //   入力中保護: _typingGuard が true（フィー欄に入力中）の場合は skip して打鍵中の挙動を破壊しない。
-  //   ただし readonly 属性を再付与するだけで input.value は変更しないため、値消失リスクは元々ない。
-  if (!_typingGuard && typeof lockAllFees === 'function') {
-    lockAllFees();
-  }
+  // v2.6.0: 🔒fee-lock（自動再ロック）は撤去（E-1）。¥フィーは記録として自由編集可。
   // settings-scope-clarity STEP1: 設定ダイアログ上部の現在トーナメント名ヘッダを更新。
   //   applyTournament は active 切替 / 新規 / 複製 / 起動復元 / dual-sync 受信すべての合流点のため、
   //   ここ 1 点で「トーナメント切替で即更新」を満たす（タブ閉時はヘルパが no-op）。
@@ -2705,103 +2693,16 @@ el.venueSaveBtn?.addEventListener('click', () => {
 });
 
 // =============================================================================
-// v2.4.0: フィー編集ロック制御 + 解除確認ダイアログ + 店舗デフォルト プール率編集
+// v2.6.0: フィー編集ロック（🔒）撤去（E-1）+ 店舗デフォルト POT 編集
 // =============================================================================
 //
-// 【C.1-A2 衝突回避】本機構（setFeeReadonly / feeLockState）はフィー input 単体の readonly 制御。
-//   ブラインド表 readonly 制御（C.1-A2 ensureEditorEditableState / setBlindsTableReadonly）とは
-//   別 DOM 階層・別 namespace で機能的に独立。混同しないよう関数名・変数名を明確に分離。
-
-// フィー編集ロック状態（起動時すべて true = readonly + 🔒、§11.5 仕様）
-const feeLockState = {
-  buyIn:   true,
-  reentry: true,
-  addOn:   true
-};
-
-// 解除ダイアログで「解除する」を押した時に対象となる feeLockState のキー
-let _feeUnlockTarget = null;
-
-// v2.4.0: フィー target → DOM 要素ペアの解決（switch case 化で動的キー組立てバグを完全排除）。
-//   旧実装の `el[\`tournament${_capitalizeFeeTarget(target)}Fee\`]` は 'buyIn' → 'BuyIn'（I 大文字残存）
-//   になり、`tournamentBuyinFeeLockBtn` (小文字 i) と不一致でバイイン / アドオン 🔒 が無反応になる
-//   バグが再発した（前原実機検証 2 回）。switch case 直結で再発不能化。
-function _resolveFeeElements(target) {
-  switch (target) {
-    case 'buyIn':   return { inputEl: el.tournamentBuyinFee,   btnEl: el.tournamentBuyinFeeLockBtn };
-    case 'reentry': return { inputEl: el.tournamentReentryFee, btnEl: el.tournamentReentryFeeLockBtn };
-    case 'addOn':   return { inputEl: el.tournamentAddonFee,   btnEl: el.tournamentAddonFeeLockBtn };
-    default:        return { inputEl: null, btnEl: null };
-  }
-}
-
-// v2.4.0: フィー input の readonly 切替 + 🔒/🔓 アイコン更新
-//   target: 'buyIn' | 'reentry' | 'addOn'
-//   locked: true（ロック、readonly + 🔒）/ false（解除、編集可 + 🔓）
-function setFeeReadonly(target, locked) {
-  const { inputEl, btnEl } = _resolveFeeElements(target);
-  if (!inputEl || !btnEl) return;
-  if (locked) {
-    inputEl.setAttribute('readonly', '');
-    btnEl.textContent = '🔒';
-    btnEl.setAttribute('aria-label', 'フィー編集を解除');
-  } else {
-    inputEl.removeAttribute('readonly');
-    btnEl.textContent = '🔓';
-    btnEl.setAttribute('aria-label', 'フィー編集をロック');
-  }
-  feeLockState[target] = locked;
-}
-
-// v2.4.0: 3 フィー一括ロック（保存・切替・再起動の自動再ロック契機で呼出）
-function lockAllFees() {
-  setFeeReadonly('buyIn',   true);
-  setFeeReadonly('reentry', true);
-  setFeeReadonly('addOn',   true);
-}
-
-// v2.4.0: 解除ダイアログを表示（target を保存して showModal）
-function openFeeUnlockDialog(target) {
-  _feeUnlockTarget = target;
-  if (el.feeUnlockDialog && typeof el.feeUnlockDialog.showModal === 'function') {
-    try { el.feeUnlockDialog.showModal(); } catch (_) { /* 既に open の場合は無視 */ }
-  }
-}
-
-// v2.4.0: 🔒/🔓 ボタン click ハンドラ群（target は data-fee-target で識別）
-//   動的キー組立て（forEach + _capitalizeFeeTarget）で reentry のみ動き buyIn/addOn 無反応のバグが
-//   再発したため、3 つの listener を直接登録に変更（動的キー組立てを完全排除）。
-//   ハンドラ本体は共通関数 _handleFeeLockBtnClick に集約。
-function _handleFeeLockBtnClick(target) {
-  try { window.api?.log?.write?.('ui:click:major', { id: `feeLockBtn:${target}`, locked: feeLockState[target] }); } catch (_) {}
-  if (feeLockState[target]) {
-    openFeeUnlockDialog(target);          // ロック中 → 解除確認ダイアログ
-  } else {
-    setFeeReadonly(target, true);          // 解除中 → 即時ロック復帰（§15.2 (A) クリック反転式）
-  }
-}
-el.tournamentBuyinFeeLockBtn?.addEventListener('click',   () => _handleFeeLockBtnClick('buyIn'));
-el.tournamentReentryFeeLockBtn?.addEventListener('click', () => _handleFeeLockBtnClick('reentry'));
-el.tournamentAddonFeeLockBtn?.addEventListener('click',   () => _handleFeeLockBtnClick('addOn'));
-
-// v2.4.0: 解除ダイアログの「解除する」ボタン
-el.feeUnlockOkBtn?.addEventListener('click', () => {
-  if (_feeUnlockTarget) {
-    setFeeReadonly(_feeUnlockTarget, false);
-    // フォーカスを該当フィー input に移して即編集可能に（_resolveFeeElements 経由で動的キー組立て排除）
-    const { inputEl } = _resolveFeeElements(_feeUnlockTarget);
-    inputEl?.focus();
-    inputEl?.select?.();
-    _feeUnlockTarget = null;
-  }
-  el.feeUnlockDialog?.close?.();
-});
-
-// v2.4.0: 解除ダイアログの「キャンセル」ボタン
-el.feeUnlockCancelBtn?.addEventListener('click', () => {
-  _feeUnlockTarget = null;
-  el.feeUnlockDialog?.close?.();
-});
+// 【E-1】v2.4.0 の 🔒fee-lock（feeLockState / setFeeReadonly / lockAllFees / 解除ダイアログ）は撤去。
+//   理由: 本モデルで ¥フィーは賞金プールに無関係（pool = Σ potAmounts$ × 件数、フィー独立）になり、
+//   🔒 の存在理由（フィー変更でプライズ変動を防ぐ景表法保護）が消滅。解除ダイアログ文言
+//   「フィーを入力するとプライズプールが変動します」も虚偽化するため。¥フィーは「買込 / 店売上の記録」
+//   として自由編集可（readonly 撤去）。
+//   ※ ブラインド表 readonly 制御（C.1-A2 ensureEditorEditableState / setBlindsTableReadonly）は
+//     別 namespace・致命バグ保護のため不可侵（本撤去は fee-lock のみ）。
 
 // v2.4.0: 店舗デフォルト プール率（appConfig.poolRatesDefault）の保存 + UI フィードバック
 function _appPoolRateDefaultHintReset() {

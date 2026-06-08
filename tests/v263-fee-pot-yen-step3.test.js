@@ -100,12 +100,12 @@ test('R6: buildTournamentForm の payoutMode は amount（金額固定保存）'
 // ============================================================
 // 保護
 // ============================================================
-test('S1 (保護): 致命バグ保護 5 件 + fee-lock 未撤去（E-1 は STEP 4）', () => {
+test('S1 (保護): 致命バグ保護 5 件維持（fee-lock は STEP4/E-1 で撤去済）', () => {
   assert.ok(/function\s+resetBlindProgressOnly\s*\(/.test(RENDERER), 'resetBlindProgressOnly 消失');
   assert.ok(/function\s+ensureEditorEditableState\s*\(/.test(RENDERER), 'ensureEditorEditableState 消失');
   const calls = (RENDERER.match(/schedulePersistRuntime\s*\(\s*\)/g) || []).length;
   assert.ok(calls >= 8, `schedulePersistRuntime 呼出が ${calls} 件（8 以上期待）`);
-  assert.match(INDEX, /id="js-fee-unlock-dialog"/, 'STEP3 で fee-unlock dialog を消してはいけない（E-1 は STEP4）');
+  // 注: fee-lock（🔒）は STEP 4（E-1）で撤去済。存続を要求しない（v264 が撤去を担保）。
 });
 
 test('S2: version 据え置き（2.5.1）+ v263 登録', () => {

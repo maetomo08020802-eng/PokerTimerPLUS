@@ -2395,33 +2395,9 @@ body:not(.has-marquee) .marquee { display: none; }
   white-space: nowrap;     /* STEP 6.6: 「許可ブレイク」「許可レベル」が2段折返しせず1段表示 */
 }
 
-/* v2.4.0: フィー入力欄の readonly + 🔒アイコン視覚化（既存 .tournament-editor__inline-label を継承） */
-.tournament-editor__inline-label--locked {
-  /* 🔒ボタン用の余白は inline-flex の gap で自然に確保される */
-}
+/* v2.6.0: 🔒fee-lock（--locked / fee-lock-btn）CSS は撤去（E-1）。¥フィーは買込記録として自由編集可。 */
 
-/* v2.4.0: フィー編集解除ボタン（🔒 / 🔓 切替）。透明背景・小型・カーソル変更で視認性確保 */
-.tournament-editor__fee-lock-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.8vw;
-  height: 1.8vw;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 1.1vw;
-  color: var(--text-secondary);
-  padding: 0;
-  border-radius: 4px;
-  transition: color 0.15s ease, background-color 0.15s ease;
-}
-.tournament-editor__fee-lock-btn:hover {
-  color: var(--gold);
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-/* v2.4.0: フィー input の readonly 視覚化（編集不可を明示） */
+/* readonly 入力（ブラインド表等、fee 以外）の視覚化（編集不可を明示） */
 .tournament-editor__input[readonly] {
   opacity: 0.55;
   cursor: not-allowed;

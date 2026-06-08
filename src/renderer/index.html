@@ -391,16 +391,7 @@
     </div>
   </dialog>
 
-  <!-- v2.4.0: フィー編集解除確認ダイアログ。既存 confirm-dialog 規約準拠（<dialog> に flex 禁止）。 -->
-  <dialog class="confirm-dialog confirm-dialog--fee-unlock" id="js-fee-unlock-dialog">
-    <h2 class="confirm-dialog__title">フィー編集を解除</h2>
-    <p class="confirm-dialog__message">フィーを入力するとプライズプールが変動します。</p>
-    <p class="confirm-dialog__hint">フィー入力時はプライズに反映されます（反映率設定可）</p>
-    <div class="confirm-dialog__actions">
-      <button type="button" class="btn btn--ghost" value="cancel" id="js-fee-unlock-cancel">キャンセル</button>
-      <button type="button" class="btn btn--primary" value="ok" id="js-fee-unlock-ok">解除する</button>
-    </div>
-  </dialog>
+  <!-- v2.6.0: フィー編集解除確認ダイアログ（🔒fee-lock）は撤去（E-1）。¥フィーは買込記録として自由編集可。 -->
 
   <!-- settings-scope-clarity STEP2: ブラインド構造の共有保存 3択確認モーダル。
        既存 confirm-dialog 規約準拠（<dialog> に flex 禁止、actions のみ flex）。
@@ -811,9 +802,8 @@
           <div class="form-row">
             <span class="form-row__label">バイイン</span>
             <div class="tournament-editor__inline-fields">
-              <label class="tournament-editor__inline-label tournament-editor__inline-label--locked">フィー
-                <input type="number" id="js-tournament-buyin-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="3000" readonly>
-                <button type="button" class="tournament-editor__fee-lock-btn" id="js-tournament-buyin-fee-lock" data-fee-target="buyIn" aria-label="フィー編集を解除">🔒</button>
+              <label class="tournament-editor__inline-label">フィー（買込¥）
+                <input type="number" id="js-tournament-buyin-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="3000">
               </label>
               <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-buyin-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
               <label class="tournament-editor__inline-label">1件あたり拠出
@@ -826,9 +816,8 @@
           <div class="form-row">
             <span class="form-row__label">リエントリー</span>
             <div class="tournament-editor__inline-fields">
-              <label class="tournament-editor__inline-label tournament-editor__inline-label--locked">フィー
-                <input type="number" id="js-tournament-reentry-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000" readonly>
-                <button type="button" class="tournament-editor__fee-lock-btn" id="js-tournament-reentry-fee-lock" data-fee-target="reentry" aria-label="フィー編集を解除">🔒</button>
+              <label class="tournament-editor__inline-label">フィー（買込¥）
+                <input type="number" id="js-tournament-reentry-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000">
               </label>
               <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-reentry-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="8000"></label>
               <label class="tournament-editor__inline-label">1件あたり拠出
@@ -840,9 +829,8 @@
           <div class="form-row">
             <span class="form-row__label">アドオン</span>
             <div class="tournament-editor__inline-fields">
-              <label class="tournament-editor__inline-label tournament-editor__inline-label--locked">フィー
-                <input type="number" id="js-tournament-addon-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000" readonly>
-                <button type="button" class="tournament-editor__fee-lock-btn" id="js-tournament-addon-fee-lock" data-fee-target="addOn" aria-label="フィー編集を解除">🔒</button>
+              <label class="tournament-editor__inline-label">フィー（買込¥）
+                <input type="number" id="js-tournament-addon-fee"   class="tournament-editor__input tournament-editor__input--narrow" min="0" step="100"  value="2000">
               </label>
               <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-addon-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
               <label class="tournament-editor__inline-label">1件あたり拠出

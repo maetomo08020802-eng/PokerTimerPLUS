@@ -117,11 +117,10 @@ test('P1: preload が settings.setPotDefaults を公開', () => {
 // ============================================================
 // 保護
 // ============================================================
-test('S1 (保護): 致命バグ保護 5 件 + fee-lock 未撤去（E-1 は STEP 4）', () => {
+test('S1 (保護): 致命バグ保護（resetBlindProgressOnly / ensureEditorEditableState）維持', () => {
   assert.ok(/function\s+resetBlindProgressOnly\s*\(/.test(RENDERER), 'resetBlindProgressOnly 消失');
   assert.ok(/function\s+ensureEditorEditableState\s*\(/.test(RENDERER), 'ensureEditorEditableState 消失');
-  // STEP 2 では fee-lock（🔒）は未撤去のまま（E-1 撤去は STEP 4）
-  assert.match(INDEX, /id="js-fee-unlock-dialog"/, 'STEP2 で fee-unlock dialog を消してはいけない（E-1 は STEP4）');
+  // 注: fee-lock（🔒）は STEP 4（E-1）で撤去済。本 STEP2 テストでは存続を要求しない（v264 が撤去を担保）。
 });
 
 test('S2: version 据え置き（2.5.1）+ v262 登録', () => {
