@@ -452,6 +452,10 @@ const DEFAULT_TOURNAMENT_EXT = Object.freeze({
   // STEP 6.5
   guarantee: 0,            // GTD保証賞金（0 なら無効、計算プールがそのまま使われる）
   payoutRounding: 100,     // 配当端数の丸め単位（1 / 10 / 100 / 1000 円）
+  // v2.5.2: 賞金傾斜モード（'percent'=プール比例 / 'amount'=入力額固定）。
+  //   migration は payouts の amount 有無から推論、新規 save は renderer が 'amount' を送信。
+  //   ここ（DEFAULT）は最終 fallback 用で 'percent'（既存挙動＝プール比例を安全側に維持）。
+  payoutMode: 'percent',
   // STEP 6.7: 賞金区分（自由入力、空文字なら表示しない）
   // 例: 「ハウスチケット」「ポイント」「景品」「賞品」など、店舗運用に応じて
   prizeCategory: '',
@@ -484,7 +488,10 @@ const DEFAULT_TOURNAMENT_EXT = Object.freeze({
   // v2.4.0: プール率（賞金プール反映率、各フィー個別、0〜100 整数）
   //   このデフォルト値（100%）は migration / fallback 経路で使われる「既存互換」用。
   //   新規トーナメント作成時は store.appConfig.poolRatesDefault（=0%）から積込まれる。
-  poolRates: { buyIn: 100, reentry: 100, addOn: 100 }
+  poolRates: { buyIn: 100, reentry: 100, addOn: 100 },
+  // v2.6.0: POT（店内通貨 $ の1件あたり拠出額、¥フィー独立）。pool = Σ(potAmounts × 件数)。
+  //   既定 0（店が都度設定。0 なら賞金プールが立たない）。migration で poolRates から変換。
+  potAmounts: { buyIn: 0, reentry: 0, addOn: 0 }
 });
 
 // STEP 6.22.1: テロップ速度の許容値 + サニタイズ共通関数
@@ -540,6 +547,38 @@ function sanitizePoolRates(value, fallback) {
     buyIn:   sanitizePoolRate(value.buyIn,   fb.buyIn),
     reentry: sanitizePoolRate(value.reentry, fb.reentry),
     addOn:   sanitizePoolRate(value.addOn,   fb.addOn)
+  };
+}
+
+// v2.6.0: POT（店内通貨 $ の1件あたり拠出額）の sanitize。
+//   - 非負整数。¥フィーとは独立（プール拠出専用）。安全のため大きめ上限 cap。
+//   - poolRates%（v2.4.0）を置換する新モデル。pool = Σ(potAmounts × 件数)。
+const MAX_POT_AMOUNT = 1_000_000_000; // 拠出上限（オーバーフロー/誤入力ガード）
+function sanitizePotAmount(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) {
+    const fb = Number(fallback);
+    return Number.isFinite(fb) && fb >= 0 ? Math.min(Math.floor(fb), MAX_POT_AMOUNT) : 0;
+  }
+  return Math.min(Math.floor(n), MAX_POT_AMOUNT);
+}
+
+// v2.6.0: potAmounts オブジェクト（{ buyIn, reentry, addOn }）の sanitize（sanitizePoolRates と同型）
+function sanitizePotAmounts(value, fallback) {
+  const fb = (fallback && typeof fallback === 'object')
+    ? fallback
+    : { buyIn: 0, reentry: 0, addOn: 0 };
+  if (!value || typeof value !== 'object') {
+    return {
+      buyIn:   sanitizePotAmount(fb.buyIn,   0),
+      reentry: sanitizePotAmount(fb.reentry, 0),
+      addOn:   sanitizePotAmount(fb.addOn,   0)
+    };
+  }
+  return {
+    buyIn:   sanitizePotAmount(value.buyIn,   fb.buyIn),
+    reentry: sanitizePotAmount(value.reentry, fb.reentry),
+    addOn:   sanitizePotAmount(value.addOn,   fb.addOn)
   };
 }
 
@@ -695,7 +734,7 @@ const store = new Store({
       id: 'tournament-default',
       name: 'ポーカートーナメント',
       subtitle: '',
-      currencySymbol: '¥',
+      currencySymbol: '$',   // v2.6.0: 店内通貨（既定 $）
       blindPresetId: 'demo-fast',
       // STEP 6: バイイン・賞金構造・ゲーム種
       startingStack: 10000,
@@ -762,7 +801,9 @@ const store = new Store({
     // v2.4.0: 店舗デフォルトのプール率（賞金プール反映率、新規トーナメント作成時にコピーされる初期値）
     //   0%＝安全側（景品表示法・風営法対応）。既存トーナメントは migration で 100% 補完されるため挙動完全維持。
     appConfig: {
-      poolRatesDefault: { buyIn: 0, reentry: 0, addOn: 0 }
+      poolRatesDefault: { buyIn: 0, reentry: 0, addOn: 0 },
+      // v2.6.0: 店舗デフォルトの POT（店内通貨 $ の1件あたり拠出、新規トーナメントにコピー）。既定 0。
+      potDefaults: { buyIn: 0, reentry: 0, addOn: 0 }
     }
   }
 });
@@ -891,7 +932,7 @@ function migrateTournament(s) {
       id,
       name: oldT.title || oldT.name || 'ポーカートーナメント',
       subtitle: oldT.subtitle || '',
-      currencySymbol: oldT.currencySymbol || '¥',
+      currencySymbol: oldT.currencySymbol || '$',
       blindPresetId: oldT.blindPresetId || 'demo-fast'
     };
     s.set('tournaments', [migrated]);
@@ -909,6 +950,7 @@ function migrateTournamentSchema(s) {
   let changed = false;
   let filledTimerState = 0;       // STEP 6.21: timerState 補完件数（ログ用）
   let filledDisplaySettings = 0;  // STEP 6.21.6: displaySettings 補完件数（ログ用）
+  let intermediatePoolRateCount = 0; // v2.6.0: 中間%（0/100以外）の項目数（poolRate→POT 変換で数値ズレ可能性の監査ログ）
   let filledMarqueeSettings = 0;  // STEP 6.22.1: marqueeSettings 補完件数（ログ用）
   const globalDisplay = s.get('display') || {};
   const fallbackDisplay = {
@@ -926,6 +968,16 @@ function migrateTournamentSchema(s) {
     let touched = false;
     if (typeof m.startingStack !== 'number') { m.startingStack = DEFAULT_TOURNAMENT_EXT.startingStack; touched = true; }
     if (!m.buyIn  || typeof m.buyIn  !== 'object') { m.buyIn  = { ...DEFAULT_TOURNAMENT_EXT.buyIn  }; touched = true; }
+    // stack-unify（2026-06-08）: 初期スタックを buyIn.chips に統一。未 unified の各トーナメントに
+    //   buyIn.chips := startingStack（旧 AVG STACK が使っていた値）を一度きり設定 → 移行後も AVG STACK
+    //   数値を完全保全。startingStack は dormant 温存（削除しない＝downgrade ロールバック安全）。
+    //   marker stackModel='unified' で再変換しない（後続のスタック編集を巻き戻さない）。
+    //   旧形式 export の import は normalizeTournament 側の同 gated ブロックで unify。
+    if (m.stackModel !== 'unified') {
+      m.buyIn.chips = Number(m.startingStack) || 0;
+      m.stackModel = 'unified';
+      touched = true;
+    }
     // STEP 6.9: rebuy → reentry リネーム（旧データ存在時は移行 + 旧キー削除）
     if (m.rebuy && typeof m.rebuy === 'object' && !m.reentry) {
       m.reentry = { fee: m.rebuy.fee || 0, chips: m.rebuy.chips || 0 };
@@ -940,6 +992,14 @@ function migrateTournamentSchema(s) {
     if (!m.addOn  || typeof m.addOn  !== 'object') { m.addOn  = { ...DEFAULT_TOURNAMENT_EXT.addOn  }; touched = true; }
     if (!Array.isArray(m.payouts) || m.payouts.length === 0) {
       m.payouts = DEFAULT_TOURNAMENT_EXT.payouts.map((p) => ({ ...p }));
+      touched = true;
+    }
+    // v2.5.2: payoutMode 補完（既存トーナメント）。amount 全ランク保持 → 'amount'（固定）、
+    //   それ以外 → 'percent'（プール比例、既存挙動維持）。TOTAL POOL 総額は変えない。
+    if (m.payoutMode !== 'amount' && m.payoutMode !== 'percent') {
+      const allHaveAmount = Array.isArray(m.payouts) && m.payouts.length > 0
+        && m.payouts.every((p) => p && Number.isFinite(Number(p.amount)) && Number(p.amount) >= 0);
+      m.payoutMode = allHaveAmount ? 'amount' : 'percent';
       touched = true;
     }
     if (typeof m.gameType !== 'string' || !VALID_GAME_TYPES.includes(m.gameType)) {
@@ -1006,6 +1066,37 @@ function migrateTournamentSchema(s) {
         m.poolRates = fixed;
         touched = true;
       }
+    }
+    // v2.6.0: poolRates%（旧）→ potAmounts$（新）へ一度だけ変換（POT = round(fee × poolRate / 100)）。
+    //   poolRate 100%（既存支配ケース）→ POT=fee 数値厳密一致 / 0%→0 ＝ TOTAL POOL 数値不変（v2.4.0 不変条件維持）。
+    //   旧 poolRates は削除せず温存（dormant、ロールバック可）。pool 計算は今後 potAmounts のみ参照。
+    if (!m.potAmounts || typeof m.potAmounts !== 'object') {
+      const feeOf = (o) => (o && typeof o === 'object' && Number.isFinite(Number(o.fee))) ? Number(o.fee) : 0;
+      const rate = m.poolRates || {};
+      // 中間%（0/100 以外）の検出 → 数値ズレ可能性を集計ログ（v2.4.0 不変条件の実データ監査用）
+      for (const k of ['buyIn', 'reentry', 'addOn']) {
+        const rv = Number(rate[k]);
+        if (rv !== 0 && rv !== 100) intermediatePoolRateCount += 1;
+      }
+      m.potAmounts = {
+        buyIn:   sanitizePotAmount(Math.round(feeOf(m.buyIn)   * (Number(rate.buyIn)   || 0) / 100)),
+        reentry: sanitizePotAmount(Math.round(feeOf(m.reentry) * (Number(rate.reentry) || 0) / 100)),
+        addOn:   sanitizePotAmount(Math.round(feeOf(m.addOn)   * (Number(rate.addOn)   || 0) / 100))
+      };
+      touched = true;
+    } else {
+      const before = JSON.stringify(m.potAmounts);
+      const fixed = sanitizePotAmounts(m.potAmounts, DEFAULT_TOURNAMENT_EXT.potAmounts);
+      if (JSON.stringify(fixed) !== before) {
+        m.potAmounts = fixed;
+        touched = true;
+      }
+    }
+    // v2.6.0: 通貨記号を店内通貨 $ へ読み替え。リテラル '¥'（既定値）のみ置換し、カスタム記号は不可侵。
+    //   TOTAL POOL 等の数値は不変（表示記号のみの変更、前原承認済の店内通貨表示）。
+    if (m.currencySymbol === '¥') {
+      m.currencySymbol = '$';
+      touched = true;
     }
     // STEP 10 フェーズC.1.8: runtime 補完（旧バージョンデータには runtime フィールドなし）
     if (!m.runtime || typeof m.runtime !== 'object') {
@@ -1083,6 +1174,9 @@ function migrateTournamentSchema(s) {
   if (filledMarqueeSettings > 0) {
     console.log(`[STEP 6.22.1] marqueeSettings 補完: ${filledMarqueeSettings}/${list.length} 件 (fallback=${JSON.stringify(fallbackMarquee)})`);
   }
+  // v2.6.0: poolRate→POT 変換の数値ズレ監査。中間%（0/100以外）があれば POT=round(fee×%/100) で ≤数円ズレうる
+  //   → 前原承認・report 明記用に件数を必ずログ。0 件なら全件 TOTAL POOL 数値厳密一致（v2.4.0 不変条件維持）。
+  console.log(`[v2.6.0] poolRate→POT 変換: 中間%(0/100以外)の項目数 = ${intermediatePoolRateCount}/${list.length}件 (0 なら TOTAL POOL 数値厳密一致)`);
   if (changed) s.set('tournaments', next);
 }
 migrateTournamentSchema(store);
@@ -1341,10 +1435,19 @@ function buildWebPreferences(role) {
     nodeIntegration: false,
     sandbox: true,
     devTools: true,
-    backgroundThrottling: false,
+    // perf-heaviness（2026-06-08）: 背面/最小化時の省電力化。
+    //   true は 2 画面モードの手元制御窓 operator のみ。
+    //   hall（会場表示）と operator-solo（単画面で会場表示を兼務／HDMI 抜き時に動的にこの role へ）は
+    //   会場表示窓のカクつきを避けるため false 据置（review 2026-06-08 確定）。
+    //   ※ Chromium の backgroundThrottling は window が hidden/minimized/occluded のときのみ
+    //     rAF/timer を絞る（visible-but-unfocused では絞らない）→ 可視運用時は挙動完全不変。
+    backgroundThrottling: role === 'operator',
     // v2.0.0 STEP 1: preload.js が process.argv から `--role=...` を抽出して
     //   document.documentElement に data-role 属性を付与する。CSP 不変、inline script 不要。
-    additionalArguments: [`--role=${role}`]
+    // perf-heaviness: PERF_METRICS env 時のみ `--perf-metrics=1` も渡す（renderer rAF Hz 計測ゲート、本番無効）。
+    additionalArguments: process.env.PERF_METRICS === '1'
+      ? [`--role=${role}`, '--perf-metrics=1']
+      : [`--role=${role}`]
   };
 }
 
@@ -1488,7 +1591,8 @@ function createHallWindow(targetDisplay) {
     focusable: false,
     // v2.0.4-rc9 Fix 1-A: focusable:false が描画優先度を下げる Windows 挙動を回避するため、
     //   show:true を明示化 + paintWhenInitiallyHidden:true（webPreferences）で初期描画を保証。
-    //   backgroundThrottling:false は buildWebPreferences で既に設定済（重複指定なし）。
+    //   省電力スロットルは buildWebPreferences(role) 側で role 別に決定し、hall は据置（会場表示の
+    //   カクつき回避、perf-heaviness 2026-06-08）。ここでは重複指定しない。
     show: true,
     backgroundColor: '#000000',
     autoHideMenuBar: true,
@@ -1994,6 +2098,15 @@ function registerIpcHandlers() {
     return { ok: true, poolRatesDefault: sanitized };
   });
 
+  // v2.6.0: 店舗デフォルト POT（appConfig.potDefaults、店内通貨 $ の1件あたり拠出）の保存。
+  //   新規トーナメント作成時に normalizeTournament の既定補完で参照される。value: { buyIn, reentry, addOn }（$、非負整数）。
+  ipcMain.handle('settings:setPotDefaults', (_event, value) => {
+    const sanitized = sanitizePotAmounts(value, { buyIn: 0, reentry: 0, addOn: 0 });
+    const cur = store.get('appConfig') || {};
+    store.set('appConfig', { ...cur, potDefaults: sanitized });
+    return { ok: true, potDefaults: sanitized };
+  });
+
   // ===== STEP 9-B: ロゴ設定 IPC =====
   // ファイル選択 + userData ディレクトリへコピー（custom モードへ即移行）
   ipcMain.handle('logo:selectFile', async () => {
@@ -2310,6 +2423,10 @@ function registerIpcHandlers() {
       const n = Number(t.payoutRounding);
       out.payoutRounding = VALID_PAYOUT_ROUNDINGS.includes(n) ? n : (fallback.payoutRounding ?? DEFAULT_TOURNAMENT_EXT.payoutRounding);
     }
+    // v2.5.2: 賞金傾斜モード（whitelist 検証。不正値は percent 扱い）
+    if ('payoutMode' in t) {
+      out.payoutMode = (t.payoutMode === 'amount') ? 'amount' : 'percent';
+    }
     // STEP 6.7: 賞金区分（空文字も許容、最大20文字）
     if ('prizeCategory' in t) {
       const s = (typeof t.prizeCategory === 'string') ? t.prizeCategory.slice(0, 20) : '';
@@ -2367,18 +2484,25 @@ function registerIpcHandlers() {
         appliedCount: Math.min(999, Math.max(0, Math.floor(toNonNegNumber(ss.appliedCount, fb.appliedCount ?? 0))))
       };
     }
-    // v2.4.0: poolRates 取込（部分更新可、sanitize 経由）
+    // v2.4.0: poolRates 取込（部分更新可、sanitize 経由）。v2.6.0 で計算からは外したが dormant 温存
     if (t.poolRates && typeof t.poolRates === 'object') {
       out.poolRates = sanitizePoolRates(
         t.poolRates,
         fallback.poolRates || DEFAULT_TOURNAMENT_EXT.poolRates
       );
     }
+    // v2.6.0: potAmounts 取込（店内通貨 $ の1件あたり拠出、部分更新可）
+    if (t.potAmounts && typeof t.potAmounts === 'object') {
+      out.potAmounts = sanitizePotAmounts(
+        t.potAmounts,
+        fallback.potAmounts || DEFAULT_TOURNAMENT_EXT.potAmounts
+      );
+    }
 
     // 既定値補完
     if (!out.name) out.name = 'ポーカートーナメント';
     if (typeof out.subtitle !== 'string') out.subtitle = '';
-    if (typeof out.currencySymbol !== 'string') out.currencySymbol = '¥';
+    if (typeof out.currencySymbol !== 'string') out.currencySymbol = '$';
     if (typeof out.blindPresetId !== 'string') out.blindPresetId = 'demo-fast';
     // STEP 10 フェーズA: 補完時も必ず新コードに正規化（旧コードが既定値に紛れ込むのを防ぐ）
     out.gameType = normalizeGameType(out.gameType ?? DEFAULT_TOURNAMENT_EXT.gameType);
@@ -2386,6 +2510,15 @@ function registerIpcHandlers() {
     if (!out.buyIn)   out.buyIn   = { ...DEFAULT_TOURNAMENT_EXT.buyIn };
     if (!out.reentry) out.reentry = { ...DEFAULT_TOURNAMENT_EXT.reentry };
     if (!out.addOn)   out.addOn   = { ...DEFAULT_TOURNAMENT_EXT.addOn };
+    // stack-unify（2026-06-08）: 初期スタックを buyIn.chips に統一。入力（t）も fallback も未 unified の
+    //   場合のみ buyIn.chips := startingStack を実施し AVG STACK を保全（旧形式 export の import 救済）。
+    //   既 unified（renderer 保存は stackModel='unified' を送る / 既存 store は migration 済）は再変換しない
+    //   ＝後続のスタック編集を巻き戻さない。startingStack は dormant 温存。正規化後は必ず unified。
+    {
+      const wasUnified = (t.stackModel === 'unified') || (fallback.stackModel === 'unified');
+      if (!wasUnified) out.buyIn.chips = Number(out.startingStack) || 0;
+      out.stackModel = 'unified';
+    }
     if (!Array.isArray(out.payouts) || out.payouts.length === 0) {
       out.payouts = DEFAULT_TOURNAMENT_EXT.payouts.map((p) => ({ ...p }));
     }
@@ -2394,6 +2527,11 @@ function registerIpcHandlers() {
     }
     if (typeof out.payoutRounding !== 'number' || !VALID_PAYOUT_ROUNDINGS.includes(out.payoutRounding)) {
       out.payoutRounding = DEFAULT_TOURNAMENT_EXT.payoutRounding;
+    }
+    // v2.5.2: payoutMode 既定補完（fallback 優先、なければ percent）
+    if (out.payoutMode !== 'amount' && out.payoutMode !== 'percent') {
+      out.payoutMode = (fallback.payoutMode === 'amount' || fallback.payoutMode === 'percent')
+        ? fallback.payoutMode : 'percent';
     }
     if (typeof out.prizeCategory !== 'string') out.prizeCategory = '';
     if (!out.specialStack || typeof out.specialStack !== 'object') {
@@ -2415,6 +2553,14 @@ function registerIpcHandlers() {
         ? fallback.poolRates
         : ((store.get('appConfig') || {}).poolRatesDefault || { buyIn: 0, reentry: 0, addOn: 0 });
       out.poolRates = sanitizePoolRates(undefined, fbRates);
+    }
+    // v2.6.0: potAmounts 既定補完（優先: 取込済 > fallback.potAmounts > appConfig.potDefaults > DEFAULT=0）。
+    //   新規 save（fallback={id}）は potDefaults（0）採用、既存上書き（fallback=list[idx]）は旧 POT 維持。
+    if (!out.potAmounts || typeof out.potAmounts !== 'object') {
+      const fbPot = (fallback.potAmounts && typeof fallback.potAmounts === 'object')
+        ? fallback.potAmounts
+        : ((store.get('appConfig') || {}).potDefaults || { buyIn: 0, reentry: 0, addOn: 0 });
+      out.potAmounts = sanitizePotAmounts(undefined, fbPot);
     }
     // STEP 6.21: timerState 既定補完
     out.timerState = normalizeTimerState(out.timerState ?? fallback.timerState);
@@ -2470,10 +2616,14 @@ function registerIpcHandlers() {
         : DEFAULT_TOURNAMENT_EXT.payouts.map((p) => ({ ...p })),
       guarantee: t.guarantee ?? DEFAULT_TOURNAMENT_EXT.guarantee,
       payoutRounding: t.payoutRounding ?? DEFAULT_TOURNAMENT_EXT.payoutRounding,
+      // v2.5.2: 賞金傾斜モード（renderer applyTournament が読む）
+      payoutMode: (t.payoutMode === 'amount' || t.payoutMode === 'percent') ? t.payoutMode : 'percent',
       prizeCategory: typeof t.prizeCategory === 'string' ? t.prizeCategory : '',
       specialStack: t.specialStack ?? { ...DEFAULT_TOURNAMENT_EXT.specialStack },
-      // v2.4.0: poolRates 同梱（renderer 側 applyTournament が読む）
+      // v2.4.0: poolRates 同梱（renderer 側 applyTournament が読む）。v2.6.0 で dormant だが温存
       poolRates: sanitizePoolRates(t.poolRates, DEFAULT_TOURNAMENT_EXT.poolRates),
+      // v2.6.0: potAmounts 同梱（renderer 側 applyTournament が読む。pool = Σ(POT × 件数)）
+      potAmounts: sanitizePotAmounts(t.potAmounts, DEFAULT_TOURNAMENT_EXT.potAmounts),
       // STEP 6.17
       titleColor: TITLE_COLOR_RE.test(t.titleColor || '') ? t.titleColor : '#FFFFFF',
       // STEP 10 フェーズC.2.3
@@ -3189,6 +3339,10 @@ function registerIpcHandlers() {
       if (!payload || typeof payload !== 'object') return;
       const label = (typeof payload.label === 'string') ? payload.label : 'renderer:unknown';
       rollingLog(label, payload.data || null);
+      // perf-heaviness: PERF_METRICS 時のみ renderer の perf:* ラベル（rAF Hz 等）を perf-metrics.log に合流。本番無効。
+      if (_PERF_METRICS_ON && label.indexOf('perf:') === 0) {
+        _perfLogAppend({ ts: new Date().toISOString(), label, data: payload.data || null });
+      }
     } catch (_) { /* never throw from logging */ }
   });
   // 'ログフォルダを開く' ボタンから呼ばれる。shell.openPath で OS のファイルマネージャで logs/ を表示。
@@ -3211,6 +3365,41 @@ function _resolveLogsDir() {
     fs.mkdirSync(dir, { recursive: true });
     return dir;
   } catch (_) { return null; }
+}
+
+// ============================================================
+// perf-heaviness 計測ハーネス（2026-06-08、PERF_METRICS env ゲート＝本番完全無効）
+//   PERF_METRICS=1 のときだけ app.getAppMetrics() を 2s 間隔でサンプリングし、
+//   各プロセス（Browser[main] / Tab[renderer] / GPU / Utility）の CPU% / 物理メモリを
+//   <userData>/logs/perf-metrics.log に JSON 1 行ずつ追記する。
+//   renderer の rAF Hz は 'rolling-log:write' 経由 'perf:raf-hz' を同ファイルに合流（下の IPC 分岐）。
+//   未設定（通常起動・本番）では一切動かない＝「念のためコード追加禁止」原則に合致。
+// ============================================================
+const _PERF_METRICS_ON = process.env.PERF_METRICS === '1';
+let _perfMetricsTimer = null;
+function _perfLogAppend(entry) {
+  try {
+    const dir = _resolveLogsDir();
+    if (!dir) return;
+    fs.appendFileSync(path.join(dir, 'perf-metrics.log'), JSON.stringify(entry) + '\n');
+  } catch (_) { /* never throw from perf log */ }
+}
+function _startPerfMetricsSampler() {
+  if (!_PERF_METRICS_ON || _perfMetricsTimer) return;
+  _perfLogAppend({ ts: new Date().toISOString(), label: 'perf:session', data: { electron: process.versions.electron, platform: process.platform } });
+  _perfMetricsTimer = setInterval(() => {
+    try {
+      const metrics = (typeof app.getAppMetrics === 'function') ? app.getAppMetrics() : [];
+      const snapshot = metrics.map((m) => ({
+        pid: m.pid,
+        type: m.type,
+        cpu: (m.cpu && typeof m.cpu.percentCPUUsage === 'number') ? Math.round(m.cpu.percentCPUUsage * 100) / 100 : null,
+        // workingSetSize は KB 単位 → MB（小数 1 桁）
+        memMB: (m.memory && typeof m.memory.workingSetSize === 'number') ? Math.round(m.memory.workingSetSize / 1024 * 10) / 10 : null
+      }));
+      _perfLogAppend({ ts: new Date().toISOString(), label: 'perf:metrics', data: snapshot });
+    } catch (_) { /* never throw from perf sampler */ }
+  }, 2000);
 }
 
 app.whenReady().then(async () => {
@@ -3261,6 +3450,8 @@ app.whenReady().then(async () => {
   // v2.0.0 STEP 4: createMainWindow が async（モニター選択ダイアログを await）になったため、
   //   shortcuts 登録より前に await して mainWindow が確実に生成された状態にする。
   await createMainWindow();
+  // perf-heaviness 計測ハーネス起動（PERF_METRICS env ゲート、本番無効）。ウィンドウ生成後に開始。
+  _startPerfMetricsSampler();
   registerShortcuts();
   // v2.0.0 STEP 5: HDMI 抜き差しイベント駆動追従の購読開始（ポーリング禁止、screen API のみ）
   setupDisplayChangeListeners();

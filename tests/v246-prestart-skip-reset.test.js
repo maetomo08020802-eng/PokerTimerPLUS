@@ -88,7 +88,7 @@ function extractIdleHallBlock() {
 // T1: package.json.version === '2.2.1'
 // ============================================================
 test('T1: package.json.version === 2.2.1', () => {
-  assert.equal(PKG.version, '2.5.1', `期待 2.2.1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.6.0', `期待 2.2.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================

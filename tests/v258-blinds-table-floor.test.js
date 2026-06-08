@@ -120,7 +120,7 @@ test('T9: 本修正の関連 CSS に position:fixed / transform:scale が無い'
 // ============================================================
 test('version: package.json は 2.5.1 据え置き（本修正で bump しない）', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.5.1', `version が ${pkg.version}（2.5.1 据え置き）`);
+  assert.equal(pkg.version, '2.6.0', `version が ${pkg.version}（2.5.1 据え置き）`);
 });
 
 test('version: scripts.test に v258-blinds-table-floor.test.js が含まれる', () => {

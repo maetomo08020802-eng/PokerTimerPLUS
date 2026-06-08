@@ -286,7 +286,10 @@
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
+  /* perf-heaviness（2026-06-08）: fixed → scroll。本アプリは body 全体が固定 viewport flex で
+     スクロールしない（ui-layout.md）ため見た目は完全に同一だが、fixed は GPU 再合成・
+     全画面再ペイントを誘発しやすく、scroll は通常レイヤとしてキャッシュされ軽い。 */
+  background-attachment: scroll;
 }
 :root[data-bg="image"] body::before,
 :root[data-bg="image"] body::after {
@@ -1599,7 +1602,10 @@ body:not(.has-marquee) .marquee { display: none; }
   animation-duration: var(--marquee-duration, 20s);
   animation-timing-function: linear;
   animation-iteration-count: infinite;
-  will-change: transform;
+  /* perf-heaviness（2026-06-08）: will-change: transform を削除。
+     marquee は infinite アニメ中の transform でブラウザが自動的にコンポジタ層化するため、
+     明示 will-change がなくてもスクロールは滑らかなまま（効果は限定的だが常駐層ヒントを 1 枚削減）。
+     表示制御 display:none（body:not(.has-marquee)）時はそもそも非描画。 */
 }
 
 @keyframes marquee-scroll {
@@ -1693,9 +1699,11 @@ body:not(.has-marquee) .marquee { display: none; }
 }
 
 .confirm-dialog::backdrop {
+  /* perf-dialog-backdrop（2026-06-08）: backdrop-filter: blur(4px) を撤去。ダイアログは中央のみ覆い、
+     外周は backdrop 下で動き続けるメイン画面（RUNNING 中はタイマー60fps＋marquee 無限アニメ）が透けるため、
+     全画面ぼかしを毎フレーム再計算し続け非力 GPU で激重だった。.card の blur 撤去（v2.1.0、style.css:1018）と同轍。
+     暗幕 rgba(0,0,0,0.7) は維持＝十分暗く設定は読みやすい（ぼかしの奥行きが消えるのみ・レイアウト不変）。 */
   background-color: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .confirm-dialog__message {
@@ -1784,9 +1792,10 @@ body:not(.has-marquee) .marquee { display: none; }
 }
 
 .form-dialog::backdrop {
+  /* perf-dialog-backdrop（2026-06-08）: 設定ダイアログ（S キー）激重の主因 backdrop-filter: blur(4px) を撤去。
+     RUNNING 中は backdrop 下のメイン画面が 60fps で動き続け全画面ぼかしを毎フレーム再計算 → 非力 GPU で激重。
+     .card の blur 撤去（v2.1.0、style.css:1018）と同轍。暗幕 rgba(0,0,0,0.7) は維持（レイアウト不変・見た目ほぼ不変）。 */
   background-color: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
 }
 
 .form-dialog__title {
@@ -2395,33 +2404,9 @@ body:not(.has-marquee) .marquee { display: none; }
   white-space: nowrap;     /* STEP 6.6: 「許可ブレイク」「許可レベル」が2段折返しせず1段表示 */
 }
 
-/* v2.4.0: フィー入力欄の readonly + 🔒アイコン視覚化（既存 .tournament-editor__inline-label を継承） */
-.tournament-editor__inline-label--locked {
-  /* 🔒ボタン用の余白は inline-flex の gap で自然に確保される */
-}
+/* v2.6.0: 🔒fee-lock（--locked / fee-lock-btn）CSS は撤去（E-1）。¥フィーは買込記録として自由編集可。 */
 
-/* v2.4.0: フィー編集解除ボタン（🔒 / 🔓 切替）。透明背景・小型・カーソル変更で視認性確保 */
-.tournament-editor__fee-lock-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.8vw;
-  height: 1.8vw;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 1.1vw;
-  color: var(--text-secondary);
-  padding: 0;
-  border-radius: 4px;
-  transition: color 0.15s ease, background-color 0.15s ease;
-}
-.tournament-editor__fee-lock-btn:hover {
-  color: var(--gold);
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-/* v2.4.0: フィー input の readonly 視覚化（編集不可を明示） */
+/* readonly 入力（ブラインド表等、fee 以外）の視覚化（編集不可を明示） */
 .tournament-editor__input[readonly] {
   opacity: 0.55;
   cursor: not-allowed;
@@ -2503,29 +2488,7 @@ body:not(.has-marquee) .marquee { display: none; }
   font-weight: 700;
 }
 
-/* STEP 6.5: 入力モード切替（% / 金額） */
-.payouts-mode-row {
-  align-items: center;
-}
-
-.payouts-mode-toggle {
-  display: flex;
-  gap: var(--space-md);
-  align-items: center;
-}
-
-.payouts-mode-toggle label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4vw;
-  cursor: pointer;
-  font-size: 1vw;
-  color: var(--text-secondary);
-}
-
-.payouts-mode-toggle input[type="radio"] {
-  accent-color: var(--gold);
-}
+/* v2.6.0: 入力モード切替（% / 金額）の toggle CSS は撤去（配当は金額固定） */
 
 /* STEP 6: プレスタートダイアログの参加人数入力行 */
 .prestart-players-row {

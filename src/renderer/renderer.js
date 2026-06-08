@@ -137,8 +137,29 @@ const _RafLabel = {
   TIMER_PRE_START_TICK: 'timer-pre-start-tick',
   RENDERER_MISC: 'renderer-misc'
 };
+// perf-heaviness（2026-06-08）: rAF 発火 Hz カウンタ（window.__PERF_METRICS true 時のみ作動）。
+//   _wrappedRAF のコールバック発火時にラベル別カウントを加算し、1s ごとに 'perf:raf-hz' で main に flush。
+//   ★ rAF の発火条件・頻度・自己停止ロジックには一切触れない（計測フックのみ）。本番（フラグ未付与）では完全無作動。
+const _perfRafCounts = Object.create(null);
+let _perfRafFlushTimer = null;
+function _perfMetricsEnabled() {
+  try { return typeof window !== 'undefined' && window.__PERF_METRICS === true; } catch (_) { return false; }
+}
+function _startPerfRafFlush() {
+  if (!_perfMetricsEnabled() || _perfRafFlushTimer) return;
+  _perfRafFlushTimer = setInterval(() => {
+    try {
+      const hz = {};
+      for (const k in _perfRafCounts) { hz[k] = _perfRafCounts[k]; _perfRafCounts[k] = 0; }
+      window.api?.log?.write?.('perf:raf-hz', { role: (typeof window !== 'undefined' && window.appRole) || null, hz });
+    } catch (_) { /* never throw from perf flush */ }
+  }, 1000);
+}
 function _wrappedRAF(label, fn) {
   return requestAnimationFrame((t) => {
+    if (_perfMetricsEnabled()) {
+      try { _perfRafCounts[label] = (_perfRafCounts[label] || 0) + 1; } catch (_) { /* never throw from perf count */ }
+    }
     try { fn(t); } catch (e) {
       try { window.api?.log?.write?.('error:caught:wrappedRAF', { label, message: e?.message }); } catch (_) {}
     }
@@ -152,7 +173,7 @@ const tournamentState = {
   id: 'tournament-default',
   title: 'ポーカートーナメント',
   subtitle: '',
-  currencySymbol: '¥',
+  currencySymbol: '$',   // v2.6.0: 店内通貨（既定 $）。実通貨¥ではない
   blindPresetId: 'demo-fast',   // 起動時に復元するブラインド構造ID（適用は「保存して適用」）
   // STEP 6: 拡張フィールド
   // STEP 10 フェーズA: defaults を新コードに統一（マイグレーション後の永続化形式と整合）
@@ -171,6 +192,9 @@ const tournamentState = {
   // STEP 6.5
   guarantee: 0,
   payoutRounding: 100,
+  // v2.5.2: 賞金傾斜モード（'percent'=プール比例 / 'amount'=入力額固定）。
+  //   applyTournament で保存値に同期。新規トーナメントは 'amount'（main 側 newT が送信）。
+  payoutMode: 'percent',
   // STEP 6.7
   prizeCategory: '',
   // STEP 6.9: 特殊スタック（早期着席特典・VIP特典など）
@@ -182,7 +206,9 @@ const tournamentState = {
   pauseAfterBreak: false,
   // v2.4.0: プール率（賞金プール反映率、起動時に main 側 store からの load で上書きされる）
   //   renderer 側初期ダミー値は 100%（main 側 migration が走らない異常時でも既存挙動維持）
-  poolRates: { buyIn: 100, reentry: 100, addOn: 100 }
+  poolRates: { buyIn: 100, reentry: 100, addOn: 100 },
+  // v2.6.0: POT（店内通貨 $ の1件あたり拠出、¥フィー独立）。pool = Σ(potAmounts × 件数)。applyTournament で保存値に同期
+  potAmounts: { buyIn: 0, reentry: 0, addOn: 0 }
 };
 
 // STEP 6.17: タイトル色 hex バリデーション（#RRGGBB のみ許可）
@@ -222,7 +248,7 @@ function getNextSB(currentSB) {
 }
 
 // 賞金構造エディタの入力モード（'percent' | 'amount'）。内部スキーマは常に % を保持
-let payoutInputMode = 'percent';
+let payoutInputMode = 'amount';   // v2.6.0: 配当は金額（店内通貨）固定。% 入力モードは撤去（常に 'amount'）
 
 // ゲーム種コード → 表示文字列
 // STEP 10 フェーズA: 新コード（'nlh' 等）と旧コード（'NLHE' 等）の両対応マップ。
@@ -358,18 +384,11 @@ const el = {
   venueNameError:  document.getElementById('js-venue-name-error'),
   venueSaveBtn:    document.getElementById('js-venue-save'),
 
-  // v2.4.0: フィー編集ロック制御（C.1-A2 ensureEditorEditableState / setBlindsTableReadonly とは別 namespace）
-  tournamentBuyinFeeLockBtn:    document.getElementById('js-tournament-buyin-fee-lock'),
-  tournamentReentryFeeLockBtn:  document.getElementById('js-tournament-reentry-fee-lock'),
-  tournamentAddonFeeLockBtn:    document.getElementById('js-tournament-addon-fee-lock'),
-  // v2.4.0: プール率入力欄（フィー隣、トーナメント個別）
+  // v2.6.0: 🔒fee-lock 関連 el（FeeLockBtn / feeUnlockDialog 系）は撤去（E-1）
+  // POT 入力欄（フィー隣、トーナメント個別。legacy id *-pool-rate だが値は店内通貨 $ の1件あたり拠出）
   tournamentBuyinPoolRate:      document.getElementById('js-tournament-buyin-pool-rate'),
   tournamentReentryPoolRate:    document.getElementById('js-tournament-reentry-pool-rate'),
   tournamentAddonPoolRate:      document.getElementById('js-tournament-addon-pool-rate'),
-  // v2.4.0: フィー解除確認ダイアログ
-  feeUnlockDialog:              document.getElementById('js-fee-unlock-dialog'),
-  feeUnlockOkBtn:               document.getElementById('js-fee-unlock-ok'),
-  feeUnlockCancelBtn:           document.getElementById('js-fee-unlock-cancel'),
   // v2.4.0: 店舗デフォルト プール率（設定ダイアログ ハウス情報タブ、グローバル）
   appPoolRateDefaultBuyin:      document.getElementById('js-app-pool-rate-default-buyin'),
   appPoolRateDefaultReentry:    document.getElementById('js-app-pool-rate-default-reentry'),
@@ -462,7 +481,7 @@ const el = {
   tournamentCustomGame:        document.getElementById('js-tournament-custom-game'),
   tournamentCustomGameWrapper: document.getElementById('js-tournament-custom-game-wrapper'),
   tournamentPauseAfterBreak:   document.getElementById('js-tournament-pause-after-break'),
-  tournamentStartingStack: document.getElementById('js-tournament-starting-stack'),
+  // stack-unify（2026-06-08）: 独立スタートスタック欄は廃止。初期スタックは buyIn.chips（下記）に統一。
   tournamentBuyinFee:    document.getElementById('js-tournament-buyin-fee'),
   tournamentBuyinChips:  document.getElementById('js-tournament-buyin-chips'),
   // STEP 6.9: rebuy → reentry リネーム
@@ -482,7 +501,7 @@ const el = {
   // STEP 6.5
   tournamentGuarantee:      document.getElementById('js-tournament-guarantee'),
   tournamentPayoutRounding: document.getElementById('js-tournament-payout-rounding'),
-  tournamentPayoutMode:     document.getElementById('js-tournament-payout-mode'),
+  // v2.6.0: 配当 % 入力モード toggle（js-tournament-payout-mode）は撤去（金額固定）
   // STEP 6.7
   tournamentPrizeCategory:  document.getElementById('js-tournament-prize-category'),
   tournamentTitleCounter:   document.getElementById('js-tournament-title-counter'),
@@ -1017,14 +1036,14 @@ function renderControls(status) {
 //   - STEP 2 migration により既存トーナメントは { buyIn: 100, reentry: 100, addOn: 100 }（旧式と完全一致）
 //   - 新規トーナメントは appConfig.poolRatesDefault（=0%）から積込まれる（安全側、景品表示法対応）
 //   - 万一 poolRates が state に不在の場合は防御的に 0% フォールバック（GTD のみ反映）
+// v2.6.0: 計算プール = Σ(POT × 件数)。potAmounts（店内通貨 $ の1件あたり拠出）を ¥フィー独立で積み上げ。
+//   $整数 × 整数件数 ＝ 端数原理的ゼロ。poolRates%（v2.4.0）は廃止（migration で POT へ変換済、dormant 温存）。
+//   既存トーナメントは migration で POT=round(fee×poolRate/100) 済 → 100%/0% は旧 pool と数値厳密一致。
 function computeCalculatedPool() {
-  const buyIn   = tournamentState.buyIn   || { fee: 0 };
-  const reentry = tournamentState.reentry || { fee: 0 };
-  const addOn   = tournamentState.addOn   || { fee: 0 };
-  const rates   = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
-  return (buyIn.fee   || 0) * tournamentRuntime.playersInitial * (Number(rates.buyIn)   || 0) / 100
-       + (reentry.fee || 0) * tournamentRuntime.reentryCount    * (Number(rates.reentry) || 0) / 100
-       + (addOn.fee   || 0) * tournamentRuntime.addOnCount      * (Number(rates.addOn)   || 0) / 100;
+  const pot = tournamentState.potAmounts || { buyIn: 0, reentry: 0, addOn: 0 };
+  return (Number(pot.buyIn)   || 0) * tournamentRuntime.playersInitial
+       + (Number(pot.reentry) || 0) * tournamentRuntime.reentryCount
+       + (Number(pot.addOn)   || 0) * tournamentRuntime.addOnCount;
 }
 
 function computeTotalPool() {
@@ -1041,15 +1060,17 @@ function isGuaranteeActive() {
 }
 
 // STEP 6.9: AVG STACK 計算に specialStack（chips × appliedCount）を加算
-// TOTAL チップ = startingStack × playersInitial + reentry.chips × reentryCount
+// stack-unify（2026-06-08）: 初期スタックの正を buyIn.chips に統一（独立 startingStack 欄は廃止）。
+//   既存トーナメントは migration で buyIn.chips := startingStack 済のため AVG STACK の数値は不変。
+// TOTAL チップ = buyIn.chips × playersInitial + reentry.chips × reentryCount
 //              + addOn.chips × addOnCount + (specialStack.enabled ? chips × appliedCount : 0)
 function computeAvgStack() {
-  const startingStack = Number(tournamentState.startingStack) || 0;
+  const buyInChips = Number(tournamentState.buyIn?.chips) || 0;
   const reentry = tournamentState.reentry || { chips: 0 };
   const addOn   = tournamentState.addOn   || { chips: 0 };
   const ss      = tournamentState.specialStack || { enabled: false };
   const ssChips = (ss.enabled ? (Number(ss.chips) || 0) * (Number(ss.appliedCount) || 0) : 0);
-  const totalChips = startingStack * tournamentRuntime.playersInitial
+  const totalChips = buyInChips * tournamentRuntime.playersInitial
                    + (reentry.chips || 0) * tournamentRuntime.reentryCount
                    + (addOn.chips   || 0) * tournamentRuntime.addOnCount
                    + ssChips;
@@ -1061,11 +1082,14 @@ function computeAvgStack() {
 // STEP 6.5: 配当金額丸め単位の許容値（main.js の VALID_PAYOUT_ROUNDINGS と同期）
 const VALID_PAYOUT_ROUNDINGS_RENDERER = [1, 10, 100, 1000];
 
-// STEP 6.5: 配当金額を計算（端数処理 + 余りを1位に上乗せ）
-// 戻り値: payouts と同順の数値配列（円単位）
-// v2.1.4 方針 A: amount フィールドが全順位に有効値で存在し、合計が pool と完全一致するなら、
-//   それを直接返す（金額モードで保存した絶対金額を精度損失なく復元）。
-//   pool 変動 / amount 不在 の場合は既存の % 計算にフォールバック（後方互換）。
+// STEP 6.5 / v2.5.2: 配当金額を計算。戻り値は payouts と同順の数値配列（円単位）。
+//   - 金額モード（payoutMode === 'amount'）: 保存された各 amount を「正（source of truth）」として
+//     そのまま返す（pool で逆算しない＝開き直し・人数増減でドリフトしない）。amount 欠損ランクは
+//     防御的に floor(pool×%) で補完（通常データでは発生しない）。
+//   - ％モード: pool×% を「最大剰余法（largest-remainder）」で丸め、合計 === pool を厳密維持。
+//     旧実装の「余り全部を1位上乗せ」が 100005/49995 等のズレを生んでいたのを是正
+//     （rounding≥100 では per-rank が綺麗な単位に着地。¥1 は % の精度ロスが残る＝金額モードで回避）。
+//   ※ pool 計算・poolRates・guarantee ロジックは不変（§5 の TOTAL POOL 表示分岐は前原確定後に別途）。
 function computeRoundedAmounts() {
   const pool = computeTotalPool();
   const rounding = VALID_PAYOUT_ROUNDINGS_RENDERER.includes(tournamentState.payoutRounding)
@@ -1073,25 +1097,29 @@ function computeRoundedAmounts() {
   const payouts = tournamentState.payouts || [];
   if (payouts.length === 0 || pool <= 0) return payouts.map(() => 0);
 
-  // v2.1.4: 全順位に有効な amount があり、合計 === pool ならそれを使う
-  const allHaveAmount = payouts.every((p) => Number.isFinite(p.amount) && p.amount >= 0);
-  if (allHaveAmount) {
-    const amountSum = payouts.reduce((s, p) => s + p.amount, 0);
-    if (amountSum === pool) {
-      return payouts.map((p) => p.amount);
-    }
+  // v2.5.2: 金額モード = 入力額を固定（amount をそのまま返す）
+  if (tournamentState.payoutMode === 'amount') {
+    return payouts.map((p) =>
+      (Number.isFinite(p.amount) && p.amount >= 0)
+        ? p.amount
+        : Math.floor(pool * (Number(p.percentage) || 0) / 100 / rounding) * rounding
+    );
   }
 
-  // 既存の % 計算（amount 不在 or pool 変動時のフォールバック）
-  const amounts = payouts.map((p) => {
-    const raw = pool * (Number(p.percentage) || 0) / 100;
-    return Math.floor(raw / rounding) * rounding;
-  });
-  // 端数の合計（pool - sum）を 1 位に上乗せ
-  const sum = amounts.reduce((s, v) => s + v, 0);
-  const remainder = pool - sum;
-  if (remainder > 0 && amounts.length > 0) {
-    amounts[0] += remainder;
+  // ％モード: pool×% を floor で丸め、端数を最大剰余法で配分（合計 === pool を厳密維持）
+  const raws    = payouts.map((p) => pool * (Number(p.percentage) || 0) / 100);
+  const amounts = raws.map((raw) => Math.floor(raw / rounding) * rounding);
+  const remainders = raws.map((raw, i) => raw - amounts[i]); // 0 .. rounding（切り捨てられた端数）
+  // 大きい remainder のランクから 1 rounding 単位ずつ配分
+  const order = payouts.map((_, i) => i).sort((a, b) => remainders[b] - remainders[a]);
+  let units = Math.floor((pool - amounts.reduce((s, v) => s + v, 0)) / rounding);
+  for (let k = 0; units > 0 && order.length > 0; k++, units--) {
+    amounts[order[k % order.length]] += rounding;
+  }
+  // pool が rounding の倍数でない時の割り切れない端数は最上位 remainder（なければ1位）へ → 合計 === pool 保証
+  const residual = pool - amounts.reduce((s, v) => s + v, 0);
+  if (residual !== 0 && amounts.length > 0) {
+    amounts[order.length > 0 ? order[0] : 0] += residual;
   }
   return amounts;
 }
@@ -1245,12 +1273,20 @@ function applyTournament(t) {
       appliedCount: Math.max(0, Math.min(999, Math.floor(Number(t.specialStack.appliedCount)) || 0))
     };
   }
-  // v2.4.0: poolRates 取込（main 側 sanitize 済み、各値は整数 0〜100 を想定、防御的に再 clamp）
+  // v2.4.0: poolRates 取込（main 側 sanitize 済み、各値は整数 0〜100 を想定、防御的に再 clamp）。v2.6.0 で dormant
   if (t.poolRates && typeof t.poolRates === 'object') {
     tournamentState.poolRates = {
       buyIn:   Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.buyIn)   || 0))),
       reentry: Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.reentry) || 0))),
       addOn:   Math.max(0, Math.min(100, Math.floor(Number(t.poolRates.addOn)   || 0)))
+    };
+  }
+  // v2.6.0: potAmounts 取込（店内通貨 $ の1件あたり拠出、非負整数。防御的に再 sanitize）
+  if (t.potAmounts && typeof t.potAmounts === 'object') {
+    tournamentState.potAmounts = {
+      buyIn:   Math.max(0, Math.floor(Number(t.potAmounts.buyIn)   || 0)),
+      reentry: Math.max(0, Math.floor(Number(t.potAmounts.reentry) || 0)),
+      addOn:   Math.max(0, Math.floor(Number(t.potAmounts.addOn)   || 0))
     };
   }
   if (Array.isArray(t.payouts) && t.payouts.length > 0) {
@@ -1260,6 +1296,10 @@ function applyTournament(t) {
       if (Number.isFinite(p.amount) && p.amount >= 0) out.amount = p.amount;
       return out;
     });
+  }
+  // v2.5.2: 賞金傾斜モード（'percent'/'amount'）を保存値に同期。不正値は percent 扱い（安全側）
+  if (t.payoutMode === 'amount' || t.payoutMode === 'percent') {
+    tournamentState.payoutMode = t.payoutMode;
   }
   // STEP 6.5
   if (typeof t.guarantee === 'number' && t.guarantee >= 0) {
@@ -1380,12 +1420,7 @@ function applyTournament(t) {
   if (el.tournamentCustomGameWrapper) {
     el.tournamentCustomGameWrapper.hidden = (tournamentState.gameType !== 'other');
   }
-  // v2.4.0: トーナメント切替・保存・新規・複製・dual-sync 受信後にフィーを自動再ロック（§11.5 (D)）。
-  //   入力中保護: _typingGuard が true（フィー欄に入力中）の場合は skip して打鍵中の挙動を破壊しない。
-  //   ただし readonly 属性を再付与するだけで input.value は変更しないため、値消失リスクは元々ない。
-  if (!_typingGuard && typeof lockAllFees === 'function') {
-    lockAllFees();
-  }
+  // v2.6.0: 🔒fee-lock（自動再ロック）は撤去（E-1）。¥フィーは記録として自由編集可。
   // settings-scope-clarity STEP1: 設定ダイアログ上部の現在トーナメント名ヘッダを更新。
   //   applyTournament は active 切替 / 新規 / 複製 / 起動復元 / dual-sync 受信すべての合流点のため、
   //   ここ 1 点で「トーナメント切替で即更新」を満たす（タブ閉時はヘルパが no-op）。
@@ -1396,13 +1431,20 @@ function applyTournament(t) {
 // 内部値（1/10/100/1000）は維持。表示文字列のみ動的に変更。
 function refreshPayoutRoundingLabels() {
   if (!el.tournamentPayoutRounding) return;
-  const sym = tournamentState.currencySymbol || '¥';
+  const sym = tournamentState.currencySymbol || '$';
   const prev = el.tournamentPayoutRounding.value;
   for (const opt of el.tournamentPayoutRounding.options) {
     opt.textContent = `${sym}${opt.value}`;
   }
   // 選択値が消えないよう復元
   if (prev) el.tournamentPayoutRounding.value = prev;
+}
+
+// v2.6.0: POT 入力欄の単位表示（.js-pot-unit）を現在の通貨記号（店内通貨）に同期。
+//   トーナメント個別の POT 入力欄が対象（ハウス既定は静的 $）。
+function refreshPotUnitLabels() {
+  const sym = tournamentState.currencySymbol || '$';
+  document.querySelectorAll('.js-pot-unit').forEach((s) => { s.textContent = sym; });
 }
 
 // プリセットIDから本体をロード（同梱→ユーザーの順で探す）
@@ -2674,103 +2716,16 @@ el.venueSaveBtn?.addEventListener('click', () => {
 });
 
 // =============================================================================
-// v2.4.0: フィー編集ロック制御 + 解除確認ダイアログ + 店舗デフォルト プール率編集
+// v2.6.0: フィー編集ロック（🔒）撤去（E-1）+ 店舗デフォルト POT 編集
 // =============================================================================
 //
-// 【C.1-A2 衝突回避】本機構（setFeeReadonly / feeLockState）はフィー input 単体の readonly 制御。
-//   ブラインド表 readonly 制御（C.1-A2 ensureEditorEditableState / setBlindsTableReadonly）とは
-//   別 DOM 階層・別 namespace で機能的に独立。混同しないよう関数名・変数名を明確に分離。
-
-// フィー編集ロック状態（起動時すべて true = readonly + 🔒、§11.5 仕様）
-const feeLockState = {
-  buyIn:   true,
-  reentry: true,
-  addOn:   true
-};
-
-// 解除ダイアログで「解除する」を押した時に対象となる feeLockState のキー
-let _feeUnlockTarget = null;
-
-// v2.4.0: フィー target → DOM 要素ペアの解決（switch case 化で動的キー組立てバグを完全排除）。
-//   旧実装の `el[\`tournament${_capitalizeFeeTarget(target)}Fee\`]` は 'buyIn' → 'BuyIn'（I 大文字残存）
-//   になり、`tournamentBuyinFeeLockBtn` (小文字 i) と不一致でバイイン / アドオン 🔒 が無反応になる
-//   バグが再発した（前原実機検証 2 回）。switch case 直結で再発不能化。
-function _resolveFeeElements(target) {
-  switch (target) {
-    case 'buyIn':   return { inputEl: el.tournamentBuyinFee,   btnEl: el.tournamentBuyinFeeLockBtn };
-    case 'reentry': return { inputEl: el.tournamentReentryFee, btnEl: el.tournamentReentryFeeLockBtn };
-    case 'addOn':   return { inputEl: el.tournamentAddonFee,   btnEl: el.tournamentAddonFeeLockBtn };
-    default:        return { inputEl: null, btnEl: null };
-  }
-}
-
-// v2.4.0: フィー input の readonly 切替 + 🔒/🔓 アイコン更新
-//   target: 'buyIn' | 'reentry' | 'addOn'
-//   locked: true（ロック、readonly + 🔒）/ false（解除、編集可 + 🔓）
-function setFeeReadonly(target, locked) {
-  const { inputEl, btnEl } = _resolveFeeElements(target);
-  if (!inputEl || !btnEl) return;
-  if (locked) {
-    inputEl.setAttribute('readonly', '');
-    btnEl.textContent = '🔒';
-    btnEl.setAttribute('aria-label', 'フィー編集を解除');
-  } else {
-    inputEl.removeAttribute('readonly');
-    btnEl.textContent = '🔓';
-    btnEl.setAttribute('aria-label', 'フィー編集をロック');
-  }
-  feeLockState[target] = locked;
-}
-
-// v2.4.0: 3 フィー一括ロック（保存・切替・再起動の自動再ロック契機で呼出）
-function lockAllFees() {
-  setFeeReadonly('buyIn',   true);
-  setFeeReadonly('reentry', true);
-  setFeeReadonly('addOn',   true);
-}
-
-// v2.4.0: 解除ダイアログを表示（target を保存して showModal）
-function openFeeUnlockDialog(target) {
-  _feeUnlockTarget = target;
-  if (el.feeUnlockDialog && typeof el.feeUnlockDialog.showModal === 'function') {
-    try { el.feeUnlockDialog.showModal(); } catch (_) { /* 既に open の場合は無視 */ }
-  }
-}
-
-// v2.4.0: 🔒/🔓 ボタン click ハンドラ群（target は data-fee-target で識別）
-//   動的キー組立て（forEach + _capitalizeFeeTarget）で reentry のみ動き buyIn/addOn 無反応のバグが
-//   再発したため、3 つの listener を直接登録に変更（動的キー組立てを完全排除）。
-//   ハンドラ本体は共通関数 _handleFeeLockBtnClick に集約。
-function _handleFeeLockBtnClick(target) {
-  try { window.api?.log?.write?.('ui:click:major', { id: `feeLockBtn:${target}`, locked: feeLockState[target] }); } catch (_) {}
-  if (feeLockState[target]) {
-    openFeeUnlockDialog(target);          // ロック中 → 解除確認ダイアログ
-  } else {
-    setFeeReadonly(target, true);          // 解除中 → 即時ロック復帰（§15.2 (A) クリック反転式）
-  }
-}
-el.tournamentBuyinFeeLockBtn?.addEventListener('click',   () => _handleFeeLockBtnClick('buyIn'));
-el.tournamentReentryFeeLockBtn?.addEventListener('click', () => _handleFeeLockBtnClick('reentry'));
-el.tournamentAddonFeeLockBtn?.addEventListener('click',   () => _handleFeeLockBtnClick('addOn'));
-
-// v2.4.0: 解除ダイアログの「解除する」ボタン
-el.feeUnlockOkBtn?.addEventListener('click', () => {
-  if (_feeUnlockTarget) {
-    setFeeReadonly(_feeUnlockTarget, false);
-    // フォーカスを該当フィー input に移して即編集可能に（_resolveFeeElements 経由で動的キー組立て排除）
-    const { inputEl } = _resolveFeeElements(_feeUnlockTarget);
-    inputEl?.focus();
-    inputEl?.select?.();
-    _feeUnlockTarget = null;
-  }
-  el.feeUnlockDialog?.close?.();
-});
-
-// v2.4.0: 解除ダイアログの「キャンセル」ボタン
-el.feeUnlockCancelBtn?.addEventListener('click', () => {
-  _feeUnlockTarget = null;
-  el.feeUnlockDialog?.close?.();
-});
+// 【E-1】v2.4.0 の 🔒fee-lock（feeLockState / setFeeReadonly / lockAllFees / 解除ダイアログ）は撤去。
+//   理由: 本モデルで ¥フィーは賞金プールに無関係（pool = Σ potAmounts$ × 件数、フィー独立）になり、
+//   🔒 の存在理由（フィー変更でプライズ変動を防ぐ景表法保護）が消滅。解除ダイアログ文言
+//   「フィーを入力するとプライズプールが変動します」も虚偽化するため。¥フィーは「買込 / 店売上の記録」
+//   として自由編集可（readonly 撤去）。
+//   ※ ブラインド表 readonly 制御（C.1-A2 ensureEditorEditableState / setBlindsTableReadonly）は
+//     別 namespace・致命バグ保護のため不可侵（本撤去は fee-lock のみ）。
 
 // v2.4.0: 店舗デフォルト プール率（appConfig.poolRatesDefault）の保存 + UI フィードバック
 function _appPoolRateDefaultHintReset() {
@@ -2799,38 +2754,41 @@ function _appPoolRateDefaultHintSuccess(msg, ttlMs = 2500) {
   }, ttlMs);
 }
 
-// プール率入力欄から整数 0〜100 を取得（不正値は fallback、Math.floor で整数化）
-function _readPoolRateFromInput(inputEl, fallback) {
+// v2.6.0: POT 入力欄（店内通貨 $ の1件あたり拠出）から非負整数を取得（不正値は fallback、Math.floor 整数化）。
+//   ¥フィー独立・上限なし（v2.4.0 の 0〜100 clamp は廃止）。入力欄 id は legacy 名（*-pool-rate）だが意味は $ POT。
+function _readPotFromInput(inputEl, fallback) {
   const n = Number(inputEl?.value);
-  if (!Number.isFinite(n)) return Math.max(0, Math.min(100, Math.floor(Number(fallback) || 0)));
-  return Math.max(0, Math.min(100, Math.floor(n)));
+  if (!Number.isFinite(n) || n < 0) return Math.max(0, Math.floor(Number(fallback) || 0));
+  return Math.max(0, Math.floor(n));
 }
 
+// v2.6.0: 店舗デフォルト POT（appConfig.potDefaults、店内通貨 $ の1件あたり拠出）の保存。
+//   入力欄 el は legacy 名（appPoolRateDefault*）だが値は $ POT。
 async function handleAppPoolRateDefaultSave() {
   _appPoolRateDefaultHintReset();
   const payload = {
-    buyIn:   _readPoolRateFromInput(el.appPoolRateDefaultBuyin,   0),
-    reentry: _readPoolRateFromInput(el.appPoolRateDefaultReentry, 0),
-    addOn:   _readPoolRateFromInput(el.appPoolRateDefaultAddon,   0)
+    buyIn:   _readPotFromInput(el.appPoolRateDefaultBuyin,   0),
+    reentry: _readPotFromInput(el.appPoolRateDefaultReentry, 0),
+    addOn:   _readPotFromInput(el.appPoolRateDefaultAddon,   0)
   };
-  if (!window.api?.settings?.setPoolRatesDefault) {
+  if (!window.api?.settings?.setPotDefaults) {
     _appPoolRateDefaultHintError('保存 API が利用できません');
     return;
   }
   try {
-    const result = await window.api.settings.setPoolRatesDefault(payload);
+    const result = await window.api.settings.setPotDefaults(payload);
     if (!result?.ok) {
       _appPoolRateDefaultHintError(result?.message || '保存に失敗しました');
       return;
     }
     // 入力欄も sanitize 済み値に同期
-    if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(result.poolRatesDefault?.buyIn   ?? payload.buyIn);
-    if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(result.poolRatesDefault?.reentry ?? payload.reentry);
-    if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(result.poolRatesDefault?.addOn   ?? payload.addOn);
+    if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(result.potDefaults?.buyIn   ?? payload.buyIn);
+    if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(result.potDefaults?.reentry ?? payload.reentry);
+    if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(result.potDefaults?.addOn   ?? payload.addOn);
     _appPoolRateDefaultHintSuccess('保存しました');
   } catch (err) {
     try { window.api?.log?.write?.('error:caught:handleAppPoolRateDefaultSave', { message: err?.message }); } catch (_) {}
-    console.warn('店舗デフォルト プール率保存失敗:', err);
+    console.warn('店舗デフォルト POT 保存失敗:', err);
     _appPoolRateDefaultHintError('保存に失敗しました: ' + (err.message || err));
   }
 }
@@ -4179,10 +4137,10 @@ function syncTournamentFormFromState() {
   if (isUserTypingInInput()) return;
   el.tournamentTitle.value = tournamentState.title || '';
   el.tournamentSubtitle.value = tournamentState.subtitle || '';
-  el.tournamentCurrency.value = tournamentState.currencySymbol || '¥';
+  el.tournamentCurrency.value = tournamentState.currencySymbol || '$';
   // STEP 6: 拡張フィールド
   if (el.tournamentGameType)        el.tournamentGameType.value        = tournamentState.gameType || 'nlh';
-  if (el.tournamentStartingStack)   el.tournamentStartingStack.value   = String(tournamentState.startingStack ?? 10000);
+  // stack-unify（2026-06-08）: 独立スタートスタック欄は廃止。初期スタックは buyIn.chips に統一。
   if (el.tournamentBuyinFee)        el.tournamentBuyinFee.value        = String(tournamentState.buyIn?.fee ?? 0);
   if (el.tournamentBuyinChips)      el.tournamentBuyinChips.value      = String(tournamentState.buyIn?.chips ?? 0);
   // STEP 6.9: rebuy → reentry リネーム
@@ -4190,11 +4148,13 @@ function syncTournamentFormFromState() {
   if (el.tournamentReentryChips)    el.tournamentReentryChips.value    = String(tournamentState.reentry?.chips ?? 0);
   if (el.tournamentAddonFee)        el.tournamentAddonFee.value        = String(tournamentState.addOn?.fee ?? 0);
   if (el.tournamentAddonChips)      el.tournamentAddonChips.value      = String(tournamentState.addOn?.chips ?? 0);
-  // v2.4.0: プール率入力欄同期（フィー隣、トーナメント個別 poolRates）
-  const _rates = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
-  if (el.tournamentBuyinPoolRate)   el.tournamentBuyinPoolRate.value   = String(_rates.buyIn   ?? 0);
-  if (el.tournamentReentryPoolRate) el.tournamentReentryPoolRate.value = String(_rates.reentry ?? 0);
-  if (el.tournamentAddonPoolRate)   el.tournamentAddonPoolRate.value   = String(_rates.addOn   ?? 0);
+  // v2.6.0: POT 入力欄同期（フィー隣、トーナメント個別 potAmounts ＝ 店内通貨 $ の1件あたり拠出）。
+  //   入力欄 id は legacy（*-pool-rate）だが値は $ POT。
+  const _pot = tournamentState.potAmounts || { buyIn: 0, reentry: 0, addOn: 0 };
+  if (el.tournamentBuyinPoolRate)   el.tournamentBuyinPoolRate.value   = String(_pot.buyIn   ?? 0);
+  if (el.tournamentReentryPoolRate) el.tournamentReentryPoolRate.value = String(_pot.reentry ?? 0);
+  if (el.tournamentAddonPoolRate)   el.tournamentAddonPoolRate.value   = String(_pot.addOn   ?? 0);
+  refreshPotUnitLabels();
   // STEP 6.9: 特殊スタック フォーム
   const ss = tournamentState.specialStack || { enabled: false, label: '早期着席特典', chips: 5000, appliedCount: 0 };
   if (el.tournamentSpecialStackEnabled) el.tournamentSpecialStackEnabled.checked = !!ss.enabled;
@@ -4218,12 +4178,9 @@ function syncTournamentFormFromState() {
   updateSubtitleCounter();
   // STEP 6.17: タイトル色 UI 同期（プリセットの選択ハイライト + カラーピッカー値）
   syncTitleColorPicker();
-  // 入力モードは常に % をデフォルトに戻す（保存値ではない、UI 状態）
-  payoutInputMode = 'percent';
-  if (el.tournamentPayoutMode) {
-    const radios = el.tournamentPayoutMode.querySelectorAll('input[name="payout-mode"]');
-    for (const r of radios) r.checked = (r.value === 'percent');
-  }
+  // v2.6.0: 配当は金額（店内通貨 $）固定。% 入力 UI は撤去済みのため入力モードは常に 'amount'。
+  //   既存 % トーナメント（payoutMode='percent'）も金額エディタで開き、保存時に amount へ移行（by use）。
+  payoutInputMode = 'amount';
   // 賞金構造エディタの再構築
   renderPayoutsEditor(tournamentState.payouts || []);
   // ブラインド構造プルダウンを最新の同梱+ユーザー一覧で再構築（タブ表示時に毎回呼ぶ）
@@ -4235,75 +4192,56 @@ function syncTournamentFormFromState() {
 
 // ===== STEP 6: 賞金構造エディタ =====
 
-// 入力値の合計を計算 + 100% / プール合致 のバリデーション表示
-// %モード: 合計が 100% でなければ NG
-// 金額モード: 合計が pool 以下なら OK（pool は editor 上のプール額をフォーム値から計算）
+// v2.6.0: 配当（金額・店内通貨）の合計 vs プール額のバリデーション表示。% モードは撤去済。
+//   合計 = pool で OK、pool 0 のときは編集途中扱い（不足/超過は出すが保存は isPayoutsValid 側で許容）。
 function updatePayoutsSum() {
   if (!el.tournamentPayoutsEditor || !el.tournamentPayoutsSum) return 0;
   const inputs = el.tournamentPayoutsEditor.querySelectorAll('.payouts-editor__pct-input');
   let sum = 0;
   for (const inp of inputs) sum += Number(inp.value) || 0;
-  if (payoutInputMode === 'amount') {
-    const pool = computeTotalPoolFromForm();
-    const rounded = Math.round(sum);
-    if (pool > 0 && Math.abs(rounded - pool) < 1) {
-      el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)} ✓`;
-      el.tournamentPayoutsSum.classList.remove('is-invalid');
-    } else if (pool > 0 && rounded < pool) {
-      el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)}（不足）`;
-      el.tournamentPayoutsSum.classList.add('is-invalid');
-    } else {
-      el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)}（超過）`;
-      el.tournamentPayoutsSum.classList.add('is-invalid');
-    }
-    return rounded;
-  }
-  // % モード（既存）
-  const rounded = Math.round(sum * 100) / 100;
-  if (Math.abs(rounded - 100) < 0.01) {
-    el.tournamentPayoutsSum.textContent = `合計: ${rounded}% ✓`;
+  const pool = computeTotalPoolFromForm();
+  const rounded = Math.round(sum);
+  if (pool > 0 && Math.abs(rounded - pool) < 1) {
+    el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)} ✓`;
     el.tournamentPayoutsSum.classList.remove('is-invalid');
+  } else if (pool > 0 && rounded < pool) {
+    el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)}（不足）`;
+    el.tournamentPayoutsSum.classList.add('is-invalid');
   } else {
-    el.tournamentPayoutsSum.textContent = `合計: ${rounded}%（100% にしてください）`;
+    el.tournamentPayoutsSum.textContent = `合計: ${formatNumber(rounded)} / プール ${formatNumber(pool)}（超過）`;
     el.tournamentPayoutsSum.classList.add('is-invalid');
   }
   return rounded;
 }
 
-// 編集中フォームからプール額を計算（プレイヤー人数は runtime を使う）
-// 金額モードでの合計バリデーションと、% → 金額換算の表示で使用
-// v2.4.0 STEP 4: プール率もフォーム入力欄（el.tournamentBuyinPoolRate 等）から読込み。
-//   フォーム入力欄が未存在の場合は tournamentState.poolRates にフォールバック（防御）。
-//   STEP 3 の state 経由のみから、UI 入力欄経由（即時反映）に拡張済。
+// v2.6.0: 編集中フォームからプール額を計算 = Σ(POT × 件数)（POT は店内通貨 $ の1件あたり拠出、¥フィー独立）。
+//   金額モード配当のバリデーション/換算表示で使用。POT 入力欄（legacy id *-pool-rate）から $ を即時読込み、
+//   未存在時は tournamentState.potAmounts にフォールバック（防御）。max(計算プール, guarantee) は維持。
 function computeTotalPoolFromForm() {
   const num = (e, def) => {
     const n = Number(e?.value);
     return Number.isFinite(n) && n >= 0 ? n : def;
   };
-  const buyInFee   = num(el.tournamentBuyinFee,   tournamentState.buyIn?.fee   ?? 0);
-  // STEP 6.9: rebuy → reentry
-  const reentryFee = num(el.tournamentReentryFee, tournamentState.reentry?.fee ?? 0);
-  const addOnFee   = num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0);
-  const guarantee  = num(el.tournamentGuarantee,  tournamentState.guarantee    ?? 0);
-  // v2.4.0: プール率もフォーム入力欄から読込み（state はフォールバック）
-  const stateRates = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
-  const buyInRate   = _readPoolRateFromInput(el.tournamentBuyinPoolRate,   stateRates.buyIn);
-  const reentryRate = _readPoolRateFromInput(el.tournamentReentryPoolRate, stateRates.reentry);
-  const addOnRate   = _readPoolRateFromInput(el.tournamentAddonPoolRate,   stateRates.addOn);
-  const calc = buyInFee   * tournamentRuntime.playersInitial * buyInRate   / 100
-             + reentryFee * tournamentRuntime.reentryCount    * reentryRate / 100
-             + addOnFee   * tournamentRuntime.addOnCount      * addOnRate   / 100;
+  const guarantee  = num(el.tournamentGuarantee,  tournamentState.guarantee ?? 0);
+  const statePot = tournamentState.potAmounts || { buyIn: 0, reentry: 0, addOn: 0 };
+  const buyInPot   = _readPotFromInput(el.tournamentBuyinPoolRate,   statePot.buyIn);
+  const reentryPot = _readPotFromInput(el.tournamentReentryPoolRate, statePot.reentry);
+  const addOnPot   = _readPotFromInput(el.tournamentAddonPoolRate,   statePot.addOn);
+  const calc = buyInPot   * tournamentRuntime.playersInitial
+             + reentryPot * tournamentRuntime.reentryCount
+             + addOnPot   * tournamentRuntime.addOnCount;
   return Math.max(calc, guarantee);
 }
 
-// 賞金構造エディタを描画（モードに応じて %値 or 金額値 を入力欄に流す）
+// v2.6.0: 賞金構造エディタを金額（店内通貨 $）で描画。% 入力モードは撤去済。
+//   amount 保持があれば優先表示、無ければ pool×%（内部 %）から逆算（既存 % トーナメントの後方表示 / プリセット）。
 function renderPayoutsEditor(payouts) {
   if (!el.tournamentPayoutsEditor) return;
   // STEP 10 フェーズC.2 Fix 0: 入力中なら payouts editor の再構築をスキップ。
   //   各行 input にフォーカスがある状態で innerHTML='' すると入力中の値が消える。
   if (isUserTypingInInput()) return;
   el.tournamentPayoutsEditor.innerHTML = '';
-  const pool = (payoutInputMode === 'amount') ? computeTotalPoolFromForm() : 0;
+  const pool = computeTotalPoolFromForm();
   payouts.forEach((p) => {
     const row = document.createElement('div');
     row.className = 'payouts-editor__row';
@@ -4314,18 +4252,11 @@ function renderPayoutsEditor(payouts) {
     input.type = 'number';
     input.className = 'payouts-editor__pct-input';
     input.min = '0';
-    if (payoutInputMode === 'amount') {
-      input.step = '100';
-      // v2.1.4: amount 保持があれば優先表示、無ければ % から逆算（後方互換）
-      const hasAmt = Number.isFinite(p.amount) && p.amount >= 0;
-      input.value = hasAmt
-        ? String(p.amount)
-        : String(Math.floor(pool * (Number(p.percentage) || 0) / 100));
-    } else {
-      input.max = '100';
-      input.step = '0.5';
-      input.value = String(p.percentage ?? 0);
-    }
+    input.step = '100';
+    const hasAmt = Number.isFinite(p.amount) && p.amount >= 0;
+    input.value = hasAmt
+      ? String(p.amount)
+      : String(Math.floor(pool * (Number(p.percentage) || 0) / 100));
     input.addEventListener('input', updatePayoutsSum);
     row.append(rank, input);
     el.tournamentPayoutsEditor.append(row);
@@ -4379,27 +4310,19 @@ function setPayoutRankCount(n, applyPreset = false) {
   renderPayoutsEditor(next);
 }
 
-// フォームから現在の賞金構造を取り出す（内部スキーマは常に %）
-// 金額モードの場合: 各順位の入力金額 ÷ プール × 100 で % へ換算して保存
-// v2.1.4 方針 A: 金額モード時は amount フィールドも同梱して精度損失（toFixed(2) 丸め）を回避
+// v2.6.0: フォームから賞金構造を取り出す（金額・店内通貨 $ 固定。% モード撤去済）。
+//   amount を正として保存し、percentage は内部互換用に amt/pool×100 で併記（表示はしない）。
 function readPayoutsFromForm() {
   if (!el.tournamentPayoutsEditor) return tournamentState.payouts || [];
   const rows = el.tournamentPayoutsEditor.querySelectorAll('.payouts-editor__row');
   const out = [];
-  if (payoutInputMode === 'amount') {
-    const pool = computeTotalPoolFromForm();
-    rows.forEach((row, i) => {
-      const inp = row.querySelector('.payouts-editor__pct-input');
-      const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
-      const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
-      out.push({ rank: i + 1, percentage: pct, amount: amt });
-    });
-  } else {
-    rows.forEach((row, i) => {
-      const inp = row.querySelector('.payouts-editor__pct-input');
-      out.push({ rank: i + 1, percentage: Number(inp?.value) || 0 });
-    });
-  }
+  const pool = computeTotalPoolFromForm();
+  rows.forEach((row, i) => {
+    const inp = row.querySelector('.payouts-editor__pct-input');
+    const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
+    const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
+    out.push({ rank: i + 1, percentage: pct, amount: amt });
+  });
   return out;
 }
 
@@ -4425,41 +4348,28 @@ el.tournamentPayoutPreset?.addEventListener('click', () => {
   setPayoutRankCount(n, true);
 });
 
-// STEP 6.5: 入力モード切替（% / 金額）
-el.tournamentPayoutMode?.addEventListener('change', (event) => {
-  const target = event.target;
-  if (!target || target.name !== 'payout-mode') return;
-  // 切替前に現在の入力値を % に正規化（金額モードからの切替なら換算）してから再描画
-  const currentPayouts = readPayoutsFromForm();
-  payoutInputMode = (target.value === 'amount') ? 'amount' : 'percent';
-  renderPayoutsEditor(currentPayouts);
-});
+// v2.6.0: 入力モード切替（% / 金額）の toggle は撤去。配当は常に金額（店内通貨）入力。
 
-// STEP 6.5: GTD / 端数 / バイインフィー等が変わったら、金額モード表示を即時再描画
+// GTD / 端数 / POT 拠出 / 件数 等が変わったら、金額表示（pool 連動の amount 逆算分）を即時再描画。
 function rerenderPayoutsEditorIfNeeded() {
-  if (payoutInputMode === 'amount' && el.tournamentPayoutsEditor) {
-    // 現在の % を保持して金額表示だけ再計算（プール額が変わったため）
+  if (el.tournamentPayoutsEditor) {
+    // 現在の入力金額を保持しつつ pool 変動を反映して再描画
     renderPayoutsEditor(readPayoutsFromFormAsPercent());
   } else {
     updatePayoutsSum();
   }
 }
 
-// 金額モード時でも、内部 % で取り出すヘルパ（再描画用）
-// v2.1.4 方針 A: 金額モード時は amount フィールドも同梱して精度損失を回避
+// 再描画用に現在のフォーム値を {rank, percentage, amount} で取り出す（金額固定・% は内部互換用）。
 function readPayoutsFromFormAsPercent() {
   const rows = el.tournamentPayoutsEditor?.querySelectorAll('.payouts-editor__row') || [];
   const pool = computeTotalPoolFromForm();
   const out = [];
   rows.forEach((row, i) => {
     const inp = row.querySelector('.payouts-editor__pct-input');
-    if (payoutInputMode === 'amount') {
-      const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
-      const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
-      out.push({ rank: i + 1, percentage: pct, amount: amt });
-    } else {
-      out.push({ rank: i + 1, percentage: Number(inp?.value) || 0 });
-    }
+    const amt = Math.max(0, Math.floor(Number(inp?.value) || 0));
+    const pct = pool > 0 ? Number((amt / pool * 100).toFixed(2)) : 0;
+    out.push({ rank: i + 1, percentage: pct, amount: amt });
   });
   return out;
 }
@@ -4840,7 +4750,7 @@ async function loadTournamentIntoForm(id) {
   // フォームへ反映
   el.tournamentTitle.value = found.name || '';
   el.tournamentSubtitle.value = found.subtitle || '';
-  el.tournamentCurrency.value = found.currencySymbol || '¥';
+  el.tournamentCurrency.value = found.currencySymbol || '$';
   if (el.tournamentBlindPreset) {
     // ブラインド構造プルダウンも紐付けに切替（プリセット一覧は populateTournamentBlindPresets 済み前提）
     el.tournamentBlindPreset.value = found.blindPresetId || 'demo-fast';
@@ -4990,8 +4900,10 @@ async function _handleTournamentNewImpl() {
     // STEP 6.21.1: 連番採番で重複回避
     name: generateUniqueTournamentName(existingList),
     subtitle: '',
-    currencySymbol: tournamentState.currencySymbol || '¥',
+    currencySymbol: tournamentState.currencySymbol || '$',
     blindPresetId: el.tournamentBlindPreset?.value || tournamentState.blindPresetId || 'demo-fast',
+    // v2.5.2: 新規トーナメントは賞金傾斜の初期値＝金額モード（入力額固定）
+    payoutMode: 'amount',
     // STEP 6.21: 新規は idle 状態で開始
     timerState: { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null }
   };
@@ -5275,11 +5187,13 @@ function readTournamentForm() {
     name,
     title: name,   // 旧コード互換用エイリアス
     subtitle: el.tournamentSubtitle?.value || '',
-    currencySymbol: (el.tournamentCurrency?.value || '').trim() || '¥',
+    currencySymbol: (el.tournamentCurrency?.value || '').trim() || '$',
     blindPresetId: el.tournamentBlindPreset?.value || tournamentState.blindPresetId,
     // STEP 6: 拡張フィールド
     gameType: el.tournamentGameType?.value || tournamentState.gameType || 'nlh',
-    startingStack: num(el.tournamentStartingStack, tournamentState.startingStack ?? 10000),
+    // stack-unify（2026-06-08）: 独立スタートスタック欄は廃止。startingStack は dormant 値を凍結
+    //   pass-through（入力欄を読まない）。初期スタックは buyIn.chips（下記）が正。
+    startingStack: tournamentState.startingStack ?? 10000,
     buyIn: {
       fee:   num(el.tournamentBuyinFee,   tournamentState.buyIn?.fee   ?? 0),
       chips: num(el.tournamentBuyinChips, tournamentState.buyIn?.chips ?? 0)
@@ -5293,11 +5207,12 @@ function readTournamentForm() {
       fee:   num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0),
       chips: num(el.tournamentAddonChips, tournamentState.addOn?.chips ?? 0)
     },
-    // v2.4.0: poolRates をフォーム入力欄から読み出し（main 側で sanitizePoolRates 再 clamp）
-    poolRates: {
-      buyIn:   _readPoolRateFromInput(el.tournamentBuyinPoolRate,   tournamentState.poolRates?.buyIn   ?? 0),
-      reentry: _readPoolRateFromInput(el.tournamentReentryPoolRate, tournamentState.poolRates?.reentry ?? 0),
-      addOn:   _readPoolRateFromInput(el.tournamentAddonPoolRate,   tournamentState.poolRates?.addOn   ?? 0)
+    // v2.6.0: POT（店内通貨 $ の1件あたり拠出）を $ 入力欄から直読み（legacy id *-pool-rate）。pool = Σ(POT × 件数)。
+    //   poolRates は dormant 温存（保存ビルドからは外し、normalizeTournament が fallback で既存値を保持）。
+    potAmounts: {
+      buyIn:   _readPotFromInput(el.tournamentBuyinPoolRate,   tournamentState.potAmounts?.buyIn   ?? 0),
+      reentry: _readPotFromInput(el.tournamentReentryPoolRate, tournamentState.potAmounts?.reentry ?? 0),
+      addOn:   _readPotFromInput(el.tournamentAddonPoolRate,   tournamentState.potAmounts?.addOn   ?? 0)
     },
     // STEP 6.9: specialStack
     specialStack: {
@@ -5307,6 +5222,8 @@ function readTournamentForm() {
       appliedCount: Math.max(0, Math.min(999, Math.floor(num(el.tournamentSpecialStackCount, tournamentState.specialStack?.appliedCount ?? 0))))
     },
     payouts: readPayoutsFromForm(),
+    // v2.5.2: 賞金傾斜モード（現在の入力モードを永続化）
+    payoutMode: (payoutInputMode === 'amount') ? 'amount' : 'percent',
     // STEP 6.5
     guarantee: num(el.tournamentGuarantee, tournamentState.guarantee ?? 0),
     payoutRounding: (() => {
@@ -5363,15 +5280,14 @@ function updateSubtitleCounter() {
 
 // 賞金構造の合計バリデーション（保存時のガード）
 // % モード: 合計 100% ±0.01
-// 金額モード: 合計 ≦ プール（プール 0 のときはスキップ＝OK扱い）
+// v2.6.0: 配当（金額・店内通貨）の合計 ≒ プール（max(Σ POT×件数, GTD)）でOK。
+//   pool 0（拠出 / GTD なし）のときはスキップ＝OK扱い（賞金プール未形成）。% モードは撤去済。
+//   ＝ §5（旧 金額固定×プール食い違い）は pool が具体 $ になることで自然解消（合計===pool 流用、法令判断不要）。
 function isPayoutsValid() {
   const sum = updatePayoutsSum();
-  if (payoutInputMode === 'amount') {
-    const pool = computeTotalPoolFromForm();
-    if (pool <= 0) return true;
-    return Math.abs(sum - pool) < 1;
-  }
-  return Math.abs(sum - 100) < 0.01;
+  const pool = computeTotalPoolFromForm();
+  if (pool <= 0) return true;
+  return Math.abs(sum - pool) < 1;
 }
 
 // 「保存」: 現在の active トーナメントへ上書き保存。タイマー無変更、メイン画面の表示のみ更新
@@ -5383,7 +5299,7 @@ async function handleTournamentSave() {
     return;
   }
   if (!isPayoutsValid()) {
-    setTournamentHint('賞金構造の合計を 100% にしてください', 'error');
+    setTournamentHint('賞金配当の合計をプール額に合わせてください', 'error');
     return;
   }
   // STEP 10 フェーズC.2 中 7: トーナメント名空で保存阻止
@@ -5459,7 +5375,7 @@ async function handleTournamentSaveApply() {
     return;
   }
   if (!isPayoutsValid()) {
-    setTournamentHint('賞金構造の合計を 100% にしてください', 'error');
+    setTournamentHint('賞金配当の合計をプール額に合わせてください', 'error');
     return;
   }
   // STEP 10 フェーズC.2.1 中 7 統合: トーナメント名空で阻止（save と同じガード）
@@ -5663,7 +5579,7 @@ el.titleColorCustomInput?.addEventListener('input', () => {
 
 // STEP 6.8: 通貨記号変更時に賞金端数 <select> ラベルを再生成
 el.tournamentCurrency?.addEventListener('input', () => {
-  const sym = (el.tournamentCurrency.value || '').trim() || '¥';
+  const sym = (el.tournamentCurrency.value || '').trim() || '$';
   if (!el.tournamentPayoutRounding) return;
   const prev = el.tournamentPayoutRounding.value;
   for (const opt of el.tournamentPayoutRounding.options) {
@@ -7885,12 +7801,12 @@ async function loadInitialSettings() {
       if (typeof all?.display?.bottomBarHidden === 'boolean') bottomBarHiddenInit = all.display.bottomBarHidden;
       // STEP 6.22: 店舗名（グローバル）
       if (typeof all?.venueName === 'string') venueNameInit = all.venueName;
-      // v2.4.0: 店舗デフォルト プール率（appConfig.poolRatesDefault）を設定ダイアログ初期値に反映
-      const appPRD = all?.appConfig?.poolRatesDefault;
-      if (appPRD && typeof appPRD === 'object') {
-        if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(appPRD.buyIn   ?? 0);
-        if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(appPRD.reentry ?? 0);
-        if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(appPRD.addOn   ?? 0);
+      // v2.6.0: 店舗デフォルト POT（appConfig.potDefaults、店内通貨 $）を設定ダイアログ初期値に反映
+      const appPotD = all?.appConfig?.potDefaults;
+      if (appPotD && typeof appPotD === 'object') {
+        if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(appPotD.buyIn   ?? 0);
+        if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(appPotD.reentry ?? 0);
+        if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(appPotD.addOn   ?? 0);
       }
       // STEP 9-B: ロゴ初期状態（グローバル）
       if (all?.logo && typeof all.logo === 'object') {
@@ -8017,6 +7933,8 @@ async function initialize() {
       });
     }
   } catch (_) { /* ignore */ }
+  // perf-heaviness: rAF Hz 計測 flush 起動（window.__PERF_METRICS true 時のみ。本番は no-op）。
+  _startPerfRafFlush();
   renderStaticInfo();
   renderPayouts();
   // loadInitialSettings は trueを返す＝blindPresetId からの復元成功

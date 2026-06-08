@@ -48,12 +48,13 @@
 - 平均スタックの自動計算
 
 ### 2.4 賞金 (ペイアウト) 管理
-- 総プール額の自動計算（v2.4.0 以降: `Σ(各フィー × 件数 × プール率 / 100)`）
-- 順位別賞金分配 (パーセンテージ or 固定額)
+- 総プール額の自動計算（**v2.6.0 以降: `Σ(potAmounts × 件数)` 店内通貨 $・1件あたり拠出**。v2.4.0〜2.5.x はプール率% モデル）
+- 順位別賞金分配（**v2.6.0: 金額・店内通貨で固定入力。% は廃止**）
 - 残り人数に応じた ITM (In The Money) 表示
 - 賞金額の丸め (1円 / 100円 / 1000円単位)
 - ペイアウトプリセット (例: 9人時は3位まで、27人時は5位まで)
-- **v2.4.0: プール率対応**: フィー入力をデフォルト readonly + 🔒 化し、店舗ごとに設定可能なプール率（初期値 0%）× フィー × 件数で賞金プールを算出。景品表示法・風営法対応の安全側初期化。詳細は §3.4.1 参照
+- **v2.4.0: プール率対応（現在は dormant）**: フィー × 件数 × プール率% で算出。詳細は §3.4.1 参照
+- **v2.6.0: 賞金モデル刷新（店内通貨 $・1件あたり拠出・% 全廃・🔒fee-lock 撤去）**: 詳細は §3.4.2 参照（現行仕様）
 
 ### 2.5 通知音
 - レベル終了時のチャイム
@@ -171,6 +172,57 @@ prize = Σ(各フィー × 件数 × プール率 / 100)
 - 計算: `src/renderer/renderer.js` の `computeCalculatedPool()` / `computeTotalPoolFromForm()`
 - スキーマ / migration / sanitize / IPC: `src/main.js` の `DEFAULT_TOURNAMENT_EXT` / `migrateTournamentSchema()` / `sanitizePoolRates()` / `settings:setPoolRatesDefault`
 - UI / readonly 制御: `src/renderer/index.html` フィー 3 行 + 解除ダイアログ + 店舗デフォルト編集セクション、`src/renderer/renderer.js` の `_resolveFeeElements()` / `setFeeReadonly()` / `lockAllFees()` 等の独自 namespace（C.1-A2 ブラインド表 readonly 制御とは分離）
+
+### 3.4.2 賞金モデル刷新（v2.6.0 店内通貨 $・1件あたり拠出）
+
+> v2.6.0 で §3.4.1 のプール率（％）モデルを**店内通貨ベース**に置換。日本の実運用（アミューズメントカジノ）に合わせ、賞金は**店内通貨（$ 等）**で扱い、％をアプリから全廃。**§3.4.1 の poolRates は dormant（温存・計算非使用）**となり、本節が現行仕様。
+
+#### 計算式（v2.6.0）
+
+```
+prize = Σ(potAmounts × 件数)
+      = potAmounts.buyIn × playersInitial
+      + potAmounts.reentry × reentryCount
+      + potAmounts.addOn × addOnCount
+
+実効プール = max(prize, guarantee)   (GTD ロジック維持)
+```
+
+- `potAmounts.*` = 店内通貨 $ の **1件あたり拠出額（非負整数、¥フィーと独立）**。$整数 × 整数件数のため**端数が原理的に出ない**。
+
+#### データモデル
+
+| 項目 | 構造 | 用途 |
+|---|---|---|
+| `tournamentState.potAmounts` | `{ buyIn, reentry, addOn }` 非負整数（$） | トーナメント個別の1件あたり拠出 |
+| `appConfig.potDefaults` | 同上 | 店舗デフォルト（新規作成時の初期値、既定 0） |
+| `tournamentState.payoutMode` | `'amount'`（固定）/ `'percent'`（既存後方表示用） | 配当モード。v2.6.0 は新規・編集とも常に金額固定 |
+
+#### 移行（v2.5.x → v2.6.0、TOTAL POOL 数値不変）
+
+| 項目 | 変換 | 効果 |
+|---|---|---|
+| poolRates% → potAmounts$ | `POT = round(fee × poolRate / 100)` | 100%→POT=fee（厳密一致）/ 0%→0 ＝ **TOTAL POOL 数値不変**（中間%のみ ≤端数ズレ、実運用ほぼ皆無） |
+| 通貨記号 | `'¥' → '$'`（リテラル一致のみ） | 店内通貨表示。カスタム記号は不可侵 |
+| 旧 poolRates | 削除せず dormant 温存 | ロールバック可 |
+
+#### UI（v2.6.0）
+
+- 各フィー隣: 「1件あたり拠出 [$]」（min0 / step100 / 上限なし）。¥フィーは「フィー（買込¥）」＝買込記録として自由編集可（**readonly + 🔒fee-lock は撤去**）。
+- 配当: 金額（店内通貨）入力のみ（**% 切替 toggle 撤去**）。合計をプール額に合わせる。
+- ハウス既定: 「1件あたり拠出（$）」（旧プール率% から置換）。
+- §3.4.1 の 🔒解除ダイアログは撤去（フィーが pool 無関係になり根拠消滅）。
+
+#### §5 解消
+
+- 旧「金額固定配当 × プール食い違い」問題は、`TOTAL POOL = max(Σ POT×件数, GTD)` が具体 $ になることで自然解消（`isPayoutsValid` は「合計≒pool」を流用、法令判断不要）。
+
+#### 実装場所（v2.6.0）
+
+- 計算: `computeCalculatedPool()` = Σ(potAmounts × 件数) / `computeRoundedAmounts()` 金額固定分岐
+- スキーマ / migration / sanitize / IPC: `sanitizePotAmounts()` / `migrateTournamentSchema()`（poolRates→potAmounts + currency ¥→$）/ `settings:setPotDefaults`
+- UI: `index.html` フィー3行（$拠出 + 買込フィー）+ ハウス既定$、配当 toggle 撤去
+- ★ 致命バグ保護 `ensureEditorEditableState` / `setBlindsTableReadonly` は不可侵で維持（fee-lock のみ撤去）
 
 ### 3.5 通知音
 | 項目 | 内容 |
