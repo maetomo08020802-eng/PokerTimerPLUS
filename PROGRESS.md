@@ -6,7 +6,7 @@
 >
 > ⚠️ **表内のファイルパスリンク表記は CC が読む参照用**(Markdown 仕様準拠)。Claude Code Desktop チャットでタップしても開きません。**人間が中身を見たい時はパスをコピーしてエディタで直接開いてください**(2026-05-28 注記追加)。
 
-最終更新: 2026-05-30(v2.4.1 配信完了 + prestart-zero-stall 案件アーカイブ)
+最終更新: 2026-06-08（**v2.6.0 fee-pot-yen STEP1〜5 全完了・テストビルド済・前原 6-B → 配信 GO 待ち**。詳細は「直近の状態 › 🔖 引き継ぎサマリ」）
 
 ---
 
@@ -59,8 +59,8 @@
 |------|------|
 | 配信済みリリース | 8 件(v1.0.0 / v1.2.0 / v1.3.0 / v2.0.0 / v2.4.0 / v2.4.1 / v2.5.0 / **v2.5.1**)|
 | アーカイブ済 案件(`.cc-archive/`)| 4 件(v210-prize-pool-refactor / prestart-zero-stall / tournament-bloat / settings-scope-clarity)|
-| オープン作業 | 0 件（v2.5.1 配信完了）|
-| 最新テスト件数 | 1261 件 全 PASS(v2.5.1 配信時点、settings-scope-clarity で +81＝v254〜v259)|
+| オープン作業 | 1 件（**v2.6.0 fee-pot-yen：テストビルド済・配信 GO 待ち**）|
+| 最新テスト件数 | **1328 件 全 PASS**(v2.6.0 テストビルド時点、payout-amount-default +19[v260] / fee-pot-yen +67[v261〜264] / 既存更新)|
 | 致命バグ保護 件数 | 5 件 完全維持(resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所)|
 
 > CC は完了報告のたびにこの表を Edit(リリース配信時はリリース履歴に新行追加、テスト件数更新)。
@@ -82,8 +82,19 @@
 
 ## 直近の状態
 
-- **現在ブランチ**: `main`（`f804114` v2.5.1 マージ commit、origin/main 同期済 push 完了）
-- **直前 commit**: `f804114 Merge: v2.5.1 - settings-scope-clarity（...）`（CHANGELOG 最終化 `33d2846` / 実装は `504e35c` まで feature 上）
+### 🔖 引き継ぎサマリ（2026-06-08 セッションクリア時点）
+- **進行中の最優先案件**: **v2.6.0 fee-pot-yen（賞金を店内通貨$・1件あたり拠出モデルへ刷新／%全廃）**。**STEP1〜5（実装＋テストビルド）全完了**、**前原 6-B 実機確認 → 配信 GO 待ち**の段階。
+- **現在ブランチ**: `feature/payout-amount-default`（**main 未merge**）。**直前 commit `ec16e7f`**（v2.6.0 bump + cascade + docs）。チェーン: `ec16e7f`(STEP5) → `80dab52`(STEP4 fee E-1) → `03a2b08`(STEP3 配当%撤去+§5解消) → `470da37`(STEP2 $UI+通貨$) → `83d59ff`(STEP1 potAmounts基盤) → `994d3eb`(payout-amount-default ①〜④)。土台は main `f804114`(v2.5.1)。
+- **テスト**: 1328件全PASS（version 2.6.0）。**テストインストーラ生成済**: `dist\pokertimerplus-setup-2.6.0.exe`（≈79MB、--publish never）。
+- **配信ガード**: **main 非merge / tag 無し / GitHub Release 非接触**（最新 Release は v2.5.1 のまま）。配信は前原 6-B OK + GO 後。
+- **次にやること（GO 受領後、CC 自走）**: feature/payout-amount-default → main merge（`--no-ff`）→ tag `v2.6.0` → push → main から .exe 再ビルド → GitHub Release `v2.6.0` 公開（Latest・自動更新、アセット latest.yml+setup.exe+.blockmap）→ 案件クローズ + md を `.cc-archive/fee-pot-yen/` へ退避 + feature ブランチ整理。
+- **前原 6-B（テストビルド `dist\pokertimerplus-setup-2.6.0.exe`）**: ①店内通貨$表示 / ②1件あたり$拠出×件数でプール / ③配当金額固定（ドリフトなし）/ ④%がどこにも無い / ⑤既存トーナメント移行（TOTAL POOL 数値不変・$表示、起動ログで中間%0/13 runtime 確認済）/ ⑥🔒・モーダル無し・¥フィー自由編集 / 追：2画面・音声・タイマー（v2.5.1 同等）。
+- **重要な前提・既確認事項**:
+  - 実データ検証（CC 自走済）: 前原 store 13トーナメントで old pool===new pool（mismatch 0・中間%0件）→ v2.4.0 不変条件（TOTAL POOL 数値不変）を実データ＋起動ログで証明。通貨は既に $×12/P$×1・¥0件 → ¥→$ 移行は実質 no-op・カスタム P$ 保全。
+  - §5（旧 payout-amount-default の前原 escalate 中だった「金額固定×プール食い違い」）は **v2.6.0 円POTモデルで自然解消済**（pool が具体$ → 法令判断不要）。別途の §5 単独実装は不要。
+  - 致命バグ保護5件 全件影響なし（特に E-1 で撤去したのは fee-lock のみ＝`feeLockState`/`setFeeReadonly`、`ensureEditorEditableState`/`setBlindsTableReadonly` は不可侵維持を grep 裏取り済）。
+  - 各 STEP の完了 review は `.cc-briefs/2026-06-07_fee-pot-yen_step{1..5}_completion_review.md`、report は `.cc-reports/2026-06-07_fee-pot-yen_step{1..5}*.md`、plan は `.cc-plans/2026-06-07_fee-pot-yen_plan.md`。実装 brief は `.cc-briefs/2026-06-07_fee-pot-yen_impl_brief.md`。
+- **旧 v2.5.1 配信状態（参考・配信済み）**: main `f804114` v2.5.1 マージ commit、origin/main 同期済、GitHub Release `v2.5.1` = Latest。
 - **2026-06-07（v2.5.1 配信完了）**: settings-scope-clarity（STEP1〜4 + ブラインド表0段修正 + 未保存切替ガード）を **v2.5.1 として全国配信完了**。前原実機 6-B 全 OK + GO 受領 → feature → main merge（`--no-ff` `f804114`）→ tag `v2.5.1`（`250a134`）→ push → main から本番 .exe 再ビルド → GitHub Release `v2.5.1` 公開（Latest・自動更新有効、アセット latest.yml+setup.exe+.blockmap の3点）。GitHub 独立確認済（Latest 切替 / tag / merge / アセット / repo public）。**データ構造・保存ロジック・migration 無変更**＝既存 v2.5.0 ユーザーは次回起動の自動更新で破壊的影響なし。Release URL: https://github.com/maetomo08020802-eng/PokerTimerPLUS/releases/tag/v2.5.1。配信 brief は cc-kouchikushi2 代行起案（ルール4-A）（[release report](.cc-reports/2026-06-07_settings-scope-clarity_release.md)）。**案件クローズ + md アーカイブ + feature ブランチ削除は構築士2 のクローズ判定後**
 - **2026-06-07（配信前修正・切替ガード）**: 配信前監査で出た中バグ「ブラインド表 dirty 編集中に別トーナメント切替→ラベル嘘ペア+保存で黙って再ポイント」を方針A（破棄/やめる確認）で根治。切替全経路（handleTournamentSelectChange[選択/hidden 集約] / New / Duplicate / RowDelete[active 卓削除時のみ]）に共通ガード confirmDiscardBlindsDirtyIfNeeded を挿入。破棄=blinds draft/meta/dirty/initialized クリア（tournamentRuntime/timerState 非接触）→新卓構造に追従ロード、やめる=切替中止+編集保持+select 値復元。updateBlindsEditingTargetLabel は meta.id===blindPresetId 時のみペア表示（嘘ラベル解消）。**_savePresetCore 本体・applyTournament の timerState/runtime 復元・main.js 無変更**。確認は confirm-dialog 流用（hall 自動非表示）。致命バグ保護5件全件影響なし。version 2.5.1 据え置き。**既存1246 + 新規v259 15 = 1261件全PASS**。Plan 軽量 review（段階2）承認済（[plan](.cc-plans/2026-06-07_settings-scope-clarity_dirty-switch-guard_plan.md) / [report](.cc-reports/2026-06-07_settings-scope-clarity_dirty-switch-guard.md)）
 - **2026-06-07（実機バグ修正）**: 一括テストビルド実機で発覚した致命バグ「ブラインド表が大画面で0段（STEP3退行）」を CSS のみで根治。根因＝固定px/vh ダイアログ高 vs vw chrome ＋ table-wrap フロア無し（min-height:0）で唯一の収縮要素が0に潰れた。修正＝table-wrap を **vh フロア(min-height:42vh)+vh キャップ(max-height:66vh)** で bound（16:9 で段数一定・内側スクロール/sticky thead 維持）、blinds タブ rigid height:100%→min-height:100%（body スクロール経路復活）、editor flex:1 0 auto、ダイアログ既定高 920→1100px。**Preview/Chromium で FHD/1440p/4K/極端短の実 clientHeight を実測**（FHD 711px/10段・1440p 933px/10段・4K 1409px/10段・極端短 368px/5段＝**0段に絶対ならず**、フッタ到達可）＝机上+実測の二重ゲート。バグ②(A)＝機能変更なし（自分の構造直接編集可・同梱は複製、新ボタンなし）。致命バグ保護5件全件影響なし、index.html/renderer.js/main.js 無変更。version 2.5.1 据え置き。c13 T15/v256 T1-2 を本修正値に追従。**既存1235 + 新規v258 11 = 1246件全PASS**。Plan 軽量 review（段階2）承認済（[blinds-table-fix plan](.cc-plans/2026-06-07_settings-scope-clarity_blinds-table-fix_plan.md) / [report](.cc-reports/2026-06-07_settings-scope-clarity_blinds-table-fix.md)）
@@ -108,7 +119,7 @@
 - **2026-06-07（再テストビルド・2回目）**: ブラインド表0段修正反映版の v2.5.1 再テストビルド完了（commit `1d9850f`＝旧 px420 コメント整理[値無変更]含む HEAD）。事前確認で v2.5.0 画像分離を土台に含むこと再確認。`npx electron-builder --win --publish never`（exit 0）。成果物 `dist\pokertimerplus-setup-2.5.1.exe`（83,040,140 bytes、ProductVersion 2.5.1.0）。asar にバグ①修正（min-height:42vh / max-height:66vh / min(1100px）+ STEP1〜4 全マーカー焼き込み確認。起動スモーク OK（致命エラーなし・自動更新誤作動なし）。**main 非merge / tag 無し / GitHub Release 非接触**。前原実機 6-B（STEP1〜4＋バグ①修正 合算 0〜10、約20分）用（[testbuild2 report](.cc-reports/2026-06-07_settings-scope-clarity_testbuild2.md)）
 - **2026-06-07（一括テストビルド・初回）**: settings-scope-clarity STEP1〜4 合算の v2.5.1 テストビルド完了。事前確認で feature ブランチが v2.5.0（画像分離 `e77fcce`）を土台に含むことを確認（祖先＋main.js マーカー12件）。`npx electron-builder --win --publish never`（exit 0）。成果物 `dist\pokertimerplus-setup-2.5.1.exe`（83,039,604 bytes ≈83MB、ProductVersion 2.5.1.0）。asar に STEP1〜4 全マーカー焼き込み確認。起動スモークテスト OK（Electron 5プロセス生存・致命エラーなし、`Update for 2.5.1 not available (latest 2.5.0, downgrade disallowed)` ＝自動更新誤作動なし）。**main 非merge / tag 無し / GitHub Release 非接触（最新は v2.5.0 のまま）**。前原実機 6-B（STEP1〜4 合算 0〜8、約20分）用（[testbuild report](.cc-reports/2026-06-07_settings-scope-clarity_testbuild.md)）
 - **2026-06-07（settings-scope-clarity 案件クローズ）**: v2.5.1 配信完了を受けて案件クローズ。関連 md（reports 11 / plans 6 / briefs 28 = 計45件）を `.cc-archive/settings-scope-clarity/`（briefs/plans/reports）へ退避完了。merge 済 `feature/settings-scope-clarity`（33d2846）をローカル削除完了（origin は未push のため remote 削除不要）。軽微5件は「温存中の次期候補」へ記載済（配信後 別 brief 化）
-- **配信状況**: **v2.5.1 配信済み（最新・公開中）**。GitHub Release v2.5.1 = Latest、自動更新有効。既存ユーザーは次回起動で v2.5.1 自動更新通知
+- **配信状況**: **公開中の最新は v2.5.1**（GitHub Release Latest・自動更新有効）。**v2.6.0 はテストビルド完了・前原 6-B → 配信 GO 待ち**（main 未merge、Release 未公開）。
 - **2026-06-08（fee-pot-yen STEP 5・配信フェーズ／version 2.6.0 bump + テストビルド）**: version **2.5.1→2.6.0 bump** + version-pin cascade（テスト69ファイル `'2.5.1'`→`'2.6.0'` 機械置換、全PASS）。CHANGELOG.md v2.6.0 セクション + docs/specs.md §3.4.2（店内通貨$・1件あたり拠出モデル）追加。`npx electron-builder --win --publish never`（exit 0）で `dist\pokertimerplus-setup-2.6.0.exe`（≈79MB）生成。**asar 焼込確認**（potAmounts 42 / 1件あたり拠出 23 / setPotDefaults 2、fee-lock/payout-mode は comment のみ）。**起動スモーク（CC 自走）で migration 数値安全を runtime 確認**＝起動ログ `[v2.6.0] poolRate→POT 変換: 中間% 0/13件`（実store13件で TOTAL POOL 数値厳密一致）+ 自動更新誤作動なし（Release は 2.5.1 のまま）+ クラッシュなし・5プロセス生存。**main 非merge / tag 無し / GitHub Release 非接触**。**1328件全PASS**。**v2.6.0 実装＋テストビルド全完了 → 前原 6-B ①〜⑥+追(2画面/音声/タイマー) → 配信 GO 待ち**。Plan 軽量 review（段階2）承認済（[step5_testbuild](.cc-reports/2026-06-07_fee-pot-yen_step5_testbuild.md)）
 - **2026-06-08（fee-pot-yen STEP 4 実装・¥フィー E-1/🔒撤去 + 統合検証）**: v2.4.0 の **🔒fee-lock 機構を完全撤去（E-1）**。本モデルで ¥フィーは pool 無関係（pool=Σ POT×件数）になり 🔒 の景表法保護根拠が消滅・解除ダイアログ文言も虚偽化のため。撤去＝feeLockState/setFeeReadonly/lockAllFees/_resolveFeeElements/openFeeUnlockDialog/🔒ボタン×3/解除ダイアログ/fee-lock CSS/自動再ロック呼出。¥フィーは **readonly 撤去＝買込（店売上）記録として自由編集可**、ラベル「フィー（買込¥）」。**★ ensureEditorEditableState/setBlindsTableReadonly（致命保護・別 namespace）は不可侵維持**（v264 E4 担保、editable-state/new-tournament-edit 既存テスト PASS）。統合検証で 店内通貨$/プール=Σ(POT×件数)/配当=金額固定/%消滅/¥フィー独立 の成立確認。致命バグ保護5件 影響なし、並列0体、version 2.5.1 据置。**STEP3後 1318＋新規 v264 10件＝1328件全PASS**（v210 T6/T7/T9/T14・v262/v263 S1 更新）。commit はこの後。**STEP1〜4（実装）全完了**＝残るは STEP5（CHANGELOG/specs・version 2.6.0 bump・テストビルド）＝前原 GO 待ち。Plan 軽量 review（段階2）承認済（[step4](.cc-reports/2026-06-07_fee-pot-yen_step4.md)）
 - **2026-06-08（fee-pot-yen STEP 3 実装・配当%撤去+§5解消）**: 配当の **payout-mode toggle（%/金額切替）を撤去**＝配当は常に金額（店内通貨$）固定。payoutInputMode 常時 'amount'、updatePayoutsSum/renderPayoutsEditor/readPayoutsFromForm/readPayoutsFromFormAsPercent/isPayoutsValid から **% 分岐撤去**、デッド CSS（.payouts-mode-*）除去、el マップ tournamentPayoutMode 撤去、保存メッセージ「100%」→「プール額に合わせて」。**§5 自然解消**＝TOTAL POOL=max(Σ POT×件数, GTD) を無改造流用・isPayoutsValid は合計≒pool 流用（pool が具体$ になり法令判断不要、payout-amount-default で escalate 中だった §5 は円POTモデルへの畳み込みで決着）。**computeRoundedAmounts の % 分岐は既存%トーナメント後方表示用に残置**。アプリから％が完全消滅。致命バグ保護5件 影響なし（🔒fee-lock 未接触＝E-1 は STEP4）、並列0体、version 2.5.1 据置。**STEP2後 1308＋新規 v263 10件＝1318件全PASS**（v216 T2・v260 S3 更新、light-todos PASS＝デッドコード/未処理コメントなし）。commit はこの後。Plan 軽量 review（段階2）承認済（[step3](.cc-reports/2026-06-07_fee-pot-yen_step3.md)）。次: STEP4（¥フィー欄 E-1 + 統合検証）
@@ -118,10 +129,10 @@
 - **2026-06-08（payout-amount-default 実装・確定部分1〜4）**: ％プライズ端数ズレを根治。**①金額モード＝入力額固定**（tournament に `payoutMode` 永続化＋`computeRoundedAmounts` を「amount をそのまま返す」分岐に。pool 変動・¥1丸めでもドリフトなし。`amountSum===pool` 厳密一致条件を撤廃）**②初期値＝金額**（新規 `newT` に `payoutMode:'amount'`、編集開きは保存モード同期、旧 percent 固定リセット撤廃）**③％モード＝従来どおり比例**（computeCalculatedPool/poolRates 無改造）**④％端数根治＝最大剰余法**（per-rank 綺麗着地・合計=pool 厳密維持・既存%も移行不要で綺麗。¥1 は%精度ロス残＝金額モードで回避）。永続化は P1（schema＋migration 推論[amount有→amount/無→percent]＋normalize＋list 同梱、total 不変）。**TOTAL POOL 表示・computeTotalPool・isPayoutsValid は無改造（§5 のため温存）→ v2.4.0 不変条件維持**。致命バグ保護5件全件影響なし、並列0体、version 2.5.1 据え置き。**既存1261＋新規 v260 19件＝1280件全PASS**（v216 は新挙動へ期待値更新）。Plan 軽量 review（段階2）承認済。**§5（金額固定×poolRate>0 併用の TOTAL POOL/validation/法令）は構築士2 が段階3 escalate→前原 Cowork 確定待ち**。ブランチ `feature/payout-amount-default`（[plan](.cc-plans/2026-06-07_payout-amount-default_plan.md) / [review](.cc-briefs/2026-06-07_payout-amount-default_review.md) / [report](.cc-reports/2026-06-07_payout-amount-default.md)）
 - **2026-06-07（payout-amount-default 調査）**: ％プライズが開き直しで端数ズレ（100000→100005 / 50000→49995）する真因を investigation 型で確定（**コード変更ゼロ**）。真因＝表示金額を毎回「保存％ × 現在プール」で逆算する `computeRoundedAmounts()`（renderer.js:1069-1097）の％フォールバック。保存値が `toFixed(2)` 丸めの％（66.67 等）なので `150000×66.67%=100005` と round number に着地しない。再現 A（pool=150000 / [66.67%,33.33%] / 丸め¥1）で症状値完全一致。v2.1.4 の amount 絶対値保持は「amount 合計===プール 厳密一致」時のみ効き、①％モードは amount 非保存 ②金額モードもライブ人数でプールが動くと即フォールバックでズレ再発。結論：**金額デフォルト化は新規・プール固定なら有効、既存％トーナメント＋プール変動ケースは未解決**。対応案 (A) デフォルト金額化（最小・新規のみ・低リスク）/ (B) ％丸め根治（根本だが敏感経路・v2.4.0 不変条件と緊張・要承認）/ (C) 既存は据え置き推奨。致命バグ保護5件影響なし、並列0体。**方針判断（A最小 or B根治）は構築士2 / 前原**（[investigation report](.cc-reports/2026-06-07_payout-amount-default_investigation.md)）
 - **次のアクション(想定)**:
-  - payout-amount-default：調査完了 → 方針判断（(A) 金額デフォルト化最小 or (B) ％丸め根治）→ 決定後に実装 brief 起案
+  - **【最優先】v2.6.0 fee-pot-yen: 前原 6-B 実機確認（テストビルド `dist\pokertimerplus-setup-2.6.0.exe`）→ 配信 GO 受領 → CC 自走で配信**（feature/payout-amount-default → main merge `--no-ff` → tag `v2.6.0` → push → main から .exe 再ビルド → GitHub Release v2.6.0 公開[Latest・自動更新]）→ 案件クローズ + md を `.cc-archive/fee-pot-yen/`（+ payout-amount-default 関連）へ退避 + feature ブランチ整理
+  - payout-amount-default（①〜④）は v2.6.0 feature ブランチに内包済（§5 は v2.6.0 で自然解消）。単独配信はしない＝v2.6.0 にまとめて配信
   - settings-scope-clarity 案件クローズ済（md 45 件 `.cc-archive/settings-scope-clarity/` 退避 + feature ブランチ削除完了）
-  - 軽微5件（温存候補）の別 brief 化（緊急性なし、前原判断）、または v2.3.0(PRE_START 永続化)再開、または新規バージョン起案
-  - poker-clock は安定運用フェーズ
+  - 温存: v2.3.0(PRE_START 永続化) / 軽微（入力欄 id legacy `*-pool-rate`→`*-pot` リネーム整理、機能影響なし）
 
 ---
 
