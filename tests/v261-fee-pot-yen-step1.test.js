@@ -124,9 +124,12 @@ test('S6 (renderer): tournamentState.potAmounts 既定 + applyTournament 複写'
   assert.match(RENDERER, /tournamentState\.potAmounts\s*=\s*\{/, 'applyTournament の potAmounts 複写がない');
 });
 
-test('S7 (renderer): 保存ビルドが potAmounts を同梱（STEP1 経過措置＝% × fee 派生）', () => {
-  assert.match(RENDERER, /potAmounts:\s*\{[\s\S]{0,400}_readPoolRateFromInput\(el\.tournamentBuyinPoolRate/,
-    '保存ビルドの potAmounts 派生がない');
+test('S7 (renderer): 保存ビルドが potAmounts を同梱（v2.6.0 STEP2＝$ 入力直読み）', () => {
+  // STEP 2 で経過措置（%×fee 派生）を撤去し $ 入力直読みに置換済
+  assert.match(RENDERER, /potAmounts:\s*\{[\s\S]{0,400}_readPotFromInput\(el\.tournamentBuyinPoolRate/,
+    '保存ビルドの potAmounts（$ 直読み）がない');
+  assert.ok(!/Math\.round\(num\(el\.tournamentBuyinFee[\s\S]{0,80}_readPoolRateFromInput/.test(RENDERER),
+    'STEP1 経過措置の %×fee 派生が残存している');
 });
 
 // ============================================================

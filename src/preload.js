@@ -41,8 +41,10 @@ contextBridge.exposeInMainWorld('api', {
     setDisplay: (value) => _measuredInvoke('settings:setDisplay', value),
     // STEP 6.22: 店舗名「Presented by ○○」表記
     setVenueName: (value) => _measuredInvoke('settings:setVenueName', value),
-    // v2.4.0: 店舗デフォルト プール率（新規トーナメント作成時の初期値、appConfig.poolRatesDefault）
-    setPoolRatesDefault: (value) => _measuredInvoke('settings:setPoolRatesDefault', value)
+    // v2.4.0: 店舗デフォルト プール率（dormant、v2.6.0 で POT へ移行）
+    setPoolRatesDefault: (value) => _measuredInvoke('settings:setPoolRatesDefault', value),
+    // v2.6.0: 店舗デフォルト POT（店内通貨 $ の1件あたり拠出、appConfig.potDefaults）
+    setPotDefaults: (value) => _measuredInvoke('settings:setPotDefaults', value)
   },
   presets: {
     listBuiltin: () => _measuredInvoke('presets:listBuiltin'),

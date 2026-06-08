@@ -152,7 +152,7 @@ const tournamentState = {
   id: 'tournament-default',
   title: 'ポーカートーナメント',
   subtitle: '',
-  currencySymbol: '¥',
+  currencySymbol: '$',   // v2.6.0: 店内通貨（既定 $）。実通貨¥ではない
   blindPresetId: 'demo-fast',   // 起動時に復元するブラインド構造ID（適用は「保存して適用」）
   // STEP 6: 拡張フィールド
   // STEP 10 フェーズA: defaults を新コードに統一（マイグレーション後の永続化形式と整合）
@@ -1420,13 +1420,20 @@ function applyTournament(t) {
 // 内部値（1/10/100/1000）は維持。表示文字列のみ動的に変更。
 function refreshPayoutRoundingLabels() {
   if (!el.tournamentPayoutRounding) return;
-  const sym = tournamentState.currencySymbol || '¥';
+  const sym = tournamentState.currencySymbol || '$';
   const prev = el.tournamentPayoutRounding.value;
   for (const opt of el.tournamentPayoutRounding.options) {
     opt.textContent = `${sym}${opt.value}`;
   }
   // 選択値が消えないよう復元
   if (prev) el.tournamentPayoutRounding.value = prev;
+}
+
+// v2.6.0: POT 入力欄の単位表示（.js-pot-unit）を現在の通貨記号（店内通貨）に同期。
+//   トーナメント個別の POT 入力欄が対象（ハウス既定は静的 $）。
+function refreshPotUnitLabels() {
+  const sym = tournamentState.currencySymbol || '$';
+  document.querySelectorAll('.js-pot-unit').forEach((s) => { s.textContent = sym; });
 }
 
 // プリセットIDから本体をロード（同梱→ユーザーの順で探す）
@@ -2823,38 +2830,41 @@ function _appPoolRateDefaultHintSuccess(msg, ttlMs = 2500) {
   }, ttlMs);
 }
 
-// プール率入力欄から整数 0〜100 を取得（不正値は fallback、Math.floor で整数化）
-function _readPoolRateFromInput(inputEl, fallback) {
+// v2.6.0: POT 入力欄（店内通貨 $ の1件あたり拠出）から非負整数を取得（不正値は fallback、Math.floor 整数化）。
+//   ¥フィー独立・上限なし（v2.4.0 の 0〜100 clamp は廃止）。入力欄 id は legacy 名（*-pool-rate）だが意味は $ POT。
+function _readPotFromInput(inputEl, fallback) {
   const n = Number(inputEl?.value);
-  if (!Number.isFinite(n)) return Math.max(0, Math.min(100, Math.floor(Number(fallback) || 0)));
-  return Math.max(0, Math.min(100, Math.floor(n)));
+  if (!Number.isFinite(n) || n < 0) return Math.max(0, Math.floor(Number(fallback) || 0));
+  return Math.max(0, Math.floor(n));
 }
 
+// v2.6.0: 店舗デフォルト POT（appConfig.potDefaults、店内通貨 $ の1件あたり拠出）の保存。
+//   入力欄 el は legacy 名（appPoolRateDefault*）だが値は $ POT。
 async function handleAppPoolRateDefaultSave() {
   _appPoolRateDefaultHintReset();
   const payload = {
-    buyIn:   _readPoolRateFromInput(el.appPoolRateDefaultBuyin,   0),
-    reentry: _readPoolRateFromInput(el.appPoolRateDefaultReentry, 0),
-    addOn:   _readPoolRateFromInput(el.appPoolRateDefaultAddon,   0)
+    buyIn:   _readPotFromInput(el.appPoolRateDefaultBuyin,   0),
+    reentry: _readPotFromInput(el.appPoolRateDefaultReentry, 0),
+    addOn:   _readPotFromInput(el.appPoolRateDefaultAddon,   0)
   };
-  if (!window.api?.settings?.setPoolRatesDefault) {
+  if (!window.api?.settings?.setPotDefaults) {
     _appPoolRateDefaultHintError('保存 API が利用できません');
     return;
   }
   try {
-    const result = await window.api.settings.setPoolRatesDefault(payload);
+    const result = await window.api.settings.setPotDefaults(payload);
     if (!result?.ok) {
       _appPoolRateDefaultHintError(result?.message || '保存に失敗しました');
       return;
     }
     // 入力欄も sanitize 済み値に同期
-    if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(result.poolRatesDefault?.buyIn   ?? payload.buyIn);
-    if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(result.poolRatesDefault?.reentry ?? payload.reentry);
-    if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(result.poolRatesDefault?.addOn   ?? payload.addOn);
+    if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(result.potDefaults?.buyIn   ?? payload.buyIn);
+    if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(result.potDefaults?.reentry ?? payload.reentry);
+    if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(result.potDefaults?.addOn   ?? payload.addOn);
     _appPoolRateDefaultHintSuccess('保存しました');
   } catch (err) {
     try { window.api?.log?.write?.('error:caught:handleAppPoolRateDefaultSave', { message: err?.message }); } catch (_) {}
-    console.warn('店舗デフォルト プール率保存失敗:', err);
+    console.warn('店舗デフォルト POT 保存失敗:', err);
     _appPoolRateDefaultHintError('保存に失敗しました: ' + (err.message || err));
   }
 }
@@ -4203,7 +4213,7 @@ function syncTournamentFormFromState() {
   if (isUserTypingInInput()) return;
   el.tournamentTitle.value = tournamentState.title || '';
   el.tournamentSubtitle.value = tournamentState.subtitle || '';
-  el.tournamentCurrency.value = tournamentState.currencySymbol || '¥';
+  el.tournamentCurrency.value = tournamentState.currencySymbol || '$';
   // STEP 6: 拡張フィールド
   if (el.tournamentGameType)        el.tournamentGameType.value        = tournamentState.gameType || 'nlh';
   if (el.tournamentStartingStack)   el.tournamentStartingStack.value   = String(tournamentState.startingStack ?? 10000);
@@ -4214,11 +4224,13 @@ function syncTournamentFormFromState() {
   if (el.tournamentReentryChips)    el.tournamentReentryChips.value    = String(tournamentState.reentry?.chips ?? 0);
   if (el.tournamentAddonFee)        el.tournamentAddonFee.value        = String(tournamentState.addOn?.fee ?? 0);
   if (el.tournamentAddonChips)      el.tournamentAddonChips.value      = String(tournamentState.addOn?.chips ?? 0);
-  // v2.4.0: プール率入力欄同期（フィー隣、トーナメント個別 poolRates）
-  const _rates = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
-  if (el.tournamentBuyinPoolRate)   el.tournamentBuyinPoolRate.value   = String(_rates.buyIn   ?? 0);
-  if (el.tournamentReentryPoolRate) el.tournamentReentryPoolRate.value = String(_rates.reentry ?? 0);
-  if (el.tournamentAddonPoolRate)   el.tournamentAddonPoolRate.value   = String(_rates.addOn   ?? 0);
+  // v2.6.0: POT 入力欄同期（フィー隣、トーナメント個別 potAmounts ＝ 店内通貨 $ の1件あたり拠出）。
+  //   入力欄 id は legacy（*-pool-rate）だが値は $ POT。
+  const _pot = tournamentState.potAmounts || { buyIn: 0, reentry: 0, addOn: 0 };
+  if (el.tournamentBuyinPoolRate)   el.tournamentBuyinPoolRate.value   = String(_pot.buyIn   ?? 0);
+  if (el.tournamentReentryPoolRate) el.tournamentReentryPoolRate.value = String(_pot.reentry ?? 0);
+  if (el.tournamentAddonPoolRate)   el.tournamentAddonPoolRate.value   = String(_pot.addOn   ?? 0);
+  refreshPotUnitLabels();
   // STEP 6.9: 特殊スタック フォーム
   const ss = tournamentState.specialStack || { enabled: false, label: '早期着席特典', chips: 5000, appliedCount: 0 };
   if (el.tournamentSpecialStackEnabled) el.tournamentSpecialStackEnabled.checked = !!ss.enabled;
@@ -4294,29 +4306,22 @@ function updatePayoutsSum() {
   return rounded;
 }
 
-// 編集中フォームからプール額を計算（プレイヤー人数は runtime を使う）
-// 金額モードでの合計バリデーションと、% → 金額換算の表示で使用
-// v2.4.0 STEP 4: プール率もフォーム入力欄（el.tournamentBuyinPoolRate 等）から読込み。
-//   フォーム入力欄が未存在の場合は tournamentState.poolRates にフォールバック（防御）。
-//   STEP 3 の state 経由のみから、UI 入力欄経由（即時反映）に拡張済。
+// v2.6.0: 編集中フォームからプール額を計算 = Σ(POT × 件数)（POT は店内通貨 $ の1件あたり拠出、¥フィー独立）。
+//   金額モード配当のバリデーション/換算表示で使用。POT 入力欄（legacy id *-pool-rate）から $ を即時読込み、
+//   未存在時は tournamentState.potAmounts にフォールバック（防御）。max(計算プール, guarantee) は維持。
 function computeTotalPoolFromForm() {
   const num = (e, def) => {
     const n = Number(e?.value);
     return Number.isFinite(n) && n >= 0 ? n : def;
   };
-  const buyInFee   = num(el.tournamentBuyinFee,   tournamentState.buyIn?.fee   ?? 0);
-  // STEP 6.9: rebuy → reentry
-  const reentryFee = num(el.tournamentReentryFee, tournamentState.reentry?.fee ?? 0);
-  const addOnFee   = num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0);
-  const guarantee  = num(el.tournamentGuarantee,  tournamentState.guarantee    ?? 0);
-  // v2.4.0: プール率もフォーム入力欄から読込み（state はフォールバック）
-  const stateRates = tournamentState.poolRates || { buyIn: 0, reentry: 0, addOn: 0 };
-  const buyInRate   = _readPoolRateFromInput(el.tournamentBuyinPoolRate,   stateRates.buyIn);
-  const reentryRate = _readPoolRateFromInput(el.tournamentReentryPoolRate, stateRates.reentry);
-  const addOnRate   = _readPoolRateFromInput(el.tournamentAddonPoolRate,   stateRates.addOn);
-  const calc = buyInFee   * tournamentRuntime.playersInitial * buyInRate   / 100
-             + reentryFee * tournamentRuntime.reentryCount    * reentryRate / 100
-             + addOnFee   * tournamentRuntime.addOnCount      * addOnRate   / 100;
+  const guarantee  = num(el.tournamentGuarantee,  tournamentState.guarantee ?? 0);
+  const statePot = tournamentState.potAmounts || { buyIn: 0, reentry: 0, addOn: 0 };
+  const buyInPot   = _readPotFromInput(el.tournamentBuyinPoolRate,   statePot.buyIn);
+  const reentryPot = _readPotFromInput(el.tournamentReentryPoolRate, statePot.reentry);
+  const addOnPot   = _readPotFromInput(el.tournamentAddonPoolRate,   statePot.addOn);
+  const calc = buyInPot   * tournamentRuntime.playersInitial
+             + reentryPot * tournamentRuntime.reentryCount
+             + addOnPot   * tournamentRuntime.addOnCount;
   return Math.max(calc, guarantee);
 }
 
@@ -4864,7 +4869,7 @@ async function loadTournamentIntoForm(id) {
   // フォームへ反映
   el.tournamentTitle.value = found.name || '';
   el.tournamentSubtitle.value = found.subtitle || '';
-  el.tournamentCurrency.value = found.currencySymbol || '¥';
+  el.tournamentCurrency.value = found.currencySymbol || '$';
   if (el.tournamentBlindPreset) {
     // ブラインド構造プルダウンも紐付けに切替（プリセット一覧は populateTournamentBlindPresets 済み前提）
     el.tournamentBlindPreset.value = found.blindPresetId || 'demo-fast';
@@ -5014,7 +5019,7 @@ async function _handleTournamentNewImpl() {
     // STEP 6.21.1: 連番採番で重複回避
     name: generateUniqueTournamentName(existingList),
     subtitle: '',
-    currencySymbol: tournamentState.currencySymbol || '¥',
+    currencySymbol: tournamentState.currencySymbol || '$',
     blindPresetId: el.tournamentBlindPreset?.value || tournamentState.blindPresetId || 'demo-fast',
     // v2.5.2: 新規トーナメントは賞金傾斜の初期値＝金額モード（入力額固定）
     payoutMode: 'amount',
@@ -5301,7 +5306,7 @@ function readTournamentForm() {
     name,
     title: name,   // 旧コード互換用エイリアス
     subtitle: el.tournamentSubtitle?.value || '',
-    currencySymbol: (el.tournamentCurrency?.value || '').trim() || '¥',
+    currencySymbol: (el.tournamentCurrency?.value || '').trim() || '$',
     blindPresetId: el.tournamentBlindPreset?.value || tournamentState.blindPresetId,
     // STEP 6: 拡張フィールド
     gameType: el.tournamentGameType?.value || tournamentState.gameType || 'nlh',
@@ -5319,19 +5324,12 @@ function readTournamentForm() {
       fee:   num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0),
       chips: num(el.tournamentAddonChips, tournamentState.addOn?.chips ?? 0)
     },
-    // v2.4.0: poolRates をフォーム入力欄から読み出し（main 側で sanitizePoolRates 再 clamp）。v2.6.0 で dormant
-    poolRates: {
-      buyIn:   _readPoolRateFromInput(el.tournamentBuyinPoolRate,   tournamentState.poolRates?.buyIn   ?? 0),
-      reentry: _readPoolRateFromInput(el.tournamentReentryPoolRate, tournamentState.poolRates?.reentry ?? 0),
-      addOn:   _readPoolRateFromInput(el.tournamentAddonPoolRate,   tournamentState.poolRates?.addOn   ?? 0)
-    },
-    // v2.6.0 STEP 1（経過措置）: pool 計算は potAmounts に切替済だが、UI はまだ % 入力（STEP 2 で $ 入力へ）。
-    //   保存時に現 % 入力 × フィーから POT を派生（POT = round(fee × poolRate / 100)）して potAmounts を最新化。
-    //   ＝ % 編集が pool に反映され続ける（数値中立）。STEP 2 で本派生を撤去し $ 入力直読みに置換。
+    // v2.6.0: POT（店内通貨 $ の1件あたり拠出）を $ 入力欄から直読み（legacy id *-pool-rate）。pool = Σ(POT × 件数)。
+    //   poolRates は dormant 温存（保存ビルドからは外し、normalizeTournament が fallback で既存値を保持）。
     potAmounts: {
-      buyIn:   Math.max(0, Math.round(num(el.tournamentBuyinFee,   tournamentState.buyIn?.fee   ?? 0) * _readPoolRateFromInput(el.tournamentBuyinPoolRate,   tournamentState.poolRates?.buyIn   ?? 0) / 100)),
-      reentry: Math.max(0, Math.round(num(el.tournamentReentryFee, tournamentState.reentry?.fee ?? 0) * _readPoolRateFromInput(el.tournamentReentryPoolRate, tournamentState.poolRates?.reentry ?? 0) / 100)),
-      addOn:   Math.max(0, Math.round(num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0) * _readPoolRateFromInput(el.tournamentAddonPoolRate,   tournamentState.poolRates?.addOn   ?? 0) / 100))
+      buyIn:   _readPotFromInput(el.tournamentBuyinPoolRate,   tournamentState.potAmounts?.buyIn   ?? 0),
+      reentry: _readPotFromInput(el.tournamentReentryPoolRate, tournamentState.potAmounts?.reentry ?? 0),
+      addOn:   _readPotFromInput(el.tournamentAddonPoolRate,   tournamentState.potAmounts?.addOn   ?? 0)
     },
     // STEP 6.9: specialStack
     specialStack: {
@@ -5699,7 +5697,7 @@ el.titleColorCustomInput?.addEventListener('input', () => {
 
 // STEP 6.8: 通貨記号変更時に賞金端数 <select> ラベルを再生成
 el.tournamentCurrency?.addEventListener('input', () => {
-  const sym = (el.tournamentCurrency.value || '').trim() || '¥';
+  const sym = (el.tournamentCurrency.value || '').trim() || '$';
   if (!el.tournamentPayoutRounding) return;
   const prev = el.tournamentPayoutRounding.value;
   for (const opt of el.tournamentPayoutRounding.options) {
@@ -7921,12 +7919,12 @@ async function loadInitialSettings() {
       if (typeof all?.display?.bottomBarHidden === 'boolean') bottomBarHiddenInit = all.display.bottomBarHidden;
       // STEP 6.22: 店舗名（グローバル）
       if (typeof all?.venueName === 'string') venueNameInit = all.venueName;
-      // v2.4.0: 店舗デフォルト プール率（appConfig.poolRatesDefault）を設定ダイアログ初期値に反映
-      const appPRD = all?.appConfig?.poolRatesDefault;
-      if (appPRD && typeof appPRD === 'object') {
-        if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(appPRD.buyIn   ?? 0);
-        if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(appPRD.reentry ?? 0);
-        if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(appPRD.addOn   ?? 0);
+      // v2.6.0: 店舗デフォルト POT（appConfig.potDefaults、店内通貨 $）を設定ダイアログ初期値に反映
+      const appPotD = all?.appConfig?.potDefaults;
+      if (appPotD && typeof appPotD === 'object') {
+        if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(appPotD.buyIn   ?? 0);
+        if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(appPotD.reentry ?? 0);
+        if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(appPotD.addOn   ?? 0);
       }
       // STEP 9-B: ロゴ初期状態（グローバル）
       if (all?.logo && typeof all.logo === 'object') {

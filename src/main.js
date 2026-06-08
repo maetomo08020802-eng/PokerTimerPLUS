@@ -734,7 +734,7 @@ const store = new Store({
       id: 'tournament-default',
       name: 'ポーカートーナメント',
       subtitle: '',
-      currencySymbol: '¥',
+      currencySymbol: '$',   // v2.6.0: 店内通貨（既定 $）
       blindPresetId: 'demo-fast',
       // STEP 6: バイイン・賞金構造・ゲーム種
       startingStack: 10000,
@@ -932,7 +932,7 @@ function migrateTournament(s) {
       id,
       name: oldT.title || oldT.name || 'ポーカートーナメント',
       subtitle: oldT.subtitle || '',
-      currencySymbol: oldT.currencySymbol || '¥',
+      currencySymbol: oldT.currencySymbol || '$',
       blindPresetId: oldT.blindPresetId || 'demo-fast'
     };
     s.set('tournaments', [migrated]);
@@ -1081,6 +1081,12 @@ function migrateTournamentSchema(s) {
         m.potAmounts = fixed;
         touched = true;
       }
+    }
+    // v2.6.0: 通貨記号を店内通貨 $ へ読み替え。リテラル '¥'（既定値）のみ置換し、カスタム記号は不可侵。
+    //   TOTAL POOL 等の数値は不変（表示記号のみの変更、前原承認済の店内通貨表示）。
+    if (m.currencySymbol === '¥') {
+      m.currencySymbol = '$';
+      touched = true;
     }
     // STEP 10 フェーズC.1.8: runtime 補完（旧バージョンデータには runtime フィールドなし）
     if (!m.runtime || typeof m.runtime !== 'object') {
@@ -2072,6 +2078,15 @@ function registerIpcHandlers() {
     return { ok: true, poolRatesDefault: sanitized };
   });
 
+  // v2.6.0: 店舗デフォルト POT（appConfig.potDefaults、店内通貨 $ の1件あたり拠出）の保存。
+  //   新規トーナメント作成時に normalizeTournament の既定補完で参照される。value: { buyIn, reentry, addOn }（$、非負整数）。
+  ipcMain.handle('settings:setPotDefaults', (_event, value) => {
+    const sanitized = sanitizePotAmounts(value, { buyIn: 0, reentry: 0, addOn: 0 });
+    const cur = store.get('appConfig') || {};
+    store.set('appConfig', { ...cur, potDefaults: sanitized });
+    return { ok: true, potDefaults: sanitized };
+  });
+
   // ===== STEP 9-B: ロゴ設定 IPC =====
   // ファイル選択 + userData ディレクトリへコピー（custom モードへ即移行）
   ipcMain.handle('logo:selectFile', async () => {
@@ -2467,7 +2482,7 @@ function registerIpcHandlers() {
     // 既定値補完
     if (!out.name) out.name = 'ポーカートーナメント';
     if (typeof out.subtitle !== 'string') out.subtitle = '';
-    if (typeof out.currencySymbol !== 'string') out.currencySymbol = '¥';
+    if (typeof out.currencySymbol !== 'string') out.currencySymbol = '$';
     if (typeof out.blindPresetId !== 'string') out.blindPresetId = 'demo-fast';
     // STEP 10 フェーズA: 補完時も必ず新コードに正規化（旧コードが既定値に紛れ込むのを防ぐ）
     out.gameType = normalizeGameType(out.gameType ?? DEFAULT_TOURNAMENT_EXT.gameType);

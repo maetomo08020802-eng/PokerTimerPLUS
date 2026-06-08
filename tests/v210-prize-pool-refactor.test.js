@@ -111,20 +111,20 @@ test('T4 (v2.6.0): computeCalculatedPool は potAmounts × 件数（poolRate% / 
 // ============================================================
 // T5: computeTotalPoolFromForm がプール率入力欄経由 + state fallback
 // ============================================================
-test('T5 (STEP 3/4): computeTotalPoolFromForm がプール率入力欄経由読込み（state fallback あり）', () => {
+test('T5 (v2.6.0): computeTotalPoolFromForm が POT 入力欄経由読込み（state.potAmounts fallback あり）', () => {
   const declIdx = RENDERER.indexOf('function computeTotalPoolFromForm');
   assert.ok(declIdx >= 0, 'computeTotalPoolFromForm 関数定義が見つからない');
   const body = RENDERER.slice(declIdx, declIdx + 1500);
-  // _readPoolRateFromInput 経由でフォーム入力欄からの読込み
-  assert.match(body, /_readPoolRateFromInput\(el\.tournamentBuyinPoolRate/,
-    'computeTotalPoolFromForm 内に el.tournamentBuyinPoolRate 読込み（_readPoolRateFromInput 経由）がない');
-  assert.match(body, /_readPoolRateFromInput\(el\.tournamentReentryPoolRate/,
-    'computeTotalPoolFromForm 内に el.tournamentReentryPoolRate 読込みがない');
-  assert.match(body, /_readPoolRateFromInput\(el\.tournamentAddonPoolRate/,
-    'computeTotalPoolFromForm 内に el.tournamentAddonPoolRate 読込みがない');
-  // state.poolRates フォールバック
-  assert.match(body, /tournamentState\.poolRates\s*\|\|/,
-    'computeTotalPoolFromForm 内の state.poolRates フォールバックがない');
+  // v2.6.0: _readPotFromInput 経由で $ POT 入力欄から読込み（legacy id *-pool-rate）
+  assert.match(body, /_readPotFromInput\(el\.tournamentBuyinPoolRate/,
+    'computeTotalPoolFromForm 内に POT buyIn 読込み（_readPotFromInput 経由）がない');
+  assert.match(body, /_readPotFromInput\(el\.tournamentReentryPoolRate/,
+    'computeTotalPoolFromForm 内に POT reentry 読込みがない');
+  assert.match(body, /_readPotFromInput\(el\.tournamentAddonPoolRate/,
+    'computeTotalPoolFromForm 内に POT addOn 読込みがない');
+  // state.potAmounts フォールバック
+  assert.match(body, /tournamentState\.potAmounts\s*\|\|/,
+    'computeTotalPoolFromForm 内の state.potAmounts フォールバックがない');
 });
 
 // ============================================================
@@ -157,20 +157,16 @@ test('T7 (STEP 4): 解除確認ダイアログ <dialog id="js-fee-unlock-dialog"
 // ============================================================
 // T8: プール率入力欄 3 件存在
 // ============================================================
-test('T8 (STEP 4): プール率入力欄 3 件存在（buyin-pool-rate / reentry-pool-rate / addon-pool-rate）', () => {
-  assert.match(INDEX, /id="js-tournament-buyin-pool-rate"/,
-    'プール率入力欄 js-tournament-buyin-pool-rate 消失');
-  assert.match(INDEX, /id="js-tournament-reentry-pool-rate"/,
-    'プール率入力欄 js-tournament-reentry-pool-rate 消失');
-  assert.match(INDEX, /id="js-tournament-addon-pool-rate"/,
-    'プール率入力欄 js-tournament-addon-pool-rate 消失');
-  // min=0 max=100 step=1 整数制約
-  const poolRateInputs = INDEX.match(/id="js-tournament-(buyin|reentry|addon)-pool-rate"[^>]*/g) || [];
-  assert.equal(poolRateInputs.length, 3, `プール率入力欄が 3 件でない（${poolRateInputs.length} 件）`);
-  for (const inp of poolRateInputs) {
-    assert.match(inp, /min="0"/, `プール率入力欄に min="0" がない: ${inp}`);
-    assert.match(inp, /max="100"/, `プール率入力欄に max="100" がない: ${inp}`);
-    assert.match(inp, /step="1"/, `プール率入力欄に step="1" がない: ${inp}`);
+test('T8 (v2.6.0): POT 入力欄 3 件存在（$拠出、legacy id *-pool-rate、min0/step100/max なし）', () => {
+  assert.match(INDEX, /id="js-tournament-buyin-pool-rate"/, 'POT 入力欄 buyin 消失');
+  assert.match(INDEX, /id="js-tournament-reentry-pool-rate"/, 'POT 入力欄 reentry 消失');
+  assert.match(INDEX, /id="js-tournament-addon-pool-rate"/, 'POT 入力欄 addon 消失');
+  const potInputs = INDEX.match(/id="js-tournament-(buyin|reentry|addon)-pool-rate"[^>]*/g) || [];
+  assert.equal(potInputs.length, 3, `POT 入力欄が 3 件でない（${potInputs.length} 件）`);
+  for (const inp of potInputs) {
+    assert.match(inp, /min="0"/, `POT 入力欄に min="0" がない: ${inp}`);
+    assert.match(inp, /step="100"/, `POT 入力欄に step="100" がない: ${inp}`);
+    assert.ok(!/max="100"/.test(inp), `POT 入力欄に旧 max="100"（% 制約）が残存: ${inp}`);
   }
 });
 
