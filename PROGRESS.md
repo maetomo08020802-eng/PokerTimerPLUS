@@ -14,7 +14,9 @@
 
 | バージョン | STEP / 作業 | 状態 | brief | plan | report |
 |------------|-------------|------|-------|------|--------|
-| (なし) | — | **v2.6.0 配信完了（2026-06-08、Latest 公開中）。案件群クローズ済（md アーカイブ + feature ブランチ削除完了）。オープン作業 0 件・安定運用フェーズ** | — | — | `.cc-archive/v260-release/reports/2026-06-08_v260-release.md` |
+| (内部整理・配信なし) | legacy-id-rename（`*-pool-rate`→`*-pot` 純粋リネーム） | 🟡 実装完了・1358件全PASS・orphan0/null参照0／**完了 review → main merge 待ち（Release なし）** | `.cc-briefs/2026-06-08_legacy-id-rename_brief.md` | `.cc-plans/2026-06-08_legacy-id-rename_plan.md` | `.cc-reports/2026-06-08_legacy-id-rename.md` |
+
+> ※ v2.6.0 は配信完了（2026-06-08、Latest 公開中）・案件群クローズ済（md アーカイブ + feature ブランチ削除）。詳細は `.cc-archive/v260-release/`。
 
 > 状態の凡例: `📝 brief 起案中` / `🤔 Plan 中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 > ※ prestart-zero-stall 案件（STEP 1 調査 → STEP 2 実装 → 配信）は v2.4.1 として配信完了 + 案件クローズ済。関連 md 8 件は `.cc-archive/prestart-zero-stall/`（briefs 5 / plans 1 / reports 2）へ退避済（2026-05-30）。

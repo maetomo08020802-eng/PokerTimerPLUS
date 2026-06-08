@@ -71,7 +71,7 @@ test('R2: computeTotalPoolFromForm が Σ(POT×件数)（rate/100 不使用）',
 });
 
 test('R3: ハウス既定保存が settings.setPotDefaults を使用（setPoolRatesDefault 依存撤去）', () => {
-  const i = RENDERER.indexOf('function handleAppPoolRateDefaultSave');
+  const i = RENDERER.indexOf('function handleAppPotDefaultSave');
   const body = RENDERER.slice(i, i + 1500);
   assert.match(body, /window\.api\.settings\.setPotDefaults/, 'setPotDefaults 呼出がない');
   assert.match(body, /result\.potDefaults/, 'result.potDefaults 参照がない');

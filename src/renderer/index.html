@@ -804,7 +804,7 @@
               </label>
               <label class="tournament-editor__inline-label">チップ（スタック） <input type="number" id="js-tournament-buyin-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
               <label class="tournament-editor__inline-label">1件あたり拠出
-                <input type="number" id="js-tournament-buyin-pool-rate" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
+                <input type="number" id="js-tournament-buyin-pot" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
                 <span class="tournament-editor__pool-rate-unit js-pot-unit">$</span>
               </label>
             </div>
@@ -818,7 +818,7 @@
               </label>
               <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-reentry-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="8000"></label>
               <label class="tournament-editor__inline-label">1件あたり拠出
-                <input type="number" id="js-tournament-reentry-pool-rate" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
+                <input type="number" id="js-tournament-reentry-pot" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
                 <span class="tournament-editor__pool-rate-unit js-pot-unit">$</span>
               </label>
             </div>
@@ -831,7 +831,7 @@
               </label>
               <label class="tournament-editor__inline-label">チップ <input type="number" id="js-tournament-addon-chips" class="tournament-editor__input tournament-editor__input--narrow" min="0" step="1000" value="10000"></label>
               <label class="tournament-editor__inline-label">1件あたり拠出
-                <input type="number" id="js-tournament-addon-pool-rate" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
+                <input type="number" id="js-tournament-addon-pot" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
                 <span class="tournament-editor__pool-rate-unit js-pot-unit">$</span>
               </label>
             </div>
@@ -1121,15 +1121,15 @@
             <span class="form-row__label">店舗デフォルト 1件あたり拠出（$）</span>
             <div class="tournament-editor__inline-fields">
               <label class="tournament-editor__inline-label">バイイン
-                <input type="number" id="js-app-pool-rate-default-buyin" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
+                <input type="number" id="js-app-pot-default-buyin" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
                 <span class="tournament-editor__pool-rate-unit">$</span>
               </label>
               <label class="tournament-editor__inline-label">リエントリー
-                <input type="number" id="js-app-pool-rate-default-reentry" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
+                <input type="number" id="js-app-pot-default-reentry" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
                 <span class="tournament-editor__pool-rate-unit">$</span>
               </label>
               <label class="tournament-editor__inline-label">アドオン
-                <input type="number" id="js-app-pool-rate-default-addon" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
+                <input type="number" id="js-app-pot-default-addon" class="tournament-editor__input tournament-editor__input--narrow tournament-editor__pool-rate-input" min="0" step="100" value="0">
                 <span class="tournament-editor__pool-rate-unit">$</span>
               </label>
             </div>
@@ -1139,9 +1139,9 @@
             0＝拠出なし（プライズプールが立たない安全側初期値）。プールは「1件あたり拠出 × 件数」で積み上がります。
           </p>
           <div class="form-dialog__actions">
-            <button type="button" class="btn btn--primary" id="js-app-pool-rate-default-save">保存</button>
+            <button type="button" class="btn btn--primary" id="js-app-pot-default-save">保存</button>
           </div>
-          <p class="settings-hint" id="js-app-pool-rate-default-error" hidden></p>
+          <p class="settings-hint" id="js-app-pot-default-error" hidden></p>
         </div>
       </section>
 

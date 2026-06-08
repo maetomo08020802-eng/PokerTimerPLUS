@@ -385,16 +385,16 @@ const el = {
   venueSaveBtn:    document.getElementById('js-venue-save'),
 
   // v2.6.0: 🔒fee-lock 関連 el（FeeLockBtn / feeUnlockDialog 系）は撤去（E-1）
-  // POT 入力欄（フィー隣、トーナメント個別。legacy id *-pool-rate だが値は店内通貨 $ の1件あたり拠出）
-  tournamentBuyinPoolRate:      document.getElementById('js-tournament-buyin-pool-rate'),
-  tournamentReentryPoolRate:    document.getElementById('js-tournament-reentry-pool-rate'),
-  tournamentAddonPoolRate:      document.getElementById('js-tournament-addon-pool-rate'),
+  // POT 入力欄（フィー隣、トーナメント個別。id *-pot、値は店内通貨 $ の1件あたり拠出）
+  tournamentBuyinPot:      document.getElementById('js-tournament-buyin-pot'),
+  tournamentReentryPot:    document.getElementById('js-tournament-reentry-pot'),
+  tournamentAddonPot:      document.getElementById('js-tournament-addon-pot'),
   // v2.4.0: 店舗デフォルト プール率（設定ダイアログ ハウス情報タブ、グローバル）
-  appPoolRateDefaultBuyin:      document.getElementById('js-app-pool-rate-default-buyin'),
-  appPoolRateDefaultReentry:    document.getElementById('js-app-pool-rate-default-reentry'),
-  appPoolRateDefaultAddon:      document.getElementById('js-app-pool-rate-default-addon'),
-  appPoolRateDefaultSaveBtn:    document.getElementById('js-app-pool-rate-default-save'),
-  appPoolRateDefaultError:      document.getElementById('js-app-pool-rate-default-error'),
+  appPotDefaultBuyin:      document.getElementById('js-app-pot-default-buyin'),
+  appPotDefaultReentry:    document.getElementById('js-app-pot-default-reentry'),
+  appPotDefaultAddon:      document.getElementById('js-app-pot-default-addon'),
+  appPotDefaultSaveBtn:    document.getElementById('js-app-pot-default-save'),
+  appPotDefaultError:      document.getElementById('js-app-pot-default-error'),
 
   // STEP 9-B: 左上ロゴ関連
   clockLogo:           document.getElementById('js-clock-logo'),
@@ -2728,34 +2728,34 @@ el.venueSaveBtn?.addEventListener('click', () => {
 //     別 namespace・致命バグ保護のため不可侵（本撤去は fee-lock のみ）。
 
 // v2.4.0: 店舗デフォルト プール率（appConfig.poolRatesDefault）の保存 + UI フィードバック
-function _appPoolRateDefaultHintReset() {
-  if (!el.appPoolRateDefaultError) return;
-  el.appPoolRateDefaultError.hidden = true;
-  el.appPoolRateDefaultError.classList.remove('settings-hint--error', 'settings-hint--success');
+function _appPotDefaultHintReset() {
+  if (!el.appPotDefaultError) return;
+  el.appPotDefaultError.hidden = true;
+  el.appPotDefaultError.classList.remove('settings-hint--error', 'settings-hint--success');
 }
-function _appPoolRateDefaultHintError(msg) {
-  if (!el.appPoolRateDefaultError) return;
-  el.appPoolRateDefaultError.textContent = msg;
-  el.appPoolRateDefaultError.classList.remove('settings-hint--success');
-  el.appPoolRateDefaultError.classList.add('settings-hint--error');
-  el.appPoolRateDefaultError.hidden = false;
+function _appPotDefaultHintError(msg) {
+  if (!el.appPotDefaultError) return;
+  el.appPotDefaultError.textContent = msg;
+  el.appPotDefaultError.classList.remove('settings-hint--success');
+  el.appPotDefaultError.classList.add('settings-hint--error');
+  el.appPotDefaultError.hidden = false;
 }
-function _appPoolRateDefaultHintSuccess(msg, ttlMs = 2500) {
-  if (!el.appPoolRateDefaultError) return;
-  el.appPoolRateDefaultError.textContent = msg;
-  el.appPoolRateDefaultError.classList.remove('settings-hint--error');
-  el.appPoolRateDefaultError.classList.add('settings-hint--success');
-  el.appPoolRateDefaultError.hidden = false;
+function _appPotDefaultHintSuccess(msg, ttlMs = 2500) {
+  if (!el.appPotDefaultError) return;
+  el.appPotDefaultError.textContent = msg;
+  el.appPotDefaultError.classList.remove('settings-hint--error');
+  el.appPotDefaultError.classList.add('settings-hint--success');
+  el.appPotDefaultError.hidden = false;
   setTimeout(() => {
-    if (el.appPoolRateDefaultError) {
-      el.appPoolRateDefaultError.hidden = true;
-      el.appPoolRateDefaultError.classList.remove('settings-hint--success');
+    if (el.appPotDefaultError) {
+      el.appPotDefaultError.hidden = true;
+      el.appPotDefaultError.classList.remove('settings-hint--success');
     }
   }, ttlMs);
 }
 
 // v2.6.0: POT 入力欄（店内通貨 $ の1件あたり拠出）から非負整数を取得（不正値は fallback、Math.floor 整数化）。
-//   ¥フィー独立・上限なし（v2.4.0 の 0〜100 clamp は廃止）。入力欄 id は legacy 名（*-pool-rate）だが意味は $ POT。
+//   ¥フィー独立・上限なし（v2.4.0 の 0〜100 clamp は廃止）。入力欄 id は *-pot、意味は $ POT。
 function _readPotFromInput(inputEl, fallback) {
   const n = Number(inputEl?.value);
   if (!Number.isFinite(n) || n < 0) return Math.max(0, Math.floor(Number(fallback) || 0));
@@ -2763,39 +2763,39 @@ function _readPotFromInput(inputEl, fallback) {
 }
 
 // v2.6.0: 店舗デフォルト POT（appConfig.potDefaults、店内通貨 $ の1件あたり拠出）の保存。
-//   入力欄 el は legacy 名（appPoolRateDefault*）だが値は $ POT。
-async function handleAppPoolRateDefaultSave() {
-  _appPoolRateDefaultHintReset();
+//   入力欄 el は appPotDefault*、値は $ POT。
+async function handleAppPotDefaultSave() {
+  _appPotDefaultHintReset();
   const payload = {
-    buyIn:   _readPotFromInput(el.appPoolRateDefaultBuyin,   0),
-    reentry: _readPotFromInput(el.appPoolRateDefaultReentry, 0),
-    addOn:   _readPotFromInput(el.appPoolRateDefaultAddon,   0)
+    buyIn:   _readPotFromInput(el.appPotDefaultBuyin,   0),
+    reentry: _readPotFromInput(el.appPotDefaultReentry, 0),
+    addOn:   _readPotFromInput(el.appPotDefaultAddon,   0)
   };
   if (!window.api?.settings?.setPotDefaults) {
-    _appPoolRateDefaultHintError('保存 API が利用できません');
+    _appPotDefaultHintError('保存 API が利用できません');
     return;
   }
   try {
     const result = await window.api.settings.setPotDefaults(payload);
     if (!result?.ok) {
-      _appPoolRateDefaultHintError(result?.message || '保存に失敗しました');
+      _appPotDefaultHintError(result?.message || '保存に失敗しました');
       return;
     }
     // 入力欄も sanitize 済み値に同期
-    if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(result.potDefaults?.buyIn   ?? payload.buyIn);
-    if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(result.potDefaults?.reentry ?? payload.reentry);
-    if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(result.potDefaults?.addOn   ?? payload.addOn);
-    _appPoolRateDefaultHintSuccess('保存しました');
+    if (el.appPotDefaultBuyin)   el.appPotDefaultBuyin.value   = String(result.potDefaults?.buyIn   ?? payload.buyIn);
+    if (el.appPotDefaultReentry) el.appPotDefaultReentry.value = String(result.potDefaults?.reentry ?? payload.reentry);
+    if (el.appPotDefaultAddon)   el.appPotDefaultAddon.value   = String(result.potDefaults?.addOn   ?? payload.addOn);
+    _appPotDefaultHintSuccess('保存しました');
   } catch (err) {
-    try { window.api?.log?.write?.('error:caught:handleAppPoolRateDefaultSave', { message: err?.message }); } catch (_) {}
+    try { window.api?.log?.write?.('error:caught:handleAppPotDefaultSave', { message: err?.message }); } catch (_) {}
     console.warn('店舗デフォルト POT 保存失敗:', err);
-    _appPoolRateDefaultHintError('保存に失敗しました: ' + (err.message || err));
+    _appPotDefaultHintError('保存に失敗しました: ' + (err.message || err));
   }
 }
 
-el.appPoolRateDefaultSaveBtn?.addEventListener('click', () => {
-  try { window.api?.log?.write?.('ui:click:major', { id: 'appPoolRateDefaultSaveBtn' }); } catch (_) {}
-  handleAppPoolRateDefaultSave();
+el.appPotDefaultSaveBtn?.addEventListener('click', () => {
+  try { window.api?.log?.write?.('ui:click:major', { id: 'appPotDefaultSaveBtn' }); } catch (_) {}
+  handleAppPotDefaultSave();
 });
 
 // ===== STEP 6.23: PC間データ移行（エクスポート / インポート） =====
@@ -4149,11 +4149,11 @@ function syncTournamentFormFromState() {
   if (el.tournamentAddonFee)        el.tournamentAddonFee.value        = String(tournamentState.addOn?.fee ?? 0);
   if (el.tournamentAddonChips)      el.tournamentAddonChips.value      = String(tournamentState.addOn?.chips ?? 0);
   // v2.6.0: POT 入力欄同期（フィー隣、トーナメント個別 potAmounts ＝ 店内通貨 $ の1件あたり拠出）。
-  //   入力欄 id は legacy（*-pool-rate）だが値は $ POT。
+  //   入力欄 id は *-pot、値は $ POT。
   const _pot = tournamentState.potAmounts || { buyIn: 0, reentry: 0, addOn: 0 };
-  if (el.tournamentBuyinPoolRate)   el.tournamentBuyinPoolRate.value   = String(_pot.buyIn   ?? 0);
-  if (el.tournamentReentryPoolRate) el.tournamentReentryPoolRate.value = String(_pot.reentry ?? 0);
-  if (el.tournamentAddonPoolRate)   el.tournamentAddonPoolRate.value   = String(_pot.addOn   ?? 0);
+  if (el.tournamentBuyinPot)   el.tournamentBuyinPot.value   = String(_pot.buyIn   ?? 0);
+  if (el.tournamentReentryPot) el.tournamentReentryPot.value = String(_pot.reentry ?? 0);
+  if (el.tournamentAddonPot)   el.tournamentAddonPot.value   = String(_pot.addOn   ?? 0);
   refreshPotUnitLabels();
   // STEP 6.9: 特殊スタック フォーム
   const ss = tournamentState.specialStack || { enabled: false, label: '早期着席特典', chips: 5000, appliedCount: 0 };
@@ -4215,7 +4215,7 @@ function updatePayoutsSum() {
 }
 
 // v2.6.0: 編集中フォームからプール額を計算 = Σ(POT × 件数)（POT は店内通貨 $ の1件あたり拠出、¥フィー独立）。
-//   金額モード配当のバリデーション/換算表示で使用。POT 入力欄（legacy id *-pool-rate）から $ を即時読込み、
+//   金額モード配当のバリデーション/換算表示で使用。POT 入力欄（id *-pot）から $ を即時読込み、
 //   未存在時は tournamentState.potAmounts にフォールバック（防御）。max(計算プール, guarantee) は維持。
 function computeTotalPoolFromForm() {
   const num = (e, def) => {
@@ -4224,9 +4224,9 @@ function computeTotalPoolFromForm() {
   };
   const guarantee  = num(el.tournamentGuarantee,  tournamentState.guarantee ?? 0);
   const statePot = tournamentState.potAmounts || { buyIn: 0, reentry: 0, addOn: 0 };
-  const buyInPot   = _readPotFromInput(el.tournamentBuyinPoolRate,   statePot.buyIn);
-  const reentryPot = _readPotFromInput(el.tournamentReentryPoolRate, statePot.reentry);
-  const addOnPot   = _readPotFromInput(el.tournamentAddonPoolRate,   statePot.addOn);
+  const buyInPot   = _readPotFromInput(el.tournamentBuyinPot,   statePot.buyIn);
+  const reentryPot = _readPotFromInput(el.tournamentReentryPot, statePot.reentry);
+  const addOnPot   = _readPotFromInput(el.tournamentAddonPot,   statePot.addOn);
   const calc = buyInPot   * tournamentRuntime.playersInitial
              + reentryPot * tournamentRuntime.reentryCount
              + addOnPot   * tournamentRuntime.addOnCount;
@@ -4377,7 +4377,7 @@ function readPayoutsFromFormAsPercent() {
 // STEP 6.9: rebuy → reentry リネーム
 // v2.4.0: プール率入力欄もリスナ対象に追加（rate 変更で TOTAL POOL リアルタイム反映）
 ['tournamentGuarantee','tournamentBuyinFee','tournamentReentryFee','tournamentAddonFee',
- 'tournamentBuyinPoolRate','tournamentReentryPoolRate','tournamentAddonPoolRate'].forEach((key) => {
+ 'tournamentBuyinPot','tournamentReentryPot','tournamentAddonPot'].forEach((key) => {
   el[key]?.addEventListener('input', rerenderPayoutsEditorIfNeeded);
 });
 
@@ -5207,12 +5207,12 @@ function readTournamentForm() {
       fee:   num(el.tournamentAddonFee,   tournamentState.addOn?.fee   ?? 0),
       chips: num(el.tournamentAddonChips, tournamentState.addOn?.chips ?? 0)
     },
-    // v2.6.0: POT（店内通貨 $ の1件あたり拠出）を $ 入力欄から直読み（legacy id *-pool-rate）。pool = Σ(POT × 件数)。
+    // v2.6.0: POT（店内通貨 $ の1件あたり拠出）を $ 入力欄から直読み（id *-pot）。pool = Σ(POT × 件数)。
     //   poolRates は dormant 温存（保存ビルドからは外し、normalizeTournament が fallback で既存値を保持）。
     potAmounts: {
-      buyIn:   _readPotFromInput(el.tournamentBuyinPoolRate,   tournamentState.potAmounts?.buyIn   ?? 0),
-      reentry: _readPotFromInput(el.tournamentReentryPoolRate, tournamentState.potAmounts?.reentry ?? 0),
-      addOn:   _readPotFromInput(el.tournamentAddonPoolRate,   tournamentState.potAmounts?.addOn   ?? 0)
+      buyIn:   _readPotFromInput(el.tournamentBuyinPot,   tournamentState.potAmounts?.buyIn   ?? 0),
+      reentry: _readPotFromInput(el.tournamentReentryPot, tournamentState.potAmounts?.reentry ?? 0),
+      addOn:   _readPotFromInput(el.tournamentAddonPot,   tournamentState.potAmounts?.addOn   ?? 0)
     },
     // STEP 6.9: specialStack
     specialStack: {
@@ -7804,9 +7804,9 @@ async function loadInitialSettings() {
       // v2.6.0: 店舗デフォルト POT（appConfig.potDefaults、店内通貨 $）を設定ダイアログ初期値に反映
       const appPotD = all?.appConfig?.potDefaults;
       if (appPotD && typeof appPotD === 'object') {
-        if (el.appPoolRateDefaultBuyin)   el.appPoolRateDefaultBuyin.value   = String(appPotD.buyIn   ?? 0);
-        if (el.appPoolRateDefaultReentry) el.appPoolRateDefaultReentry.value = String(appPotD.reentry ?? 0);
-        if (el.appPoolRateDefaultAddon)   el.appPoolRateDefaultAddon.value   = String(appPotD.addOn   ?? 0);
+        if (el.appPotDefaultBuyin)   el.appPotDefaultBuyin.value   = String(appPotD.buyIn   ?? 0);
+        if (el.appPotDefaultReentry) el.appPotDefaultReentry.value = String(appPotD.reentry ?? 0);
+        if (el.appPotDefaultAddon)   el.appPotDefaultAddon.value   = String(appPotD.addOn   ?? 0);
       }
       // STEP 9-B: ロゴ初期状態（グローバル）
       if (all?.logo && typeof all.logo === 'object') {

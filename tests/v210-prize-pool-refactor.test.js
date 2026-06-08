@@ -115,12 +115,12 @@ test('T5 (v2.6.0): computeTotalPoolFromForm が POT 入力欄経由読込み（s
   const declIdx = RENDERER.indexOf('function computeTotalPoolFromForm');
   assert.ok(declIdx >= 0, 'computeTotalPoolFromForm 関数定義が見つからない');
   const body = RENDERER.slice(declIdx, declIdx + 1500);
-  // v2.6.0: _readPotFromInput 経由で $ POT 入力欄から読込み（legacy id *-pool-rate）
-  assert.match(body, /_readPotFromInput\(el\.tournamentBuyinPoolRate/,
+  // v2.6.0: _readPotFromInput 経由で $ POT 入力欄から読込み（id *-pot）
+  assert.match(body, /_readPotFromInput\(el\.tournamentBuyinPot/,
     'computeTotalPoolFromForm 内に POT buyIn 読込み（_readPotFromInput 経由）がない');
-  assert.match(body, /_readPotFromInput\(el\.tournamentReentryPoolRate/,
+  assert.match(body, /_readPotFromInput\(el\.tournamentReentryPot/,
     'computeTotalPoolFromForm 内に POT reentry 読込みがない');
-  assert.match(body, /_readPotFromInput\(el\.tournamentAddonPoolRate/,
+  assert.match(body, /_readPotFromInput\(el\.tournamentAddonPot/,
     'computeTotalPoolFromForm 内に POT addOn 読込みがない');
   // state.potAmounts フォールバック
   assert.match(body, /tournamentState\.potAmounts\s*\|\|/,
@@ -154,11 +154,11 @@ test('T7 (v2.6.0 E-1): フィー解除確認ダイアログ撤去（虚偽文言
 // ============================================================
 // T8: プール率入力欄 3 件存在
 // ============================================================
-test('T8 (v2.6.0): POT 入力欄 3 件存在（$拠出、legacy id *-pool-rate、min0/step100/max なし）', () => {
-  assert.match(INDEX, /id="js-tournament-buyin-pool-rate"/, 'POT 入力欄 buyin 消失');
-  assert.match(INDEX, /id="js-tournament-reentry-pool-rate"/, 'POT 入力欄 reentry 消失');
-  assert.match(INDEX, /id="js-tournament-addon-pool-rate"/, 'POT 入力欄 addon 消失');
-  const potInputs = INDEX.match(/id="js-tournament-(buyin|reentry|addon)-pool-rate"[^>]*/g) || [];
+test('T8 (v2.6.0): POT 入力欄 3 件存在（$拠出、id *-pot、min0/step100/max なし）', () => {
+  assert.match(INDEX, /id="js-tournament-buyin-pot"/, 'POT 入力欄 buyin 消失');
+  assert.match(INDEX, /id="js-tournament-reentry-pot"/, 'POT 入力欄 reentry 消失');
+  assert.match(INDEX, /id="js-tournament-addon-pot"/, 'POT 入力欄 addon 消失');
+  const potInputs = INDEX.match(/id="js-tournament-(buyin|reentry|addon)-pot"[^>]*/g) || [];
   assert.equal(potInputs.length, 3, `POT 入力欄が 3 件でない（${potInputs.length} 件）`);
   for (const inp of potInputs) {
     assert.match(inp, /min="0"/, `POT 入力欄に min="0" がない: ${inp}`);
