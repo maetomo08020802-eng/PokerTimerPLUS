@@ -7,26 +7,37 @@
 - 配布形態: フリー配布（全国のポーカールームでの汎用使用）
 - PLUS2ブランドおよび作者の認知拡大を目的とした戦略的フリーソフト
 
-## ハイブリッド自動化対応済（2026-05-28、Phase 2 ON）
+## ハイブリッド自動化（2026-05-28 導入 / ★現在 Phase 1 = 通知のみ・auto-trigger は 2026-06-11 に無効化）
 
-本プロジェクトはハイブリッド自動化の **3 プロジェクト共通展開先**（plus2-homepage で Phase 2 段階 2 フロー完全実証成功 → 3 プロジェクト全部入りに更新済）。
+> **★2026-06-22 更新(全プロジェクト共通・customer-app 検証済→本採用): 完了レビューの起動を「cc-review ワークフロー」に一本化**
+>
+> 完了レポート(`.cc-reports/...md`)を書き終えたら、従来の「Agent ツールで `cc-kouchikushi2` を単発呼出」ではなく、**Workflow〔ワークフロー=複数エージェントを台本どおり自動で回す純正の仕組み〕ツールで `cc-review` を実行**してください。Stop hook での強制起動(旧 Phase 2)が mid-turn でハングした問題を、決定論的・バックグラウンド・再開可能なワークフローで置き換えるのが狙いです。
+> - **実行方法**: Workflow ツールに `{ name: "cc-review", args: { reportPath: "<完了reportの絶対パス>" } }` を渡す。`name` で解決できない時は `{ scriptPath: "C:\\Users\\user\\Documents\\Claude\\Projects\\個人アシスタント\\poker-clock\\.claude\\workflows\\cc-review.js", args: { reportPath: "<絶対パス>" } }`。reportPath を省略すると最新の `.cc-reports/*.md` を自動探索。
+> - **cc-review がやること**: ①構築士2(cc-kouchikushi2)が**従来どおり**完了reviewを実施し `.cc-briefs/...completion_review.md` を Write(DoD/INVARIANTS/スコープ判定。poker-clock は致命バグ保護5件も照合)②独立した懐疑役が SQL/DB・認証/認可境界・スコープを「反証する気で」二次チェックし、懸念/escalate の有無を返す。
+> - **完了後の処理は従来どおり**: CC は completion_review.md を Read → 既存の「チャット丸展開ルール」を実行 + ワークフロー戻り値の二次チェック結果(懸念/escalate)を1行添える。
+> - **読み替え規約**: 本ファイル内で「完了report 書出後に `cc-kouchikushi2` を能動呼出/単発呼出」とある箇所は、**完了reviewに限り**「`cc-review` ワークフローを実行」と読み替える。使えない・失敗時のみ従来の単発呼出にフォールバック。**Plan 軽量review・brief 起案の単発呼出は従来どおり**。
+> - **他ルールは全て従来どおり**: Stop hook 通知・INVARIANTS・DoD・6-A/6-B・並列sub-agent最大3体・push前review 等は不変。変わるのは「完了reviewの起動方法だけ」。
 
-- **日常運用**: CC が plan / brief / report 書出 → Stop hook 検知 → サブエージェント版 構築士2（`~/.claude/agents/cc-kouchikushi2.md`）が自動起動 → review.md / completion_review.md / 次 brief を自動生成
-- **手動呼出**: `Agent` ツールで `subagent_type: "cc-kouchikushi2"` 指定、対象 report / plan / brief パスを引数として渡す
+> **現在の運用(2026-06-11〜)**: Phase 1 = **Stop hook は通知(トースト)のみ**。`~/.claude/hybrid-automation.auto-trigger.enabled` は削除済=サブエージェントの**自動**呼出はしない。主経路は **CC が report 書出直後に `cc-kouchikushi2` を能動呼出**する。Phase 2(自動トリガー)再有効化は手順最適化後に判断。
+
+- **日常運用(主経路)**: CC が plan / report を書く → **CC 自身が Agent ツールで `cc-kouchikushi2` を能動呼出**（`subagent_type: "cc-kouchikushi2"`、対象 md を絶対パスで渡す）→ review.md / completion_review.md / 次 brief を生成 → CC が読んで実装 / 報告。
 - **新案件 / 大方針相談**: Cowork 版 構築士2（現状維持）
 - **自動参照される Skills**: `plus2-photo-policy`（写真使用可否マップ）、`plus2-terminology`（文言ポリシー）
 - **poker-clock 固有の DoD 観点**（致命バグ保護 5 件 / 既存テスト全 PASS / 並列 sub-agent 最大 3 / レイアウトシフト撲滅 5 原則 / ブランディング保護）はサブエージェントも認識（CLAUDE.md ルール4-B 経由で参照）
 - **詳細・トラブル時の対応**: [`~/.claude/HYBRID_AUTOMATION_README.md`](file:///C:/Users/user/.claude/HYBRID_AUTOMATION_README.md)
-- **現在の状態（2026-05-28 更新）**: スクリプト内 allow-list は **3 プロジェクト全部入り（plus2-homepage / customer-app / poker-clock）、Phase 2（auto-trigger）ON**。CC が plan / report 書出すと Stop hook 経由でサブエージェント自動呼出が走る
-- **Stop hook 検出対象（2026-05-28 拡張、`~/.claude/scripts/relay-to-kouchikushi.ps1`）**:
-  - 対象: `.cc-reports/*.md` + `.cc-plans/*.md` + `.cc-briefs/*_brief.md`
-  - 除外: `README.md` / `_template*.md` / `*_review.md` / `*_completion_review.md`
-  - Plan 書出時点でも Stop hook → サブエージェント自動 review が走る（plus2-homepage homepage-performance-audit 案件で 2026-05-28 完全実証成功、3 段階フロー = plan 書出 → 自動 review → 実装 → report 書出 → 自動 completion review）
+- **Stop hook 通知対象**（`~/.claude/scripts/relay-to-kouchikushi.ps1`、allow-list に登録済）: `.cc-reports/*.md` + `.cc-plans/*.md` + `.cc-briefs/*_brief.md`（除外: `README.md` / `_template*.md` / `*_review.md` / `*_completion_review.md`）。Phase 1 では通知のみ(自動 review は走らない)。
 
 ## レビュー必読 INVARIANTS（致命ルール・サブエージェント必読）
 
 > この節はサブエージェント版 構築士2 が**レビューのたびに必ず全文読む**短い致命ルール一覧（review-rules.md §0-4）。
 > ここに違反する変更は DoD が全■でも承認しない。
+
+### ★ 全プロジェクト共通・最優先ルール(2026-06-18 常設・全プロジェクト同一)
+
+> CC(Code)が最初に読む位置に常設。court 生成ループ〔同じ語を延々繰り返すモデル側の暴走〕と PROGRESS 再肥大は、ルールを脚注に書くだけでは防げないと実証されたため致命ルールに格上げした。
+
+- **① ツール作業中は前置きゼロ**: ツール(Read/Edit/Bash 等)を呼ぶ前に文章を一切書かない(「〜します:」等の前置きの断片が court ループの引き金)。説明は全ツール完了後に普通の完全な文で 1 回だけ。区切り線・絵文字や記号の連打・意味のない短語も書かない。同じ語/記号が連続し始めたら、その応答を即座に打ち切る(自己検知・自己停止)。
+- **② PROGRESS.md 肥大厳禁**: 各行は 1〜2 行。`## 直近の状態`は **最新スナップショット 1 つだけ**(完了報告のたびに古い記載を消して上書き=過去セッションのログを積み増さない。これが再肥大の主因)。実装の詳細 narrative・migration 検証ログ(VERIFY/SMOKE)・恒久知見の全文は書かず `.cc-reports/...md` と memory に委ねる。完了/アーカイブは「日付+案件+一言+commit」の 1 行のみ。サブエージェントは review 時、PROGRESS が肥大していれば指摘する。
 
 - **致命バグ保護 5 件は全件維持**: resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所。1 件でも壊す変更は禁止。report に全件「影響なし or 影響あり+対処」を明記。【標準制約 / DoD / 段階1 条件4】
 - **既存テスト全 PASS 維持**: skip / コメントアウト / 無効化は禁止。件数・PASS 状況に変化があれば構築士2 review 必須。【DoD「既存テスト全 PASS 維持」】
@@ -83,7 +94,7 @@
 - console.errorやTODOコメントを未処理で残さない
 - 既存のPokerStars Poker Clockのコード・素材を直接コピーしない（参考のみ）
 - **前原に直接作業を依頼しない**（2026-05-24 追加）。完了報告 md の冒頭やセクション内で「前原さんへの動作確認依頼」「○○してください」のような命令調で前原宛に直接書かない。前原実機確認が必要な項目は **`## 6. 構築士2 への確認事項` セクションに「前原実機確認候補」として整理**（手順・所要時間・チェック項目を箇条書き）。構築士2 がそれを `.cc-briefs/...review.md` で再構成して前原に渡す。前原は実装作業・実機確認の窓口を常に「構築士2 経由」で受け取る
-- **CC は自走を止めない（2026-05-28 追加、Phase 2 ON 運用前提）**。サブエージェント版構築士2 が自動 review を出す体制になったため、CC が進行方針で立ち止まることは禁止である。具体的には:
+- **CC は自走を止めない（2026-05-28 追加）**。サブエージェント版構築士2 の review(現 Phase 1 では CC が report/plan 書出直後に能動呼出)が回る体制のため、CC が進行方針で立ち止まることは禁止である。具体的には:
   - セクション E 段階 1 のスキップ 4 条件すべて met なら、確認なしで即実装着手（チャットに「軽量 review スキップ運用で実装に進みます」を 1 行明記すれば足る）
   - 4 条件のいずれか not met なら、確認なしで即サブエージェント自動呼出（段階 2）に進む
   - **`AskUserQuestion` / `ExitPlanMode` / 進行方針確認質問（「このまま進めて良いか」「Plan のどれを採用するか」等）は全面禁止**。plus2-homepage で 2026-05-28 に「CC が AskUserQuestion で止まる」事案発生済、本プロジェクトでも再発させない
@@ -462,7 +473,7 @@ Plan 提示時、以下の 3 段階で処理。詳細は `CC構築士2_手順書
 
 スキップ時、構築士2 は完了 review で「事後妥当性検証」セクション必須。
 
-**段階 2: サブエージェント自動呼出**（2026-05-28 拡張、Phase 2 ON で完全自動化）
+**段階 2: サブエージェント呼出**（2026-05-28 拡張。現 Phase 1 では CC が report/plan 書出直後に能動呼出）
 
 4 条件 not met の場合、CC は Cowork に投げずに `cc-kouchikushi2` サブエージェントを自動呼出（Agent ツール、`subagent_type: "cc-kouchikushi2"`）。Plan + brief パスを渡してサブエージェントが軽量 review → `.cc-briefs/...review.md` 自動書出。CC が読んで実装着手。
 
