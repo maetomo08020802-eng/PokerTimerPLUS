@@ -2549,10 +2549,11 @@ function openPreStartDialog() {
   for (const r of radios) {
     r.checked = (r.value === '0');
   }
-  // 参加人数の初期値: 前回値 or 10 人（最初は store にデータがないので 10）
+  // ② prestart-display-fixes（2026-06-23）: 参加人数の初期表示は毎回 3（前回値を引きずらない）。
+  //   実開始は 3〜4 人が大半のため、開くたびに 3 から始めて ±・直接入力で調整させる。
+  //   下限上限ガード（readPreStartPlayers の 1〜500 clamp）は無変更で維持。
   if (el.prestartPlayers) {
-    const prev = tournamentRuntime.playersInitial;
-    el.prestartPlayers.value = prev > 0 ? String(prev) : '10';
+    el.prestartPlayers.value = '3';
   }
   if (typeof el.prestartDialog.showModal === 'function') {
     el.prestartDialog.showModal();
