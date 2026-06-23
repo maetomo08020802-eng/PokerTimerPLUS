@@ -203,7 +203,7 @@ test('T11: 本案件追加クラスに transform: scale / position: fixed がな
 // ============================================================
 test('version: package.json は 2.5.1', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.6.0', `package.json version が ${pkg.version}（期待 2.5.1）`);
+  assert.equal(pkg.version, '2.6.1', `package.json version が ${pkg.version}（期待 2.5.1）`);
 });
 
 test('version: scripts.test に v254-settings-scope-clarity.test.js が含まれる', () => {

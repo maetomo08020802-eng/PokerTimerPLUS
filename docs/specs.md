@@ -896,6 +896,13 @@ Yu Shimomachi が運営する PLUS2 をはじめ、HDMI 拡張モニターを備
 - 破棄は rolling-log ラベル `operator:applyPreStartState:discard-stale-restore` で観測可能。
 - `cancelPreStart` 経路・main 側送信・`timer.js`・IPC は無変更（誤発火の抑止のみ）。
 
+### PRE_START 中の NEXT BREAK IN 表示（v2.6.1、誤表示根治）
+
+PRE_START 中は `state.remainingMs` が「開始までのカウントダウン残り」であり、Lv0 の残りではない。`renderNextBreak` がこれを `computeNextBreakMs` の基準に渡すと「カウントダウン残り + 後続 duration」という誤った NEXT BREAK IN を表示していた（0 着地で `startAtLevel(0)` が remainingMs を Lv0 満了 duration に置換するため、実スタート瞬間に正値へジャンプして見えた）。
+
+- 修正: `renderNextBreak` 本体で `status === PRE_START` のときのみ基準を Lv0 満了 duration（`getLevel(currentIndex).durationMinutes`）に差し替える。実スタート直後の値と連続し、0 着地ジャンプが解消される。
+- 表示レイヤーのみの変更で、`timer.js` 状態機械・上記 0 着地ガード経路には非接触。残ブレイク無し構成では従来どおり「TOTAL GAME TIME」ラベル（PRE_START 中は 0）に切替わる。
+
 ### AudioContext 再初期化対応
 
 - C.1.7 で確立した `audio.js _play()` 内 suspend resume は維持
