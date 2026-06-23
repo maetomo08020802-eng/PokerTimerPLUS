@@ -981,7 +981,21 @@ function computeTotalGameTimeMs() {
 }
 
 function renderNextBreak(remainingMs, currentIndex) {
-  const ms = computeNextBreakMs(remainingMs, currentIndex);
+  // ① prestart-display-fixes（2026-06-23）: PRE_START（開始前カウントダウン）中は
+  //   state.remainingMs が「開始までの残り時間」であって currentIndex(=Lv0) の残りではない。
+  //   computeNextBreakMs はこれを基準（line 951 `let total = remainingMs`）に後続レベルを積むため、
+  //   PRE_START 中は「カウントダウン残り + 後続 duration」という誤った NEXT BREAK IN になり、
+  //   0 着地（startAtLevel(0) が Lv0 満了 duration を投入）で正値へジャンプして見えていた。
+  //   実スタート直後と連続させるため、PRE_START 中だけ基準を Lv0 満了 duration に差し替える
+  //   （structure 未ロード等で getLevel が null の場合は remainingMs にフォールバック）。
+  let baseMs = remainingMs;
+  if (getState().status === States.PRE_START) {
+    const lv = getLevel(currentIndex);
+    if (lv && typeof lv.durationMinutes === 'number') {
+      baseMs = lv.durationMinutes * 60 * 1000;
+    }
+  }
+  const ms = computeNextBreakMs(baseMs, currentIndex);
   // STEP 10 フェーズC.1.6 Fix 2: 残ブレイクなし → TOTAL GAME TIME ラベル + 累積時間表示に切替
   if (ms === null) {
     if (el.nextBreakLabel) el.nextBreakLabel.textContent = 'TOTAL GAME TIME';
