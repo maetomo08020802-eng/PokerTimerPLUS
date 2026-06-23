@@ -4,15 +4,13 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-06-23** — prestart-display-fixes(①PRE_START中NEXT BREAK IN誤表示根治 ②参加人数初期値10→3)実装+テスト完了・**前原実機確認待ち**。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-06-23** — **v2.6.1 配信済(Latest 公開中)**。prestart-display-fixes(①NEXT BREAK IN誤表示根治 ②参加人数初期値10→3)・オープン作業0件。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
 ## 🟡 現在のリリース作業 / オープン STEP
 
-| 案件 | 状態 | report |
-|------|------|--------|
-| prestart-display-fixes(①NEXT BREAK IN誤表示 ②人数初期値3) | 🟡 実機確認待ち(`fix/prestart-display-fixes`・main未merge・v2.6.1想定) | `.cc-reports/2026-06-23_prestart-display-fixes.md` |
+**(なし)** — v2.6.1 配信完了(Latest 公開中)。次案件の brief 受領待ち。
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -21,6 +19,7 @@
 
 | 配信日 | バージョン | 主要変更(1行) | report |
 |--------|-----------|---------|--------|
+| 2026-06-23 | **v2.6.1** | PRE_START中のNEXT BREAK IN誤表示根治(基準をLv0満了durationに)+参加人数初期値10→3。merge `4427af7`/tag v2.6.1 | `.cc-reports/2026-06-23_prestart-display-fixes.md` |
 | 2026-06-08 | **v2.6.0** | 賞金プールを店内通貨$・1件あたり拠出×件数モデルへ刷新(%全廃・配当金額固定)+ 重さ改善3種。merge `a1bce57`/tag v2.6.0(Latest) | `.cc-reports/2026-06-08_v260-release.md` |
 | 2026-06-07 | v2.5.1 | 設定タブをスコープ別2分割 + ブラインド編集の卓固定 + 各種UX。merge `f804114` | `.cc-reports/2026-06-07_settings-scope-clarity_release.md` |
 | 2026-06-06 | v2.5.0 | トーナメント画像分離で保存激重を根治(config 35MB→92KB)。merge `e77fcce` | `.cc-archive/tournament-bloat/` |
@@ -43,7 +42,7 @@
 
 | 指標 | 値 |
 |------|----|
-| 配信済リリース | 9件(v1.0.0〜v2.6.0)|
+| 配信済リリース | 10件(v1.0.0〜v2.6.1)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件(安定運用フェーズ)|
 | 最新テスト件数 | 1368件 全PASS(v268 +10) |
@@ -53,9 +52,9 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: ブランチ `fix/prestart-display-fixes`(main未merge・origin未push)・version 2.6.0据置(bumpはリリース時)・テスト1368件全PASS。main HEAD は `fbf7203`。
-- **直前作業(2026-06-23)**: prestart-display-fixes 実装完了。①renderNextBreakでPRE_START時のみ基準をLv0満了durationに差替(NEXT BREAK IN誤表示根治)②参加人数初期値を毎回3に。3コミット(①`a9296e5`/②`6573228`/test`f6aaf64`)+PROGRESSスリム化(前セッション未コミット分)取込。致命バグ保護5件非接触。
-- **次のアクション**: 前原実機確認(brief 6-B 表①②③)→ GO で main merge + version bump v2.6.1 + tag/Release。**推測着手禁止**。
+- **git**: `main`・version 2.6.1・テスト1368件全PASS。merge `4427af7`(`--no-ff`)・tag `v2.6.1`。
+- **直前作業(2026-06-23)**: prestart-display-fixes を **v2.6.1 として配信**(前原 GO 済・6-B実機確認3シナリオ)。①renderNextBreakでPRE_START時のみ基準をLv0満了durationに差替(NEXT BREAK IN誤表示根治)②参加人数初期値を毎回3に。回帰テストv268 10件。致命バグ保護5件 全件影響なし。
+- **次のアクション**: 特になし(安定運用)。次案件の brief 受領待ち。温存=v2.3.0 / 軽微リネーム。**推測着手禁止**。
 
 ---
 
