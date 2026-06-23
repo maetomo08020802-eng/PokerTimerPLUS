@@ -248,7 +248,7 @@ test('T8 (保護): 致命バグ保護 5 件すべて維持', () => {
 // T9: package.json version は 2.1.12
 // ============================================================
 test('T9: package.json version は 2.1.12', () => {
-  assert.equal(PKG.version, '2.6.0',
+  assert.equal(PKG.version, '2.6.1',
     `package.json version が ${PKG.version}（期待 2.1.18）`);
 });
 
