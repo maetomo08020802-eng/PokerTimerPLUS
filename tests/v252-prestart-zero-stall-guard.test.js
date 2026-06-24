@@ -84,7 +84,7 @@ function makeCtx({ status, isPreStart }) {
 // T1: package.json.version === 2.4.1
 // ============================================================
 test('T1: package.json.version === 2.4.1', () => {
-  assert.equal(PKG.version, '2.6.3', `期待 2.4.1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.6.4', `期待 2.4.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================

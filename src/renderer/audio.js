@@ -43,7 +43,8 @@ const enabledMap = {
   'countdown-tick':  true,
   'level-end':       true,
   'break-end':       true,
-  'start':           true   // STEP 5 用（枠だけ確保）
+  'start':           true,  // STEP 5 用（枠だけ確保）
+  'start-voice':     true    // tournament-start-voice: 開始ボイス（再生可否は startVoice 選択で renderer 側 gate）
 };
 
 // store キー名 ↔ soundId のマッピング
@@ -74,13 +75,28 @@ const SOUND_FILES = {
     variant2: '../audio/countdown-tick2.mp3'
   },
   // STEP 5 用の枠（現状 404 → フォールバック合成）
-  'start':          '../audio/start.mp3'
+  'start':          '../audio/start.mp3',
+  // tournament-start-voice: トーナメント開始ボイス（女性4 + 男性4）。
+  //   選択は store グローバルキー startVoice → variantState['start-voice'] で 1 つ選ぶ（dict バリアント）。
+  'start-voice': {
+    'female-1': '../audio/shuffle-up-and-deal-female-1.mp3',
+    'female-2': '../audio/shuffle-up-and-deal-female-2.mp3',
+    'female-3': '../audio/shuffle-up-and-deal-female-3.mp3',
+    'female-4': '../audio/shuffle-up-and-deal-female-4.mp3',
+    'male-1':   '../audio/shuffle-up-and-deal-male-clear-1.mp3',
+    'male-2':   '../audio/shuffle-up-and-deal-male-clear-2.mp3',
+    'male-3':   '../audio/shuffle-up-and-deal-male-clear-3.mp3',
+    'male-4':   '../audio/shuffle-up-and-deal-male-clear-4.mp3'
+  }
 };
 
 // バリアント選択状態（applyAudioSettings / setVariant で更新）
 const variantState = {
   'level-end':      'default',
-  'countdown-tick': 'default'
+  'countdown-tick': 'default',
+  // tournament-start-voice: getSoundPath が常に有効 key を引けるよう既定を 1 ボイスに置く
+  //   （実際の選択は applyAudioSettings(settings.startVoice) / setVariant で上書き。'off' 時は再生されない）。
+  'start-voice':    'female-1'
 };
 
 function getSoundPath(soundId) {
@@ -233,6 +249,14 @@ export function applyAudioSettings(settings) {
   }
   if (typeof settings.countdownTickVariant === 'string') {
     variantState['countdown-tick'] = settings.countdownTickVariant === 'variant2' ? 'variant2' : 'default';
+  }
+  // tournament-start-voice: 開始ボイス選択。'off' は variantState を触らない（再生は renderer 側で gate）。
+  //   有効な 8 ボイス key のときだけ variantState['start-voice'] を更新（次ロードで該当 mp3 が使われる）。
+  if (typeof settings.startVoice === 'string' && settings.startVoice !== 'off') {
+    const voiceEntry = SOUND_FILES['start-voice'];
+    if (voiceEntry && Object.prototype.hasOwnProperty.call(voiceEntry, settings.startVoice)) {
+      variantState['start-voice'] = settings.startVoice;
+    }
   }
   // settings.reverbEnabled は互換のため受け入れるが、無視する（mp3 サンプル方式）
 }

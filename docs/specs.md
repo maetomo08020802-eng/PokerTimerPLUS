@@ -614,6 +614,13 @@ PokerStars Poker Clock のキー体系を踏襲しつつ、日本語キーボー
 | スタートカウント1 | `count-1.mp3` | スタート 1 秒前 | 設定で ON/OFF |
 | スタート | `start.mp3` | スタート時 | 連動 |
 | ブレイク終了 | `break-end.mp3` | ブレイク残り 0 秒 | 設定で ON/OFF |
+| **トーナメント開始ボイス（v2.6.4）** | `shuffle-up-and-deal-{female,male-clear}-{1..4}.mp3` | トーナメント開始時（即時開始 / PRE_START 0着地 両方） | 音タブで選択（なし+女性4+男性4）。グローバル `startVoice` |
+
+**トーナメント開始ボイス（v2.6.4・tournament-start-voice）**
+- 音タブの `<select id="js-audio-start-voice">`（なし + 女性1-4 + 男性1-4 = 9 状態）で選択。store グローバルキー `startVoice`（`'off'` 既定）に永続化（per-tournament でない・アプリ全体共通）。
+- 再生は新 soundId `'start-voice'`（`SOUND_FILES` の dict バリアント）。`playTournamentStartVoiceIfSelected()`（renderer.js）が `onPreStartEnd`（PRE_START 0着地）と即時開始（`timerStart()` 直後）で呼ばれ、選択時のみ `playSound('start-voice')`。
+- **置換**: ボイス選択時は `start.mp3` を鳴らさない（二重再生なし）。**OFF は各経路で従来動作を厳密保存**（PRE_START→`start.mp3` / 即時→無音）。
+- `_play`/`ensureAudioReady`/`playSound` 無改変＝AudioContext resume 防御・hall 二重再生ガードを継承。試聴は専用ハンドラ（`js-audio-start-voice-test`、OFF は無音 + ヒント）。
 
 **実装ポリシー**
 - Web Audio API ベースで実装。`AudioContext` は最初のユーザー操作後に初期化。

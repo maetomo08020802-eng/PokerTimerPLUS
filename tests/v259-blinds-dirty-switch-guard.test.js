@@ -155,7 +155,7 @@ test('E4: <dialog>（.form-dialog--tabs）に display:flex なし / 新確認ダ
 // ============================================================
 test('version: package.json は 2.5.1 据え置き（本修正で bump しない）', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.6.3', `version が ${pkg.version}（2.5.1 据え置き）`);
+  assert.equal(pkg.version, '2.6.4', `version が ${pkg.version}（2.5.1 据え置き）`);
 });
 
 test('version: scripts.test に v259-blinds-dirty-switch-guard.test.js が含まれる', () => {
