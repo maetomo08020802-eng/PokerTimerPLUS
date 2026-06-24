@@ -177,7 +177,7 @@ test('T6: rc1 Fix 1/2/3 + rc2 Fix 1 + 致命バグ保護 5 件 + v2.1.6〜v2.1.1
     'v2.1.17 main.js sanitization isPaused 転送 1 行消失');
 
   // package.json version 2.1.18
-  assert.equal(PKG.version, '2.6.1', `package.json version が 2.1.18 ではない（実際: ${PKG.version}）`);
+  assert.equal(PKG.version, '2.6.2', `package.json version が 2.1.18 ではない（実際: ${PKG.version}）`);
 });
 
 console.log(`\n結果: ${pass} PASS, ${fail} FAIL`);

@@ -98,6 +98,7 @@
           <ul>
             <li><kbd>S</kbd> 設定ダイアログ</li>
             <li><kbd>Ctrl</kbd>+<kbd>T</kbd> テロップ編集</li>
+            <li><kbd>T</kbd> テロップ表示 / 非表示</li>
             <li><kbd>M</kbd> ミュート切替</li>
           </ul>
         </div>
@@ -282,6 +283,8 @@
       <span class="shortcut-item">H: 下部バー非表示</span>
       <span class="shortcut-sep">／</span>
       <span class="shortcut-item">Ctrl+T: テロップ編集</span>
+      <span class="shortcut-sep">／</span>
+      <span class="shortcut-item">T: テロップ表示/非表示</span>
       <span class="shortcut-sep">／</span>
       <span class="shortcut-item">F11: フルスクリーン</span>
       <span class="shortcut-sep">／</span>
@@ -1058,6 +1061,7 @@
         <div class="form-row">
           <label class="form-row__label" for="js-marquee-tab-text">表示テキスト</label>
           <textarea id="js-marquee-tab-text" class="form-textarea" rows="4" placeholder="複数行入力可。改行は半角スペース3つで連結されます。"></textarea>
+          <p class="form-row__hint marquee-decor-hint">一部の色を変える: <code>[red]文字[/red]</code>（使える色: red / gold / yellow / orange / green / cyan / blue / pink / white または <code>#RRGGBB</code>）</p>
         </div>
 
         <div class="form-row">
@@ -1163,6 +1167,7 @@
     <div class="form-row">
       <label class="form-row__label" for="js-marquee-text">表示テキスト</label>
       <textarea id="js-marquee-text" class="form-textarea" rows="4" maxlength="200" placeholder="複数行入力可。改行は半角スペース3つで連結されます。最大 200 文字。"></textarea>
+      <p class="form-row__hint marquee-decor-hint">一部の色を変える: <code>[red]文字[/red]</code>（使える色: red / gold / yellow / orange / green / cyan / blue / pink / white または <code>#RRGGBB</code>）</p>
     </div>
 
     <div class="form-row">

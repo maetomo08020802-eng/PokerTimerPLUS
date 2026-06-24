@@ -362,7 +362,8 @@ prize = Σ(potAmounts × 件数)
 - テキスト入力（textarea、複数行可、改行は半角スペース3つで連結して1行表示）
 - スクロール速度選択（ラジオボタン: 遅い 30秒/周 / 普通 20秒/周 / 速い 12秒/周）
 - 「プレビュー」ボタン: 現在のフォーム値をメインクロック画面に即時反映＆永続化
-- ショートカット `Ctrl+T` で同じ編集ダイアログを直接開ける（運用中の即時編集）
+- ショートカット `Ctrl+T` で同じ編集ダイアログを直接開ける（運用中の即時編集）。単独 `T` で表示/非表示トグル（v2.6.2）
+- **部分色変え（v2.6.2）**: 本文に `[color]…[/color]` 記法で一部だけ色変更可。color はホワイトリスト（red/gold/yellow/orange/green/cyan/blue/pink/white）または `#RRGGBB`。描画は `renderMarqueeContent`（marquee.js）が限定パースし `createElement('span')`+`textContent`+検証済 color のみで生成（**innerHTML 不使用＝XSS 構造的に不可**）。`text` 文字列に乗るため保存スキーマ・hall 同期・migration は無改修。許可外色/未対応記法は地の文字でフォールバック。`MARQUEE_TEXT_MAX=200` は記法込み据置
 
 #### 4.2.6 音設定タブ
 - レベル終了チャイム選択 / 試聴
@@ -545,6 +546,7 @@ PokerStars Poker Clock のキー体系を踏襲しつつ、日本語キーボー
 | Space | 一時停止 / 再開 |
 | Enter | スタート (待機状態のとき) |
 | Ctrl+T | テロップ編集ダイアログを直接開く |
+| T | テロップ表示 / 非表示トグル（v2.6.2。enabled 反転 → 永続化＋hall 同期。入力中/dialog 中は抑制・実質 operator 専用） |
 | S | 設定ダイアログ（表示タブ）を開く |
 | F11 | フルスクリーン切替 |
 | Ctrl+Q (macOS: Cmd+Q) | アプリ終了 (確認あり) |

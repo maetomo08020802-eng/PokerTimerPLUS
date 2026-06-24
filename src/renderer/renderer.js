@@ -7313,6 +7313,23 @@ async function handleMarqueeSave() {
   closeMarqueeDialog();
 }
 
+// telop-dualscreen-ideas ①（2026-06-24）: 単独 T キーでテロップ表示/非表示をトグル。
+//   enabled を反転 → applyMarquee で即時反映 → setMarqueeSettings で永続化＋hall 同期（既存経路）。
+//   ダイアログ/設定タブを開かずに切替できる導線。hall はキーフォワード無効のため実質 operator 専用。
+function toggleMarquee() {
+  if (window.appRole === 'hall') return;   // ホール側はテロップ操作不可（二重防御）
+  const next = { ...lastMarqueeSettings, enabled: !lastMarqueeSettings.enabled };
+  lastMarqueeSettings = next;
+  _marqueePreviewing = false;   // トグルは確定操作なのでプレビュー状態を解除
+  applyMarquee(next);
+  syncMarqueeTabFormFromCurrent();   // 設定タブのフォーム表示も整合（開いていれば反映）
+  if (window.api?.tournaments?.setMarqueeSettings && tournamentState.id) {
+    window.api.tournaments.setMarqueeSettings(tournamentState.id, next).catch((err) => {
+      console.warn('テロップ表示トグルの保存に失敗:', err);
+    });
+  }
+}
+
 el.marqueePreview?.addEventListener('click', handleMarqueePreview);
 el.marqueeSave?.addEventListener('click', handleMarqueeSave);
 // STEP 6.22.1.fix: 閉じる時にプレビューを保存値へ復元
@@ -7423,6 +7440,14 @@ function dispatchClockShortcut(event) {
             window.api?.dual?.broadcastMuteState?.(nowMuted);
           }
         });
+      }
+      break;
+    case 'KeyT':
+      // telop-dualscreen-ideas ①: 単独 T でテロップ表示/非表示トグル
+      //   （Ctrl+T は switch 手前の 7338 で marquee ダイアログを開く別経路）
+      if (!event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        toggleMarquee();
       }
       break;
     case 'KeyH':

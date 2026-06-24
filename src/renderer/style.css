@@ -2439,6 +2439,15 @@ body:not(.has-marquee) .marquee { display: none; }
   color: var(--text-secondary);
 }
 
+/* telop-dualscreen-ideas ③（2026-06-24）: テロップ装飾記法ヒント内の code 表記 */
+.marquee-decor-hint code {
+  font-family: var(--font-mono, monospace);
+  font-style: normal;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0 0.3em;
+  border-radius: 3px;
+}
+
 /* STEP 6: 賞金構造エディタ（順位×% テーブル） */
 .payouts-editor {
   display: grid;
