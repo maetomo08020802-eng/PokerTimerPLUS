@@ -1010,6 +1010,26 @@
               <option value="variant2">音色2</option>
             </select>
           </div>
+          <div class="form-row">
+            <label class="form-row__label" for="js-audio-start-voice">トーナメント開始ボイス</label>
+            <select id="js-audio-start-voice" class="audio-editor__variant-select">
+              <option value="off">なし</option>
+              <optgroup label="女性">
+                <option value="female-1">女性1</option>
+                <option value="female-2">女性2</option>
+                <option value="female-3">女性3</option>
+                <option value="female-4">女性4</option>
+              </optgroup>
+              <optgroup label="男性">
+                <option value="male-1">男性1</option>
+                <option value="male-2">男性2</option>
+                <option value="male-3">男性3</option>
+                <option value="male-4">男性4</option>
+              </optgroup>
+            </select>
+            <button type="button" id="js-audio-start-voice-test" class="btn btn--ghost">試聴</button>
+          </div>
+          <p class="settings-hint">開始ボイスを選ぶと、トーナメント開始時（即時開始 / カウントダウン終了）にそのボイスが鳴ります（スタート音と置き換え）。全トーナメント共通の設定です。</p>
 
           <hr class="audio-editor__divider">
 

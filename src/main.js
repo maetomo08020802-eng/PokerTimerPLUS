@@ -325,6 +325,8 @@ function sanitizeRuntime(value, fallback) {
 }
 const VALID_TIMER_FONTS = ['jetbrains', 'roboto', 'space'];
 const VALID_VARIANTS = ['default', 'variant2'];
+// tournament-start-voice: 開始ボイス選択の許容値（'off' + 女性4 + 男性4）
+const VALID_START_VOICES = ['off', 'female-1', 'female-2', 'female-3', 'female-4', 'male-1', 'male-2', 'male-3', 'male-4'];
 
 // ===== STEP 10 フェーズA: ゲーム種拡張（11ゲーム × 4構造型） =====
 // STEP 10 フェーズC.2.3: Limit Hold'em / MIX / その他 を追加（11 → 14 種類）
@@ -796,7 +798,9 @@ const store = new Store({
       reverbEnabled: true,          // STEP 4 仕上げ②: 互換のため残置（事実上 dead key）
       // STEP 4 仕上げ④: 音色2バリアント切替（'default' | 'variant2'）
       levelEndVariant: 'default',
-      countdownTickVariant: 'default'
+      countdownTickVariant: 'default',
+      // tournament-start-voice: トーナメント開始ボイス（アプリ全体共通）。'off'＝従来動作（PRE_START→start.mp3 / 即時→無音）
+      startVoice: 'off'
     },
     // v2.4.0: 店舗デフォルトのプール率（賞金プール反映率、新規トーナメント作成時にコピーされる初期値）
     //   0%＝安全側（景品表示法・風営法対応）。既存トーナメントは migration で 100% 補完されるため挙動完全維持。
@@ -3052,6 +3056,13 @@ function registerIpcHandlers() {
       } else {
         merged[k] = current[k] && VALID_VARIANTS.includes(current[k]) ? current[k] : 'default';
       }
+    }
+    // tournament-start-voice: 開始ボイス enum 検証（不正は current → さらに不正なら 'off' の二段ガード）
+    if (typeof merged.startVoice === 'string' && VALID_START_VOICES.includes(merged.startVoice)) {
+      // OK
+    } else {
+      merged.startVoice = (typeof current.startVoice === 'string' && VALID_START_VOICES.includes(current.startVoice))
+        ? current.startVoice : 'off';
     }
     store.set('audio', merged);
     // v2.0.0 STEP 2: hall に audio 設定を broadcast（音はホール側で鳴る想定、設定読込は hall で初期化）

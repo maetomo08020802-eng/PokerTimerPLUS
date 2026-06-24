@@ -437,6 +437,8 @@ const el = {
   audioStart:           document.getElementById('js-audio-start'),
   audioVariantLevelEnd:        document.getElementById('js-audio-variant-level-end'),
   audioVariantCountdownTick:   document.getElementById('js-audio-variant-countdown-tick'),
+  audioStartVoice:      document.getElementById('js-audio-start-voice'),
+  audioStartVoiceTest:  document.getElementById('js-audio-start-voice-test'),
   audioTestButtons:     document.querySelectorAll('[data-test-sound]'),
   audioHint:            document.getElementById('js-audio-hint'),
 
@@ -2498,7 +2500,9 @@ setHandlers({
   },
   onPreStartEnd: () => {
     // PRE_START 残り 0 → start 音 → 直後に startAtLevel(0) が呼ばれる
-    playSound('start');
+    // tournament-start-voice: 開始ボイス選択時はボイスを鳴らし start.mp3 は鳴らさない（置換・二重再生なし）。
+    //   OFF（なし）は従来どおり playSound('start')（start.mp3）。状態機械（startAtLevel(0)）には触れない。
+    if (!playTournamentStartVoiceIfSelected()) playSound('start');
     lastAudioTriggerSec = -1;
   },
   // v2.1.6: PRE_START の edge イベント → hall に session state として broadcast（間引きなし）
@@ -2641,6 +2645,8 @@ el.prestartOk?.addEventListener('click', () => {
   initTournamentRuntime(players);
   if (minutes <= 0) {
     timerStart();   // 「今すぐ開始」: 従来通り即時 startAtLevel(0)
+    // tournament-start-voice: 即時開始でも選択ボイスを鳴らす（OFF は no-op＝従来どおり無音）。
+    playTournamentStartVoiceIfSelected();
   } else {
     timerStartPreStart(minutes);
   }
@@ -7057,8 +7063,22 @@ const audioState = {
   startEnabled: true,           // STEP 5: スタート音
   // STEP 4 仕上げ④: 音色2バリアント
   levelEndVariant: 'default',
-  countdownTickVariant: 'default'
+  countdownTickVariant: 'default',
+  // tournament-start-voice: 開始ボイス（アプリ全体共通）。'off' + female-1..4 / male-1..4
+  startVoice: 'off'
 };
+
+// tournament-start-voice: 開始時にボイスが選択されていれば start-voice を鳴らし true を返す。
+//   OFF / 未選択は false（呼び元が従来音 start.mp3 にフォールバック可）。
+//   playSound 経由のため hall ガード + AudioContext resume 防御（_play）を継承（二画面二重再生なし）。
+function playTournamentStartVoiceIfSelected() {
+  const v = audioState.startVoice;
+  if (v && v !== 'off') {
+    playSound('start-voice');
+    return true;
+  }
+  return false;
+}
 
 function setAudioHint(message, kind = '') {
   if (!el.audioHint) return;
@@ -7085,6 +7105,9 @@ function syncAudioFormFromState() {
   }
   if (el.audioVariantCountdownTick) {
     el.audioVariantCountdownTick.value = audioState.countdownTickVariant === 'variant2' ? 'variant2' : 'default';
+  }
+  if (el.audioStartVoice) {
+    el.audioStartVoice.value = audioState.startVoice || 'off';
   }
   setAudioHint('');
 }
@@ -7154,6 +7177,32 @@ el.audioVariantCountdownTick?.addEventListener('change', async () => {
   await ensureAudioReady();
   await audioSetVariant('countdown-tick', value);
   persistAudioPartial({ countdownTickVariant: value });
+});
+
+// tournament-start-voice: 開始ボイス選択（グローバル・electron-store 永続化）
+el.audioStartVoice?.addEventListener('change', async () => {
+  const value = el.audioStartVoice.value;
+  audioState.startVoice = value;
+  await ensureAudioReady();
+  // 'off' 以外は該当ボイスの buffer をロード（'off' は setVariant 不要＝再生は開始時に gate される）
+  if (value !== 'off') await audioSetVariant('start-voice', value);
+  persistAudioPartial({ startVoice: value });
+});
+
+// tournament-start-voice: 開始ボイス試聴（専用ハンドラ。data-test-sound は付けない＝generic 試聴と二重バインドしない）。
+//   OFF 時に既定 female-1 が誤再生するのを避けるため、選択中ボイスのみ playSoundForce で鳴らす。
+el.audioStartVoiceTest?.addEventListener('click', async () => {
+  await ensureAudioReady();
+  const v = audioState.startVoice;
+  if (!v || v === 'off') {
+    setAudioHint('開始ボイスは「なし」です', '');
+    setTimeout(() => setAudioHint(''), 1200);
+    return;
+  }
+  await audioSetVariant('start-voice', v);   // 選択と buffer を一致させてから鳴らす
+  playSoundForce('start-voice');
+  setAudioHint('開始ボイスを再生', 'success');
+  setTimeout(() => setAudioHint(''), 1200);
 });
 
 // 試聴ボタン: ON/OFF を無視して必ず鳴らす（playSoundForce）
