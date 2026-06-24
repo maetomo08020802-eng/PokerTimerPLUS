@@ -57,9 +57,9 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main`・version 2.6.4・テスト1418件全PASS。merge `ee16648`(`--no-ff`)・tag `v2.6.4`・origin 同期済。GitHub Release v2.6.4 Latest 公開・自動更新有効(.exe + latest.yml + blockmap アップロード済)。
-- **直前作業(2026-06-24)**: tournament-start-voice(開始ボイス選択)を **v2.6.4 として配信**(前原「配信GO」+ 実機確認OK)。音タブに開始ボイス select(なし+女性4+男性4=9状態)、グローバル store `startVoice` 永続化、開始時(即時/PRE_START0着地 両方)に選択ボイス1回再生し start.mp3 を置換(二重再生なし)。OFF は各経路で従来動作の厳密保存。audio.js の `_play`/`ensureAudioReady`/`playSound` 無改変(AudioContext resume・hall ガード継承)＝致命5件全件非接触。8ボイスmp3は前原自作(CREDITS確定・帰属不要)で追跡化。段階2+完了 review 承認(懐疑役 escalate なし)。v271回帰14件。report `.cc-reports/2026-06-24_tournament-start-voice.md`。
-- **次のアクション**: brief 受領待ち(オープン作業0件・安定運用フェーズ)。温存候補は下表(v2.3.0 PRE_START永続化 / 軽微: index.html:1030・CREDITS.md:66 の旧STEP5/未配置注記の実態乖離 文言整理 / 軽微5件 等)。
+- **git**: `main` HEAD `0eb2690`(v2.6.4 配信後に注記整理1件の doc commit)・version 2.6.4・テスト1418件全PASS・origin 同期済。配信は merge `ee16648`(`--no-ff`)・tag `v2.6.4`・GitHub Release Latest 公開・自動更新有効(.exe + latest.yml + blockmap)。※main は tag より doc commit 1件分先行(次回リリースに同梱)。
+- **直前作業(2026-06-24)**: tournament-start-voice(開始ボイス選択)を **v2.6.4 として配信**(前原「配信GO」+ 実機確認OK)。音タブに開始ボイス select(なし+女性4+男性4=9状態)、グローバル store `startVoice` 永続化、開始時(即時/PRE_START0着地 両方)に選択ボイス1回再生し start.mp3 を置換(二重再生なし)。OFF は各経路で従来動作の厳密保存。audio.js の `_play`/`ensureAudioReady`/`playSound` 無改変(AudioContext resume・hall ガード継承)＝致命5件全件非接触。8ボイスmp3は前原自作(CREDITS確定・帰属不要)で追跡化。段階2+完了 review 承認(懐疑役 escalate なし)。v271回帰14件。配信後に音タブヒント/CREDITS の旧STEP5・start.mp3未配置注記を実態整理(`0eb2690`)。report `.cc-reports/2026-06-24_tournament-start-voice.md`。
+- **次のアクション**: brief 受領待ち(オープン作業0件・安定運用フェーズ)。温存候補は下表(v2.3.0 PRE_START永続化 / poolRates dormant除去 / 旧ブランチ整理 / settings軽微5件)。
 - **参考**: 本日 v2.6.2→2.6.3(dualscreen-latency)→2.6.4(開始ボイス)を連続配信。**推測着手禁止**。
 
 ---
