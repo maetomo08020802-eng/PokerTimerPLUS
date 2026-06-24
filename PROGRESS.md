@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | 安定運用フェーズ | 次は brief 受領待ち |
+| telop-preview-label | 📦 配信準備中（main landed・GO 待ち） | テロップ編集の色付き表示枠に「プレビュー（表示見本・編集不可）」ラベル明示（誤認防止）。UI/文言のみ・2箇所整合・軽量トラック diff review 承認。次回リリース(v2.6.6 候補)に同梱 or 前原 GO で即配信。`.cc-briefs/2026-06-24_telop-preview-label_lightweight_review.md` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -60,8 +60,9 @@
 
 - **git**: `main` HEAD `e680436`(Merge: telop-color-ux-simplify — v2.6.5)・version 2.6.5・origin 同期済(main + tag push 済)。配信は merge `e680436`(`--no-ff`)・tag `v2.6.5`・GitHub Release Latest 公開・自動更新有効(.exe + latest.yml + blockmap の3点添付・`/releases/latest`=v2.6.5)。feature ブランチ `feature/telop-color-ux-simplify` は merge 済(ローカル整理可)。
 - **直前作業(2026-06-24)**: telop-color-ux-simplify を **v2.6.5 として配信**(前原「配信GO」)。**テロップ色変えを「文字を選択→色ボタン」方式に作り直し**(前原「手打ち記法が難しすぎる」→方式A 採用)。9 色スウォッチ+任意色 picker+「色を消す」+編集中インラインプレビューを設定タブ版/Ctrl+T ダイアログ版の 2 箇所に。記法 `[color]…[/color]` は内部で自動生成/除去(ネスト防止・後勝ち)。**保存フォーマット・marquee.js 安全パーサ(innerHTML 不使用・色ホワイトリスト)は無改変=export 追加のみ**で旧データ 100% 互換・XSS 後退ゼロ。致命5件全件非接触(入力 UI のみ)。v272 回帰15件・1433件全PASS・v269互換維持。Plan 段階2+完了 review 承認(懐疑役 escalate なし)。report `.cc-reports/2026-06-24_telop-color-ux-simplify.md`。
-- **次のアクション**: brief 受領待ち(オープン作業0件・安定運用フェーズ)。前原実機確認(6-B ①〜⑥=実機での色付け操作感・2画面反映・プレビュー見た目)は配信後の任意確認。温存候補は下表。
-- **参考**: 本日 v2.6.2→2.6.3→2.6.4→2.6.5 を連続配信。本案件は v2.6.2 の手打ち記法 UX を改善。**推測着手禁止**。
+- **追記(2026-06-24・telop-preview-label)**: v2.6.5 のテロップ色プレビュー枠を利用者が編集領域と誤認した件の fix。色付き表示枠の上に「プレビュー（表示見本・ここは編集できません）」ラベルを明示（枠は編集不可のまま挙動不変）。設定タブ/Ctrl+T の2箇所整合・冗長補助文整理。UI/文言のみ(index.html/style.css/v272 test +1 assert)・致命5件非接触・1433件全PASS。軽量トラック diff review 承認(escalate なし)。**main に push 済(version 2.6.5 据置・未タグ＝次回リリース同梱 or 前原 GO で v2.6.6 即配信)**。
+- **次のアクション**: brief 受領待ち。telop-preview-label は配信判断(v2.6.6 即配信 or 次回同梱)が前原 GO 待ち。前原実機確認(色プレビュー枠の「プレビュー」表示)。温存候補は下表。
+- **参考**: 本日 v2.6.2→2.6.3→2.6.4→2.6.5 を連続配信。本案件群は v2.6.2 の手打ち記法 UX を改善(色 UI 作り直し→プレビュー明示)。**推測着手禁止**。
 
 ---
 

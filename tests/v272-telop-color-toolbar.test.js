@@ -250,6 +250,9 @@ test('T12: 両編集 UI に色ツールバー一式が存在（スウォッチ 9
   assert.match(HTML, /id="js-marquee-color-clear"/, 'ダイアログ版 クリアボタンがない');
   assert.match(HTML, /id="js-marquee-tab-preview-box"/, '設定タブ版 プレビュー box がない');
   assert.match(HTML, /id="js-marquee-preview-box"/, 'ダイアログ版 プレビュー box がない');
+  // telop-preview-label: 表示専用と分かる「プレビュー」ラベルが各 UI に（編集領域と誤認させない）
+  const labelCount = (HTML.match(/class="marquee-preview-label"/g) || []).length;
+  assert.equal(labelCount, 2, `プレビューラベルが 2 箇所でない（実際: ${labelCount}）`);
 });
 
 test('T13: 全スウォッチの data-color がホワイトリストで解決できる（生成記法が必ず色になる）', () => {

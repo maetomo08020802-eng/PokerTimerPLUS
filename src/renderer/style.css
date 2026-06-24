@@ -2523,9 +2523,30 @@ body:not(.has-marquee) .marquee { display: none; }
 }
 
 .marquee-edit-preview:empty::before {
-  content: "（プレビュー）";
+  content: "（文字を入力すると、ここに表示見本が出ます）";
   color: var(--text-secondary, #8b8e98);
   opacity: 0.6;
+}
+
+/* telop-preview-label: 表示専用プレビュー枠の見出しラベル（編集領域と誤認させない） */
+.marquee-preview-label {
+  display: block;
+  margin-top: var(--space-sm);
+  font-family: var(--font-body);
+  font-size: 0.95vw;
+  font-weight: 600;
+  color: var(--text-secondary, #cfd2da);
+  letter-spacing: 0.02em;
+}
+
+.marquee-preview-label__note {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+/* ラベル直下の枠は上余白を詰めてラベルと一体に見せる */
+.marquee-preview-label + .marquee-edit-preview {
+  margin-top: 0.4vh;
 }
 
 /* 選択なし・上限超過などの一時警告（案内文を一時的に黄色く） */
