@@ -9,6 +9,62 @@ const SPEED_DURATION = Object.freeze({
   fast: '12s'
 });
 
+// telop-dualscreen-ideas ③（2026-06-24）: テロップ部分装飾（色のみ）の許可色ホワイトリスト。
+//   記法 [color]…[/color] の color はこのキー（小文字）か #RRGGBB のみ許可。
+//   それ以外は装飾扱いせず地の文字として表示（フォールバック）。
+const MARQUEE_COLORS = Object.freeze({
+  red:    '#ff4d4f',
+  gold:   '#ffce54',
+  yellow: '#ffe14d',
+  orange: '#ff9f43',
+  green:  '#46d369',
+  cyan:   '#3fb6d4',
+  blue:   '#4d8bff',
+  pink:   '#ff6fb5',
+  white:  '#ffffff'
+});
+
+// 色名（ホワイトリスト）or #RRGGBB のみ解決。許可外は null（＝装飾化しない）。
+function resolveMarqueeColor(name) {
+  if (typeof name !== 'string') return null;
+  const key = name.toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(MARQUEE_COLORS, key)) return MARQUEE_COLORS[key];
+  if (/^#[0-9a-f]{6}$/i.test(name)) return name;
+  return null;
+}
+
+// 記法 [color]…[/color] を限定パースして container に描画。
+//   innerHTML は使わず createTextNode / createElement('span')+textContent+検証済 color のみ
+//   → 保存物（store/import JSON）が信頼境界外でも XSS は構造的に不可能。
+//   ネスト非対応（フラット・後勝ち）、閉じ忘れは行末まで適用。未知の色/未対応記法はタグごと地の文字。
+function renderMarqueeContent(container, text) {
+  container.textContent = '';   // 既存子要素を全クリア
+  const safe = typeof text === 'string' ? text : '';
+  const re = /\[(\/?)([a-z]+|#[0-9a-f]{6})\]/gi;
+  let lastIndex = 0;
+  let activeColor = null;   // 現在開いている色（フラット・1段）
+  const appendText = (str, color) => {
+    if (!str) return;
+    if (color) {
+      const span = document.createElement('span');
+      span.textContent = str;
+      span.style.color = color;
+      container.appendChild(span);
+    } else {
+      container.appendChild(document.createTextNode(str));
+    }
+  };
+  let m;
+  while ((m = re.exec(safe)) !== null) {
+    const color = resolveMarqueeColor(m[2]);
+    if (color === null) continue;   // 未知の色 → タグとして扱わず地の文字に残す
+    appendText(safe.slice(lastIndex, m.index), activeColor);   // タグ手前を現在色で
+    activeColor = (m[1] === '/') ? null : color;               // 閉じ→解除 / 開き→上書き
+    lastIndex = re.lastIndex;
+  }
+  appendText(safe.slice(lastIndex), activeColor);   // 残り
+}
+
 const dom = {
   marquee: null,
   content: null,
@@ -47,8 +103,8 @@ export function applyMarquee(settings) {
   const duration = SPEED_DURATION[settings.speed] || SPEED_DURATION.normal;
   dom.marquee.style.setProperty('--marquee-duration', duration);
 
-  // テキスト更新
-  dom.content.textContent = cleaned;
+  // テキスト更新（③ 部分装飾: [color]…[/color] を限定パースして span 化。innerHTML 不使用）
+  renderMarqueeContent(dom.content, cleaned);
 
   // 表示状態へ（CSS は body:not(.has-marquee) .marquee { display: none } で制御）
   document.body.classList.add('has-marquee');
