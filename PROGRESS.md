@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-06-24** — **②2画面時差(dualscreen-latency・案A)実装完了・🟡前原6-B GO待ち**(v2.6.2 は引続き Latest 公開中)。遷移時のみ即時送信で operator→hall 反映を最大500ms→約20〜60ms。テスト1404件全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-06-24** — **v2.6.3 配信済(Latest 公開中・自動更新有効)**。② 2画面 operator→hall 時差を案A(遷移時のみ即時送信)で最大500ms→約20〜60msに短縮。テスト1404件全PASS・オープン作業0件。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,9 +12,8 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| ②2画面時差(dualscreen-latency・案A) | 🟡 実機確認待ち(実装+v270回帰24件+完了report完了、前原6-B 2画面検証→GOで v2.6.3 配信) | report `.cc-reports/2026-06-24_dualscreen-latency.md` / ブランチ `feature/v2.6.3-dualscreen-latency`(commit `96f52aa`) |
+| (なし) | 安定運用フェーズ | 次は brief 受領待ち |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
-> ★引継ぎ(2026-06-24): ② 案A 実装完了(renderer.js のみ・timer.js/main.js/dual-sync.js 無改変)。残=前原6-B 2画面実機検証(report 7.1: Space/レベル切替反映速度・PRE_START0着地退行なし・ts差定量)→ GO 後に release commit(version 2.6.2→2.6.3 + 73件pin + CHANGELOG + docs/specs)→ main `--no-ff` merge + tag v2.6.3 + push + .exe + Release。memory `[[dualsync-frequency]]` 参照。
 
 ---
 
@@ -22,6 +21,7 @@
 
 | 配信日 | バージョン | 主要変更(1行) | report |
 |--------|-----------|---------|--------|
+| 2026-06-24 | **v2.6.3** | ② 2画面 operator→hall 状態遷移の時差を案A(遷移時のみ即時送信)で最大500ms→約20〜60msに短縮。renderer.jsのみ・致命5件+PRE_START0着地ガード非接触。merge `184a25e`/tag v2.6.3(Latest) | `.cc-reports/2026-06-24_dualscreen-latency.md` |
 | 2026-06-24 | **v2.6.2** | テロップ ①単独Tで表示/非表示トグル ③本文の部分色変え`[color]…[/color]`(innerHTML不使用でXSS安全)。merge `f019f14`/tag v2.6.2 | `.cc-reports/2026-06-24_telop-dualscreen-ideas.md` |
 | 2026-06-23 | **v2.6.1** | PRE_START中のNEXT BREAK IN誤表示根治(基準をLv0満了durationに)+参加人数初期値10→3。merge `4427af7`/tag v2.6.1 | `.cc-reports/2026-06-23_prestart-display-fixes.md` |
 | 2026-06-08 | **v2.6.0** | 賞金プールを店内通貨$・1件あたり拠出×件数モデルへ刷新(%全廃・配当金額固定)+ 重さ改善3種。merge `a1bce57`/tag v2.6.0(Latest) | `.cc-reports/2026-06-08_v260-release.md` |
@@ -46,9 +46,9 @@
 
 | 指標 | 値 |
 |------|----|
-| 配信済リリース | 11件(v1.0.0〜v2.6.2)|
+| 配信済リリース | 12件(v1.0.0〜v2.6.3)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 1件(②2画面時差・実装完了→前原6-B GO待ち)|
+| オープン作業 | 0件(安定運用フェーズ)|
 | 最新テスト件数 | 1404件 全PASS(v270 +24) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
@@ -56,10 +56,10 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: ブランチ `feature/v2.6.3-dualscreen-latency`・commit `96f52aa`・version 2.6.2 据置・テスト1404件全PASS。main は v2.6.2(`f019f14`/tag `v2.6.2`)で Latest 公開中。
-- **直前作業(2026-06-24)**: ②2画面時差(dualscreen-latency・案A)を**実装完了**。renderer.js に `persistTimerStateNow()` 新設＋subscribe 遷移分岐(`isTransition && !involvesPreStart` で即時送信／値変化・PRE_START 絡みは従来500ms debounce 維持)で operator→hall 反映を最大500ms→約20〜60ms に短縮。timer.js/main.js/dual-sync.js 無改変。致命バグ保護5件+PRE_START0着地ガード(v2.4.1)三重防御 非接触。v270回帰24件(提案1=PRE_START絡み遷移が従来debounceに落ちる直接検証 含む)。既存1380件全PASS維持。report `.cc-reports/2026-06-24_dualscreen-latency.md`。
-- **次のアクション（最優先）**: **前原6-B 2画面実機検証**(report 7.1: ①Space一時停止/再開反映速度 ②レベル切替/即時開始 ③PRE_START0着地退行なし ④ts差定量 任意)→ **GO 後に release commit**(version 2.6.2→2.6.3 + 73件pinテスト bump + CHANGELOG + docs/specs §dual-screen)→ feature を main `--no-ff` merge + tag `v2.6.3` + push + .exe ビルド + GitHub Release。完了review は cc-review ワークフローで起動済。
-- **参考**: `src/audio/shuffle-up-and-deal-*.mp3` 8件は前原の将来機能(開始同時音声)用に未追跡温存・本コミット非対象。**推測着手禁止**。
+- **git**: `main`・version 2.6.3・テスト1404件全PASS。merge `184a25e`(`--no-ff`)・tag `v2.6.3`・origin 同期済。GitHub Release v2.6.3 Latest 公開・自動更新有効(.exe + latest.yml + blockmap アップロード済)。
+- **直前作業(2026-06-24)**: ②2画面時差(dualscreen-latency・案A)を **v2.6.3 として配信**(前原「配信GO」)。renderer.js に `persistTimerStateNow()` 新設＋subscribe 遷移分岐(`isTransition && !involvesPreStart` で即時送信／値変化・PRE_START 絡みは従来500ms debounce 維持)で operator→hall 反映を最大500ms→約20〜60ms に短縮。timer.js/main.js/dual-sync.js 無改変。致命バグ保護5件+PRE_START0着地ガード(v2.4.1)三重防御 非接触。v270回帰24件。cc-review 完了承認(懐疑役 escalate なし)。report `.cc-reports/2026-06-24_dualscreen-latency.md`。`[[dualsync-frequency]]`。
+- **次のアクション**: brief 受領待ち(オープン作業0件・安定運用フェーズ)。前原の実機2画面での体感確認(report 7.1 ①〜④)は配信版で随時(退行・違和感あれば対応)。温存候補は下表(v2.3.0 PRE_START永続化 / 軽微5件等)。
+- **参考**: `src/audio/shuffle-up-and-deal-*.mp3` 8件は前原の将来機能(開始同時音声)用に未追跡温存・コミット非対象。**推測着手禁止**。
 
 ---
 
