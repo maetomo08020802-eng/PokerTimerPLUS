@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| tournament-start-voice(開始ボイス選択・全体共通) | 🟡 実機確認待ち(実装+v271回帰14件+完了report完了。段階2review承認) | report `.cc-reports/2026-06-24_tournament-start-voice.md` / ブランチ `feature/v2.6.4-tournament-start-voice`(commit `e79ac13`)。残=前原6-B(音再生体感)+**CREDITS ライセンス確定**→GOで v2.6.4 配信 |
+| tournament-start-voice(開始ボイス選択・全体共通) | 🟡 実機確認待ち(実装+v271回帰14件+完了report+完了review承認。CREDITS確定済) | report `.cc-reports/2026-06-24_tournament-start-voice.md` / ブランチ `feature/v2.6.4-tournament-start-voice`。残=前原6-B(音再生体感①〜④)+配信GO→ v2.6.4 配信。CREDITS=前原自作・帰属不要(2026-06-24確定) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
