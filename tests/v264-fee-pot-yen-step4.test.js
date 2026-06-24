@@ -104,7 +104,7 @@ test('P1 (保護): 致命バグ保護 5 件すべて維持', () => {
 });
 
 test('P2: version 2.6.0（配信 bump 済）+ v264 登録', () => {
-  assert.equal(PKG.version, '2.6.5', `version が ${PKG.version}`);
+  assert.equal(PKG.version, '2.6.6', `version が ${PKG.version}`);
   assert.ok(PKG.scripts.test.includes('v264-fee-pot-yen-step4.test.js'), 'v264 未登録');
 });
 

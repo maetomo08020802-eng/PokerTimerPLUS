@@ -67,7 +67,7 @@ test('D4: ::backdrop 規則は 2 つだけ（confirm / form）＝個別 overlay 
 });
 
 test('P1: version 2.6.0 据置（早期 bump なし）+ v267 登録', () => {
-  assert.equal(PKG.version, '2.6.5', `version が ${PKG.version}`);
+  assert.equal(PKG.version, '2.6.6', `version が ${PKG.version}`);
   assert.ok(PKG.scripts.test.includes('v267-perf-dialog-backdrop.test.js'), 'v267 未登録');
 });
 

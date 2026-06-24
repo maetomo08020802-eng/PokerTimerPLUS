@@ -72,7 +72,7 @@ function extractBalancedBlock(source, startIdx) {
 // T1: package.json.version === '2.2.1'
 // ============================================================
 test('T1: package.json.version === 2.1.20-rc1', () => {
-  assert.equal(PKG.version, '2.6.5', `期待 2.1.20-rc1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.6.6', `期待 2.1.20-rc1, 実際 ${PKG.version}`);
 });
 
 // ============================================================

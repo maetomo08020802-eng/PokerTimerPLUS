@@ -144,7 +144,7 @@ test('S8 (保護): 致命バグ保護 5 件すべて維持', () => {
 });
 
 test('S9: version 2.6.0（配信 bump 済）', () => {
-  assert.equal(PKG.version, '2.6.5', `version が ${PKG.version}`);
+  assert.equal(PKG.version, '2.6.6', `version が ${PKG.version}`);
 });
 
 test('S10: scripts.test に v261 登録', () => {
