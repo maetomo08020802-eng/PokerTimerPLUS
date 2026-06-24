@@ -2448,6 +2448,91 @@ body:not(.has-marquee) .marquee { display: none; }
   border-radius: 3px;
 }
 
+/* telop-color-ux-simplify: テロップ色ツールバー（選択→色ボタン）。「イベント名の色」ピッカーに体裁を寄せる */
+.marquee-color-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5vw;
+  margin-bottom: var(--space-sm);
+}
+
+.marquee-color-swatch {
+  width: 2vw;
+  height: 2vw;
+  min-width: 24px;
+  min-height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.15s, transform 0.1s;
+}
+
+.marquee-color-swatch:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.marquee-color-swatch:active {
+  transform: translateY(1px);
+}
+
+.marquee-color-custom {
+  width: 2.4vw;
+  height: 2vw;
+  min-width: 28px;
+  min-height: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.marquee-color-clear {
+  font-family: var(--font-body);
+  font-size: 0.95vw;
+  color: var(--text-secondary, #cfd2da);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.2vw 0.6vw;
+  min-height: 24px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.marquee-color-clear:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* 編集中インラインプレビュー: 暗色地で色が映える。実描画と同じ renderMarqueeContent 経由で innerHTML 不使用 */
+.marquee-edit-preview {
+  margin-top: var(--space-sm);
+  min-height: 2.4vh;
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1.2vw;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.marquee-edit-preview:empty::before {
+  content: "（プレビュー）";
+  color: var(--text-secondary, #8b8e98);
+  opacity: 0.6;
+}
+
+/* 選択なし・上限超過などの一時警告（案内文を一時的に黄色く） */
+.marquee-color-help.is-warning {
+  color: var(--warning, #ffce54);
+}
+
 /* STEP 6: 賞金構造エディタ（順位×% テーブル） */
 .payouts-editor {
   display: grid;

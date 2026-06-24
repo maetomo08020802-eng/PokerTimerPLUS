@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | 安定運用フェーズ | 次は brief 受領待ち |
+| telop-color-ux-simplify | 🟡 実機確認待ち（実装完了・GO 待ち） | テロップ色変えを「選択→色ボタン＋編集中プレビュー」方式に（記法手打ち不要・保存形式/安全パーサ無改変・旧データ互換）。v272 15件追加・1433件全PASS・致命5件非接触。feature ブランチに 1 コミット。配信は前原 GO 後（v2.6.5 想定）。`.cc-reports/2026-06-24_telop-color-ux-simplify.md` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -49,18 +49,18 @@
 |------|----|
 | 配信済リリース | 13件(v1.0.0〜v2.6.4)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 0件(安定運用フェーズ)|
-| 最新テスト件数 | 1418件 全PASS(v271 +14) |
+| オープン作業 | 1件(telop-color-ux-simplify 実装完了・GO 待ち)|
+| 最新テスト件数 | 1433件 全PASS(v272 +15) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` HEAD `0eb2690`(v2.6.4 配信後に注記整理1件の doc commit)・version 2.6.4・テスト1418件全PASS・origin 同期済。配信は merge `ee16648`(`--no-ff`)・tag `v2.6.4`・GitHub Release Latest 公開・自動更新有効(.exe + latest.yml + blockmap)。※main は tag より doc commit 1件分先行(次回リリースに同梱)。
-- **直前作業(2026-06-24)**: tournament-start-voice(開始ボイス選択)を **v2.6.4 として配信**(前原「配信GO」+ 実機確認OK)。音タブに開始ボイス select(なし+女性4+男性4=9状態)、グローバル store `startVoice` 永続化、開始時(即時/PRE_START0着地 両方)に選択ボイス1回再生し start.mp3 を置換(二重再生なし)。OFF は各経路で従来動作の厳密保存。audio.js の `_play`/`ensureAudioReady`/`playSound` 無改変(AudioContext resume・hall ガード継承)＝致命5件全件非接触。8ボイスmp3は前原自作(CREDITS確定・帰属不要)で追跡化。段階2+完了 review 承認(懐疑役 escalate なし)。v271回帰14件。配信後に音タブヒント/CREDITS の旧STEP5・start.mp3未配置注記を実態整理(`0eb2690`)。report `.cc-reports/2026-06-24_tournament-start-voice.md`。
-- **次のアクション**: brief 受領待ち(オープン作業0件・安定運用フェーズ)。温存候補は下表(v2.3.0 PRE_START永続化 / poolRates dormant除去 / 旧ブランチ整理 / settings軽微5件)。
-- **参考**: 本日 v2.6.2→2.6.3(dualscreen-latency)→2.6.4(開始ボイス)を連続配信。**推測着手禁止**。
+- **git**: `main` HEAD `0eb2690`・version 2.6.4・origin 同期済。telop-color-ux-simplify は **feature ブランチに 1 コミット(実装完了・未 merge)**。配信時は merge `--no-ff`+version bump(v2.6.5 想定)+tag/push/.exe/Release が前原 GO 後。直近配信 v2.6.4=merge `ee16648`/tag `v2.6.4`(Latest 公開中)。
+- **直前作業(2026-06-24)**: telop-color-ux-simplify=**テロップ色変えを「文字を選択→色ボタン」方式に作り直し**(前原「手打ち記法が難しすぎる」→方式A 採用)。9 色スウォッチ+任意色 picker+「色を消す」+編集中インラインプレビューを設定タブ版/Ctrl+T ダイアログ版の 2 箇所に。記法 `[color]…[/color]` は内部で自動生成/除去(ネスト防止・後勝ち)。**保存フォーマット・marquee.js 安全パーサ(innerHTML 不使用・色ホワイトリスト)は無改変=export 追加のみ**で旧データ 100% 互換・XSS 後退ゼロ。致命5件全件非接触(入力 UI のみ)。v272 回帰15件・1433件全PASS・v269互換維持。Plan 段階2 review 承認(提案3点 self-fix 済)。report `.cc-reports/2026-06-24_telop-color-ux-simplify.md`。
+- **次のアクション**: 完了 review(cc-review)→ 前原実機確認(6-B ①〜⑥)→ GO で配信(v2.6.5)。温存候補は下表。
+- **参考**: 本日 v2.6.2→2.6.3→2.6.4 連続配信。本案件は v2.6.2 の手打ち記法 UX を改善。**推測着手禁止**。
 
 ---
 
