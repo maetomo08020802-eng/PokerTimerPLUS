@@ -1872,6 +1872,21 @@ function cancelPendingTimerStatePersist() {
     timerStatePersistTimer = null;
   }
 }
+// v2.6.3 ② dualscreen-latency 案A: 状態遷移時のみ 500ms debounce をバイパスして即時送信する。
+//   schedulePersistTimerState の debounce 後処理と同一の捕捉・送信ロジックを、500ms 待たず即時に行うだけ。
+//   呼び出し元（subscribe の遷移ブロック）が PRE_START 絡みを除外するため、本関数は 0着地ガード経路に乗らない。
+//   冒頭で cancelPendingTimerStatePersist() し pending debounce と二重送信しない。captureCurrentTimerState /
+//   cancelPendingTimerStatePersist は既存・無改変で再利用（500ms 定数・periodic 5秒・PRE_START 即時経路は無改変）。
+function persistTimerStateNow() {
+  if (window.appRole === 'hall') return;  // v2.0.1 と同方針: hall は purely consumer、逆書込禁止
+  cancelPendingTimerStatePersist();        // pending debounce をキャンセル（二重送信防止）
+  const id = tournamentState.id;
+  if (!id || !window.api?.tournaments?.setTimerState) return;
+  const ts = captureCurrentTimerState();
+  window.api.tournaments.setTimerState(id, ts).catch((err) => {
+    console.warn('timerState 即時保存失敗:', err);
+  });
+}
 
 // STEP 10 フェーズC.1.8: ランタイム永続化（debounce 500ms）。
 //   tournamentRuntime のフィールド変更時に呼ばれ、active id に対して store へ保存。
@@ -2116,7 +2131,16 @@ subscribe((state, prev) => {
     (state.status === States.PAUSED && state.remainingMs !== prev.remainingMs) ||
     (state.status === States.IDLE && (state.remainingMs !== prev.remainingMs || state.totalMs !== prev.totalMs))
   ) {
-    schedulePersistTimerState();
+    // v2.6.3 ② 案A: 遷移(status/level 変化)かつ PRE_START 非関与は即時送信、値変化/PRE_START 絡みは従来 debounce 維持。
+    const isTransition = (state.status !== prev.status) || (state.currentLevelIndex !== prev.currentLevelIndex);
+    const involvesPreStart = (state.status === States.PRE_START) || (prev.status === States.PRE_START)
+      || (typeof isPreStartActive === 'function' && isPreStartActive());
+    if (isTransition && !involvesPreStart) {
+      persistTimerStateNow();        // 遷移＝即時送信（最大500ms→即時）
+    } else {
+      schedulePersistTimerState();   // 値変化・PRE_START 絡みは従来 debounce 維持
+    }
+    // [v270-route-end]
     // v2.1.19-rc1 主犯 1 撤廃: 旧コードでこのブロック内に renderTournamentList().catch(...) があったが、
     //   下記の独立 throttle gate（_shouldRefreshListByThrottle）に統合。edge イベント時も throttle gate
     //   が status/level 変化を検知して即時 renderTournamentList を呼ぶ。
