@@ -10,8 +10,11 @@
 
 ## 🟡 現在のリリース作業 / オープン STEP
 
-**(なし)** — v2.6.2 配信完了(Latest 公開中)。次案件の brief 受領待ち。
+| 案件 | 状態 | 成果物 / 引継ぎ |
+|------|------|--------|
+| ②2画面時差(dualscreen-latency・案A) | 📦 実装待ち(調査+案A設計+段階2review+影響網羅監査すべて完了・前原GO済方向→新セッションで実装) | brief `.cc-briefs/2026-06-24_dualscreen-latency_brief.md` / plan `.cc-plans/2026-06-24_dualscreen-latency_investigation.md` / review `.cc-briefs/2026-06-24_dualscreen-latency_review.md` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
+> ★引継ぎ(2026-06-24): ② は調査・案A設計・段階2 review・影響網羅監査(反証4レンズ全て副作用なし)まで完了。**新セッションは上記 brief を読んで即実装着手**(再 Plan/再 review 不要・完了 review のみ)。実装=renderer.js に `persistTimerStateNow()` 新設＋subscribe 遷移分岐(`isTransition && !involvesPreStart` で即時送信／他は従来500ms debounce)。timer.js/main.js/dual-sync.js 無改変。v2.6.3 配信。memory `[[dualsync-frequency]]` 参照。
 
 ---
 
@@ -56,7 +59,8 @@
 
 - **git**: `main`・version 2.6.2・テスト1380件全PASS。merge `f019f14`(`--no-ff`)・tag `v2.6.2`。
 - **直前作業(2026-06-24)**: telop-dualscreen-ideas を調査(3項目)→ ①③を **v2.6.2 として配信**(前原「配信までGO」)。①単独Tでテロップ表示/非表示トグル(永続化＋hall同期)②(保留)③本文の部分色変え`[color]…[/color]`(marquee.jsにrenderMarqueeContentパーサ・innerHTML不使用でXSS構造防御・スキーマ/hall同期/migration無改修)。回帰テストv269 12件。致命バグ保護5件 全件影響なし。
-- **次のアクション**: 前原実機確認(report 7.1: ①Tトグル ③部分色変え)は配信版で随時。②2画面時差は方向GO待ち(温存表)。次案件の brief 受領待ち。**推測着手禁止**。
+- **次のアクション（最優先・引継ぎ）**: ② dualscreen-latency 実装。前原が /clear 後に新セッションで着手。**`.cc-briefs/2026-06-24_dualscreen-latency_brief.md` を読む → plan(`.cc-plans/2026-06-24_dualscreen-latency_investigation.md` §4実装/§7テスト)通りに実装 → 既存1380件PASS維持 + v270回帰テスト(PRE_START0着地非発火を直接テスト) → 完了report → cc-review 完了review → 前原GOで v2.6.3 配信**。調査/案A設計/段階2review/影響網羅監査は完了済=再Plan・再review不要。実装は renderer.js のみ(timer.js/main.js/dual-sync.js 無改変)。`[[dualsync-frequency]]`。
+- **参考**: 前原実機確認(v2.6.2 report 7.1: ①Tトグル ③部分色変え)は配信版で随時。`src/audio/shuffle-up-and-deal-*.mp3` 8件は前原の将来機能(開始同時音声)用に未追跡温存。**推測着手禁止**。
 
 ---
 
