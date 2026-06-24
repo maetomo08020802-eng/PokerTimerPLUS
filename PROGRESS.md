@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-06-24** — **v2.6.2 配信済(Latest 公開中)**。telop-dualscreen-ideas ①Tトグル ③テロップ部分色変え(②時差は温存)・オープン作業0件。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-06-24** — **②2画面時差(dualscreen-latency・案A)実装完了・🟡前原6-B GO待ち**(v2.6.2 は引続き Latest 公開中)。遷移時のみ即時送信で operator→hall 反映を最大500ms→約20〜60ms。テスト1404件全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,9 +12,9 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| ②2画面時差(dualscreen-latency・案A) | 📦 実装待ち(調査+案A設計+段階2review+影響網羅監査すべて完了・前原GO済方向→新セッションで実装) | brief `.cc-briefs/2026-06-24_dualscreen-latency_brief.md` / plan `.cc-plans/2026-06-24_dualscreen-latency_investigation.md` / review `.cc-briefs/2026-06-24_dualscreen-latency_review.md` |
+| ②2画面時差(dualscreen-latency・案A) | 🟡 実機確認待ち(実装+v270回帰24件+完了report完了、前原6-B 2画面検証→GOで v2.6.3 配信) | report `.cc-reports/2026-06-24_dualscreen-latency.md` / ブランチ `feature/v2.6.3-dualscreen-latency`(commit `96f52aa`) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
-> ★引継ぎ(2026-06-24): ② は調査・案A設計・段階2 review・影響網羅監査(反証4レンズ全て副作用なし)まで完了。**新セッションは上記 brief を読んで即実装着手**(再 Plan/再 review 不要・完了 review のみ)。実装=renderer.js に `persistTimerStateNow()` 新設＋subscribe 遷移分岐(`isTransition && !involvesPreStart` で即時送信／他は従来500ms debounce)。timer.js/main.js/dual-sync.js 無改変。v2.6.3 配信。memory `[[dualsync-frequency]]` 参照。
+> ★引継ぎ(2026-06-24): ② 案A 実装完了(renderer.js のみ・timer.js/main.js/dual-sync.js 無改変)。残=前原6-B 2画面実機検証(report 7.1: Space/レベル切替反映速度・PRE_START0着地退行なし・ts差定量)→ GO 後に release commit(version 2.6.2→2.6.3 + 73件pin + CHANGELOG + docs/specs)→ main `--no-ff` merge + tag v2.6.3 + push + .exe + Release。memory `[[dualsync-frequency]]` 参照。
 
 ---
 
@@ -37,7 +37,6 @@
 
 | 候補 | 概要 | 状態 |
 |------|------|------|
-| ②2画面時差 | telop-dualscreen-ideas ②(operator→hall 状態遷移の最大500ms debounce 短縮)| 前原方向GO待ち。案A=遷移時のみ即時flush(値変化は据置)。PRE_START近接でPlan+段階2review+`isPreStartActive()`ガード必須。investigation/report 8-1 参照 |
 | v2.3.0 | PRE_START 永続化(`feature/v2.3.0-prestart-persistence`)| 温存・再開は前原判断。再開時は復元経路に RUNNING/BREAK stale-restore ガード要評価 |
 | 軽微 | id `*-pool-rate`→`*-pot` リネーム / poolRates dormant除去 / 旧merge済ローカルブランチ整理 / settings軽微5件 | 別brief可・緊急性なし |
 
@@ -49,18 +48,18 @@
 |------|----|
 | 配信済リリース | 11件(v1.0.0〜v2.6.2)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 0件(安定運用フェーズ・②2画面時差は温存)|
-| 最新テスト件数 | 1380件 全PASS(v269 +12) |
+| オープン作業 | 1件(②2画面時差・実装完了→前原6-B GO待ち)|
+| 最新テスト件数 | 1404件 全PASS(v270 +24) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main`・version 2.6.2・テスト1380件全PASS。merge `f019f14`(`--no-ff`)・tag `v2.6.2`。
-- **直前作業(2026-06-24)**: telop-dualscreen-ideas を調査(3項目)→ ①③を **v2.6.2 として配信**(前原「配信までGO」)。①単独Tでテロップ表示/非表示トグル(永続化＋hall同期)②(保留)③本文の部分色変え`[color]…[/color]`(marquee.jsにrenderMarqueeContentパーサ・innerHTML不使用でXSS構造防御・スキーマ/hall同期/migration無改修)。回帰テストv269 12件。致命バグ保護5件 全件影響なし。
-- **次のアクション（最優先・引継ぎ）**: ② dualscreen-latency 実装。前原が /clear 後に新セッションで着手。**`.cc-briefs/2026-06-24_dualscreen-latency_brief.md` を読む → plan(`.cc-plans/2026-06-24_dualscreen-latency_investigation.md` §4実装/§7テスト)通りに実装 → 既存1380件PASS維持 + v270回帰テスト(PRE_START0着地非発火を直接テスト) → 完了report → cc-review 完了review → 前原GOで v2.6.3 配信**。調査/案A設計/段階2review/影響網羅監査は完了済=再Plan・再review不要。実装は renderer.js のみ(timer.js/main.js/dual-sync.js 無改変)。`[[dualsync-frequency]]`。
-- **参考**: 前原実機確認(v2.6.2 report 7.1: ①Tトグル ③部分色変え)は配信版で随時。`src/audio/shuffle-up-and-deal-*.mp3` 8件は前原の将来機能(開始同時音声)用に未追跡温存。**推測着手禁止**。
+- **git**: ブランチ `feature/v2.6.3-dualscreen-latency`・commit `96f52aa`・version 2.6.2 据置・テスト1404件全PASS。main は v2.6.2(`f019f14`/tag `v2.6.2`)で Latest 公開中。
+- **直前作業(2026-06-24)**: ②2画面時差(dualscreen-latency・案A)を**実装完了**。renderer.js に `persistTimerStateNow()` 新設＋subscribe 遷移分岐(`isTransition && !involvesPreStart` で即時送信／値変化・PRE_START 絡みは従来500ms debounce 維持)で operator→hall 反映を最大500ms→約20〜60ms に短縮。timer.js/main.js/dual-sync.js 無改変。致命バグ保護5件+PRE_START0着地ガード(v2.4.1)三重防御 非接触。v270回帰24件(提案1=PRE_START絡み遷移が従来debounceに落ちる直接検証 含む)。既存1380件全PASS維持。report `.cc-reports/2026-06-24_dualscreen-latency.md`。
+- **次のアクション（最優先）**: **前原6-B 2画面実機検証**(report 7.1: ①Space一時停止/再開反映速度 ②レベル切替/即時開始 ③PRE_START0着地退行なし ④ts差定量 任意)→ **GO 後に release commit**(version 2.6.2→2.6.3 + 73件pinテスト bump + CHANGELOG + docs/specs §dual-screen)→ feature を main `--no-ff` merge + tag `v2.6.3` + push + .exe ビルド + GitHub Release。完了review は cc-review ワークフローで起動済。
+- **参考**: `src/audio/shuffle-up-and-deal-*.mp3` 8件は前原の将来機能(開始同時音声)用に未追跡温存・本コミット非対象。**推測着手禁止**。
 
 ---
 
