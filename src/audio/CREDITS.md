@@ -74,4 +74,4 @@
 `src/audio/` に該当 mp3 ファイルが存在しない soundId は、起動時に `OfflineAudioContext` で内蔵合成（FM ベル + 非調和倍音 + コンボリューションリバーブ）を AudioBuffer にレンダして再生します。
 合成レシピは `src/renderer/audio.js` の `SYNTH_DEFS` を参照。合成音は本プロジェクトの生成物のため attribution 不要です。
 
-現状（STEP 4 仕上げ④時点）、**全7音とも mp3 ファイルから再生**されます。フォールバック合成は STEP 5 で予約された `start.mp3` のみ未配置です。
+現状、通知音はすべて mp3 ファイルから再生されます（`start.mp3`・開始ボイス 8 ファイル含め `src/audio/` に全て配置済み）。フォールバック合成は `src/audio/` から該当ファイルが失われた場合の保険として機能します（通常運用では使われません）。
