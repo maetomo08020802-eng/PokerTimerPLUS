@@ -890,6 +890,14 @@ Yu Shimomachi が運営する PLUS2 をはじめ、HDMI 拡張モニターを備
 
 ホール側はローカル時刻計算（既存 `timer.js` の `performance.now` ベース）+ main からの「基準時刻 + 状態フラグ」のみ受信で実現。tick ごとの timer 値 broadcast は禁止（リスク 2 対策）。
 
+### 状態遷移の即時送信（v2.6.3、operator→hall 時差短縮・案A）
+
+operator の状態遷移（一時停止/再開・レベル切替・IDLE→RUNNING 即時開始 等）は、従来 `schedulePersistTimerState`（500ms debounce）に縛られ hall 反映が最大約 500ms 遅れていた。これを `persistTimerStateNow()`（新設）で **遷移時のみ debounce をバイパスして即時送信**し、約 20〜60ms（≒ IPC + store.set + hall rAF flush）に短縮した。「一時停止/再開のレスポンス 300ms 以内」基準を余裕で満たす。
+
+- subscribe の送信分岐: `isTransition = (status 変化) || (level 変化)`、`involvesPreStart = (state/prev.status === PRE_START) || isPreStartActive()`。`isTransition && !involvesPreStart` のときのみ即時送信、それ以外（PAUSED remainingMs・IDLE remainingMs/totalMs の値変化、PRE_START 絡み）は従来 500ms debounce を維持。
+- hall は consumer のまま（基準時刻+状態フラグ方式・tick 値 broadcast 復活なし＝アーキ不変）。`timer.js` / `main.js` / `dual-sync.js` は無改変。送信頻度は増えない（periodic 5 秒再同期・tick 非送信は無改変、遷移は秒〜分間隔で稀）。
+- **PRE_START 0 着地ガード（v2.4.1）非接触**: `involvesPreStart`（送信ルーティング）＋ `captureCurrentTimerState` の PRE_START→idle 化 ＋ hall 受信ガードの三重防御を維持。0 着地（PRE_START→RUNNING）は `prev.status === PRE_START` で即時送信から除外され、従来挙動のまま。
+
 ### PRE_START 0 着地ガード（v2.4.1、症状① 根治）
 
 開始前カウントダウン（PRE_START）は専用の `preStartState` 同期メッセージで配信され、operator(-solo) 自身にも main 経由で再送される。0 着地で PRE_START → RUNNING に本始動した「後」に、遅れて届いた古い `preStartState` メッセージがタイマーを巻き戻すレースを防ぐため、`applyOperatorPreStartState` の復元分岐に **タイマーが既に本始動している（status が RUNNING / BREAK）ときは古い PRE_START 復元 payload を破棄する** ガードを置く。
