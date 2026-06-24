@@ -65,6 +65,14 @@ function renderMarqueeContent(container, text) {
   appendText(safe.slice(lastIndex), activeColor);   // 残り
 }
 
+// telop-color-ux-simplify（2026-06-24）: 編集中インラインプレビュー用の薄いラッパ。
+//   生テキスト（改行入り）→ private cleanText で 1 行整形 → 既存 renderMarqueeContent で描画。
+//   新たな描画経路は作らず安全資産（innerHTML 不使用・色ホワイトリスト）をそのまま共有する。
+function renderMarqueePreview(container, rawText) {
+  if (!container) return;
+  renderMarqueeContent(container, cleanText(rawText));
+}
+
 const dom = {
   marquee: null,
   content: null,
@@ -162,3 +170,7 @@ export function readMarqueeForm() {
     speed
   };
 }
+
+// telop-color-ux-simplify（2026-06-24）: 入力 UI（選択→色ボタン）から安全資産を再利用するための追加 export。
+//   実装は無改変・参照のみ提供。renderMarqueeContent の innerHTML 不使用・色ホワイトリストは不変。
+export { MARQUEE_COLORS, resolveMarqueeColor, renderMarqueeContent, renderMarqueePreview };

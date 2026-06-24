@@ -1080,8 +1080,24 @@
 
         <div class="form-row">
           <label class="form-row__label" for="js-marquee-tab-text">表示テキスト</label>
+          <!-- telop-color-ux-simplify: 文字を選んで色ボタンを押すと選択範囲だけ色が付く（記法 [color]…[/color] は裏で自動生成・手打ち不要） -->
+          <div class="marquee-color-toolbar" id="js-marquee-tab-color-toolbar" role="group" aria-label="文字の色">
+            <button type="button" class="marquee-color-swatch" data-color="red" style="background:#ff4d4f" title="レッド"></button>
+            <button type="button" class="marquee-color-swatch" data-color="gold" style="background:#ffce54" title="ゴールド"></button>
+            <button type="button" class="marquee-color-swatch" data-color="yellow" style="background:#ffe14d" title="イエロー"></button>
+            <button type="button" class="marquee-color-swatch" data-color="orange" style="background:#ff9f43" title="オレンジ"></button>
+            <button type="button" class="marquee-color-swatch" data-color="green" style="background:#46d369" title="グリーン"></button>
+            <button type="button" class="marquee-color-swatch" data-color="cyan" style="background:#3fb6d4" title="シアン"></button>
+            <button type="button" class="marquee-color-swatch" data-color="blue" style="background:#4d8bff" title="ブルー"></button>
+            <button type="button" class="marquee-color-swatch" data-color="pink" style="background:#ff6fb5" title="ピンク"></button>
+            <button type="button" class="marquee-color-swatch" data-color="white" style="background:#ffffff" title="ホワイト"></button>
+            <input type="color" id="js-marquee-tab-color-custom" class="marquee-color-custom" value="#ff4d4f" title="任意の色を選んで適用">
+            <button type="button" class="marquee-color-clear" id="js-marquee-tab-color-clear" title="選択範囲の色を消す">色を消す</button>
+          </div>
           <textarea id="js-marquee-tab-text" class="form-textarea" rows="4" placeholder="複数行入力可。改行は半角スペース3つで連結されます。"></textarea>
-          <p class="form-row__hint marquee-decor-hint">一部の色を変える: <code>[red]文字[/red]</code>（使える色: red / gold / yellow / orange / green / cyan / blue / pink / white または <code>#RRGGBB</code>）</p>
+          <p class="form-row__hint marquee-color-help">色を変えたい文字を選んでから、上の色ボタンを押してください。選んだ部分だけ色が変わります（下のプレビューで仕上がりを確認できます）。</p>
+          <div class="marquee-edit-preview" id="js-marquee-tab-preview-box" aria-live="polite" aria-label="テロップ表示プレビュー"></div>
+          <p class="form-row__hint marquee-decor-hint">上級者向け: <code>[red]文字[/red]</code> の記法も使えます（使える色: red / gold / yellow / orange / green / cyan / blue / pink / white または <code>#RRGGBB</code>）。旧データもそのまま表示されます。</p>
         </div>
 
         <div class="form-row">
@@ -1186,8 +1202,24 @@
 
     <div class="form-row">
       <label class="form-row__label" for="js-marquee-text">表示テキスト</label>
+      <!-- telop-color-ux-simplify: 設定タブ版と同一挙動。文字を選んで色ボタンを押すと選択範囲だけ色が付く（記法は裏で自動生成・手打ち不要） -->
+      <div class="marquee-color-toolbar" id="js-marquee-color-toolbar" role="group" aria-label="文字の色">
+        <button type="button" class="marquee-color-swatch" data-color="red" style="background:#ff4d4f" title="レッド"></button>
+        <button type="button" class="marquee-color-swatch" data-color="gold" style="background:#ffce54" title="ゴールド"></button>
+        <button type="button" class="marquee-color-swatch" data-color="yellow" style="background:#ffe14d" title="イエロー"></button>
+        <button type="button" class="marquee-color-swatch" data-color="orange" style="background:#ff9f43" title="オレンジ"></button>
+        <button type="button" class="marquee-color-swatch" data-color="green" style="background:#46d369" title="グリーン"></button>
+        <button type="button" class="marquee-color-swatch" data-color="cyan" style="background:#3fb6d4" title="シアン"></button>
+        <button type="button" class="marquee-color-swatch" data-color="blue" style="background:#4d8bff" title="ブルー"></button>
+        <button type="button" class="marquee-color-swatch" data-color="pink" style="background:#ff6fb5" title="ピンク"></button>
+        <button type="button" class="marquee-color-swatch" data-color="white" style="background:#ffffff" title="ホワイト"></button>
+        <input type="color" id="js-marquee-color-custom" class="marquee-color-custom" value="#ff4d4f" title="任意の色を選んで適用">
+        <button type="button" class="marquee-color-clear" id="js-marquee-color-clear" title="選択範囲の色を消す">色を消す</button>
+      </div>
       <textarea id="js-marquee-text" class="form-textarea" rows="4" maxlength="200" placeholder="複数行入力可。改行は半角スペース3つで連結されます。最大 200 文字。"></textarea>
-      <p class="form-row__hint marquee-decor-hint">一部の色を変える: <code>[red]文字[/red]</code>（使える色: red / gold / yellow / orange / green / cyan / blue / pink / white または <code>#RRGGBB</code>）</p>
+      <p class="form-row__hint marquee-color-help">色を変えたい文字を選んでから、上の色ボタンを押してください。選んだ部分だけ色が変わります（下のプレビューで仕上がりを確認できます）。</p>
+      <div class="marquee-edit-preview" id="js-marquee-preview-box" aria-live="polite" aria-label="テロップ表示プレビュー"></div>
+      <p class="form-row__hint marquee-decor-hint">上級者向け: <code>[red]文字[/red]</code> の記法も使えます（使える色: red / gold / yellow / orange / green / cyan / blue / pink / white または <code>#RRGGBB</code>）。旧データもそのまま表示されます。</p>
     </div>
 
     <div class="form-row">

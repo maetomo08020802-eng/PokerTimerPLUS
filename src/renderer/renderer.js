@@ -41,7 +41,9 @@ import {
   applyMarquee,
   openMarqueeDialog,
   closeMarqueeDialog,
-  readMarqueeForm
+  readMarqueeForm,
+  renderMarqueePreview,
+  resolveMarqueeColor
 } from './marquee.js';
 import {
   initAudio,
@@ -346,6 +348,11 @@ const el = {
   marqueePreview: document.getElementById('js-marquee-preview'),
   marqueeSave: document.getElementById('js-marquee-save'),
   marqueeClose: document.getElementById('js-marquee-close'),
+  // telop-color-ux-simplify: Ctrl+T ダイアログ版 色ツールバー / 任意色 / クリア / プレビュー
+  marqueeColorToolbar: document.getElementById('js-marquee-color-toolbar'),
+  marqueeColorCustom: document.getElementById('js-marquee-color-custom'),
+  marqueeColorClear: document.getElementById('js-marquee-color-clear'),
+  marqueePreviewBox: document.getElementById('js-marquee-preview-box'),
 
   settingsDialog: document.getElementById('js-settings-dialog'),
   settingsClose: document.getElementById('js-settings-close'),
@@ -425,6 +432,11 @@ const el = {
   marqueeTabPreview: document.getElementById('js-marquee-tab-preview'),
   marqueeTabSave: document.getElementById('js-marquee-tab-save'),
   marqueeTabHint: document.getElementById('js-marquee-tab-hint'),
+  // telop-color-ux-simplify: 設定タブ版 色ツールバー / 任意色 / クリア / プレビュー
+  marqueeTabColorToolbar: document.getElementById('js-marquee-tab-color-toolbar'),
+  marqueeTabColorCustom: document.getElementById('js-marquee-tab-color-custom'),
+  marqueeTabColorClear: document.getElementById('js-marquee-tab-color-clear'),
+  marqueeTabPreviewBox: document.getElementById('js-marquee-tab-preview-box'),
 
   // 音タブ（STEP 4）
   audioMasterVolume:    document.getElementById('js-audio-master-volume'),
@@ -7245,6 +7257,8 @@ function syncMarqueeTabFormFromCurrent() {
   for (const radio of el.marqueeTabSpeedRadios) {
     radio.checked = radio.value === lastMarqueeSettings.speed;
   }
+  // telop-color-ux-simplify: フォーム同期に合わせて編集中プレビューも更新
+  updateMarqueeEditorPreview(el.marqueeTabText, el.marqueeTabPreviewBox);
 }
 
 function readMarqueeTabForm() {
@@ -7297,6 +7311,130 @@ function setMarqueeTabHint(message, kind = '') {
   if (kind === 'error')   el.marqueeTabHint.classList.add('is-error');
   if (kind === 'success') el.marqueeTabHint.classList.add('is-success');
 }
+
+// ============================================================
+// telop-color-ux-simplify（2026-06-24）: テロップ文字色を「選択 → 色ボタン」で付与する入力 UI。
+//   利用者は記法を手打ちしない。記法 [color]…[/color] は内部で自動生成/除去するだけで、
+//   保存フォーマット・描画バックエンド（marquee.js renderMarqueeContent）は無改変。
+// ============================================================
+
+// テロップ色タグ（resolveMarqueeColor で解決できる色のみ）を文字列から除去。未知ブラケットは温存。
+//   選択範囲を包む前に呼ぶことで「色付き範囲を別色で上書き」してもネストせず後勝ちになる土台。
+function stripMarqueeColorTags(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/\[(\/?)([a-z]+|#[0-9a-f]{6})\]/gi, (full, _slash, name) =>
+    (resolveMarqueeColor(name) !== null ? '' : full));
+}
+
+// 選択範囲を [token]…[/token] で包んだ新しい value と caret 位置を返す（純粋関数・DOM 非依存・テスト可）。
+//   選択内の既存色タグは先に除去（ネスト防止）。最終的な後勝ちは描画側 renderMarqueeContent が担保。
+function wrapMarqueeSelectionValue(value, start, end, token) {
+  const safeVal = typeof value === 'string' ? value : '';
+  const s = Math.max(0, Math.min(start | 0, safeVal.length));
+  const e = Math.max(s, Math.min(end | 0, safeVal.length));
+  const inner = stripMarqueeColorTags(safeVal.slice(s, e));
+  const wrapped = `[${token}]${inner}[/${token}]`;
+  return {
+    value: safeVal.slice(0, s) + wrapped + safeVal.slice(e),
+    selStart: s,
+    selEnd: s + wrapped.length
+  };
+}
+
+// 編集中インラインプレビュー更新（出荷パーサ renderMarqueePreview 経由・innerHTML 不使用）。
+function updateMarqueeEditorPreview(textarea, previewBox) {
+  if (!textarea || !previewBox) return;
+  renderMarqueePreview(previewBox, textarea.value);
+}
+
+// 選択範囲へ色トークン（色名 or #rrggbb）を適用。
+//   選択なし → ヒントで no-op。挿入後に maxLength 超過 → ヒントで skip（無音にしない）。
+function applyMarqueeColorToSelection(textarea, token, previewBox, flashHint) {
+  if (!textarea || !token) return;
+  if (window.appRole === 'hall') return;   // hall はテロップ操作不可（二重防御）
+  const start = textarea.selectionStart ?? 0;
+  const end = textarea.selectionEnd ?? 0;
+  if (start === end) {
+    flashHint?.('色を付けたい文字を選んでから色ボタンを押してください');
+    return;
+  }
+  const result = wrapMarqueeSelectionValue(textarea.value, start, end, token);
+  const max = textarea.maxLength;   // 未設定は -1（ガード対象外）
+  if (max > 0 && result.value.length > max) {
+    flashHint?.(`文字数が上限（${max} 文字）を超えるため、この色は付けられません`);
+    return;
+  }
+  textarea.value = result.value;
+  textarea.focus();
+  try { textarea.setSelectionRange(result.selStart, result.selEnd); } catch (_) { /* 範囲外は無視 */ }
+  updateMarqueeEditorPreview(textarea, previewBox);
+}
+
+// 選択範囲の色タグを除去（「色を消す」）。未知ブラケットは温存。
+function clearMarqueeColorOnSelection(textarea, previewBox, flashHint) {
+  if (!textarea) return;
+  if (window.appRole === 'hall') return;
+  const start = textarea.selectionStart ?? 0;
+  const end = textarea.selectionEnd ?? 0;
+  if (start === end) {
+    flashHint?.('色を消したい文字を選んでから「色を消す」を押してください');
+    return;
+  }
+  const stripped = stripMarqueeColorTags(textarea.value.slice(start, end));
+  textarea.value = textarea.value.slice(0, start) + stripped + textarea.value.slice(end);
+  textarea.focus();
+  try { textarea.setSelectionRange(start, start + stripped.length); } catch (_) { /* noop */ }
+  updateMarqueeEditorPreview(textarea, previewBox);
+}
+
+// 1 つのテロップ編集 UI（textarea + 色ツールバー + プレビュー）を配線。設定タブ版とダイアログ版で 2 回呼ぶ。
+function wireMarqueeColorToolbar({ textarea, toolbar, customInput, clearBtn, previewBox }) {
+  if (!textarea || !toolbar) return;
+  // ヒント表示は直近の案内文 <p class="marquee-color-help"> を一時的に書き換える方式
+  const helpEl = toolbar.parentElement?.querySelector('.marquee-color-help') || null;
+  const defaultHelp = helpEl ? helpEl.textContent : '';
+  let helpTimer = null;
+  const flashHint = (msg) => {
+    if (!helpEl) return;
+    helpEl.textContent = msg;
+    helpEl.classList.add('is-warning');
+    if (helpTimer) clearTimeout(helpTimer);
+    helpTimer = setTimeout(() => {
+      helpEl.textContent = defaultHelp;
+      helpEl.classList.remove('is-warning');
+    }, 2200);
+  };
+  // スウォッチ/クリアは mousedown 既定動作を抑止 → textarea の選択範囲を保持したままクリックできる
+  toolbar.addEventListener('mousedown', (event) => {
+    if (event.target.closest('.marquee-color-swatch') || event.target.closest('.marquee-color-clear')) {
+      event.preventDefault();
+    }
+  });
+  toolbar.addEventListener('click', (event) => {
+    const sw = event.target.closest('.marquee-color-swatch');
+    if (!sw) return;
+    applyMarqueeColorToSelection(textarea, (sw.dataset.color || '').toLowerCase(), previewBox, flashHint);
+  });
+  // 任意色: <input type="color"> は #RRGGBB を返す → 小文字化して [#rrggbb] を生成（描画は大小無視だが表記を統一）。
+  //   change（コミット時 1 回）で適用。input 連発による再フォーカス暴発を避ける。
+  customInput?.addEventListener('change', () => {
+    applyMarqueeColorToSelection(textarea, (customInput.value || '').toLowerCase(), previewBox, flashHint);
+  });
+  clearBtn?.addEventListener('click', () => clearMarqueeColorOnSelection(textarea, previewBox, flashHint));
+  // 打鍵でプレビュー追従（記法直打ち・通常入力どちらも反映）
+  textarea.addEventListener('input', () => updateMarqueeEditorPreview(textarea, previewBox));
+}
+
+wireMarqueeColorToolbar({
+  textarea: el.marqueeTabText, toolbar: el.marqueeTabColorToolbar,
+  customInput: el.marqueeTabColorCustom, clearBtn: el.marqueeTabColorClear,
+  previewBox: el.marqueeTabPreviewBox
+});
+wireMarqueeColorToolbar({
+  textarea: el.marqueeText, toolbar: el.marqueeColorToolbar,
+  customInput: el.marqueeColorCustom, clearBtn: el.marqueeColorClear,
+  previewBox: el.marqueePreviewBox
+});
 
 el.marqueeTabPreview?.addEventListener('click', handleMarqueeTabPreview);
 el.marqueeTabSave?.addEventListener('click', handleMarqueeTabSave);
@@ -7428,6 +7566,8 @@ function dispatchClockShortcut(event) {
   if ((event.ctrlKey || event.metaKey) && event.code === 'KeyT') {
     event.preventDefault();
     openMarqueeDialog();
+    // telop-color-ux-simplify: ダイアログ表示直後に編集中プレビューを反映
+    updateMarqueeEditorPreview(el.marqueeText, el.marqueePreviewBox);
     return;
   }
 
