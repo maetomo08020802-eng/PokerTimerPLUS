@@ -127,7 +127,7 @@ test('P2 (保護): pool 計算（potAmounts）・reentry/addOn は非接触', ()
 });
 
 test('P3: version 2.6.0 据置（早期 bump なし）+ v266 登録', () => {
-  assert.equal(PKG.version, '2.6.4', `version が ${PKG.version}`);
+  assert.equal(PKG.version, '2.6.5', `version が ${PKG.version}`);
   assert.ok(PKG.scripts.test.includes('v266-stack-unify-preset-hint.test.js'), 'v266 未登録');
 });
 

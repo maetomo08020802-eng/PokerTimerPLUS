@@ -48,7 +48,7 @@ function testIfProduction(name, fn) {
 // T1: package.json.version === '2.2.1'
 // ============================================================
 testIfProduction('T1: package.json.version === 2.2.1（本番版、サフィックスなし）', () => {
-  assert.equal(PKG.version, '2.6.4', `期待 2.2.1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.6.5', `期待 2.2.1, 実際 ${PKG.version}`);
   assert.doesNotMatch(PKG.version, /-/, `本番版にサフィックスが残存: ${PKG.version}`);
 });
 
