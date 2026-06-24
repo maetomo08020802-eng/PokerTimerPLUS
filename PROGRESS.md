@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-06-24** — **v2.6.4 配信済(Latest 公開中・自動更新有効)**。tournament-start-voice=音タブで開始ボイス(なし+女性4+男性4=9)選択・グローバル永続化・開始時にstart.mp3置換(二重再生なし)。テスト1418件全PASS・オープン作業0件。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-06-24** — **v2.6.5 配信済(Latest 公開中・自動更新有効)**。telop-color-ux-simplify=テロップ色変えを「文字を選択→色ボタン」方式に作り直し(手打ち記法不要・9色+任意色+色を消す+編集中プレビュー・2箇所整合)。保存形式/安全パーサ無改変=旧データ互換・XSS後退ゼロ。テスト1433件全PASS・オープン作業0件。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| telop-color-ux-simplify | 🟡 実機確認待ち（実装完了・GO 待ち） | テロップ色変えを「選択→色ボタン＋編集中プレビュー」方式に（記法手打ち不要・保存形式/安全パーサ無改変・旧データ互換）。v272 15件追加・1433件全PASS・致命5件非接触。feature ブランチに 1 コミット。配信は前原 GO 後（v2.6.5 想定）。`.cc-reports/2026-06-24_telop-color-ux-simplify.md` |
+| (なし) | 安定運用フェーズ | 次は brief 受領待ち |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -21,6 +21,7 @@
 
 | 配信日 | バージョン | 主要変更(1行) | report |
 |--------|-----------|---------|--------|
+| 2026-06-24 | **v2.6.5** | テロップ色変えを「文字を選択→色ボタン」方式に作り直し(手打ち記法不要・9色+任意色+色を消す+編集中プレビュー・設定タブ/Ctrl+T 2箇所)。保存形式/marquee.js安全パーサ無改変=旧データ100%互換・XSS後退ゼロ。致命5件非接触。merge `e680436`/tag v2.6.5(Latest・自動更新) | `.cc-reports/2026-06-24_telop-color-ux-simplify.md` |
 | 2026-06-24 | **v2.6.4** | トーナメント開始ボイス選択(音タブ・なし+女性4+男性4=9・グローバル共通)。開始時(即時/0着地両方)に選択ボイス1回・start.mp3置換。8ボイス前原自作。致命5件(特にAudioContext resume)非接触。merge `ee16648`/tag v2.6.4(Latest) | `.cc-reports/2026-06-24_tournament-start-voice.md` |
 | 2026-06-24 | **v2.6.3** | ② 2画面 operator→hall 状態遷移の時差を案A(遷移時のみ即時送信)で最大500ms→約20〜60msに短縮。renderer.jsのみ・致命5件+PRE_START0着地ガード非接触。merge `184a25e`/tag v2.6.3 | `.cc-reports/2026-06-24_dualscreen-latency.md` |
 | 2026-06-24 | **v2.6.2** | テロップ ①単独Tで表示/非表示トグル ③本文の部分色変え`[color]…[/color]`(innerHTML不使用でXSS安全)。merge `f019f14`/tag v2.6.2 | `.cc-reports/2026-06-24_telop-dualscreen-ideas.md` |
@@ -47,9 +48,9 @@
 
 | 指標 | 値 |
 |------|----|
-| 配信済リリース | 13件(v1.0.0〜v2.6.4)|
+| 配信済リリース | 14件(v1.0.0〜v2.6.5)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 1件(telop-color-ux-simplify 実装完了・GO 待ち)|
+| オープン作業 | 0件(安定運用フェーズ)|
 | 最新テスト件数 | 1433件 全PASS(v272 +15) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
@@ -57,10 +58,10 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` HEAD `0eb2690`・version 2.6.4・origin 同期済。telop-color-ux-simplify は **feature ブランチに 1 コミット(実装完了・未 merge)**。配信時は merge `--no-ff`+version bump(v2.6.5 想定)+tag/push/.exe/Release が前原 GO 後。直近配信 v2.6.4=merge `ee16648`/tag `v2.6.4`(Latest 公開中)。
-- **直前作業(2026-06-24)**: telop-color-ux-simplify=**テロップ色変えを「文字を選択→色ボタン」方式に作り直し**(前原「手打ち記法が難しすぎる」→方式A 採用)。9 色スウォッチ+任意色 picker+「色を消す」+編集中インラインプレビューを設定タブ版/Ctrl+T ダイアログ版の 2 箇所に。記法 `[color]…[/color]` は内部で自動生成/除去(ネスト防止・後勝ち)。**保存フォーマット・marquee.js 安全パーサ(innerHTML 不使用・色ホワイトリスト)は無改変=export 追加のみ**で旧データ 100% 互換・XSS 後退ゼロ。致命5件全件非接触(入力 UI のみ)。v272 回帰15件・1433件全PASS・v269互換維持。Plan 段階2 review 承認(提案3点 self-fix 済)。report `.cc-reports/2026-06-24_telop-color-ux-simplify.md`。
-- **次のアクション**: 完了 review(cc-review)→ 前原実機確認(6-B ①〜⑥)→ GO で配信(v2.6.5)。温存候補は下表。
-- **参考**: 本日 v2.6.2→2.6.3→2.6.4 連続配信。本案件は v2.6.2 の手打ち記法 UX を改善。**推測着手禁止**。
+- **git**: `main` HEAD `e680436`(Merge: telop-color-ux-simplify — v2.6.5)・version 2.6.5・origin 同期済(main + tag push 済)。配信は merge `e680436`(`--no-ff`)・tag `v2.6.5`・GitHub Release Latest 公開・自動更新有効(.exe + latest.yml + blockmap の3点添付・`/releases/latest`=v2.6.5)。feature ブランチ `feature/telop-color-ux-simplify` は merge 済(ローカル整理可)。
+- **直前作業(2026-06-24)**: telop-color-ux-simplify を **v2.6.5 として配信**(前原「配信GO」)。**テロップ色変えを「文字を選択→色ボタン」方式に作り直し**(前原「手打ち記法が難しすぎる」→方式A 採用)。9 色スウォッチ+任意色 picker+「色を消す」+編集中インラインプレビューを設定タブ版/Ctrl+T ダイアログ版の 2 箇所に。記法 `[color]…[/color]` は内部で自動生成/除去(ネスト防止・後勝ち)。**保存フォーマット・marquee.js 安全パーサ(innerHTML 不使用・色ホワイトリスト)は無改変=export 追加のみ**で旧データ 100% 互換・XSS 後退ゼロ。致命5件全件非接触(入力 UI のみ)。v272 回帰15件・1433件全PASS・v269互換維持。Plan 段階2+完了 review 承認(懐疑役 escalate なし)。report `.cc-reports/2026-06-24_telop-color-ux-simplify.md`。
+- **次のアクション**: brief 受領待ち(オープン作業0件・安定運用フェーズ)。前原実機確認(6-B ①〜⑥=実機での色付け操作感・2画面反映・プレビュー見た目)は配信後の任意確認。温存候補は下表。
+- **参考**: 本日 v2.6.2→2.6.3→2.6.4→2.6.5 を連続配信。本案件は v2.6.2 の手打ち記法 UX を改善。**推測着手禁止**。
 
 ---
 
