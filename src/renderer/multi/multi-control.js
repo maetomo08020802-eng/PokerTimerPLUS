@@ -162,6 +162,16 @@ function opLevel(index, delta) {
   refreshPaneStatus(pane);
 }
 
+// Phase 2c: ±30 秒の時間微調整（単一モードの「30秒進める」= −30s /「30秒戻す」= +30s）。
+// カウントダウン中は開始までの残りに作用（0 到達で自動 running）。idle/finished はエンジン側 no-op
+function opAdjust30(index, deltaMs) {
+  const pane = panes[index];
+  if (!pane || !pane.engine) return;
+  pane.engine.adjustTimeBy(deltaMs, Date.now());
+  publishPane(index);
+  refreshPaneStatus(pane);
+}
+
 // 確認なしの即リセット（確認は呼び出し側: ボタン=confirm / キーボード=R 2 度押し）
 function opResetConfirmed(index) {
   const pane = panes[index];
@@ -217,6 +227,8 @@ function buildPaneUI(index) {
       <button type="button" class="mc-btn js-pause">一時停止</button>
       <button type="button" class="mc-btn js-prev">◀ レベル</button>
       <button type="button" class="mc-btn js-next">レベル ▶</button>
+      <button type="button" class="mc-btn js-back30">30秒戻す</button>
+      <button type="button" class="mc-btn js-fwd30">30秒進める</button>
       <button type="button" class="mc-btn mc-btn--danger js-reset">リセット</button>
     </div>`;
   grid.appendChild(root);
@@ -228,7 +240,8 @@ function buildPaneUI(index) {
       fillerImageBtn: q('.js-filler-image'), fillerText: q('.js-filler-text'), fillerPath: q('.js-filler-path'),
       startMode: q('.js-start-mode'), startCustomWrap: q('.js-start-custom-wrap'), startCustomMin: q('.js-start-custom-min'),
       time: q('.js-time'), level: q('.js-level'), state: q('.js-state'),
-      start: q('.js-start'), pause: q('.js-pause'), prev: q('.js-prev'), next: q('.js-next'), reset: q('.js-reset')
+      start: q('.js-start'), pause: q('.js-pause'), prev: q('.js-prev'), next: q('.js-next'),
+      back30: q('.js-back30'), fwd30: q('.js-fwd30'), reset: q('.js-reset')
     },
     tournamentId: null,
     filler: { kind: 'blank', imagePath: '', text: '' }, // Phase 2: セッション内 transient のみ（electron-store 非永続化）
@@ -300,6 +313,8 @@ function buildPaneUI(index) {
   pane.els.pause.addEventListener('click', () => opTogglePause(index));
   pane.els.prev.addEventListener('click', () => opLevel(index, -1));
   pane.els.next.addEventListener('click', () => opLevel(index, 1));
+  pane.els.back30.addEventListener('click', () => opAdjust30(index, 30 * 1000));
+  pane.els.fwd30.addEventListener('click', () => opAdjust30(index, -30 * 1000));
   pane.els.reset.addEventListener('click', () => {
     if (!pane.engine) return;
     // 誤操作防止の確認（この区画だけがリセットされる = 他区画非影響）。
@@ -336,6 +351,10 @@ function refreshPaneStatus(pane) {
   pane.els.start.disabled = now.status !== ENGINE_STATUS.IDLE; // PRE_START 中はスタート disable（単一モード忠実）
   pane.els.pause.disabled = !(isRunning || isPaused || isPreStartRunning);
   pane.els.pause.textContent = isPaused ? '再開' : '一時停止';
+  // Phase 2c: ±30 秒は進行中系のみ有効（idle / finished はエンジン no-op = 単一モード忠実）
+  const adjustable = isRunning || isPaused || isPreStartRunning;
+  pane.els.back30.disabled = !adjustable;
+  pane.els.fwd30.disabled = !adjustable;
 }
 
 // ===== Phase 2: キーボード操作フォールバック（mirror = 複製運用の保険） =====
@@ -450,6 +469,16 @@ function handleKeydown(e) {
     case 'ArrowRight':
       clearResetArm(true);
       opLevel(activePane, 1);
+      e.preventDefault();
+      break;
+    case 'ArrowUp': // 30秒戻す（残り +30s）。←→=レベル(横) / ↑↓=時間(縦) の対
+      clearResetArm(true);
+      opAdjust30(activePane, 30 * 1000);
+      e.preventDefault();
+      break;
+    case 'ArrowDown': // 30秒進める（残り −30s）
+      clearResetArm(true);
+      opAdjust30(activePane, -30 * 1000);
       e.preventDefault();
       break;
     case 'r': case 'R':

@@ -419,6 +419,120 @@ const MIN = 60 * 1000;
     }
   });
 
+  // ============================================================
+  // 5. Phase 2c: adjustTimeBy（±30秒等の時間微調整）
+  //    単一モード timer.js advanceTimeBy（L342-372 の繰越規則）/ advancePreStartBy の仕様値を固定する
+  //    スペックテスト。※ advanceTimeBy 本体は state/blinds/rAF シングルトン密結合のためソース抽出
+  //    による直接同値検証は不能 → 仕様値固定で乖離を防ぐ（computeNextBreakMsFor と同パターン）
+  // ============================================================
+  test('adjustTimeBy: RUNNING 進める方向はレベル繰越（超過分引継）・全レベル超過で finished', () => {
+    const e = createClockEngine(LEVELS);
+    e.start(0);
+    // Level 1 残 20 分 → −21 分 → Level 2 の残 19 分（超過 1 分の引継 = timer.js ケース A）
+    e.adjustTimeBy(-21 * MIN, 0);
+    let now = e.computeNow(0);
+    assert.equal(now.levelIndex, 1);
+    assert.equal(now.remainingMs, 19 * MIN);
+    // 残り全部（19+15+10+30 分）を超えて進める → 完走
+    e.adjustTimeBy(-(19 + 15 + 10 + 30) * MIN - 1000, 0);
+    now = e.computeNow(0);
+    assert.equal(now.status, ENGINE_STATUS.FINISHED);
+  });
+
+  test('adjustTimeBy: 戻す方向は前レベルへ繰越・レベル 0 でクランプ', () => {
+    const e = createClockEngine(LEVELS);
+    e.start(0);
+    e.adjustTimeBy(-25 * MIN, 0); // Level 2 残 15 分へ
+    // +17 分 → 32 分 > Level2 初期 20 分 → 前レベル（Level 1）へ超過 12 分（timer.js ケース B）
+    e.adjustTimeBy(17 * MIN, 0);
+    let now = e.computeNow(0);
+    assert.equal(now.levelIndex, 0);
+    assert.equal(now.remainingMs, 12 * MIN);
+    // さらに +30 分 → Level 1 初期 20 分でクランプ
+    e.adjustTimeBy(30 * MIN, 0);
+    now = e.computeNow(0);
+    assert.equal(now.levelIndex, 0);
+    assert.equal(now.remainingMs, 20 * MIN);
+  });
+
+  test('adjustTimeBy: PAUSED 中も残り時間を調整（状態は PAUSED のまま）', () => {
+    const e = createClockEngine(LEVELS);
+    e.start(0);
+    e.pause(5 * MIN); // Level 1 残 15 分で停止
+    e.adjustTimeBy(-30 * 1000, 6 * MIN);
+    const rec = e.getRecord();
+    assert.equal(rec.status, 'paused');
+    assert.equal(rec.pausedRemainingMs, 15 * MIN - 30 * 1000, '残 14:30 で停止のまま');
+  });
+
+  test('adjustTimeBy: PRESTART はカウントダウン残に作用（戻しはクランプなしで加算・0 到達で自動レベル 0 running）', () => {
+    const T0 = 8_000_000;
+    const e = createClockEngine(LEVELS);
+    e.startPreStart(2 * MIN, T0);
+    e.adjustTimeBy(30 * 1000, T0 + 1 * MIN); // 残 1 分 → 戻して残 1:30
+    assert.equal(Math.round(e.computeNow(T0 + 1 * MIN).remainingMs / 1000), 90);
+    assert.equal(e.getRecord().status, 'prestart');
+    // 残 1:30 → −2 分で 0 到達 → 即レベル 0 満了 duration の running（単一モード advancePreStartBy と同義）
+    e.adjustTimeBy(-2 * MIN, T0 + 1 * MIN);
+    const now = e.computeNow(T0 + 1 * MIN);
+    assert.equal(now.status, ENGINE_STATUS.RUNNING);
+    assert.equal(now.levelIndex, 0);
+    assert.equal(now.remainingMs, 20 * MIN);
+  });
+
+  test('adjustTimeBy: prestart 由来 PAUSED はクランプのみ・running へ遷移しない（advancePreStartBy paused 分岐に忠実）', () => {
+    const e = createClockEngine(LEVELS);
+    e.startPreStart(2 * MIN, 0);
+    e.pause(1 * MIN); // カウントダウン残 1 分で一時停止
+    e.adjustTimeBy(-5 * MIN, 2 * MIN); // 0 未満 → 0 でクランプ・遷移しない
+    const rec = e.getRecord();
+    assert.equal(rec.status, 'paused');
+    assert.equal(rec.pausedRemainingMs, 0);
+    assert.equal(e.computeNow(10 * MIN).preStart, true, 'prestart 由来のまま');
+    // resume すると残 0 のカウントダウン → 即着地で running 派生
+    e.resume(20 * MIN);
+    assert.equal(e.computeNow(20 * MIN).status, ENGINE_STATUS.RUNNING);
+  });
+
+  test('adjustTimeBy: IDLE / FINISHED は no-op（単一モードの早期 return に忠実）', () => {
+    const e = createClockEngine(LEVELS);
+    const before = e.getRecord();
+    e.adjustTimeBy(-30 * 1000, 0);
+    assert.deepEqual(e.getRecord(), before, 'idle で record 不変');
+    const e2 = createClockEngine(LEVELS);
+    e2.start(0);
+    e2.adjustTimeBy(-(20 + 20 + 15 + 10 + 30) * MIN - 1000, 0); // 完走させる
+    assert.equal(e2.getRecord().status, 'finished');
+    const beforeFin = e2.getRecord();
+    e2.adjustTimeBy(30 * 1000, 0);
+    assert.deepEqual(e2.getRecord(), beforeFin, 'finished で record 不変（戻しも no-op）');
+  });
+
+  test('adjustTimeBy: 区画独立性（1 区画の ±30秒 が他区画の record に影響しない）', () => {
+    const T0 = 9_000_000;
+    const engines = [0, 1, 2, 3].map(() => createClockEngine(LEVELS));
+    engines[0].start(T0);
+    engines[2].startPreStart(10 * MIN, T0);
+    const before = [engines[0].getRecord(), engines[2].getRecord(), engines[3].getRecord()];
+    engines[1].start(T0);
+    engines[1].adjustTimeBy(-30 * 1000, T0 + MIN);
+    engines[1].adjustTimeBy(30 * 1000, T0 + 2 * MIN);
+    const after = [engines[0].getRecord(), engines[2].getRecord(), engines[3].getRecord()];
+    assert.deepEqual(after, before, '区画 2 の時間調整で他区画の記録が変化した');
+  });
+
+  test('adjustTimeBy: 防御（空 levels / delta 0 / 非有限は no-op）', () => {
+    const e = createClockEngine(LEVELS);
+    e.start(0);
+    const before = e.getRecord();
+    e.adjustTimeBy(0, 0);
+    e.adjustTimeBy(NaN, 0);
+    assert.deepEqual(e.getRecord(), before);
+    const empty = createClockEngine([]);
+    empty.adjustTimeBy(-30 * 1000, 0); // throw しない
+    assert.equal(empty.getRecord().status, 'idle');
+  });
+
   test('同値検証: prestart 0 着地後のレベル・残時間が computeLiveTimerState（着地時刻起点）と一致', () => {
     const factory = extractComputeLiveTimerState();
     const T0 = 1_700_000_000_000;

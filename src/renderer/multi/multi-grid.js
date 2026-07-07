@@ -572,7 +572,8 @@ function buildHelpOverlay() {
     <div><kbd>S</kbd> スタート（今すぐ）</div>
     <div><kbd>C</kbd> スタートまでカウントダウン開始（区画の開始タイミング設定）</div>
     <div><kbd>Space</kbd>/<kbd>P</kbd> 一時停止 / 再開</div>
-    <div><kbd>←</kbd><kbd>→</kbd> レベル戻し / 送り（1 レベルずつ。30秒単位の時間調整はマルチ表示にはありません）</div>
+    <div><kbd>←</kbd><kbd>→</kbd> レベル戻し / 送り（1 レベルずつ）</div>
+    <div><kbd>↑</kbd><kbd>↓</kbd> 30秒戻す / 30秒進める（時間微調整）</div>
     <div><kbd>R</kbd> リセット（3 秒以内にもう一度押して確定）</div>
     <div><kbd>H</kbd> このヘルプの表示 / 非表示</div>
     <div><kbd>G</kbd> グリッドを前面へ　<kbd>Esc</kbd> 操作盤を前面へ</div>`;

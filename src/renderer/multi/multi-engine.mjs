@@ -252,6 +252,77 @@ export function createClockEngine(levels) {
         record = { ...record, currentLevelIndex: target }; // idle: 表示位置のみ移動
       }
     },
+    // Phase 2c: ±30 秒等の時間微調整（単一モード timer.js advanceTimeBy / advancePreStartBy の
+    // 意味論を record モデルへ忠実移植）。deltaMs 負 = 進める（残り減）/ 正 = 戻す（残り増）。
+    //   - RUNNING/PAUSED: 残り時間調整。≤0 → 次レベルへ超過分繰越・全レベル超過 → finished。
+    //     現レベル初期長超 → 前レベルへ繰越・レベル 0 でクランプ（timer.js L342-372 と同型）
+    //   - PRESTART: カウントダウン残に作用（0 未満クランプ・0 到達で自動レベル 0 running）
+    //   - prestart 由来 PAUSED: クランプのみ・遷移しない（advancePreStartBy の paused 分岐に忠実）
+    //   - IDLE / FINISHED: no-op（単一モードの早期 return に忠実）
+    adjustTimeBy(deltaMs, nowMs) {
+      if (_levels.length === 0 || !Number.isFinite(deltaMs) || deltaMs === 0) return;
+      if (record.status === ENGINE_STATUS.PRESTART) {
+        commitNow(nowMs);   // 0 着地済なら running に確定して下の通常経路へ
+        if (record.status === ENGINE_STATUS.PRESTART) {
+          const cur = Math.max(0, record.endAtMs - nowMs);
+          const newRem = Math.max(0, cur + deltaMs);
+          if (newRem <= 0) {
+            // 0 到達 → 即レベル 0 running（単一モード advancePreStartBy の startAtLevel(0) と同義）
+            record = {
+              status: ENGINE_STATUS.RUNNING,
+              currentLevelIndex: 0,
+              endAtMs: nowMs + levelDurationMs(_levels, 0),
+              pausedRemainingMs: null,
+              preStartTotalMs: null
+            };
+          } else {
+            record = { ...record, endAtMs: nowMs + newRem };
+          }
+          return;
+        }
+      }
+      if (record.status === ENGINE_STATUS.PAUSED && isPreStartRecord()) {
+        const newRem = Math.max(0, (Number(record.pausedRemainingMs) || 0) + deltaMs);
+        record = { ...record, pausedRemainingMs: newRem };
+        return;
+      }
+      if (record.status !== ENGINE_STATUS.RUNNING && record.status !== ENGINE_STATUS.PAUSED) return;
+      if (record.status === ENGINE_STATUS.RUNNING) commitNow(nowMs);
+      if (record.status === ENGINE_STATUS.FINISHED) return; // commit で完走に達していた場合
+      const isPaused = record.status === ENGINE_STATUS.PAUSED;
+      let levelIndex = clampLevelIndex(_levels, record.currentLevelIndex);
+      let levelMs = levelDurationMs(_levels, levelIndex);
+      const cur = isPaused
+        ? Math.max(0, Number(record.pausedRemainingMs) || 0)
+        : Math.max(0, record.endAtMs - nowMs);
+      let newRemaining = cur + deltaMs;
+      // ケース A: 進める方向（≤0）→ 次レベルへ繰越、全レベル超過で完走
+      while (newRemaining <= 0) {
+        if (levelIndex + 1 >= _levels.length) {
+          record = { status: ENGINE_STATUS.FINISHED, currentLevelIndex: _levels.length - 1, endAtMs: null, pausedRemainingMs: null, preStartTotalMs: null };
+          return;
+        }
+        levelIndex += 1;
+        levelMs = levelDurationMs(_levels, levelIndex);
+        newRemaining += levelMs;
+      }
+      // ケース B: 戻す方向（> 現レベル初期長）→ 前レベルへ繰越、レベル 0 でクランプ
+      while (newRemaining > levelMs) {
+        if (levelIndex === 0) {
+          newRemaining = levelMs;
+          break;
+        }
+        const overflow = newRemaining - levelMs;
+        levelIndex -= 1;
+        levelMs = levelDurationMs(_levels, levelIndex);
+        newRemaining = overflow;
+      }
+      if (isPaused) {
+        record = { ...record, currentLevelIndex: levelIndex, pausedRemainingMs: newRemaining };
+      } else {
+        record = { ...record, currentLevelIndex: levelIndex, endAtMs: nowMs + newRemaining };
+      }
+    },
     reset() {
       record = { status: ENGINE_STATUS.IDLE, currentLevelIndex: 0, endAtMs: null, pausedRemainingMs: null, preStartTotalMs: null };
     },

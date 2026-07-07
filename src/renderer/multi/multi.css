@@ -69,6 +69,10 @@
   --cyan-bright: #82DCFF;
   --warn: #FFC107;
   --danger: #E53935;
+  /* Phase 2c: 選択中区画の色（前原FB「オレンジの太枠」）。終了/一時停止の #FF8C1A とは
+     明度高めの色差 + 形状差（全周太枠 vs 中央ボックス）+ バッジ文字で意味分離。
+     multi-control.html 側のハイライトも同 hex（静的テストで一致を担保） */
+  --select: #FFB300;
   --text-primary: #FFFFFF;
   --text-secondary: #B0BEC5;
   --text-muted: #607D8B;
@@ -949,15 +953,19 @@ img { display: block; max-width: 100%; height: auto; }
 .pane-filler[data-filler="text"] .pane-filler__text { display: block; }
 
 /* ===== Phase 2: キーボード操作（mirror 保険）の grid 側表示 ===== */
-/* 選択中区画のハイライト枠（静的オーバーレイ・アニメなし・レイアウト非干渉） */
+/* 選択中区画のハイライト枠（静的オーバーレイ・アニメなし・レイアウト非干渉）。
+   Phase 2c: 水色 0.5cqw では「まったく気づかない」（前原実機FB）→ オレンジ基調 --select の
+   太枠 1.2cqw + 内側白ヘアライン + 内向きグローへ強化。inset 描画のため区画 box 寸法は不変 */
 .pane[data-active="true"]::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 8;
   pointer-events: none;
-  border: 0.5cqw solid var(--cyan);
-  box-shadow: inset 0 0 2cqw rgba(79, 195, 247, 0.35);
+  border: 1.2cqw solid var(--select);
+  box-shadow:
+    inset 0 0 0 0.25cqw rgba(255, 255, 255, 0.85),
+    inset 0 0 3cqw rgba(255, 179, 0, 0.45);
 }
 /* リセット 2 度押し確認バッジ（3 秒・静的表示） */
 .pane-reset-arm {
@@ -995,8 +1003,8 @@ img { display: block; max-width: 100%; height: auto; }
   font-weight: 700;
   font-size: 1.8cqw;
   line-height: 1.4;
-  color: #062033;
-  background: var(--cyan);
+  color: #1a1200;
+  background: var(--select); /* Phase 2c: 選択枠と同色に統一（3 者で「選択中」を指す） */
   border-radius: 0.4cqw;
   padding: 0.5cqh 1.2cqw;
 }
