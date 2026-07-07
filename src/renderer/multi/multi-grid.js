@@ -566,15 +566,23 @@ function buildHelpOverlay() {
   const aside = document.createElement('aside');
   aside.className = 'mgrid-help';
   aside.innerHTML = `
-    <div class="mgrid-help__title">キーボード操作</div>
-    <div class="mgrid-help__note">操作対象は選択中の区画だけ（他の区画は動きません）。<br>選択中の区画は水色の枠と左上の「操作中」バッジで確認できます。</div>
+    <div class="mgrid-help__title">キーボード操作（単一表示と同じ割当）</div>
+    <div class="mgrid-help__note">操作対象は選択中の区画だけ（他の区画は動きません）。<br>選択中の区画はオレンジの枠と左上の「操作中」バッジで確認できます。</div>
+    <div class="mgrid-help__section">区画・開始</div>
     <div><kbd>1</kbd>〜<kbd>4</kbd> 操作する区画を選択</div>
-    <div><kbd>S</kbd> スタート（今すぐ）</div>
-    <div><kbd>C</kbd> スタートまでカウントダウン開始（区画の開始タイミング設定）</div>
-    <div><kbd>Space</kbd>/<kbd>P</kbd> 一時停止 / 再開</div>
-    <div><kbd>←</kbd><kbd>→</kbd> レベル戻し / 送り（1 レベルずつ）</div>
-    <div><kbd>↑</kbd><kbd>↓</kbd> 30秒戻す / 30秒進める（時間微調整）</div>
-    <div><kbd>R</kbd> リセット（3 秒以内にもう一度押して確定）</div>
+    <div><kbd>Space</kbd> スタート / 一時停止 / 再開（停止中は開始タイミング設定に従って開始）</div>
+    <div><kbd>C</kbd> スタートまでカウントダウン開始（開始タイミング設定）</div>
+    <div class="mgrid-help__section">時間・レベル</div>
+    <div><kbd>←</kbd><kbd>→</kbd> 30秒戻す / 30秒進める</div>
+    <div><kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> レベル戻し / 送り（1 レベルずつ）</div>
+    <div class="mgrid-help__section">人数・エントリー（このモード中のみ反映・保存はされません）</div>
+    <div><kbd>↑</kbd> 新規エントリー追加　<kbd>Shift</kbd>+<kbd>↑</kbd> 取消</div>
+    <div><kbd>↓</kbd> プレイヤー脱落　<kbd>Shift</kbd>+<kbd>↓</kbd> 復活</div>
+    <div><kbd>Ctrl</kbd>+<kbd>R</kbd> リエントリー +1（<kbd>Shift</kbd> 併用で −1）</div>
+    <div><kbd>Ctrl</kbd>+<kbd>A</kbd> アドオン +1（<kbd>Shift</kbd> 併用で −1）</div>
+    <div><kbd>Ctrl</kbd>+<kbd>E</kbd> 特殊スタック +1（<kbd>Shift</kbd> 併用で −1）</div>
+    <div class="mgrid-help__section">その他</div>
+    <div><kbd>R</kbd> リセット（3 秒以内にもう一度押して確定・人数等は割当時の値に戻ります）</div>
     <div><kbd>H</kbd> このヘルプの表示 / 非表示</div>
     <div><kbd>G</kbd> グリッドを前面へ　<kbd>Esc</kbd> 操作盤を前面へ</div>`;
   document.body.appendChild(aside);

@@ -9,7 +9,7 @@
 //     grid へ push。間は grid が endAtMs seed で自走（ポーリングなし）
 //   - 既存 timer.js / state.js / blinds.js / audio.js は import しない
 
-import { createClockEngine, computePaneNow, formatPreStartClock, ENGINE_STATUS } from './multi-engine.mjs';
+import { createClockEngine, computePaneNow, formatPreStartClock, applyRuntimeOp, ENGINE_STATUS } from './multi-engine.mjs';
 
 const PANE_COUNT = 4;
 const STATE_LABEL = Object.freeze({
@@ -123,16 +123,9 @@ function resolveStartMinutes(pane) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// 即時スタート（Phase 1 と同じ・idle の現在レベルから）
-function opStartImmediate(index) {
-  const pane = panes[index];
-  if (!pane || !pane.engine) return;
-  pane.engine.start(Date.now());
-  publishPane(index);
-  refreshPaneStatus(pane);
-}
-
-// 開始タイミング設定に従ってスタート（0 分 = 即時 / それ以外 = スタートまでカウントダウン開始）
+// 開始タイミング設定に従ってスタート（0 分 = 即時 / それ以外 = スタートまでカウントダウン開始）。
+// Phase 2d: 開始経路はこれ（ボタン / Space / C）に一本化。旧 S キーの即時スタートは
+// 単一モードの S=設定との混同・誤操作源のため廃止（brief default C）
 function opStartTimed(index) {
   const pane = panes[index];
   if (!pane || !pane.engine) return;
@@ -172,11 +165,33 @@ function opAdjust30(index, deltaMs) {
   refreshPaneStatus(pane);
 }
 
-// 確認なしの即リセット（確認は呼び出し側: ボタン=confirm / キーボード=R 2 度押し）
+// 確認なしの即リセット（確認は呼び出し側: ボタン=confirm / キーボード=R 2 度押し）。
+// Phase 2d（brief default D）: タイマーに加え、セッション内 runtime を「割当時点の snapshot 値」へ
+// 復帰させる（単一モードの 0 クリアではなく割当値復帰＝マルチ本番での誤爆損害を回避する安全側 default）
 function opResetConfirmed(index) {
   const pane = panes[index];
   if (!pane || !pane.engine) return;
   pane.engine.reset();
+  if (pane.snapshot && pane.assignRuntime) {
+    pane.snapshot = {
+      ...pane.snapshot,
+      runtime: { ...pane.assignRuntime.runtime },
+      specialStack: { ...pane.snapshot.specialStack, appliedCount: pane.assignRuntime.specialApplied }
+    };
+  }
+  publishPane(index);
+  refreshPaneStatus(pane);
+}
+
+// Phase 2d: runtime 操作（単一モード操作パリティ・transient）。
+// applyRuntimeOp（純粋計算）で新 snapshot を作り、publishPane の既存経路で grid が
+// PLAYERS / AVG STACK / PRIZE POOL / 特別配布行を再計算する（store には一切書かない）
+function runtimeOp(index, op) {
+  const pane = panes[index];
+  if (!pane || !pane.snapshot) return;
+  const next = applyRuntimeOp(pane.snapshot, op);
+  if (!next) return; // クランプ・ガードで変更なし（単一モードの無音ガードと同じ）
+  pane.snapshot = next;
   publishPane(index);
   refreshPaneStatus(pane);
 }
@@ -230,6 +245,19 @@ function buildPaneUI(index) {
       <button type="button" class="mc-btn js-back30">30秒戻す</button>
       <button type="button" class="mc-btn js-fwd30">30秒進める</button>
       <button type="button" class="mc-btn mc-btn--danger js-reset">リセット</button>
+    </div>
+    <div class="mc-pane__rt-status js-rt-status"></div>
+    <div class="mc-pane__runtime-row">
+      <button type="button" class="mc-btn mc-btn--small js-rt-entry-add">エントリー＋</button>
+      <button type="button" class="mc-btn mc-btn--small js-rt-entry-cancel">取消</button>
+      <button type="button" class="mc-btn mc-btn--small js-rt-eliminate">脱落</button>
+      <button type="button" class="mc-btn mc-btn--small js-rt-revive">復活</button>
+      <button type="button" class="mc-btn mc-btn--small js-rt-re-plus">RE＋</button>
+      <button type="button" class="mc-btn mc-btn--small js-rt-re-minus">RE−</button>
+      <button type="button" class="mc-btn mc-btn--small js-rt-ad-plus">AD＋</button>
+      <button type="button" class="mc-btn mc-btn--small js-rt-ad-minus">AD−</button>
+      <button type="button" class="mc-btn mc-btn--small js-rt-sp-plus" hidden>特＋</button>
+      <button type="button" class="mc-btn mc-btn--small js-rt-sp-minus" hidden>特−</button>
     </div>`;
   grid.appendChild(root);
   const q = (sel) => root.querySelector(sel);
@@ -241,14 +269,29 @@ function buildPaneUI(index) {
       startMode: q('.js-start-mode'), startCustomWrap: q('.js-start-custom-wrap'), startCustomMin: q('.js-start-custom-min'),
       time: q('.js-time'), level: q('.js-level'), state: q('.js-state'),
       start: q('.js-start'), pause: q('.js-pause'), prev: q('.js-prev'), next: q('.js-next'),
-      back30: q('.js-back30'), fwd30: q('.js-fwd30'), reset: q('.js-reset')
+      back30: q('.js-back30'), fwd30: q('.js-fwd30'), reset: q('.js-reset'),
+      rtStatus: q('.js-rt-status'),
+      rtSpPlus: q('.js-rt-sp-plus'), rtSpMinus: q('.js-rt-sp-minus')
     },
     tournamentId: null,
     filler: { kind: 'blank', imagePath: '', text: '' }, // Phase 2: セッション内 transient のみ（electron-store 非永続化）
     snapshot: null,
     engine: null,
+    assignRuntime: null, // Phase 2d: 割当時点の runtime 複製（リセット時の復帰先・transient）
     fillerTextTimerId: null
   };
+
+  // Phase 2d: runtime 操作ボタン（キーボードと同じ runtimeOp 経由 = 真実源は control の state）
+  const RT_BUTTONS = [
+    ['.js-rt-entry-add', 'addEntry'], ['.js-rt-entry-cancel', 'cancelEntry'],
+    ['.js-rt-eliminate', 'eliminate'], ['.js-rt-revive', 'revive'],
+    ['.js-rt-re-plus', 'reentryPlus'], ['.js-rt-re-minus', 'reentryMinus'],
+    ['.js-rt-ad-plus', 'addOnPlus'], ['.js-rt-ad-minus', 'addOnMinus'],
+    ['.js-rt-sp-plus', 'specialPlus'], ['.js-rt-sp-minus', 'specialMinus']
+  ];
+  for (const [sel, op] of RT_BUTTONS) {
+    q(sel).addEventListener('click', () => runtimeOp(index, op));
+  }
 
   // フィラー種別に応じたサブ入力の表示切替（画像選択ボタン / テキスト入力 / 選択済みファイル名）
   function refreshFillerControls() {
@@ -266,7 +309,7 @@ function buildPaneUI(index) {
   pane.els.select.addEventListener('change', async () => {
     const id = pane.els.select.value;
     if (!id) {
-      pane.tournamentId = null; pane.snapshot = null; pane.engine = null;
+      pane.tournamentId = null; pane.snapshot = null; pane.engine = null; pane.assignRuntime = null;
       root.dataset.assigned = 'false';
       publishPane(index);
       refreshKbTarget(); // 選択中区画の割当解除に操作対象表示を追従
@@ -277,6 +320,14 @@ function buildPaneUI(index) {
     pane.tournamentId = id;
     pane.snapshot = await buildSnapshot(t);
     pane.engine = createClockEngine(pane.snapshot.levels);
+    // Phase 2d: 割当時点の runtime を複製保持（リセット時の復帰先）+ 特殊スタックボタンの表示切替
+    pane.assignRuntime = {
+      runtime: { ...pane.snapshot.runtime },
+      specialApplied: Number(pane.snapshot.specialStack?.appliedCount) || 0
+    };
+    const spEnabled = !!pane.snapshot.specialStack?.enabled;
+    pane.els.rtSpPlus.hidden = !spEnabled;
+    pane.els.rtSpMinus.hidden = !spEnabled;
     root.dataset.assigned = 'true';
     publishPane(index);
     refreshPaneStatus(pane);
@@ -355,6 +406,12 @@ function refreshPaneStatus(pane) {
   const adjustable = isRunning || isPaused || isPreStartRunning;
   pane.els.back30.disabled = !adjustable;
   pane.els.fwd30.disabled = !adjustable;
+  // Phase 2d: runtime 現在値（操作の効きが手元で見える・変化時のみ書込）
+  const rt = pane.snapshot.runtime || {};
+  const ss = pane.snapshot.specialStack || {};
+  let rtText = `PLAYERS ${rt.playersRemaining || 0}/${rt.playersInitial || 0} ・ RE ${rt.reentryCount || 0} ・ AD ${rt.addOnCount || 0}`;
+  if (ss.enabled) rtText += ` ・ 特 ${Number(ss.appliedCount) || 0}`;
+  if (pane.els.rtStatus.textContent !== rtText) pane.els.rtStatus.textContent = rtText;
 }
 
 // ===== Phase 2: キーボード操作フォールバック（mirror = 複製運用の保険） =====
@@ -414,10 +471,33 @@ function isTypingTarget(t) {
   return tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable === true;
 }
 
+// Phase 2d: キー割当を単一モードに整合（renderer.js dispatchClockShortcut と同じ操作は同じキー）。
+//   ←→=±30秒 / ↑↓=エントリー・脱落（Shift で取消・復活）/ Ctrl+R/A/E=リエントリー・アドオン・特殊スタック。
+//   Phase 2c の「↑↓=±30秒」誤割当を撤回。レベル送り戻しは Shift+←→ へ移設（単一モードに該当キーなし）。
+//   S=即時スタートは廃止（単一モードの S=設定との混同・誤操作源）。開始は Space / C に集約。
 function handleKeydown(e) {
-  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.altKey || e.metaKey) return;
   if (isTypingTarget(e.target)) {
     if (e.key === 'Escape' && typeof e.target.blur === 'function') e.target.blur();
+    return;
+  }
+  // Ctrl 系 = 単一モードと同じ runtime 操作（e.code 判定 = dispatchClockShortcut と同方式・配列非依存。
+  //   アプリは Menu.setApplicationMenu(null) のため Ctrl+R のリロード既定は存在しないが preventDefault も掛ける）
+  if (e.ctrlKey) {
+    if (activePane === null) return;
+    if (e.code === 'KeyR') {
+      clearResetArm(true);
+      runtimeOp(activePane, e.shiftKey ? 'reentryMinus' : 'reentryPlus');
+      e.preventDefault();
+    } else if (e.code === 'KeyA') {
+      clearResetArm(true);
+      runtimeOp(activePane, e.shiftKey ? 'addOnMinus' : 'addOnPlus');
+      e.preventDefault();
+    } else if (e.code === 'KeyE') {
+      clearResetArm(true);
+      runtimeOp(activePane, e.shiftKey ? 'specialMinus' : 'specialPlus');
+      e.preventDefault();
+    }
     return;
   }
   const k = e.key;
@@ -446,39 +526,41 @@ function handleKeydown(e) {
   }
   if (activePane === null) return;
   switch (k) {
-    case 's': case 'S':
-      clearResetArm(true);
-      opStartImmediate(activePane);
-      e.preventDefault();
-      break;
     case 'c': case 'C':
       clearResetArm(true);
       opStartTimed(activePane);
       e.preventDefault();
       break;
-    case ' ': case 'p': case 'P':
+    case ' ': {
+      // Space = 単一モード忠実のトグル（IDLE→開始タイミング設定に従い開始 / 進行中→一時停止 / PAUSED→再開）
       clearResetArm(true);
-      opTogglePause(activePane);
+      const pane = panes[activePane];
+      const st = (pane && pane.engine) ? pane.engine.computeNow(Date.now()).status : null;
+      if (st === ENGINE_STATUS.IDLE) opStartTimed(activePane);
+      else opTogglePause(activePane);
       e.preventDefault();
       break;
-    case 'ArrowLeft':
+    }
+    case 'ArrowLeft': // ←=30秒戻す（単一と同一）/ Shift+←=レベル戻し（multi 固有・移設先）
       clearResetArm(true);
-      opLevel(activePane, -1);
+      if (e.shiftKey) opLevel(activePane, -1);
+      else opAdjust30(activePane, 30 * 1000);
       e.preventDefault();
       break;
-    case 'ArrowRight':
+    case 'ArrowRight': // →=30秒進める / Shift+→=レベル送り
       clearResetArm(true);
-      opLevel(activePane, 1);
+      if (e.shiftKey) opLevel(activePane, 1);
+      else opAdjust30(activePane, -30 * 1000);
       e.preventDefault();
       break;
-    case 'ArrowUp': // 30秒戻す（残り +30s）。←→=レベル(横) / ↑↓=時間(縦) の対
+    case 'ArrowUp': // ↑=新規エントリー追加 / Shift+↑=取消（単一と同一）
       clearResetArm(true);
-      opAdjust30(activePane, 30 * 1000);
+      runtimeOp(activePane, e.shiftKey ? 'cancelEntry' : 'addEntry');
       e.preventDefault();
       break;
-    case 'ArrowDown': // 30秒進める（残り −30s）
+    case 'ArrowDown': // ↓=プレイヤー脱落 / Shift+↓=復活（単一と同一）
       clearResetArm(true);
-      opAdjust30(activePane, -30 * 1000);
+      runtimeOp(activePane, e.shiftKey ? 'revive' : 'eliminate');
       e.preventDefault();
       break;
     case 'r': case 'R':

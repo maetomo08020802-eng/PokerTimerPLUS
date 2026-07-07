@@ -338,6 +338,65 @@ export function createClockEngine(levels) {
   };
 }
 
+// ===== Phase 2d: runtime 操作の純粋計算（単一モード操作パリティ） =====
+// renderer.js addNewEntry/cancelNewEntry/eliminatePlayer/revivePlayer/adjustReentry/adjustAddOn/
+// adjustSpecialStack（L7833-7982）の増減規則・クランプを忠実に写した純粋関数。
+// 入力 snapshot は変更せず、変更がある場合のみ「runtime / specialStack を新オブジェクトに
+// 差し替えた新 snapshot」を返す。変更なし（クランプ・ガードで弾かれた）は null。
+// ※ transient 設計の核: ここは計算のみで、electron-store への書込経路を一切持たない
+export const RUNTIME_OPS = Object.freeze([
+  'addEntry', 'cancelEntry', 'eliminate', 'revive',
+  'reentryPlus', 'reentryMinus', 'addOnPlus', 'addOnMinus', 'specialPlus', 'specialMinus'
+]);
+
+export function applyRuntimeOp(snapshot, op) {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const rt = snapshot.runtime || {};
+  const initial = Math.max(0, Number(rt.playersInitial) || 0);
+  const remaining = Math.max(0, Number(rt.playersRemaining) || 0);
+  const reentry = Math.max(0, Number(rt.reentryCount) || 0);
+  const addOn = Math.max(0, Number(rt.addOnCount) || 0);
+  const MAX_PLAYERS = 999; // renderer.js addNewEntry と同値
+  const withRuntime = (patch) => ({ ...snapshot, runtime: { ...rt, ...patch } });
+
+  switch (op) {
+    case 'addEntry': // ↑: initial++ かつ remaining++（上限 999）
+      if (initial >= MAX_PLAYERS) return null;
+      return withRuntime({ playersInitial: initial + 1, playersRemaining: remaining + 1 });
+    case 'cancelEntry': // Shift+↑: 両方 --（下限 0）
+      if (initial <= 0) return null;
+      return withRuntime({ playersInitial: initial - 1, playersRemaining: Math.max(0, remaining - 1) });
+    case 'eliminate': // ↓: remaining のみ --（下限 0）
+      if (remaining <= 0) return null;
+      return withRuntime({ playersRemaining: remaining - 1 });
+    case 'revive': // Shift+↓: remaining++（initial を超えない）
+      if (remaining >= initial) return null;
+      return withRuntime({ playersRemaining: remaining + 1 });
+    case 'reentryPlus':
+      return withRuntime({ reentryCount: reentry + 1 });
+    case 'reentryMinus':
+      if (reentry <= 0) return null;
+      return withRuntime({ reentryCount: reentry - 1 });
+    case 'addOnPlus':
+      return withRuntime({ addOnCount: addOn + 1 });
+    case 'addOnMinus':
+      if (addOn <= 0) return null;
+      return withRuntime({ addOnCount: addOn - 1 });
+    case 'specialPlus':
+    case 'specialMinus': {
+      // 特殊スタック適用数 ±1（enabled 時のみ・0〜999 = renderer.js adjustSpecialStack と同値）
+      const ss = snapshot.specialStack;
+      if (!ss || !ss.enabled) return null;
+      const cur = Math.max(0, Number(ss.appliedCount) || 0);
+      const next = Math.max(0, Math.min(999, cur + (op === 'specialPlus' ? 1 : -1)));
+      if (next === cur) return null;
+      return { ...snapshot, specialStack: { ...ss, appliedCount: next } };
+    }
+    default:
+      return null;
+  }
+}
+
 // ===== 表示用の派生計算（renderer.js の同名ロジックの移植・引数化版） =====
 // ※ 二重管理リスクは tests/multi-engine.test.js の同値検証で担保（Phase 0 plan §3 の対処）
 

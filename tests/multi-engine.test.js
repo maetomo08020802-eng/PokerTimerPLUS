@@ -533,6 +533,79 @@ const MIN = 60 * 1000;
     assert.equal(empty.getRecord().status, 'idle');
   });
 
+  // ============================================================
+  // 6. Phase 2d: applyRuntimeOp（runtime 操作の純粋計算・単一モード操作パリティ）
+  //    増減規則・クランプは renderer.js addNewEntry〜adjustSpecialStack（L7833-7982）の仕様値を固定
+  // ============================================================
+  const { applyRuntimeOp } = engineModule;
+  const RT_SNAP = Object.freeze({
+    title: 'テスト',
+    runtime: Object.freeze({ playersInitial: 10, playersRemaining: 8, reentryCount: 2, addOnCount: 1 }),
+    specialStack: Object.freeze({ enabled: true, chips: 5000, appliedCount: 3, label: '早期' })
+  });
+
+  test('applyRuntimeOp: エントリー追加/取消（initial&remaining 同時増減・上限999・下限0）', () => {
+    const added = applyRuntimeOp(RT_SNAP, 'addEntry');
+    assert.equal(added.runtime.playersInitial, 11);
+    assert.equal(added.runtime.playersRemaining, 9, '追加は initial++ かつ remaining++（単一 addNewEntry）');
+    const cancelled = applyRuntimeOp(RT_SNAP, 'cancelEntry');
+    assert.equal(cancelled.runtime.playersInitial, 9);
+    assert.equal(cancelled.runtime.playersRemaining, 7, '取消は両方 --（単一 cancelNewEntry）');
+    // 上限 999
+    const atMax = { ...RT_SNAP, runtime: { ...RT_SNAP.runtime, playersInitial: 999 } };
+    assert.equal(applyRuntimeOp(atMax, 'addEntry'), null, '999 で追加は no-op');
+    // 下限 0
+    const atZero = { ...RT_SNAP, runtime: { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 } };
+    assert.equal(applyRuntimeOp(atZero, 'cancelEntry'), null, 'initial 0 で取消は no-op');
+  });
+
+  test('applyRuntimeOp: 脱落/復活（remaining のみ・下限0・initial を超えない）', () => {
+    const out = applyRuntimeOp(RT_SNAP, 'eliminate');
+    assert.equal(out.runtime.playersRemaining, 7);
+    assert.equal(out.runtime.playersInitial, 10, '脱落は remaining のみ --（単一 eliminatePlayer）');
+    const revived = applyRuntimeOp(RT_SNAP, 'revive');
+    assert.equal(revived.runtime.playersRemaining, 9);
+    const zero = { ...RT_SNAP, runtime: { ...RT_SNAP.runtime, playersRemaining: 0 } };
+    assert.equal(applyRuntimeOp(zero, 'eliminate'), null, 'remaining 0 で脱落は no-op');
+    const full = { ...RT_SNAP, runtime: { ...RT_SNAP.runtime, playersRemaining: 10 } };
+    assert.equal(applyRuntimeOp(full, 'revive'), null, 'remaining=initial で復活は no-op（単一 revivePlayer）');
+  });
+
+  test('applyRuntimeOp: リエントリー/アドオン ±（下限0・変更なしは null）', () => {
+    assert.equal(applyRuntimeOp(RT_SNAP, 'reentryPlus').runtime.reentryCount, 3);
+    assert.equal(applyRuntimeOp(RT_SNAP, 'reentryMinus').runtime.reentryCount, 1);
+    assert.equal(applyRuntimeOp(RT_SNAP, 'addOnPlus').runtime.addOnCount, 2);
+    assert.equal(applyRuntimeOp(RT_SNAP, 'addOnMinus').runtime.addOnCount, 0);
+    const zero = { ...RT_SNAP, runtime: { ...RT_SNAP.runtime, reentryCount: 0, addOnCount: 0 } };
+    assert.equal(applyRuntimeOp(zero, 'reentryMinus'), null, 'リエントリー 0 で −1 は no-op（単一 adjustReentry）');
+    assert.equal(applyRuntimeOp(zero, 'addOnMinus'), null);
+  });
+
+  test('applyRuntimeOp: 特殊スタック ±（enabled 時のみ・0〜999 クランプ）', () => {
+    assert.equal(applyRuntimeOp(RT_SNAP, 'specialPlus').specialStack.appliedCount, 4);
+    assert.equal(applyRuntimeOp(RT_SNAP, 'specialMinus').specialStack.appliedCount, 2);
+    const disabled = { ...RT_SNAP, specialStack: { ...RT_SNAP.specialStack, enabled: false } };
+    assert.equal(applyRuntimeOp(disabled, 'specialPlus'), null, '無効時は no-op（単一 adjustSpecialStack）');
+    const at999 = { ...RT_SNAP, specialStack: { ...RT_SNAP.specialStack, appliedCount: 999 } };
+    assert.equal(applyRuntimeOp(at999, 'specialPlus'), null, '999 で +1 は no-op');
+    const at0 = { ...RT_SNAP, specialStack: { ...RT_SNAP.specialStack, appliedCount: 0 } };
+    assert.equal(applyRuntimeOp(at0, 'specialMinus'), null, '0 で −1 は no-op');
+  });
+
+  test('applyRuntimeOp: 純粋関数（入力 snapshot を変更しない・他フィールドは共有維持）', () => {
+    const before = JSON.stringify(RT_SNAP);
+    const out = applyRuntimeOp(RT_SNAP, 'addEntry');
+    assert.equal(JSON.stringify(RT_SNAP), before, '入力が変更された（freeze 下で throw もしない）');
+    assert.notEqual(out.runtime, RT_SNAP.runtime, 'runtime は新オブジェクト');
+    assert.equal(out.title, 'テスト', '他フィールドは引き継がれる');
+  });
+
+  test('applyRuntimeOp: 防御（不正 op / 不正 snapshot は null）', () => {
+    assert.equal(applyRuntimeOp(RT_SNAP, 'unknownOp'), null);
+    assert.equal(applyRuntimeOp(null, 'addEntry'), null);
+    assert.equal(applyRuntimeOp(undefined, 'addEntry'), null);
+  });
+
   test('同値検証: prestart 0 着地後のレベル・残時間が computeLiveTimerState（着地時刻起点）と一致', () => {
     const factory = extractComputeLiveTimerState();
     const T0 = 1_700_000_000_000;

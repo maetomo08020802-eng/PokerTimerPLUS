@@ -64,6 +64,11 @@
     .mc-pane__status-level { font-size: 15px; color: #4FC3F7; letter-spacing: 0.08em; }
     .mc-pane__status-state { font-size: 13px; color: #ffc857; letter-spacing: 0.06em; }
     .mc-pane__buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+    /* Phase 2d: runtime（人数・リエントリー等）の現在値表示 + 調整ボタン副次行（主操作行は不変） */
+    .mc-pane__rt-status { font-size: 12px; font-weight: 700; color: #B0BEC5; font-variant-numeric: tabular-nums; min-height: 15px; }
+    .mc-pane__runtime-row { display: flex; flex-wrap: wrap; gap: 4px; }
+    .mc-pane[data-assigned="false"] .mc-pane__rt-status,
+    .mc-pane[data-assigned="false"] .mc-pane__runtime-row { display: none; }
     .mc-btn {
       font-family: inherit; font-weight: 700; font-size: 13px;
       border: none; border-radius: 4px; padding: 7px 12px; cursor: pointer;
@@ -95,7 +100,7 @@
   <header class="mc-header">
     <div>
       <div class="mc-title">マルチ表示 操作盤（4分割）</div>
-      <div class="mc-note">巨大スクリーン側は表示専用です。各区画は完全に独立して動きます（休憩スライドショー・音・テロップはこのモードでは無効）。<br>キーボード操作: <b>1〜4</b> で区画を選択 / <b>H</b> でキー一覧（グリッド上に表示）。複製（ミラー）1台運用は「グリッドを前面に」からキーボードで操作できます。<br>※ <b>←→キーはレベル単位</b>、<b>↑↓キーは30秒単位</b>（↑=30秒戻す / ↓=30秒進める）で動きます。操作対象の区画は下の表示とグリッド左上の「操作中」バッジで確認できます。</div>
+      <div class="mc-note">巨大スクリーン側は表示専用です。各区画は完全に独立して動きます（休憩スライドショー・音・テロップはこのモードでは無効）。<br>キーボード操作は単一表示と同じ割当です: <b>↑↓</b>=エントリー追加/脱落（+Shift で取消/復活）・<b>←→</b>=30秒戻す/進める・<b>Ctrl+R/A/E</b>=リエントリー/アドオン/特殊スタック±。レベル送り戻しは <b>Shift+←→</b>。<b>1〜4</b> で区画を選択 / <b>H</b> でキー一覧（グリッド上）。複製（ミラー）1台運用は「グリッドを前面に」から。<br>※ 人数等の増減はこのモード中のみ反映され、保存はされません（単一表示側の保存値は変わりません）。操作対象の区画は下の表示とグリッド左上の「操作中」バッジで確認できます。</div>
       <div class="mc-kb-target" id="js-mc-kb-target">キーボード操作対象: 未選択（1〜4 キーで選択）</div>
     </div>
     <div style="display:flex; flex-direction:column; gap:6px; align-items:stretch;">
