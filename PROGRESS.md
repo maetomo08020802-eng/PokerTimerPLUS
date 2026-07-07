@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-07** — multi-tournament-4up **Phase 2+2b(区画独立PRE_START+キーボード保険+フィラー拡充+実機FB=操作対象視認性/キー案内)実装完了・前原実機確認待ち**(`feature/multi-tournament-4up-phase2`・前原GOまでmainへpushしない)。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチモードは未配信機能・単一モード非接触)・テスト**1480件**全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-07** — multi-tournament-4up **Phase 2+2b+2c(区画独立PRE_START+キーボード保険+フィラー拡充+実機FB=視認性/±30秒搭載)実装完了・前原実機確認待ち**(`feature/multi-tournament-4up-phase2`・前原GOまでmainへpushしない)。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチモードは未配信機能・単一モード非接触)・テスト**1490件**全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| multi-tournament-4up Phase 2+2b(独立PRE_START+キーボード保険+フィラー拡充+実機FB対応) | 🟡 実装完了・前原実機確認待ち | report `.cc-reports/2026-07-07_multi-tournament-4up_phase2.md`+`..._phase2b-keyboard-ux.md` / branch `feature/multi-tournament-4up-phase2`(`6748195`+`811b92d`) |
+| multi-tournament-4up Phase 2+2b+2c(独立PRE_START+キーボード保険+フィラー拡充+実機FB 2弾対応) | 🟡 実装完了・前原実機確認待ち | report `.cc-reports/2026-07-07_multi-tournament-4up_phase2.md`+`..._phase2b-keyboard-ux.md`+`..._phase2c-highlight-30s.md` / branch `feature/multi-tournament-4up-phase2`(`6748195`+`811b92d`+`5bbdfba`) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,16 +52,16 @@
 | 配信済リリース | 15件(v1.0.0〜v2.6.6)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件(安定運用フェーズ)|
-| 最新テスト件数 | 1480件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3) |
+| 最新テスト件数 | 1490件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `feature/multi-tournament-4up-phase2`(feat `6748195`+`811b92d`+docs)。`main` は `1512cac`+docs のまま・**前原 GO まで main merge/push しない**。配信は tag `v2.6.6`(Latest・自動更新有効)のまま(マルチモードは未配信機能)。
-- **直前作業(2026-07-07)**: multi **Phase 2**(区画独立PRE_START・キーボード保険・フィラー拡充=完了review承認済)+**Phase 2b**(前原実機FB対応=grid選択区画にトーナメント名バッジ・操作盤に操作対象表示+ハイライト・ヘルプに「←→はレベル単位/30秒調整なし」明記。表示/文言のみ・キー割当/エンジン不変)。単一モード diff ゼロ・致命5件非接触・テスト1480件全PASS。report `.cc-reports/2026-07-07_multi-tournament-4up_phase2.md` + `..._phase2b-keyboard-ux.md`。
-- **次のアクション**: phase2b 完了review(cc-review2)→前原実機確認(2b: バッジ/対象表示の一目判別・ヘルプ注記 + 2 の残り4項目)→**±30秒調整をマルチに足すかの product 判断**(GO なら Phase 3 で別brief)→GO なら main merge→Phase 3(仕上げ・堅牢化・配信/roadmap §5)。**推測着手禁止**。
+- **git**: `feature/multi-tournament-4up-phase2`(feat `6748195`+`811b92d`+`5bbdfba`+docs)。`main` は `1512cac`+docs のまま・**前原 GO まで main merge/push しない**。配信は tag `v2.6.6`(Latest・自動更新有効)のまま(マルチモードは未配信機能)。
+- **直前作業(2026-07-07)**: multi **Phase 2**(区画独立PRE_START・キーボード保険・フィラー拡充)+**2b**(操作対象バッジ/対象表示/キー案内)+**2c**(前原実機FB第2弾=選択枠をオレンジ #FFB300 太枠1.2cqwへ強化・**±30秒微調整をマルチ搭載**=engine adjustTimeBy(単一モード忠実)+ボタン+↑↓キー)。2/2b は完了review承認済・2c は review 実行中→承認待ち。単一モード diff ゼロ・致命5件非接触・テスト1490件全PASS。report 3本 `.cc-reports/2026-07-07_multi-tournament-4up_phase2*.md`。
+- **次のアクション**: phase2c 完了review→前原実機確認(2c: 選択枠の視認性・±30秒の体感 / 2: カウントダウン・フィラー・4K滑らかさ)→GO なら main merge→Phase 3(仕上げ・堅牢化・配信/roadmap §5)。**推測着手禁止**。
 
 ---
 
