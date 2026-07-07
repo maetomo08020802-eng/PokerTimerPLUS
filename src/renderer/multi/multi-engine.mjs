@@ -101,18 +101,70 @@ export function computePaneNow(record, levels, nowMs) {
   return computeRunningNow(levels, idx, record.endAtMs - nowMs);
 }
 
+// ===== Phase 2e: セッション復帰（停電・クラッシュ）用の純粋計算 =====
+
+// 復元入力（セッションファイル由来の record）の防御的検証。不正・欠落は安全側の idle を返す。
+export function sanitizeRecord(record, levels) {
+  const idleRecord = { status: ENGINE_STATUS.IDLE, currentLevelIndex: 0, endAtMs: null, pausedRemainingMs: null, preStartTotalMs: null };
+  if (!record || typeof record !== 'object') return idleRecord;
+  const validStatuses = [ENGINE_STATUS.IDLE, ENGINE_STATUS.PRESTART, ENGINE_STATUS.RUNNING, ENGINE_STATUS.PAUSED, ENGINE_STATUS.FINISHED];
+  if (!validStatuses.includes(record.status)) return idleRecord;
+  const num = (v) => (Number.isFinite(v) ? v : null);
+  const rec = {
+    status: record.status,
+    currentLevelIndex: clampLevelIndex(levels, record.currentLevelIndex),
+    endAtMs: num(record.endAtMs),
+    pausedRemainingMs: num(record.pausedRemainingMs),
+    preStartTotalMs: (Number.isFinite(record.preStartTotalMs) && record.preStartTotalMs > 0) ? Math.floor(record.preStartTotalMs) : null
+  };
+  // 状態に必要なフィールドが欠けている record は復元しない（安全側 idle）
+  if ((rec.status === ENGINE_STATUS.RUNNING || rec.status === ENGINE_STATUS.PRESTART) && rec.endAtMs === null) return idleRecord;
+  if (rec.status === ENGINE_STATUS.PAUSED && (rec.pausedRemainingMs === null || rec.pausedRemainingMs < 0)) return idleRecord;
+  if (rec.status === ENGINE_STATUS.PRESTART) rec.currentLevelIndex = 0;
+  return rec;
+}
+
+// 停電・クラッシュ復帰: 進行中（running / prestart）の record を「書出し時点（savedAtMs）で
+// 一時停止した状態」へ変換する（brief C の (b) 採用）。
+//   - remaining = endAtMs − savedAtMs（0 未満は 0 クランプ・レベルは前進させない = 勝手に進めない安全側）
+//   - prestart は preStartTotalMs を維持 = 再開でカウントダウンへ復帰
+//   - idle / paused / finished は不変（時計を進めない）
+// 壁時計継続（停電中も進んだ扱い）は不採用。main プロセスからも動的 import で共用（二重実装回避）。
+export function toPowerLossPausedRecord(record, savedAtMs) {
+  if (!record || typeof record !== 'object') return record;
+  if (record.status !== ENGINE_STATUS.RUNNING && record.status !== ENGINE_STATUS.PRESTART) {
+    return { ...record };
+  }
+  const saved = Number(savedAtMs);
+  const remaining = (Number.isFinite(record.endAtMs) && Number.isFinite(saved))
+    ? Math.max(0, record.endAtMs - saved) : 0;
+  return {
+    status: ENGINE_STATUS.PAUSED,
+    currentLevelIndex: record.status === ENGINE_STATUS.PRESTART ? 0 : (Number.isFinite(record.currentLevelIndex) ? record.currentLevelIndex : 0),
+    endAtMs: null,
+    pausedRemainingMs: remaining,
+    preStartTotalMs: record.status === ENGINE_STATUS.PRESTART
+      ? ((Number.isFinite(record.preStartTotalMs) && record.preStartTotalMs > 0) ? record.preStartTotalMs : null)
+      : null
+  };
+}
+
 // 区画1つぶんの独立時計エンジンを生成する。
 // levels は生成時に固定（区画への割当 = エンジン再生成。途中差し替えはしない設計）。
 // record はクロージャ内に閉じ、外部へは getRecord() のコピー経由でのみ公開（共有可変状態ゼロ）。
-export function createClockEngine(levels) {
+// Phase 2e: 第2引数 initialRecord（省略可・後方互換）= セッション復帰時の再構築用 seed。
+//   sanitizeRecord を通して防御的に受け入れる（不正入力は idle）。
+export function createClockEngine(levels, initialRecord) {
   const _levels = Array.isArray(levels) ? levels.slice() : [];
-  let record = {
-    status: ENGINE_STATUS.IDLE,
-    currentLevelIndex: 0,
-    endAtMs: null,
-    pausedRemainingMs: null,
-    preStartTotalMs: null
-  };
+  let record = (initialRecord !== undefined && initialRecord !== null)
+    ? sanitizeRecord(initialRecord, _levels)
+    : {
+      status: ENGINE_STATUS.IDLE,
+      currentLevelIndex: 0,
+      endAtMs: null,
+      pausedRemainingMs: null,
+      preStartTotalMs: null
+    };
 
   function isPreStartRecord() {
     return Number.isFinite(record.preStartTotalMs) && record.preStartTotalMs > 0;

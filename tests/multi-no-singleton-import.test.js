@@ -328,5 +328,39 @@ test('phase2d: キー割当の単一モード整合（S 即時スタート廃止
 });
 
 // ============================================================
+// 11. Phase 2e: 停電・クラッシュ復帰（一時セッションファイル）
+//    前提変更: main.js multi ブロックへの fs 書出しは許容。ただし store 書込ゼロ
+//    （store.set 不使用＝テスト 3 の既存 assert）と単一経路・preload 非接触は維持
+// ============================================================
+test('phase2e: セッションファイルの配線（専用ファイル・savedAtMs・tmp+rename・正常終了/quit 削除）', () => {
+  const m = MAIN.match(/\/\/ ===== multi-tournament-4up Phase 1[\s\S]*?registerMultiIpcHandlers\(\);/);
+  assert.ok(m, 'main.js に multi ブロックが見つからない');
+  const b = m[0];
+  assert.ok(b.includes('multi-session.json'), '専用セッションファイル名がない');
+  assert.ok(b.includes('savedAtMs'), 'savedAtMs（PAUSED 復元の基準時刻）がない');
+  assert.ok(b.includes('MULTI_SESSION_SCHEMA'), 'スキーマ版数がない');
+  assert.ok(/\.tmp/.test(b) && /rename\(/.test(b), 'tmp+rename の書出しでない（電源断中の破損対策）');
+  // 「残存＝異常終了」signal の健全性: 正常終了は exitMultiMode で削除（マルチ在席中のアプリ終了も
+  // closed → exitMultiMode 連鎖で網羅）。will-quit には登録しない（v2.0.3 P4 の 1 ハンドラ統合を維持 +
+  // マルチ未使用のアプリ終了で復元機会を消さない）
+  assert.ok(/_multiModeActive = false;[\s\S]{0,200}_deleteMultiSession\(\)/.test(b), 'exitMultiMode での削除がない');
+  assert.ok(!/app\.on\('will-quit'/.test(b), 'multi ブロックが will-quit に登録している（P4 統合違反）');
+  // 破損・版数不一致は復元せず破棄（安全側）
+  assert.ok(b.includes('_readMultiSession'), 'セッション読取（検証付き）がない');
+});
+
+test('phase2e: 復元計算はエンジンの純粋関数を main/control で共用（二重実装なし・preload 無改変）', () => {
+  assert.ok(code['multi-engine.mjs'].includes('toPowerLossPausedRecord'), 'エンジンに PAUSED 復元計算がない');
+  assert.ok(code['multi-engine.mjs'].includes('sanitizeRecord'), 'エンジンに復元入力の防御検証がない');
+  const b = MAIN.match(/\/\/ ===== multi-tournament-4up Phase 1[\s\S]*?registerMultiIpcHandlers\(\);/)[0];
+  assert.ok(b.includes('toPowerLossPausedRecord'), 'main が復元計算を共用していない');
+  assert.ok(!/function toPowerLossPausedRecord/.test(MAIN), 'main に復元計算の二重実装がある');
+  assert.ok(code['multi-control.js'].includes('restorePanesFromInit'), 'control に復元再構築がない');
+  assert.ok(code['multi-control.js'].includes('assignRuntime: pane.assignRuntime'),
+    'publish payload に assignRuntime（リセット復帰先）がない');
+  assert.ok(!PRELOAD.includes('multi-session'), 'preload にセッション関連が漏れている（無改変原則）');
+});
+
+// ============================================================
 console.log(`\n=== Summary: ${pass} passed / ${fail} failed ===`);
 process.exit(fail === 0 ? 0 : 1);

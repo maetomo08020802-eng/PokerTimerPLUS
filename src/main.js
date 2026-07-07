@@ -1943,6 +1943,74 @@ function _resetMultiPaneCache() {
   _multiUiCache = null;
 }
 
+// ----- Phase 2e: 停電・クラッシュ復帰用の一時セッションファイル -----
+//   保存先は electron-store の config とは別の専用ファイル（store.set 不使用 = store 書込ゼロ原則を維持。
+//   単一モードの tournaments / runtime 永続化 8 箇所には一切触れない）。
+//   「ファイルが残存 = 異常終了」を signal にする: 正常終了（exitMultiMode / アプリ正常 quit）では必ず削除し、
+//   電源断・クラッシュ・タスクキルでは削除経路が走らないため残存する。恒久保存機能ではない。
+const { pathToFileURL } = require('url');
+const MULTI_SESSION_SCHEMA = 1;
+let _multiSessionSaveTimer = null;
+
+function _multiSessionPath() {
+  return path.join(app.getPath('userData'), 'multi-session.json');
+}
+
+// publish（edge イベント）相乗りの debounce 書出し（1 秒。大会中の高頻度操作でも I/O を張り付かせない）
+function _scheduleMultiSessionSave() {
+  if (!_multiModeActive || _multiSessionSaveTimer) return;
+  _multiSessionSaveTimer = setTimeout(() => {
+    _multiSessionSaveTimer = null;
+    _writeMultiSession();
+  }, 1000);
+}
+
+async function _writeMultiSession() {
+  if (!_multiModeActive) return;
+  const file = _multiSessionPath();
+  const tmp = file + '.tmp';
+  try {
+    const payload = JSON.stringify({
+      schema: MULTI_SESSION_SCHEMA,
+      savedAtMs: Date.now(),
+      panes: _multiPaneCache,
+      ui: _multiUiCache
+    });
+    // tmp へ書いて rename（書込中の電源断でも旧ファイルが生存。中途破損は parse 失敗 → 復元せず破棄の網にかかる）
+    await fs.promises.writeFile(tmp, payload, 'utf8');
+    await fs.promises.rename(tmp, file);
+  } catch (_) { /* 書出し失敗は無視（次の debounce で再試行） */ }
+}
+
+function _deleteMultiSession() {
+  if (_multiSessionSaveTimer) {
+    clearTimeout(_multiSessionSaveTimer);
+    _multiSessionSaveTimer = null;
+  }
+  try { fs.unlinkSync(_multiSessionPath()); } catch (_) { /* 不在なら無視 */ }
+  try { fs.unlinkSync(_multiSessionPath() + '.tmp'); } catch (_) { /* 不在なら無視 */ }
+}
+
+// 残存セッションの読取（破損 / スキーマ版数不一致は null = 復元せず破棄する安全側）
+function _readMultiSession() {
+  try {
+    const raw = fs.readFileSync(_multiSessionPath(), 'utf8');
+    const data = JSON.parse(raw);
+    if (!data || data.schema !== MULTI_SESSION_SCHEMA || !Array.isArray(data.panes) || !Number.isFinite(data.savedAtMs)) {
+      return null;
+    }
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+// 削除経路は exitMultiMode（+ 復元確認での「破棄」/ 破損検出）に限定する設計。
+//   - マルチ在席中のアプリ終了は closed ハンドラ → exitMultiMode 連鎖で削除される（正常終了網羅）。
+//   - マルチ未使用のアプリ起動 / 終了ではファイルに触れない = 停電後に一度単一モードだけ使って
+//     終了しても復元機会が消えない（unconditional な will-quit 削除はこれを壊すため置かない。
+//     will-quit は v2.0.3 P4 で 1 ハンドラに統合済＝単一モード経路のため触れない）。
+
 // 会場側 2×2 グリッドウィンドウ（createHallWindow の配置パターンを踏襲した新関数）
 function createMultiGridWindow(targetDisplay) {
   if (multiGridWindow && !multiGridWindow.isDestroyed()) {
@@ -2042,6 +2110,32 @@ async function enterMultiMode() {
   if (_dualStateCache.preStartState && _dualStateCache.preStartState.isActive) {
     return { ok: false, reason: 'pre-start-active' };
   }
+  // Phase 2e: 異常終了セッションの検出と復元確認（picker 前）。
+  //   破損 / 版数不一致は確認を出さず破棄して新規開始（安全側）。
+  //   キャンセル = マルチ開始自体を中止しファイルは温存（誤操作で復元機会を失わない）。
+  let _restoreSession = null;
+  try {
+    if (fs.existsSync(_multiSessionPath())) {
+      const data = _readMultiSession();
+      if (!data) {
+        _deleteMultiSession();
+      } else {
+        const choice = dialog.showMessageBoxSync(mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined, {
+          type: 'question',
+          title: 'マルチ表示の復元',
+          message: '前回のマルチ表示が正常に終了しませんでした。直前の状態を復元しますか？',
+          detail: '復元すると、各区画は前回終了時点の残り時間で一時停止した状態で戻ります（再開はスペースキー / 一時停止ボタンから）。',
+          buttons: ['復元する', '破棄して新規で始める', 'キャンセル'],
+          defaultId: 0,
+          cancelId: 2,
+          noLink: true
+        });
+        if (choice === 2) return { ok: false, reason: 'restore-cancelled' };
+        if (choice === 1) _deleteMultiSession();
+        else _restoreSession = data;
+      }
+    }
+  } catch (_) { /* 検出失敗時は新規開始 */ }
   _multiTransitioning = true;
   try {
     // グリッド表示モニターの選択（2 画面以上なら picker = 既存 chooseHallDisplayInteractive を呼ぶだけ。
@@ -2055,6 +2149,25 @@ async function enterMultiMode() {
     }
     _multiModeActive = true;
     _resetMultiPaneCache();
+    // Phase 2e: 復元 prime。engine record はここで「書出し時点で一時停止」へ変換してから配る
+    //   （grid / control とも最初から止まった時計を受け取る = 跳んだ時計を一瞬も見せない）。
+    //   変換ロジックは multi-engine.mjs の純粋関数を動的 import で共用（二重実装を作らない）。
+    if (_restoreSession) {
+      try {
+        const engineMod = await import(pathToFileURL(path.join(__dirname, 'renderer', 'multi', 'multi-engine.mjs')).href);
+        for (let i = 0; i < _multiPaneCache.length; i++) {
+          const p = _restoreSession.panes[i];
+          if (!p || typeof p !== 'object') continue;
+          const pane = { ...p };
+          if (pane.engine) pane.engine = engineMod.toPowerLossPausedRecord(pane.engine, _restoreSession.savedAtMs);
+          _multiPaneCache[i] = pane;
+        }
+        _multiUiCache = (_restoreSession.ui && typeof _restoreSession.ui === 'object') ? _restoreSession.ui : null;
+        try { rollingLog('multi:session-restored', { savedAtMs: _restoreSession.savedAtMs }); } catch (_) { /* ignore */ }
+      } catch (_) {
+        _resetMultiPaneCache(); // 復元失敗は新規開始（安全側）
+      }
+    }
     // 既存 hall は閉じる（dual broadcast は hallWindow null で自動 no-op = 既存 STEP 2 設計）
     if (hallWindow && !hallWindow.isDestroyed()) {
       try { hallWindow.close(); } catch (_) { /* ignore */ }
@@ -2083,6 +2196,7 @@ async function exitMultiMode() {
   _multiTransitioning = true;
   try {
     _multiModeActive = false; // 先に落とす = close 連鎖（closed ハンドラ）の再入を構造的に防ぐ
+    _deleteMultiSession();    // Phase 2e: 正常終了 = セッションファイル削除（恒久保存しない）
     const gw = multiGridWindow; multiGridWindow = null;
     const cw = multiControlWindow; multiControlWindow = null;
     if (gw && !gw.isDestroyed()) { try { gw.close(); } catch (_) { /* ignore */ } }
@@ -2132,6 +2246,7 @@ function registerMultiIpcHandlers() {
     } else {
       return;
     }
+    _scheduleMultiSessionSave(); // Phase 2e: edge イベント相乗りの debounce 書出し（停電復帰用）
     if (multiGridWindow && !multiGridWindow.isDestroyed()) {
       try { multiGridWindow.webContents.send('multi:state-sync', payload); } catch (_) { /* ignore */ }
     }

@@ -104,7 +104,10 @@ function publishPane(index) {
         assigned: !!pane.snapshot,
         filler: pane.filler,
         snapshot: pane.snapshot,
-        engine: pane.engine ? pane.engine.getRecord() : null
+        engine: pane.engine ? pane.engine.getRecord() : null,
+        // Phase 2e: リセット=割当値復帰の復帰先もセッション復帰で失わないよう payload に含める
+        //（grid は未使用フィールドとして無害・main のセッションファイル経由で復元される）
+        assignRuntime: pane.assignRuntime || null
       }
     }
   };
@@ -366,6 +369,8 @@ function buildPaneUI(index) {
   pane.els.next.addEventListener('click', () => opLevel(index, 1));
   pane.els.back30.addEventListener('click', () => opAdjust30(index, 30 * 1000));
   pane.els.fwd30.addEventListener('click', () => opAdjust30(index, -30 * 1000));
+  pane.refreshFillerControls = refreshFillerControls; // Phase 2e: セッション復帰時の UI 同期用に公開
+
   pane.els.reset.addEventListener('click', () => {
     if (!pane.engine) return;
     // 誤操作防止の確認（この区画だけがリセットされる = 他区画非影響）。
@@ -579,6 +584,61 @@ function handleKeydown(e) {
   }
 }
 
+// Phase 2e: 停電・クラッシュ復帰。main が復元 prime 済なら、初期 state（既存 fetchInitialState
+// = multi:state-sync-init の流用・新 IPC なし）から各区画の割当・engine・フィラーを再構築する。
+// engine record は main 側で「書出し時点の一時停止」へ変換済（toPowerLossPausedRecord）。
+async function restorePanesFromInit() {
+  let init = null;
+  try { init = await window.api?.multi?.fetchInitialState?.(); } catch (_) { return; }
+  const initPanes = Array.isArray(init?.panes) ? init.panes : [];
+  initPanes.forEach((p, i) => {
+    const pane = panes[i];
+    if (!pane || !p || typeof p !== 'object') return;
+    // フィラー設定の復元（未割当区画にも適用）+ 入力 UI の同期
+    if (p.filler && typeof p.filler === 'object') {
+      pane.filler = {
+        kind: FILLER_KINDS.has(p.filler.kind) ? p.filler.kind : 'blank',
+        imagePath: typeof p.filler.imagePath === 'string' ? p.filler.imagePath : '',
+        text: typeof p.filler.text === 'string' ? p.filler.text : ''
+      };
+      pane.els.filler.value = pane.filler.kind;
+      pane.els.fillerText.value = pane.filler.text;
+      pane.refreshFillerControls();
+    }
+    if (!p.assigned || !p.snapshot) return;
+    pane.snapshot = p.snapshot;
+    pane.tournamentId = p.snapshot.id || null;
+    pane.engine = createClockEngine(p.snapshot.levels || [], p.engine || null);
+    pane.assignRuntime = (p.assignRuntime && typeof p.assignRuntime === 'object') ? p.assignRuntime : {
+      runtime: { ...(p.snapshot.runtime || {}) },
+      specialApplied: Number(p.snapshot.specialStack?.appliedCount) || 0
+    };
+    // 割当プルダウンの復元。元トーナメントが削除済みなら「（復元）」option を追補して選択状態を再現
+    if (pane.tournamentId) {
+      pane.els.select.value = pane.tournamentId;
+      if (pane.els.select.value !== pane.tournamentId) {
+        const opt = document.createElement('option');
+        opt.value = pane.tournamentId;
+        opt.textContent = `${p.snapshot.title || '(名称未設定)'}（復元）`;
+        pane.els.select.appendChild(opt);
+        pane.els.select.value = pane.tournamentId;
+      }
+    }
+    const spEnabled = !!p.snapshot.specialStack?.enabled;
+    pane.els.rtSpPlus.hidden = !spEnabled;
+    pane.els.rtSpMinus.hidden = !spEnabled;
+    pane.root.dataset.assigned = 'true';
+    refreshPaneStatus(pane);
+  });
+  // キーボード UI 状態（選択区画・ヘルプ表示）の復元 → grid へも再同期
+  if (init?.ui && typeof init.ui === 'object') {
+    const a = init.ui.activePane;
+    activePane = (Number.isInteger(a) && a >= 0 && a < PANE_COUNT) ? a : null;
+    helpVisible = !!init.ui.helpVisible;
+    publishUi();
+  }
+}
+
 async function init() {
   try {
     tournaments = (await window.api.tournaments.list()) || [];
@@ -594,8 +654,11 @@ async function init() {
       pane.els.select.appendChild(opt);
     }
     panes.push(pane);
-    publishPane(i); // 初期状態（空き区画 = 無地）を grid に通知
   }
+  // Phase 2e: 復元（あれば）→ その後に現状態を publish（復元なしなら従来どおり空き区画を通知。
+  //   Phase 1 の「buildPaneUI 直後に publish」は復元 prime を空 pane で上書きするため、fetch 後に移動）
+  await restorePanesFromInit();
+  for (let i = 0; i < PANE_COUNT; i++) publishPane(i);
   exitBtn.addEventListener('click', () => {
     try { window.api?.multi?.exit?.(); } catch (_) { /* main 側で window close される */ }
   });

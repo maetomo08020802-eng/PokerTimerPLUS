@@ -606,6 +606,73 @@ const MIN = 60 * 1000;
     assert.equal(applyRuntimeOp(undefined, 'addEntry'), null);
   });
 
+  // ============================================================
+  // 7. Phase 2e: セッション復帰（停電・クラッシュ）の純粋計算
+  // ============================================================
+  const { toPowerLossPausedRecord, sanitizeRecord } = engineModule;
+
+  test('復帰: running は書出し時点で PAUSED 化（remaining=endAtMs−savedAtMs・0クランプ・レベル非前進）', () => {
+    const rec = { status: 'running', currentLevelIndex: 2, endAtMs: 1_000_000 + 7 * MIN, pausedRemainingMs: null, preStartTotalMs: null };
+    const out = toPowerLossPausedRecord(rec, 1_000_000);
+    assert.equal(out.status, 'paused');
+    assert.equal(out.currentLevelIndex, 2, 'レベル維持');
+    assert.equal(out.pausedRemainingMs, 7 * MIN, '書出し時点の残り時間で停止');
+    // 停電中にそのレベルの残りが尽きていた場合: 0 クランプ・勝手にレベルを進めない（安全側）
+    const expired = toPowerLossPausedRecord(rec, 1_000_000 + 30 * MIN);
+    assert.equal(expired.status, 'paused');
+    assert.equal(expired.currentLevelIndex, 2, 'レベル非前進');
+    assert.equal(expired.pausedRemainingMs, 0);
+  });
+
+  test('復帰: prestart は preStartTotalMs 維持で PAUSED 化 → resume でカウントダウンへ復帰', () => {
+    const rec = { status: 'prestart', currentLevelIndex: 0, endAtMs: 5_000_000 + 4 * MIN, pausedRemainingMs: null, preStartTotalMs: 10 * MIN };
+    const out = toPowerLossPausedRecord(rec, 5_000_000);
+    assert.equal(out.status, 'paused');
+    assert.equal(out.pausedRemainingMs, 4 * MIN);
+    assert.equal(out.preStartTotalMs, 10 * MIN, 'prestart 由来の印を維持');
+    const e = createClockEngine(LEVELS, out);
+    const now = e.computeNow(9_000_000);
+    assert.equal(now.status, ENGINE_STATUS.PAUSED);
+    assert.equal(now.preStart, true, '復元後も「スタートまで」表示系で描画される');
+    e.resume(9_000_000);
+    const resumed = e.computeNow(9_000_000 + 1 * MIN);
+    assert.equal(resumed.status, ENGINE_STATUS.PRESTART, '再開でカウントダウンへ復帰');
+    assert.equal(resumed.remainingMs, 3 * MIN);
+  });
+
+  test('復帰: idle / paused / finished は不変（時計を進めない）', () => {
+    for (const rec of [
+      { status: 'idle', currentLevelIndex: 0, endAtMs: null, pausedRemainingMs: null, preStartTotalMs: null },
+      { status: 'paused', currentLevelIndex: 1, endAtMs: null, pausedRemainingMs: 5 * MIN, preStartTotalMs: null },
+      { status: 'finished', currentLevelIndex: 4, endAtMs: null, pausedRemainingMs: null, preStartTotalMs: null }
+    ]) {
+      assert.deepEqual(toPowerLossPausedRecord(rec, 123_456), rec, `${rec.status} は不変`);
+    }
+  });
+
+  test('復帰: createClockEngine(levels, record) の round-trip 決定論（seed→同一状態→再開続行可）', () => {
+    const src = createClockEngine(LEVELS);
+    src.start(1_000_000);
+    src.pause(1_000_000 + 3 * MIN); // Level 1 残 17 分で停止
+    const saved = src.getRecord();
+    const restored = createClockEngine(LEVELS, saved);
+    assert.deepEqual(restored.getRecord(), saved, '同一 record を導出（決定論）');
+    assert.deepEqual(restored.computeNow(2_000_000), src.computeNow(2_000_000), '派生状態も一致');
+    restored.resume(2_000_000);
+    assert.equal(restored.computeNow(2_000_000 + 1 * MIN).remainingMs, 16 * MIN, '再開して続行できる');
+  });
+
+  test('復帰: sanitizeRecord は不正入力を安全側 idle に・第2引数省略は後方互換', () => {
+    assert.equal(sanitizeRecord(null, LEVELS).status, 'idle');
+    assert.equal(sanitizeRecord({ status: 'bogus' }, LEVELS).status, 'idle');
+    assert.equal(sanitizeRecord({ status: 'running', endAtMs: 'x' }, LEVELS).status, 'idle', 'running の endAtMs 欠落は idle');
+    assert.equal(sanitizeRecord({ status: 'paused' }, LEVELS).status, 'idle', 'paused の残時間欠落は idle');
+    const clamped = sanitizeRecord({ status: 'paused', currentLevelIndex: 99, pausedRemainingMs: 5 * MIN }, LEVELS);
+    assert.equal(clamped.currentLevelIndex, LEVELS.length - 1, 'レベル index はクランプ');
+    const e = createClockEngine(LEVELS);
+    assert.equal(e.getRecord().status, 'idle', '第2引数省略は従来どおり idle 初期化');
+  });
+
   test('同値検証: prestart 0 着地後のレベル・残時間が computeLiveTimerState（着地時刻起点）と一致', () => {
     const factory = extractComputeLiveTimerState();
     const T0 = 1_700_000_000_000;
