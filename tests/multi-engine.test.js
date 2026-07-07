@@ -238,6 +238,213 @@ const MIN = 60 * 1000;
     assert.equal(computeNextBreakMsFor(LEVELS, 4, 10 * MIN), null, '以降に break が無ければ null');
   });
 
+  // ============================================================
+  // 4. Phase 2: PRE_START（区画独立の開始前カウントダウン）
+  // ============================================================
+  const { formatPreStartClock, computeTotalGameTimeMsFor } = engineModule;
+
+  test('prestart: idle からのみ起動・レベル 0 固定・派生は preStart フラグ付き', () => {
+    const T0 = 3_000_000;
+    const e = createClockEngine(LEVELS);
+    e.advanceLevel(1, T0); // idle で表示位置を Level 2 へ動かしても
+    e.startPreStart(5 * MIN, T0);
+    const rec = e.getRecord();
+    assert.equal(rec.status, 'prestart');
+    assert.equal(rec.currentLevelIndex, 0, 'プレスタートはレベル 0 固定（単一モード忠実）');
+    assert.equal(rec.preStartTotalMs, 5 * MIN);
+    const now = e.computeNow(T0 + 2 * MIN);
+    assert.equal(now.status, ENGINE_STATUS.PRESTART);
+    assert.equal(now.preStart, true);
+    assert.equal(now.levelIndex, 0);
+    assert.equal(now.remainingMs, 3 * MIN, 'カウントダウン残 3 分');
+  });
+
+  test('prestart: totalMs<=0 / 非有限 は即時 start（レベル 0 running）と等価', () => {
+    for (const bad of [0, -100, NaN, undefined]) {
+      const e = createClockEngine(LEVELS);
+      e.startPreStart(bad, 1000);
+      const now = e.computeNow(1000);
+      assert.equal(now.status, ENGINE_STATUS.RUNNING, `totalMs=${bad} → 即時 running`);
+      assert.equal(now.levelIndex, 0);
+      assert.equal(now.remainingMs, 20 * MIN);
+    }
+  });
+
+  test('prestart: idle 以外からの起動は no-op（running / prestart 重複 / paused）', () => {
+    const e = createClockEngine(LEVELS);
+    e.start(0);
+    e.startPreStart(5 * MIN, 1000);
+    assert.equal(e.getRecord().status, 'running', 'running 中の startPreStart は no-op');
+    const e2 = createClockEngine(LEVELS);
+    e2.startPreStart(5 * MIN, 0);
+    e2.startPreStart(10 * MIN, 1000);
+    assert.equal(e2.getRecord().preStartTotalMs, 5 * MIN, 'prestart 中の重複起動は no-op');
+  });
+
+  test('prestart: 0 着地で自動的にレベル 0（Level 1）へ満了 duration の running 遷移', () => {
+    const T0 = 4_000_000;
+    const e = createClockEngine(LEVELS);
+    e.startPreStart(5 * MIN, T0);
+    const land = e.computeNow(T0 + 5 * MIN); // 着地ちょうど
+    assert.equal(land.status, ENGINE_STATUS.RUNNING);
+    assert.equal(land.levelIndex, 0);
+    assert.equal(land.remainingMs, 20 * MIN, '着地瞬間にレベル 0 満了 duration 投入');
+    assert.ok(!land.preStart, '着地後は preStart フラグなし');
+    const after = e.computeNow(T0 + 5 * MIN + 7 * MIN);
+    assert.equal(after.levelIndex, 0);
+    assert.equal(after.remainingMs, 13 * MIN, '着地 7 分後は残 13 分');
+    const crossed = e.computeNow(T0 + 5 * MIN + 25 * MIN);
+    assert.equal(crossed.levelIndex, 1, '着地 25 分後はレベル跨ぎで Level 2');
+    assert.equal(crossed.remainingMs, 15 * MIN);
+    const done = e.computeNow(T0 + 5 * MIN + 95 * MIN + 1000);
+    assert.equal(done.status, ENGINE_STATUS.FINISHED, '全レベル超過で finished');
+  });
+
+  test('prestart: 一時停止で残時間固定 → 再開で続きから（単一モード PRE_START⇄PAUSED 忠実）', () => {
+    const T0 = 5_000_000;
+    const e = createClockEngine(LEVELS);
+    e.startPreStart(10 * MIN, T0);
+    e.pause(T0 + 4 * MIN);
+    const rec = e.getRecord();
+    assert.equal(rec.status, 'paused');
+    assert.equal(rec.preStartTotalMs, 10 * MIN, 'paused でも preStart 由来の印を維持');
+    const frozen = e.computeNow(T0 + 60 * MIN);
+    assert.equal(frozen.status, ENGINE_STATUS.PAUSED);
+    assert.equal(frozen.preStart, true, 'prestart 由来の paused は preStart フラグ付き');
+    assert.equal(frozen.remainingMs, 6 * MIN, '停止中は残 6 分で固定');
+    e.resume(T0 + 100 * MIN);
+    const resumed = e.computeNow(T0 + 101 * MIN);
+    assert.equal(resumed.status, ENGINE_STATUS.PRESTART, 'resume でカウントダウンへ復帰');
+    assert.equal(resumed.remainingMs, 5 * MIN);
+    // 再開後の 0 着地も自動 running
+    const landed = e.computeNow(T0 + 100 * MIN + 6 * MIN + 1000);
+    assert.equal(landed.status, ENGINE_STATUS.RUNNING);
+    assert.equal(landed.levelIndex, 0);
+  });
+
+  test('prestart: 0 着地後の pause は running に確定してから停止（commit 経路）', () => {
+    const T0 = 6_000_000;
+    const e = createClockEngine(LEVELS);
+    e.startPreStart(5 * MIN, T0);
+    e.pause(T0 + 5 * MIN + 8 * MIN); // 着地 8 分後に一時停止
+    const rec = e.getRecord();
+    assert.equal(rec.status, 'paused');
+    assert.equal(rec.preStartTotalMs, null, '着地後の paused は preStart 由来ではない');
+    assert.equal(rec.currentLevelIndex, 0);
+    assert.equal(rec.pausedRemainingMs, 12 * MIN, 'Level 1 残 12 分で停止');
+  });
+
+  test('prestart: キャンセル（cancelPreStart / reset）で idle へ。running からの cancel は no-op', () => {
+    const e = createClockEngine(LEVELS);
+    e.startPreStart(10 * MIN, 0);
+    e.cancelPreStart();
+    assert.equal(e.getRecord().status, 'idle');
+    assert.equal(e.computeNow(0).remainingMs, 20 * MIN, 'idle = レベル 0 満了 duration');
+    // prestart-paused からもキャンセル可
+    const e2 = createClockEngine(LEVELS);
+    e2.startPreStart(10 * MIN, 0);
+    e2.pause(2 * MIN);
+    e2.cancelPreStart();
+    assert.equal(e2.getRecord().status, 'idle');
+    // reset でも idle へ
+    const e3 = createClockEngine(LEVELS);
+    e3.startPreStart(10 * MIN, 0);
+    e3.reset();
+    assert.equal(e3.getRecord().status, 'idle');
+    // running からの cancelPreStart は no-op
+    const e4 = createClockEngine(LEVELS);
+    e4.start(0);
+    e4.cancelPreStart();
+    assert.equal(e4.getRecord().status, 'running');
+  });
+
+  test('prestart: カウントダウン中（および一時停止中）のレベル操作は no-op、着地後は commit して有効', () => {
+    const e = createClockEngine(LEVELS);
+    e.startPreStart(10 * MIN, 0);
+    e.advanceLevel(1, 2 * MIN);
+    assert.equal(e.getRecord().status, 'prestart', 'カウントダウン中のレベル送りは no-op');
+    assert.equal(e.getRecord().currentLevelIndex, 0);
+    e.pause(3 * MIN);
+    e.advanceLevel(1, 4 * MIN);
+    assert.equal(e.getRecord().currentLevelIndex, 0, 'カウントダウン一時停止中も no-op');
+    e.resume(5 * MIN);
+    // 着地後（record は prestart のまま）のレベル送りは running に確定してから有効
+    e.advanceLevel(1, 5 * MIN + 10 * MIN + 3 * MIN);
+    const rec = e.getRecord();
+    assert.equal(rec.status, 'running');
+    assert.equal(rec.currentLevelIndex, 1, '着地 3 分後のレベル送り → Level 2');
+  });
+
+  test('prestart: 区画独立性（1 区画のカウントダウン操作が他区画の record に一切影響しない）', () => {
+    const T0 = 7_000_000;
+    const engines = [0, 1, 2, 3].map(() => createClockEngine(LEVELS));
+    engines[0].start(T0);
+    engines[2].startPreStart(15 * MIN, T0);
+    // 区画 4（index 3）は idle のまま
+    const before = [engines[0].getRecord(), engines[2].getRecord(), engines[3].getRecord()];
+    // 区画 2（index 1）だけを操作: カウントダウン開始 → 一時停止 → 再開 → キャンセル → 再度開始
+    engines[1].startPreStart(5 * MIN, T0);
+    engines[1].pause(T0 + 1 * MIN);
+    engines[1].resume(T0 + 2 * MIN);
+    engines[1].cancelPreStart();
+    engines[1].startPreStart(30 * MIN, T0 + 3 * MIN);
+    const after = [engines[0].getRecord(), engines[2].getRecord(), engines[3].getRecord()];
+    assert.deepEqual(after, before, '区画 2 の PRE_START 操作で他区画の記録が変化した');
+    assert.equal(engines[1].getRecord().preStartTotalMs, 30 * MIN);
+  });
+
+  test('prestart: TOTAL GAME TIME はトーナメント未開始なので 0（idle と同様）', () => {
+    assert.equal(computeTotalGameTimeMsFor(LEVELS, 0, 5 * MIN, ENGINE_STATUS.PRESTART), 0);
+    assert.equal(computeTotalGameTimeMsFor(LEVELS, 0, 5 * MIN, ENGINE_STATUS.IDLE), 0);
+    assert.ok(computeTotalGameTimeMsFor(LEVELS, 0, 5 * MIN, ENGINE_STATUS.RUNNING) > 0);
+  });
+
+  // renderer.js から formatPreStartTime をソース抽出（純関数・Date.now 非依存）
+  function extractFormatPreStartTime() {
+    const m = RENDERER.match(/function formatPreStartTime\(ms\) \{[\s\S]*?\n\}/);
+    assert.ok(m, 'renderer.js から formatPreStartTime を抽出できない（リネーム時は本テストを更新）');
+    // eslint-disable-next-line no-new-func
+    return new Function(`${m[0]}; return formatPreStartTime;`)();
+  }
+
+  test('同値検証: formatPreStartClock が renderer.js formatPreStartTime と同フォーマット（60 分境界含む）', () => {
+    const single = extractFormatPreStartTime();
+    const samples = [0, 500, 9_999, 10_000, 59_999, 60_000, 61_500, 599_000, 3_599_000, 3_599_999,
+      3_600_000, 3_600_001, 5_400_000, 7_199_999, 2 * 3_600_000];
+    for (const ms of samples) {
+      const ours = formatPreStartClock(ms);
+      assert.equal(ours.text, single(ms), `${ms}ms: 表示文字列一致`);
+      // data-prestart-format の切替規則（renderer.js:944 と同じ 60 分閾値）
+      assert.equal(ours.format, ms >= 60 * 60 * 1000 ? 'hms' : 'ms', `${ms}ms: format 一致`);
+    }
+  });
+
+  test('同値検証: prestart 0 着地後のレベル・残時間が computeLiveTimerState（着地時刻起点）と一致', () => {
+    const factory = extractComputeLiveTimerState();
+    const T0 = 1_700_000_000_000;
+    const PRE = 10 * MIN;
+    const e = createClockEngine(LEVELS);
+    e.startPreStart(PRE, T0);
+    const TLand = T0 + PRE; // 0 着地時刻 = 単一モードの startAtLevel(0) 実行時刻
+    const offsetsMin = [0, 0.5, 10, 19.99, 20.01, 25, 56, 70, 94, 95.5, 200];
+    for (const off of offsetsMin) {
+      const nowMs = TLand + Math.round(off * MIN);
+      const engineNow = e.computeNow(nowMs);
+      const live = factory(() => nowMs)(
+        { status: 'running', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: TLand, pausedAt: null },
+        LEVELS
+      );
+      if (live.status === 'finished') {
+        assert.equal(engineNow.status, ENGINE_STATUS.FINISHED, `着地+${off}分: finished 一致`);
+        continue;
+      }
+      assert.equal(engineNow.levelIndex, live.currentLevel - 1, `着地+${off}分: レベル一致`);
+      const liveRemainSec = LEVELS[live.currentLevel - 1].durationMinutes * 60 - live.elapsedSecondsInLevel;
+      assert.ok(Math.abs(engineNow.remainingMs / 1000 - liveRemainSec) <= 1,
+        `着地+${off}分: 残時間一致（許容±1s）`);
+    }
+  });
+
   console.log(`\n=== Summary: ${pass} passed / ${fail} failed ===`);
   process.exit(fail === 0 ? 0 : 1);
 })().catch((err) => {

@@ -70,20 +70,32 @@
     .mc-btn--start:hover:not(:disabled) { background: #37b56e; }
     .mc-btn--danger { background: rgba(229, 57, 53, 0.55); }
     .mc-btn--danger:hover:not(:disabled) { background: rgba(229, 57, 53, 0.8); }
-    .mc-pane__filler-row { display: flex; align-items: center; gap: 8px; font-size: 12px; opacity: 0.9; }
+    .mc-pane__filler-row { display: flex; align-items: center; gap: 8px; font-size: 12px; opacity: 0.9; flex-wrap: wrap; }
     .mc-pane__filler-row select { font-family: inherit; font-size: 12px; padding: 3px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); background: #10294F; color: #fff; }
+    .mc-btn--small { font-size: 12px; padding: 4px 8px; }
+    .mc-pane__filler-text { flex: 1; min-width: 120px; font-family: inherit; font-size: 12px; padding: 3px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); background: #10294F; color: #fff; }
+    .mc-pane__filler-path { font-size: 11px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Phase 2: 開始タイミング（今すぐ / N 分後 / カスタム）= 単一モードのプレスタート選択肢と同一 */
+    .mc-pane__prestart-row { display: flex; align-items: center; gap: 8px; font-size: 12px; opacity: 0.9; }
+    .mc-pane__prestart-row select { font-family: inherit; font-size: 12px; padding: 3px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); background: #10294F; color: #fff; }
+    .mc-pane__custom-min { width: 56px; font-family: inherit; font-size: 12px; padding: 3px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); background: #10294F; color: #fff; }
     .mc-pane[data-assigned="false"] .mc-pane__status,
+    .mc-pane[data-assigned="false"] .mc-pane__prestart-row,
     .mc-pane[data-assigned="false"] .mc-pane__buttons { display: none; }
-    .mc-pane[data-assigned="true"] .mc-pane__filler-row { display: none; }
+    .mc-pane[data-assigned="true"] .mc-pane__filler-row,
+    .mc-pane[data-assigned="true"] .mc-pane__filler-path { display: none; }
   </style>
 </head>
 <body>
   <header class="mc-header">
     <div>
       <div class="mc-title">マルチ表示 操作盤（4分割）</div>
-      <div class="mc-note">巨大スクリーン側は表示専用です。各区画は完全に独立して動きます（休憩スライドショー・音・テロップはこのモードでは無効）。</div>
+      <div class="mc-note">巨大スクリーン側は表示専用です。各区画は完全に独立して動きます（休憩スライドショー・音・テロップはこのモードでは無効）。<br>キーボード操作: <b>1〜4</b> で区画を選択 / <b>H</b> でキー一覧（グリッド上に表示）。複製（ミラー）1台運用は「グリッドを前面に」からキーボードで操作できます。</div>
     </div>
-    <button type="button" class="mc-exit" id="js-mc-exit">通常モードに戻る</button>
+    <div style="display:flex; flex-direction:column; gap:6px; align-items:stretch;">
+      <button type="button" class="mc-exit" id="js-mc-exit">通常モードに戻る</button>
+      <button type="button" class="mc-exit" id="js-mc-grid-front">グリッドを前面に（キーボード操作）</button>
+    </div>
   </header>
   <main class="mc-grid" id="js-mc-grid"></main>
   <script type="module" src="multi-control.js"></script>

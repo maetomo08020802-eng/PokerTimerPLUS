@@ -1936,9 +1936,11 @@ let multiGridWindow = null;
 let _multiModeActive = false;
 let _multiTransitioning = false; // enter/exit 中の再入・close 連鎖ガード
 const _multiPaneCache = [null, null, null, null]; // multi:publish kind='pane' のキャッシュ（grid 初期同期用）
+let _multiUiCache = null; // Phase 2: multi:publish kind='ui'（キーボード操作の選択区画/ヘルプ）のキャッシュ
 
 function _resetMultiPaneCache() {
   for (let i = 0; i < _multiPaneCache.length; i++) _multiPaneCache[i] = null;
+  _multiUiCache = null;
 }
 
 // 会場側 2×2 グリッドウィンドウ（createHallWindow の配置パターンを踏襲した新関数）
@@ -2116,13 +2118,20 @@ async function exitMultiMode() {
 function registerMultiIpcHandlers() {
   ipcMain.handle('multi:enter', () => enterMultiMode());
   ipcMain.handle('multi:exit', () => exitMultiMode());
-  // multi-control（真実源）→ main（キャッシュ）→ multi-grid の edge イベント中継
+  // multi-control（真実源）→ main（キャッシュ）→ multi-grid の edge イベント中継。
+  // Phase 2: kind='ui'（キーボード操作の選択区画ハイライト / ヘルプ / リセット確認）も同経路で受理
   ipcMain.on('multi:publish', (_event, payload) => {
     if (!_multiModeActive) return;
-    if (!payload || payload.kind !== 'pane' || !payload.value || typeof payload.value !== 'object') return;
-    const idx = Number(payload.value.index);
-    if (!Number.isInteger(idx) || idx < 0 || idx > 3) return;
-    _multiPaneCache[idx] = payload.value.pane || null;
+    if (!payload || !payload.value || typeof payload.value !== 'object') return;
+    if (payload.kind === 'pane') {
+      const idx = Number(payload.value.index);
+      if (!Number.isInteger(idx) || idx < 0 || idx > 3) return;
+      _multiPaneCache[idx] = payload.value.pane || null;
+    } else if (payload.kind === 'ui') {
+      _multiUiCache = payload.value;
+    } else {
+      return;
+    }
     if (multiGridWindow && !multiGridWindow.isDestroyed()) {
       try { multiGridWindow.webContents.send('multi:state-sync', payload); } catch (_) { /* ignore */ }
     }
@@ -2130,11 +2139,43 @@ function registerMultiIpcHandlers() {
   // grid 起動時の全量 1 回同期（venueName / logo は store 読み取りのみ）
   ipcMain.handle('multi:state-sync-init', () => ({
     panes: _multiPaneCache.slice(),
+    ui: _multiUiCache,
     global: {
       venueName: store.get('venueName') || '',
       logo: store.get('logo') || null
     }
   }));
+  // Phase 2: 空き区画フィラー用の画像ファイル選択（読み取りのみ・store 書込なし・
+  // 選択パスは control 側のセッション内 state にのみ保持 = electron-store 非永続化）
+  ipcMain.handle('multi:pick-filler-image', async () => {
+    if (!_multiModeActive || !multiControlWindow || multiControlWindow.isDestroyed()) return { path: '' };
+    try {
+      const result = await dialog.showOpenDialog(multiControlWindow, {
+        title: 'フィラー画像を選択',
+        properties: ['openFile'],
+        filters: [{ name: '画像ファイル', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
+      });
+      if (result.canceled || !Array.isArray(result.filePaths) || !result.filePaths[0]) return { path: '' };
+      return { path: result.filePaths[0] };
+    } catch (_) {
+      return { path: '' };
+    }
+  });
+  // Phase 2: mirror（複製 = 1 台運用）の前面切替。grid は focusable:false のため moveTop しても
+  // focus は control に残り、キーボード操作（control の keydown）が継続できる（globalShortcut 不使用）
+  ipcMain.on('multi:grid-front', () => {
+    if (!_multiModeActive) return;
+    if (multiGridWindow && !multiGridWindow.isDestroyed()) {
+      try { multiGridWindow.moveTop(); } catch (_) { /* ignore */ }
+    }
+  });
+  ipcMain.on('multi:control-front', () => {
+    if (!_multiModeActive) return;
+    if (multiControlWindow && !multiControlWindow.isDestroyed()) {
+      try { multiControlWindow.moveTop(); } catch (_) { /* ignore */ }
+      try { multiControlWindow.focus(); } catch (_) { /* ignore */ }
+    }
+  });
 }
 registerMultiIpcHandlers();
 

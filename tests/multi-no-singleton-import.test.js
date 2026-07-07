@@ -167,5 +167,74 @@ test('multi-grid.js は rAF ループ 1 本（requestAnimationFrame の自己再
 });
 
 // ============================================================
+// 7. Phase 2: PRE_START / キーボード / フィラー拡充の追随担保
+// ============================================================
+test('phase2: multi.css に PRE_START 表示パリティのセレクタがある（format 切替 / 最後10秒赤 / 一時停止）', () => {
+  for (const sel of [
+    '[data-status="PRE_START"][data-prestart-format="hms"]',
+    '[data-status="PRE_START"][data-prestart-format="ms"]',
+    '[data-status="PRE_START"][data-timer-state="danger"]',
+    '[data-prestart-paused="true"]'
+  ]) {
+    assert.ok(code['multi.css'].includes(sel), `multi.css に ${sel} がない`);
+  }
+});
+
+test('phase2: PRE_START 遷移とフォーマットの配線（engine の prestart / grid の formatPreStartClock）', () => {
+  assert.ok(code['multi-engine.mjs'].includes('startPreStart'), 'multi-engine.mjs に startPreStart がない');
+  assert.ok(code['multi-engine.mjs'].includes('cancelPreStart'), 'multi-engine.mjs に cancelPreStart がない');
+  assert.ok(code['multi-engine.mjs'].includes("PRESTART: 'prestart'"), 'multi-engine.mjs に prestart status がない');
+  assert.ok(code['multi-grid.js'].includes('formatPreStartClock'), 'multi-grid.js が formatPreStartClock を使っていない');
+  assert.ok(code['multi-grid.js'].includes('prestartFormat'), 'multi-grid.js が data-prestart-format を書いていない');
+  assert.ok(code['multi-control.js'].includes('startPreStart'), 'multi-control.js に カウントダウン開始経路がない');
+});
+
+test('phase2: キーボードは control 側 keydown（globalShortcut 不使用 = 単一モードのショートカット地層に非接触）', () => {
+  assert.ok(code['multi-control.js'].includes("addEventListener('keydown'"), 'multi-control.js に keydown ハンドラがない');
+  assert.ok(code['multi-control.js'].includes('isTypingTarget'), 'multi-control.js にタイピング中ガードがない');
+  for (const f of MULTI_FILES) {
+    assert.ok(!code[f].includes('globalShortcut'), `${f} が globalShortcut に触れている`);
+  }
+  const block = MAIN.match(/\/\/ ===== multi-tournament-4up Phase 1[\s\S]*?registerMultiIpcHandlers\(\);/);
+  assert.ok(block, 'main.js に multi ブロックが見つからない');
+  // 設計原則コメント内の言及は許容し、コード実体のみ検査（本ファイル冒頭の方針と同じ）
+  assert.ok(!/globalShortcut/.test(stripComments(block[0])), 'main.js の multi ブロックが globalShortcut を呼んでいる');
+});
+
+test('phase2: 新 IPC（pick-filler-image / grid-front / control-front）と ui publish が配線されている', () => {
+  for (const ch of ["'multi:pick-filler-image'", "'multi:grid-front'", "'multi:control-front'"]) {
+    assert.ok(MAIN.includes(ch), `main.js に ${ch} ハンドラがない`);
+    assert.ok(PRELOAD.includes(ch), `preload.js に ${ch} がない`);
+  }
+  assert.ok(code['multi-control.js'].includes("kind: 'ui'"), 'multi-control.js が ui 状態を publish していない');
+  assert.ok(code['multi-grid.js'].includes('applyUiPayload'), 'multi-grid.js に ui 受信処理がない');
+});
+
+test('phase2: フィラー拡充（任意画像 / テキスト）の DOM と CSS がある', () => {
+  for (const cls of ['pane-filler__image', 'pane-filler__text', 'pane-reset-arm', 'mgrid-help']) {
+    assert.ok(code['multi-grid.js'].includes(cls), `multi-grid.js に ${cls} がない`);
+    assert.ok(code['multi.css'].includes(`.${cls}`), `multi.css に .${cls} のスタイルがない`);
+  }
+  assert.ok(code['multi-control.js'].includes('pickFillerImage'), 'multi-control.js に画像選択経路がない');
+  // 画像は object-fit: contain で区画枠に収める（はみ出し / レイアウトシフト防止）
+  assert.match(code['multi.css'], /\.pane-filler__image[^}]*object-fit:\s*contain/s, 'フィラー画像が contain でない');
+});
+
+test('phase2: 新規の連続アニメを足していない（@keyframes は既存 mp-timer-pulse の 1 個のみ）', () => {
+  const count = (code['multi.css'].match(/@keyframes/g) || []).length;
+  assert.equal(count, 1, `multi.css の @keyframes が ${count} 個（新規常時アニメ禁止）`);
+  assert.ok(code['multi.css'].includes('@keyframes mp-timer-pulse'), '既存 mp-timer-pulse が見つからない');
+});
+
+test('phase2: フィラー設定は electron-store に永続化しない（settings 系 API を呼ばない）', () => {
+  // store 書込 API の網羅 ban はテスト 3 で担保済。ここでは filler が settings 保存系 IPC に
+  // 触れていないことを追加で固定する（transient 方針の追随ガード）
+  for (const banned of ['settings:set', 'appConfig', 'store.set']) {
+    assert.ok(!code['multi-control.js'].includes(banned), `multi-control.js が ${banned} に触れている`);
+    assert.ok(!code['multi-grid.js'].includes(banned), `multi-grid.js が ${banned} に触れている`);
+  }
+});
+
+// ============================================================
 console.log(`\n=== Summary: ${pass} passed / ${fail} failed ===`);
 process.exit(fail === 0 ? 0 : 1);
