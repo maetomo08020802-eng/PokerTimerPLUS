@@ -13,6 +13,7 @@
 >
 > 完了レポート(`.cc-reports/...md`)を書き終えたら、従来の「Agent ツールで `cc-kouchikushi2` を単発呼出」ではなく、**Workflow〔ワークフロー=複数エージェントを台本どおり自動で回す純正の仕組み〕ツールで `cc-review` を実行**してください。Stop hook での強制起動(旧 Phase 2)が mid-turn でハングした問題を、決定論的・バックグラウンド・再開可能なワークフローで置き換えるのが狙いです。
 > - **実行方法**: Workflow ツールに `{ name: "cc-review", args: { reportPath: "<完了reportの絶対パス>" } }` を渡す。`name` で解決できない時は `{ scriptPath: "C:\\Users\\user\\Documents\\Claude\\Projects\\個人アシスタント\\poker-clock\\.claude\\workflows\\cc-review.js", args: { reportPath: "<絶対パス>" } }`。reportPath を省略すると最新の `.cc-reports/*.md` を自動探索。
+> - **★実験(2026-07-07〜・このプロジェクトのみ)**: 完了レビュー実行時、まず `{ name: "cc-review2", args: {同上} }` を試す(ユーザーレベル共通版 `C:\Users\user\.claude\workflows\cc-review2.js`。懐疑役の観点は当プロジェクトの `.claude/cc-review-verify.md` を実行時に読む)。name 解決に失敗したら従来の `cc-review` にフォールバックし、**どちらで動いたかを完了報告に1行明記**する(cc-review 1箇所管理化の実験・結果次第で全プロジェクト移行判断)。
 > - **cc-review がやること**: ①構築士2(cc-kouchikushi2)が**従来どおり**完了reviewを実施し `.cc-briefs/...completion_review.md` を Write(DoD/INVARIANTS/スコープ判定。poker-clock は致命バグ保護5件も照合)②独立した懐疑役が SQL/DB・認証/認可境界・スコープを「反証する気で」二次チェックし、懸念/escalate の有無を返す。
 > - **完了後の処理は従来どおり**: CC は completion_review.md を Read → 既存の「チャット丸展開ルール」を実行 + ワークフロー戻り値の二次チェック結果(懸念/escalate)を1行添える。
 > - **読み替え規約**: 本ファイル内で「完了report 書出後に `cc-kouchikushi2` を能動呼出/単発呼出」とある箇所は、**完了reviewに限り**「`cc-review` ワークフローを実行」と読み替える。使えない・失敗時のみ従来の単発呼出にフォールバック。**Plan 軽量review・brief 起案の単発呼出は従来どおり**。
