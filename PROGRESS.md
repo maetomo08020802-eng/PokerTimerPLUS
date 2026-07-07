@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-07** — multi-tournament-4up **Phase 1(2×2グリッド骨格)実装完了・完了review承認済**(feature ブランチ・main 未merge・前原実機確認待ち)。Phase 0 も同日完了承認済。配信中は **v2.6.6(Latest・自動更新有効)**・テスト1456件全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-07** — multi-tournament-4up **Phase 0/1/1b 完了・前原実機確認OK・main merge済(前原GO)**。次は Phase 2(brief 起案済・新セッション着手待ち)。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチモードは未配信機能・単一モード非接触)・テスト1458件全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| multi-tournament-4up Phase 1+1b(2×2グリッド骨格+1/4パリティ) | 🟡 実機確認待ち(見た目再確認) | report `.cc-reports/2026-07-07_multi-tournament-4up_phase1b-grid-parity.md` / branch `feature/multi-tournament-4up-phase1`(main 未merge) |
+| multi-tournament-4up Phase 2(独立PRE_START+キーボード保険+フィラー拡充) | 📝 brief起案済(新セッション着手待ち) | brief `.cc-briefs/2026-07-07_multi-tournament-4up_phase2_brief.md` / 正典 roadmap §5 Phase 2 |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -59,9 +59,9 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: 作業ブランチ `feature/multi-tournament-4up-phase1`(main 未merge・前原 GO まで push しない)。main HEAD `f85ef07`・version 2.6.6・配信は tag `v2.6.6`(Latest・自動更新有効)のまま不変。
-- **直前作業(2026-07-07)**: multi-tournament-4up **Phase 1b(grid-parity)実装完了**。前原実機確認の見た目NG(「単一モードの1/4になっていない」)を受け、区画を style.css の vw→cqw/vh→cqh 移植+DOM写経一致で**単一モード会場画面の忠実な1/4縮小**に作り直し。multi 2ファイル+テスト1件のみ・単一モード無改変・致命5件非接触。寸法実測(18cqw列/54cqwカード=単一比率厳密一致)+スクショ目視OK・1458件全PASS。report `.cc-reports/2026-07-07_multi-tournament-4up_phase1b-grid-parity.md`(Phase 1 本体は同日完了承認済)。
-- **次のアクション**: phase1b 完了 review → **前原の見た目再確認**(npm start→設定→ハウス情報→マルチ表示モードを開始)→ OK なら Phase 1+1b クローズ・main merge 判断(前原GO)→ Phase 2 brief 起案待ち。**推測着手禁止**。
+- **git**: `main` HEAD `1512cac`(merge(multi) Phase 1+1b・前原GO 2026-07-07)+ 後続 docs commit・origin push 済・version 2.6.6(バージョン不変=マルチモードは未配信機能として main に同居)。feature ブランチは merge 済につき削除。配信は tag `v2.6.6`(Latest・自動更新有効)のまま。
+- **直前作業(2026-07-07)**: multi-tournament-4up **Phase 0(調査GO)→Phase 1(2×2グリッド骨格)→Phase 1b(区画=単一モード会場画面の1/4忠実縮小)を同日完走**。前原実機確認OK(見た目OK+merge GO)。全フェーズ完了review承認済(cc-review2 共通版・escalate なし)。実装: src/renderer/multi/ 6ファイル+main.js multiブロック+preload multi API+設定入口1点。単一モード非接触(store書込ゼロ・非import・静的テスト13件で機械担保)・致命5件全件非接触・テスト1458件全PASS。report は phase1 / phase1b の2本(`.cc-reports/2026-07-07_multi-tournament-4up_*.md`)。
+- **次のアクション(新セッション)**: 前原が「`.cc-briefs/2026-07-07_multi-tournament-4up_phase2_brief.md` を読んで進めて」で再開 → Phase 2(区画独立 PRE_START+mirror用キーボード保険+フィラー画像/テキスト拡充)。着手時に本表へ 🟢 行更新・feature ブランチ新設(`feature/multi-tournament-4up-phase2`)。**推測着手禁止**。
 
 ---
 
