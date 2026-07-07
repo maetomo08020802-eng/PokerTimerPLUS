@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-07** — multi-tournament-4up **Phase 2〜2d(区画独立PRE_START+キーボード保険+フィラー+実機FB 3弾=視認性/±30秒/単一モード操作パリティ)実装完了・前原実機確認待ち**(`feature/multi-tournament-4up-phase2`・前原GOまでmainへpushしない)。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチモードは未配信機能・単一モード非接触)・テスト**1498件**全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-07** — multi-tournament-4up **Phase 2〜2e(区画独立PRE_START+キーボード保険+フィラー+実機FB 4弾=視認性/±30秒/操作パリティ/停電復帰)実装完了・前原実機確認待ち**(`feature/multi-tournament-4up-phase2`・前原GOまでmainへpushしない)。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチモードは未配信機能・単一モード非接触)・テスト**1505件**全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| multi-tournament-4up Phase 2〜2d(独立PRE_START+キーボード保険+フィラー+実機FB 3弾対応=操作パリティまで) | 🟡 実装完了・前原実機確認待ち | report 4本 `.cc-reports/2026-07-07_multi-tournament-4up_phase2*.md` / branch `feature/multi-tournament-4up-phase2`(2=`6748195`/2b=`811b92d`/2c=`5bbdfba`/2d=`e7a8de6`) |
+| multi-tournament-4up Phase 2〜2e(独立PRE_START+キーボード保険+フィラー+実機FB 4弾対応=停電復帰まで) | 🟡 実装完了・前原実機確認待ち | report 5本 `.cc-reports/2026-07-07_multi-tournament-4up_phase2*.md` / branch `feature/multi-tournament-4up-phase2`(2d=`e7a8de6`/2e=`cf74a96`) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,16 +52,16 @@
 | 配信済リリース | 15件(v1.0.0〜v2.6.6)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件(安定運用フェーズ)|
-| 最新テスト件数 | 1498件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8) |
+| 最新テスト件数 | 1505件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `feature/multi-tournament-4up-phase2`(2=`6748195`/2b=`811b92d`/2c=`5bbdfba`/2d=`e7a8de6`+docs)。`main` は `1512cac`+docs のまま・**前原 GO まで main merge/push しない**。配信は tag `v2.6.6`(Latest・自動更新有効)のまま(マルチモードは未配信機能)。
-- **直前作業(2026-07-07)**: multi **Phase 2d**=前原実機FB第3弾(単一モード操作パリティ)。キー割当を単一モードに整合(←→=±30秒に是正/Shift+←→=レベル移設/↑↓=エントリー・脱落/Ctrl+R/A/E=RE・AD・特±/Space単一忠実トグル/S・P廃止)+runtime操作一式を transient 搭載(engine applyRuntimeOp 純粋関数・操作盤副次行+現在値表示・grid既存経路で再計算・store書込ゼロ維持)。リセット=割当値復帰(safe default)。2/2b/2c は完了review承認済・2d は review 実行→承認待ち。単一モード diff ゼロ・致命5件非接触・テスト1498件全PASS。report 4本。
-- **次のアクション**: phase2d 完了review→前原実機確認(2d: 単一と同じ操作感・壁打ち①永続化②リセット挙動③ボタン④即時スタート廃止 / 2〜2c の残り項目)→GO なら main merge→Phase 3(仕上げ・堅牢化・配信/roadmap §5・壁打ち①GOならCowork設計を統合)。**推測着手禁止**。
+- **git**: `feature/multi-tournament-4up-phase2`(2=`6748195`/2b=`811b92d`/2c=`5bbdfba`/2d=`e7a8de6`/2e=`cf74a96`+docs)。`main` は `1512cac`+docs のまま・**前原 GO まで main merge/push しない**。配信は tag `v2.6.6`(Latest・自動更新有効)のまま(マルチモードは未配信機能)。
+- **直前作業(2026-07-07)**: multi **Phase 2e**=前原FB第4弾(停電・クラッシュ復帰)。専用一時ファイル `userData/multi-session.json`(store.set不使用=store書込ゼロ維持)へ publish相乗り debounce書出し(tmp+rename)→異常終了後の再入場で復元確認→**停電時点PAUSEDで丸ごと復元**(engine純粋関数 toPowerLossPausedRecord を main が動的import共用・レベル非前進・prestart はカウントダウン復帰)。正常終了で削除=恒久保存なし。**壁打ち②③④は前原承認=恒久仕様確定**。2〜2d 完了review承認済・2e は review 実行→承認待ち。致命5件非接触・テスト1505件全PASS。report 5本。
+- **次のアクション**: phase2e 完了review→前原実機確認(2e: 電源断シミュレーション=タスクキル→再起動→復元 / 2〜2d の残り項目)→GO なら main merge→Phase 3(仕上げ・堅牢化・配信/roadmap §5)。**推測着手禁止**。
 
 ---
 
