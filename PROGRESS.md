@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-06-24** — **v2.6.6 配信済(Latest 公開中・自動更新有効)**。telop-preview-label=テロップ色プレビュー枠に「プレビュー(表示見本・編集不可)」ラベル明示(v2.6.5 で枠を編集領域と誤認した件の fix・UI/文言のみ)。前リリース v2.6.5=テロップ色変えを「選択→色ボタン」方式に作り直し。テスト1433件全PASS・オープン作業0件。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-07** — multi-tournament-4up **Phase 1(2×2グリッド骨格)実装完了・完了review承認済**(feature ブランチ・main 未merge・前原実機確認待ち)。Phase 0 も同日完了承認済。配信中は **v2.6.6(Latest・自動更新有効)**・テスト1456件全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | 安定運用フェーズ | 次は brief 受領待ち |
+| multi-tournament-4up Phase 1+1b(2×2グリッド骨格+1/4パリティ) | 🟡 実機確認待ち(見た目再確認) | report `.cc-reports/2026-07-07_multi-tournament-4up_phase1b-grid-parity.md` / branch `feature/multi-tournament-4up-phase1`(main 未merge) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,18 +52,16 @@
 | 配信済リリース | 15件(v1.0.0〜v2.6.6)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件(安定運用フェーズ)|
-| 最新テスト件数 | 1433件 全PASS(v272 +15) |
+| 最新テスト件数 | 1458件 全PASS(multi Phase1 +23・1b +2) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` HEAD `df919b9`(release(v2.6.6))・version 2.6.6・origin 同期済(main + tag push 済)。配信は tag `v2.6.6`・GitHub Release Latest 公開・自動更新有効(.exe + latest.yml + blockmap の3点添付・`/releases/latest`=v2.6.6)。telop-preview-label は軽量トラックで main 直 push(`f1fbd78` fix + `df919b9` release bump)＝feature ブランチ未使用。
-- **直前作業(2026-06-24)**: telop-preview-label を **v2.6.6 として即配信**(前原「v2.6.6 配信GO」)。**v2.6.5 のテロップ色プレビュー枠を利用者が編集領域と誤認した件の fix**=色付き表示枠の上に「プレビュー（表示見本・ここは編集できません）」ラベルを明示(枠は編集不可のまま挙動不変)。設定タブ/Ctrl+T の2箇所整合・冗長補助文整理・空時プレースホルダ調整。UI/文言のみ(index.html/style.css/v272 test +1 assert=labelCount 2)・marquee.js 安全パーサ/色適用/保存形式/致命5件のコード経路は非接触・1433件全PASS。軽量トラック diff review 承認(escalate なし)。review `.cc-briefs/2026-06-24_telop-preview-label_lightweight_review.md`。
-- **直前リリース(2026-06-24)**: telop-color-ux-simplify を **v2.6.5 配信**(テロップ色変えを「文字を選択→色ボタン」方式に作り直し・9色+任意色+色を消す+編集中プレビュー・2箇所・保存形式/安全パーサ無改変=旧データ互換・XSS後退ゼロ・v272 15件)。report `.cc-reports/2026-06-24_telop-color-ux-simplify.md`。
-- **次のアクション**: brief 受領待ち(オープン作業0件・安定運用フェーズ)。前原実機確認は配信後の任意(色プレビュー枠の「プレビュー」ラベル表示・色付け操作感・2画面反映)。温存候補は下表。
-- **参考**: 本日 v2.6.2→2.6.3→2.6.4→2.6.5→2.6.6 を連続配信。本案件群は v2.6.2 の手打ち記法 UX を改善(色 UI 作り直し→プレビュー明示)。**推測着手禁止**。
+- **git**: 作業ブランチ `feature/multi-tournament-4up-phase1`(main 未merge・前原 GO まで push しない)。main HEAD `f85ef07`・version 2.6.6・配信は tag `v2.6.6`(Latest・自動更新有効)のまま不変。
+- **直前作業(2026-07-07)**: multi-tournament-4up **Phase 1b(grid-parity)実装完了**。前原実機確認の見た目NG(「単一モードの1/4になっていない」)を受け、区画を style.css の vw→cqw/vh→cqh 移植+DOM写経一致で**単一モード会場画面の忠実な1/4縮小**に作り直し。multi 2ファイル+テスト1件のみ・単一モード無改変・致命5件非接触。寸法実測(18cqw列/54cqwカード=単一比率厳密一致)+スクショ目視OK・1458件全PASS。report `.cc-reports/2026-07-07_multi-tournament-4up_phase1b-grid-parity.md`(Phase 1 本体は同日完了承認済)。
+- **次のアクション**: phase1b 完了 review → **前原の見た目再確認**(npm start→設定→ハウス情報→マルチ表示モードを開始)→ OK なら Phase 1+1b クローズ・main merge 判断(前原GO)→ Phase 2 brief 起案待ち。**推測着手禁止**。
 
 ---
 

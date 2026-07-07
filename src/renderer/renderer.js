@@ -8561,3 +8561,34 @@ if (__appRole === 'hall') {
   initialize();
   ensureAudioReady();
 }
+
+// ===== multi-tournament-4up Phase 1: マルチ表示モード（4分割）入口（追記のみ・既存関数無改変） =====
+//   設定ダイアログ「ハウス情報」タブのボタン 1 個から multi:enter IPC を呼ぶだけの薄い配線。
+//   モード切替・ウィンドウ生成はすべて main プロセス側（enterMultiMode）が担う。
+//   拒否理由（単一モードのタイマー進行中 / PRE_START 中 / キャンセル）はヒント行に表示する。
+(() => {
+  const btn = document.getElementById('js-multi-mode-enter');
+  const hint = document.getElementById('js-multi-mode-hint');
+  if (!btn) return;
+  const REASON_MESSAGES = {
+    'timer-active': '単一モードのタイマーが進行中（または一時停止中）です。タイマーをリセットしてから開始してください。',
+    'pre-start-active': '開始前カウントダウンが進行中です。カウントダウンを終了してから開始してください。',
+    'busy': '画面切替の処理中です。少し待ってからもう一度お試しください。',
+    'already': 'マルチ表示モードは既に起動しています。'
+  };
+  btn.addEventListener('click', async () => {
+    if (hint) { hint.hidden = true; hint.classList.remove('settings-hint--error'); hint.textContent = ''; }
+    let result = null;
+    try {
+      result = await window.api?.multi?.enter?.();
+    } catch (_) { /* IPC 失敗時は下の汎用メッセージ */ }
+    if (result && result.ok) return; // 成功時は main 側が operator を hide する（このダイアログごと隠れる）
+    const reason = result && result.reason;
+    if (reason === 'cancelled') return; // モニター選択キャンセルは無言で戻る（picker と同じ流儀）
+    if (hint) {
+      hint.textContent = REASON_MESSAGES[reason] || 'マルチ表示モードを開始できませんでした。';
+      hint.classList.add('settings-hint--error');
+      hint.hidden = false;
+    }
+  });
+})();

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja" data-role="multi-control">
+<head>
+  <meta charset="UTF-8">
+  <!-- multi-tournament-4up Phase 1: 手元 PC 側 4区画操作盤（状態の真実源）。
+       独立 HTML = index.html / renderer.js / audio.js を一切読まない（display-picker 前例）。
+       スタイルは picker と同じく <style> インライン（style-src 'unsafe-inline' 許可済・独立小 UI）。 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; connect-src 'self' file:">
+  <title>PokerTimerPLUS+ — マルチ表示 操作盤</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: #0A1F3D;
+      color: #fff;
+      font-family: 'Barlow Condensed', 'Noto Sans JP', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      padding: 12px;
+      gap: 10px;
+      overflow: hidden;
+    }
+    .mc-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .mc-title { font-size: 20px; font-weight: 700; letter-spacing: 0.04em; }
+    .mc-note { font-size: 12px; opacity: 0.7; }
+    .mc-exit {
+      font-family: inherit; font-weight: 700; font-size: 13px;
+      background: rgba(255, 255, 255, 0.12); color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px;
+      padding: 8px 14px; cursor: pointer;
+    }
+    .mc-exit:hover { background: rgba(255, 255, 255, 0.2); }
+    /* グリッドと同じ 2×2 配置（迷わない） */
+    .mc-grid {
+      flex: 1; min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 10px;
+    }
+    .mc-pane {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 10px;
+      display: flex; flex-direction: column; gap: 8px;
+      min-height: 0; overflow: hidden;
+    }
+    .mc-pane__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .mc-pane__badge {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+      background: #4cc2ff; color: #0A1F3D; border-radius: 3px; padding: 2px 6px;
+    }
+    .mc-pane__select { flex: 1; min-width: 0; font-family: inherit; font-size: 13px; padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); background: #10294F; color: #fff; }
+    .mc-pane__status {
+      font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums;
+      display: flex; align-items: baseline; gap: 10px; min-height: 32px;
+    }
+    .mc-pane__status-level { font-size: 15px; color: #4FC3F7; letter-spacing: 0.08em; }
+    .mc-pane__status-state { font-size: 13px; color: #ffc857; letter-spacing: 0.06em; }
+    .mc-pane__buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+    .mc-btn {
+      font-family: inherit; font-weight: 700; font-size: 13px;
+      border: none; border-radius: 4px; padding: 7px 12px; cursor: pointer;
+      background: rgba(255, 255, 255, 0.14); color: #fff;
+    }
+    .mc-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.24); }
+    .mc-btn:disabled { opacity: 0.35; cursor: default; }
+    .mc-btn--start { background: #2f9e5f; }
+    .mc-btn--start:hover:not(:disabled) { background: #37b56e; }
+    .mc-btn--danger { background: rgba(229, 57, 53, 0.55); }
+    .mc-btn--danger:hover:not(:disabled) { background: rgba(229, 57, 53, 0.8); }
+    .mc-pane__filler-row { display: flex; align-items: center; gap: 8px; font-size: 12px; opacity: 0.9; }
+    .mc-pane__filler-row select { font-family: inherit; font-size: 12px; padding: 3px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.3); background: #10294F; color: #fff; }
+    .mc-pane[data-assigned="false"] .mc-pane__status,
+    .mc-pane[data-assigned="false"] .mc-pane__buttons { display: none; }
+    .mc-pane[data-assigned="true"] .mc-pane__filler-row { display: none; }
+  </style>
+</head>
+<body>
+  <header class="mc-header">
+    <div>
+      <div class="mc-title">マルチ表示 操作盤（4分割）</div>
+      <div class="mc-note">巨大スクリーン側は表示専用です。各区画は完全に独立して動きます（休憩スライドショー・音・テロップはこのモードでは無効）。</div>
+    </div>
+    <button type="button" class="mc-exit" id="js-mc-exit">通常モードに戻る</button>
+  </header>
+  <main class="mc-grid" id="js-mc-grid"></main>
+  <script type="module" src="multi-control.js"></script>
+</body>
+</html>

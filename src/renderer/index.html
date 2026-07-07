@@ -1184,6 +1184,20 @@
             <button type="button" class="btn btn--primary" id="js-app-pot-default-save">保存</button>
           </div>
           <p class="settings-hint" id="js-app-pot-default-error" hidden></p>
+
+          <!-- multi-tournament-4up Phase 1: マルチ表示モード（4分割）への入口（追記のみ・既存要素無改変） -->
+          <hr class="form-divider">
+          <div class="form-row">
+            <span class="form-row__label">マルチトーナメント表示（4分割・大型大会向け）</span>
+            <div class="form-dialog__actions">
+              <button type="button" class="btn btn--primary" id="js-multi-mode-enter">マルチ表示モードを開始</button>
+            </div>
+            <p class="settings-hint">
+              巨大スクリーンに独立した時計を最大4つ 2×2 で同時表示します。開始するとモニター選択 → 専用の操作盤ウィンドウが開きます。<br>
+              ※ 単一モードのタイマーが停止中（リセット済）のときのみ開始できます。このモードでは休憩スライドショー・音・テロップは無効です。
+            </p>
+            <p class="settings-hint" id="js-multi-mode-hint" hidden></p>
+          </div>
         </div>
       </section>
 

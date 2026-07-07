@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ja" data-role="multi-grid">
+<head>
+  <meta charset="UTF-8">
+  <!-- multi-tournament-4up Phase 1: 会場側 2×2 グリッド（表示専用・純粋 consumer）。
+       独立 HTML = index.html / renderer.js / audio.js / marquee.js を一切読まない（display-picker 前例）。
+       休憩スライドショー / 音 / テロップ / PIP / ミュートバッジは DOM ごと存在しない（最強の無効化）。
+       CSP は index.html と同等の厳格設定（ページ自体が file:// のため 'self' が file: を包含 = カスタムロゴ/画像も可）。 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; connect-src 'self' file:">
+  <title>PokerTimerPLUS+ — マルチ表示（4分割）</title>
+  <link rel="stylesheet" href="multi.css">
+</head>
+<body>
+  <!-- 4区画は multi-grid.js が起動時に一度だけ構築する（テンプレート複製 ×4） -->
+  <main class="mgrid" id="js-mgrid"></main>
+  <script type="module" src="multi-grid.js"></script>
+</body>
+</html>
