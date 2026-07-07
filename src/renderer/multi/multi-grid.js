@@ -237,7 +237,8 @@ function buildPane(index) {
       <img class="pane-filler__image" alt="">
       <div class="pane-filler__text"></div>
     </div>
-    <div class="pane-reset-arm">もう一度 R でリセット</div>`;
+    <div class="pane-reset-arm">もう一度 R でリセット</div>
+    <div class="pane-active-badge js-active-badge"></div>`;
   gridRoot.appendChild(root);
   const q = (sel) => root.querySelector(sel);
   return {
@@ -257,7 +258,7 @@ function buildPane(index) {
       addonRow: q('.js-addon-row'), addon: q('.js-addon'),
       specialStackRow: q('.js-special-stack-row'), specialStack: q('.js-special-stack'),
       filler: q('.pane-filler'), fillerImage: q('.pane-filler__image'), fillerText: q('.pane-filler__text'),
-      resetArm: q('.pane-reset-arm')
+      resetArm: q('.pane-reset-arm'), activeBadge: q('.js-active-badge')
     },
     data: { assigned: false, filler: normalizeFiller('blank'), snapshot: null, engine: null },
     last: { time: null, levelIndex: null, status: null, timerState: null, nextBreak: null, prestartFormat: null }
@@ -513,6 +514,26 @@ function tickLoop() {
 // ===== 同期受信（multi:state-sync — edge イベント駆動・ポーリングなし） =====
 let globalData = null;
 let helpEl = null; // Phase 2: キー割当ヘルプオーバーレイ（H でトグル）
+let lastUi = null; // Phase 2b: 直近の ui payload（割当変更時にバッジを再評価するため保持）
+
+// Phase 2b: 選択区画のハイライト枠 + トーナメント名バッジ（操作対象の視認性）。
+// 選択変化（ui payload）と割当変化（pane payload）の両方から呼ばれ、旧選択区画の表示は
+// 全区画ループで必ず落とす（残留なし）
+function refreshActiveBadges() {
+  const active = (lastUi && Number.isInteger(lastUi.activePane) && lastUi.activePane >= 0 && lastUi.activePane < PANE_COUNT)
+    ? lastUi.activePane : null;
+  panes.forEach((pane, i) => {
+    const on = i === active;
+    if ((pane.root.dataset.active === 'true') !== on) pane.root.dataset.active = on ? 'true' : 'false';
+    let text = '';
+    if (on) {
+      const title = (pane.data.assigned && pane.data.snapshot) ? (pane.data.snapshot.title || 'ポーカートーナメント') : '';
+      text = title ? `操作中｜区画 ${i + 1}: 〔${title}〕` : `操作中｜区画 ${i + 1}（未割当）`;
+    }
+    if (pane.els.activeBadge.textContent !== text) pane.els.activeBadge.textContent = text;
+    pane.els.activeBadge.classList.toggle('is-visible', on);
+  });
+}
 
 function applyPanePayload(value) {
   if (!value || typeof value !== 'object') return;
@@ -525,33 +546,33 @@ function applyPanePayload(value) {
   pane.data.snapshot = p.snapshot || null;
   pane.data.engine = p.engine || null;
   renderPaneStatic(pane, globalData);
+  refreshActiveBadges(); // 選択中区画の割当が変わってもバッジのトーナメント名が追従
 }
 
 // Phase 2: キーボード操作の UI 状態（選択区画ハイライト / ヘルプ表示 / リセット確認バッジ）。
 // 真実源は multi-control 側の state（kind:'ui' の edge イベントで受けるだけ・ここは表示専用）
 function applyUiPayload(value) {
   if (!value || typeof value !== 'object') return;
-  const active = (Number.isInteger(value.activePane) && value.activePane >= 0 && value.activePane < PANE_COUNT)
-    ? value.activePane : null;
+  lastUi = value;
   const armIndex = (value.resetArm && Number.isInteger(value.resetArm.index)) ? value.resetArm.index : null;
   panes.forEach((pane, i) => {
-    const on = i === active;
-    if ((pane.root.dataset.active === 'true') !== on) pane.root.dataset.active = on ? 'true' : 'false';
     pane.els.resetArm.classList.toggle('is-visible', i === armIndex);
   });
   if (helpEl) helpEl.classList.toggle('is-visible', !!value.helpVisible);
+  refreshActiveBadges();
 }
 
 function buildHelpOverlay() {
   const aside = document.createElement('aside');
   aside.className = 'mgrid-help';
   aside.innerHTML = `
-    <div class="mgrid-help__title">キーボード操作（操作対象は選択中の区画）</div>
+    <div class="mgrid-help__title">キーボード操作</div>
+    <div class="mgrid-help__note">操作対象は選択中の区画だけ（他の区画は動きません）。<br>選択中の区画は水色の枠と左上の「操作中」バッジで確認できます。</div>
     <div><kbd>1</kbd>〜<kbd>4</kbd> 操作する区画を選択</div>
     <div><kbd>S</kbd> スタート（今すぐ）</div>
     <div><kbd>C</kbd> スタートまでカウントダウン開始（区画の開始タイミング設定）</div>
     <div><kbd>Space</kbd>/<kbd>P</kbd> 一時停止 / 再開</div>
-    <div><kbd>←</kbd><kbd>→</kbd> レベル戻し / 送り</div>
+    <div><kbd>←</kbd><kbd>→</kbd> レベル戻し / 送り（1 レベルずつ。30秒単位の時間調整はマルチ表示にはありません）</div>
     <div><kbd>R</kbd> リセット（3 秒以内にもう一度押して確定）</div>
     <div><kbd>H</kbd> このヘルプの表示 / 非表示</div>
     <div><kbd>G</kbd> グリッドを前面へ　<kbd>Esc</kbd> 操作盤を前面へ</div>`;

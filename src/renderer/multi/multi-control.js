@@ -29,6 +29,7 @@ function formatTime(ms) {
 const grid = document.getElementById('js-mc-grid');
 const exitBtn = document.getElementById('js-mc-exit');
 const gridFrontBtn = document.getElementById('js-mc-grid-front');
+const kbTargetEl = document.getElementById('js-mc-kb-target');
 let tournaments = []; // tournaments:list の読み取り専用コピー
 const panes = [];     // { root, els, tournamentId, filler, snapshot, engine }
 
@@ -255,6 +256,7 @@ function buildPaneUI(index) {
       pane.tournamentId = null; pane.snapshot = null; pane.engine = null;
       root.dataset.assigned = 'false';
       publishPane(index);
+      refreshKbTarget(); // 選択中区画の割当解除に操作対象表示を追従
       return;
     }
     const t = tournaments.find((x) => x.id === id);
@@ -265,6 +267,7 @@ function buildPaneUI(index) {
     root.dataset.assigned = 'true';
     publishPane(index);
     refreshPaneStatus(pane);
+    refreshKbTarget(); // 選択中区画の割当変更にトーナメント名表示を追従
   });
   pane.els.filler.addEventListener('change', () => {
     const v = pane.els.filler.value;
@@ -340,6 +343,24 @@ function refreshPaneStatus(pane) {
 //   - grid は focusable:false のため、mirror で grid を前面に重ねても focus はこの window に残り
 //     キーが届く（globalShortcut 不使用 = OS 全域・既存単一モードのショートカット地層に非接触）
 //   - 操作はボタンと同じ op* 関数を呼ぶ（真実源 = この window の engine/state を経由して grid へ反映）
+// Phase 2b: 操作盤側の「キーボード操作対象」表示（ヘッダの対象名 + 該当区画カードのハイライト）。
+// grid のバッジと同じ内部 state（activePane / snapshot.title）から描くだけ＝新 IPC 不要・選択同期
+function refreshKbTarget() {
+  let text;
+  if (activePane === null) {
+    text = 'キーボード操作対象: 未選択（1〜4 キーで選択）';
+  } else {
+    const pane = panes[activePane];
+    const title = (pane && pane.snapshot) ? (pane.snapshot.title || 'ポーカートーナメント') : '';
+    text = `キーボード操作対象: 区画 ${activePane + 1}〔${title || '未割当'}〕`;
+  }
+  if (kbTargetEl && kbTargetEl.textContent !== text) kbTargetEl.textContent = text;
+  panes.forEach((pane, i) => {
+    const on = i === activePane;
+    if ((pane.root.dataset.kbActive === 'true') !== on) pane.root.dataset.kbActive = on ? 'true' : 'false';
+  });
+}
+
 function publishUi() {
   const payload = {
     kind: 'ui',
@@ -350,6 +371,7 @@ function publishUi() {
     }
   };
   try { window.api?.multi?.publish?.(payload); } catch (_) { /* grid transition 中は無視 */ }
+  refreshKbTarget(); // 選択変化はすべて publishUi 経由 → 操作盤側の対象表示も同時に同期
 }
 
 function clearResetArm(republish) {
@@ -471,6 +493,7 @@ async function init() {
     try { window.api?.multi?.gridFront?.(); } catch (_) { /* ignore */ }
   });
   document.addEventListener('keydown', handleKeydown);
+  refreshKbTarget(); // 初期表示「未選択（1〜4 キーで選択）」
   // 操作盤ミニ表示の更新（1 秒間隔。grid 側の描画とは独立で、IPC は発生しない）
   setInterval(() => { for (const pane of panes) refreshPaneStatus(pane); }, 1000);
 }

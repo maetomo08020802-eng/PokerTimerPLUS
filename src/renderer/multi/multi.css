@@ -978,6 +978,29 @@ img { display: block; max-width: 100%; height: auto; }
   white-space: nowrap;
 }
 .pane-reset-arm.is-visible { display: block; }
+/* Phase 2b: 選択区画のトーナメント名バッジ（「操作中｜区画 N: 〔名前〕」・静的表示・アニメなし）。
+   区画は overflow:hidden のため長名も ellipsis で区画外へはみ出さない */
+.pane-active-badge {
+  position: absolute;
+  top: 1.2cqh;
+  left: 1.2cqw;
+  z-index: 9;
+  pointer-events: none;
+  display: none;
+  max-width: 70cqw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 1.8cqw;
+  line-height: 1.4;
+  color: #062033;
+  background: var(--cyan);
+  border-radius: 0.4cqw;
+  padding: 0.5cqh 1.2cqw;
+}
+.pane-active-badge.is-visible { display: block; }
 /* キー割当ヘルプ（H でトグル・常時表示しない。overlay = レイアウト非干渉） */
 .mgrid-help {
   position: absolute;

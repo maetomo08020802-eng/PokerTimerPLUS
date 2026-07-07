@@ -23,6 +23,10 @@
     .mc-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .mc-title { font-size: 20px; font-weight: 700; letter-spacing: 0.04em; }
     .mc-note { font-size: 12px; opacity: 0.7; }
+    /* Phase 2b: キーボード操作対象の明示（grid のバッジと同期・静的表示） */
+    .mc-kb-target { font-size: 14px; font-weight: 700; color: #4FC3F7; margin-top: 2px; }
+    /* Phase 2b: 選択中区画カードのハイライト（既存 1px 枠の色変更 + inset 影 = 枠太さ不変でシフトなし） */
+    .mc-pane[data-kb-active="true"] { border-color: #4FC3F7; box-shadow: inset 0 0 0 1px #4FC3F7; }
     .mc-exit {
       font-family: inherit; font-weight: 700; font-size: 13px;
       background: rgba(255, 255, 255, 0.12); color: #fff;
@@ -90,7 +94,8 @@
   <header class="mc-header">
     <div>
       <div class="mc-title">マルチ表示 操作盤（4分割）</div>
-      <div class="mc-note">巨大スクリーン側は表示専用です。各区画は完全に独立して動きます（休憩スライドショー・音・テロップはこのモードでは無効）。<br>キーボード操作: <b>1〜4</b> で区画を選択 / <b>H</b> でキー一覧（グリッド上に表示）。複製（ミラー）1台運用は「グリッドを前面に」からキーボードで操作できます。</div>
+      <div class="mc-note">巨大スクリーン側は表示専用です。各区画は完全に独立して動きます（休憩スライドショー・音・テロップはこのモードでは無効）。<br>キーボード操作: <b>1〜4</b> で区画を選択 / <b>H</b> でキー一覧（グリッド上に表示）。複製（ミラー）1台運用は「グリッドを前面に」からキーボードで操作できます。<br>※ <b>←→キーはレベル単位</b>で動きます（30秒単位の時間調整はマルチ表示にはありません）。操作対象の区画は下の表示とグリッド左上の「操作中」バッジで確認できます。</div>
+      <div class="mc-kb-target" id="js-mc-kb-target">キーボード操作対象: 未選択（1〜4 キーで選択）</div>
     </div>
     <div style="display:flex; flex-direction:column; gap:6px; align-items:stretch;">
       <button type="button" class="mc-exit" id="js-mc-exit">通常モードに戻る</button>

@@ -236,5 +236,36 @@ test('phase2: フィラー設定は electron-store に永続化しない（setti
 });
 
 // ============================================================
+// 8. Phase 2b: 操作対象の視認性 + キー一覧の分かりやすさ（前原実機フィードバック対応）
+// ============================================================
+test('phase2b: grid の選択区画にトーナメント名バッジ（未割当表示・ui/pane 両変化で追従）', () => {
+  assert.ok(code['multi-grid.js'].includes('pane-active-badge'), 'multi-grid.js にバッジ DOM がない');
+  assert.ok(code['multi.css'].includes('.pane-active-badge'), 'multi.css にバッジ style がない');
+  assert.ok(code['multi-grid.js'].includes('未割当'), 'multi-grid.js に未割当時の表示がない');
+  assert.ok(code['multi-grid.js'].includes('refreshActiveBadges'), 'multi-grid.js にバッジ再評価関数がない');
+  // 選択変化（applyUiPayload）と割当変化（applyPanePayload）の両方から再評価される（追従要件）
+  const calls = (code['multi-grid.js'].match(/refreshActiveBadges\(\)/g) || []).length;
+  assert.ok(calls >= 2, `refreshActiveBadges の呼出が ${calls} 箇所（ui/pane 両変化での追従が必要）`);
+  // 長名は ellipsis で区画外へはみ出さない
+  assert.match(code['multi.css'], /\.pane-active-badge[^}]*text-overflow:\s*ellipsis/s, 'バッジに ellipsis がない');
+});
+
+test('phase2b: 操作盤側にキーボード操作対象の表示 + 選択ハイライト同期がある', () => {
+  assert.ok(code['multi-control.html'].includes('js-mc-kb-target'), 'multi-control.html に操作対象表示欄がない');
+  assert.ok(code['multi-control.js'].includes('refreshKbTarget'), 'multi-control.js に操作対象表示の更新関数がない');
+  assert.ok(code['multi-control.js'].includes('kbActive'), 'multi-control.js に選択ハイライト（data-kb-active）がない');
+  assert.ok(code['multi-control.html'].includes('data-kb-active'), 'multi-control.html にハイライト style がない');
+  assert.ok(code['multi-control.js'].includes('未選択'), 'multi-control.js に未選択時の案内表示がない');
+});
+
+test('phase2b: ヘルプ/案内に「←→はレベル単位（30秒調整なし）」「操作対象は選択区画のみ」の注記がある', () => {
+  assert.ok(/30秒単位の時間調整はマルチ表示にはありません/.test(code['multi-grid.js']),
+    'grid ヘルプに 30秒調整なしの注記がない');
+  assert.ok(code['multi-grid.js'].includes('選択中の区画だけ'), 'grid ヘルプに操作対象の明示がない');
+  assert.ok(/30秒単位の時間調整はマルチ表示にはありません/.test(sources['multi-control.html']),
+    '操作盤の案内文に 30秒調整なしの注記がない');
+});
+
+// ============================================================
 console.log(`\n=== Summary: ${pass} passed / ${fail} failed ===`);
 process.exit(fail === 0 ? 0 : 1);
