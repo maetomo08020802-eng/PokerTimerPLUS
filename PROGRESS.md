@@ -60,8 +60,8 @@
 ## 直近の状態(次セッション起点)
 
 - **git**: `feature/multi-tournament-4up-phase2`(2=`6748195`/2b=`811b92d`/2c=`5bbdfba`/2d=`e7a8de6`/2e=`cf74a96`+docs)。`main` は `1512cac`+docs のまま・**前原 GO まで main merge/push しない**。配信は tag `v2.6.6`(Latest・自動更新有効)のまま(マルチモードは未配信機能)。
-- **直前作業(2026-07-07)**: multi **Phase 2e**=前原FB第4弾(停電・クラッシュ復帰)。専用一時ファイル `userData/multi-session.json`(store.set不使用=store書込ゼロ維持)へ publish相乗り debounce書出し(tmp+rename)→異常終了後の再入場で復元確認→**停電時点PAUSEDで丸ごと復元**(engine純粋関数 toPowerLossPausedRecord を main が動的import共用・レベル非前進・prestart はカウントダウン復帰)。正常終了で削除=恒久保存なし。**壁打ち②③④は前原承認=恒久仕様確定**。2〜2d 完了review承認済・2e は review 実行→承認待ち。致命5件非接触・テスト1505件全PASS。report 5本。
-- **次のアクション**: phase2e 完了review→前原実機確認(2e: 電源断シミュレーション=タスクキル→再起動→復元 / 2〜2d の残り項目)→GO なら main merge→Phase 3(仕上げ・堅牢化・配信/roadmap §5)。**推測着手禁止**。
+- **直前作業(2026-07-07〜08)**: multi **Phase 2e**=前原FB第4弾(停電・クラッシュ復帰)。専用一時ファイル `userData/multi-session.json`(store.set不使用=store書込ゼロ維持)へ publish相乗り debounce書出し(tmp+rename)→異常終了後の再入場で復元確認→**停電時点PAUSEDで丸ごと復元**(engine純粋関数を main が動的import共用・レベル非前進)。正常終了で削除=恒久保存なし。**壁打ち②③④は前原承認=恒久仕様確定**。2〜2e 全フェーズ完了review承認済(2e 懐疑役指摘2件=data-transfer 7件の偽PASS空洞化(Phase1継承)と書出し競合窓を `a36e73b` で同日是正・実測PASS行=1505で件数一致)。致命5件非接触・テスト1505件全PASS。report 5本。
+- **次のアクション**: 前原実機確認(2e: 電源断シミュレーション=タスクキル→再起動→復元 / 2〜2d の残り項目)→GO なら main merge→Phase 3(仕上げ・堅牢化・配信/roadmap §5)。**推測着手禁止**。
 
 ---
 
