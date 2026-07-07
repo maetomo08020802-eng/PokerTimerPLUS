@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| multi-tournament-4up Phase 1(2×2グリッド骨格) | 🔵 レビュー待ち(実装完了・テスト全PASS) | report `.cc-reports/2026-07-07_multi-tournament-4up_phase1.md` / branch `feature/multi-tournament-4up-phase1`(main 未merge) |
+| multi-tournament-4up Phase 1+1b(2×2グリッド骨格+1/4パリティ) | 🟡 実機確認待ち(見た目再確認) | report `.cc-reports/2026-07-07_multi-tournament-4up_phase1b-grid-parity.md` / branch `feature/multi-tournament-4up-phase1`(main 未merge) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,7 +52,7 @@
 | 配信済リリース | 15件(v1.0.0〜v2.6.6)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件(安定運用フェーズ)|
-| 最新テスト件数 | 1456件 全PASS(multi Phase1 +23) |
+| 最新テスト件数 | 1458件 全PASS(multi Phase1 +23・1b +2) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
@@ -60,8 +60,8 @@
 ## 直近の状態(次セッション起点)
 
 - **git**: 作業ブランチ `feature/multi-tournament-4up-phase1`(main 未merge・前原 GO まで push しない)。main HEAD `f85ef07`・version 2.6.6・配信は tag `v2.6.6`(Latest・自動更新有効)のまま不変。
-- **直前作業(2026-07-07)**: multi-tournament-4up **Phase 1(2×2グリッド骨格)実装完了・レビュー待ち**。B案どおり新規6ファイル(multi-engine.mjs/grid/control/css)+追記のみ(main/preload/入口1点)。単一モード非接触・store書込ゼロ・致命5件非接触。テスト1456件全PASS(新規23件=エンジン12+非接触静的11)。E2Eスモーク(割当→同期→描画→START→毎秒進行)+実アプリ起動スモーク成功。report `.cc-reports/2026-07-07_multi-tournament-4up_phase1.md`。Phase 0 は同日完了承認済(前原確定3件反映)。
-- **次のアクション**: Phase 1 完了 review → 前原実機確認(2画面 extend でのマルチモード出入り・グリッド見た目)→ GO 後に main merge 判断。Phase 2(区画独立開始時刻+キーボード保険+フィラー拡充)は brief 起案待ち。**推測着手禁止**。
+- **直前作業(2026-07-07)**: multi-tournament-4up **Phase 1b(grid-parity)実装完了**。前原実機確認の見た目NG(「単一モードの1/4になっていない」)を受け、区画を style.css の vw→cqw/vh→cqh 移植+DOM写経一致で**単一モード会場画面の忠実な1/4縮小**に作り直し。multi 2ファイル+テスト1件のみ・単一モード無改変・致命5件非接触。寸法実測(18cqw列/54cqwカード=単一比率厳密一致)+スクショ目視OK・1458件全PASS。report `.cc-reports/2026-07-07_multi-tournament-4up_phase1b-grid-parity.md`(Phase 1 本体は同日完了承認済)。
+- **次のアクション**: phase1b 完了 review → **前原の見た目再確認**(npm start→設定→ハウス情報→マルチ表示モードを開始)→ OK なら Phase 1+1b クローズ・main merge 判断(前原GO)→ Phase 2 brief 起案待ち。**推測着手禁止**。
 
 ---
 
