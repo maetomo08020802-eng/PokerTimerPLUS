@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-07** — multi-tournament-4up **Phase 0/1/1b 完了・前原実機確認OK・main merge済(前原GO)**。次は Phase 2(brief 起案済・新セッション着手待ち)。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチモードは未配信機能・単一モード非接触)・テスト1458件全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-07** — multi-tournament-4up **Phase 2(区画独立PRE_START+キーボード保険+フィラー拡充)実装完了・前原実機確認待ち**(`feature/multi-tournament-4up-phase2`・前原GOまでmainへpushしない)。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチモードは未配信機能・単一モード非接触)・テスト**1477件**全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| multi-tournament-4up Phase 2(独立PRE_START+キーボード保険+フィラー拡充) | 📝 brief起案済(新セッション着手待ち) | brief `.cc-briefs/2026-07-07_multi-tournament-4up_phase2_brief.md` / 正典 roadmap §5 Phase 2 |
+| multi-tournament-4up Phase 2(独立PRE_START+キーボード保険+フィラー拡充) | 🟡 実装完了・前原実機確認待ち | report `.cc-reports/2026-07-07_multi-tournament-4up_phase2.md` / branch `feature/multi-tournament-4up-phase2`(feat `6748195`) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,16 +52,16 @@
 | 配信済リリース | 15件(v1.0.0〜v2.6.6)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件(安定運用フェーズ)|
-| 最新テスト件数 | 1458件 全PASS(multi Phase1 +23・1b +2) |
+| 最新テスト件数 | 1477件 全PASS(multi Phase1 +23・1b +2・Phase2 +19) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` HEAD `1512cac`(merge(multi) Phase 1+1b・前原GO 2026-07-07)+ 後続 docs commit・origin push 済・version 2.6.6(バージョン不変=マルチモードは未配信機能として main に同居)。feature ブランチは merge 済につき削除。配信は tag `v2.6.6`(Latest・自動更新有効)のまま。
-- **直前作業(2026-07-07)**: multi-tournament-4up **Phase 0(調査GO)→Phase 1(2×2グリッド骨格)→Phase 1b(区画=単一モード会場画面の1/4忠実縮小)を同日完走**。前原実機確認OK(見た目OK+merge GO)。全フェーズ完了review承認済(cc-review2 共通版・escalate なし)。実装: src/renderer/multi/ 6ファイル+main.js multiブロック+preload multi API+設定入口1点。単一モード非接触(store書込ゼロ・非import・静的テスト13件で機械担保)・致命5件全件非接触・テスト1458件全PASS。report は phase1 / phase1b の2本(`.cc-reports/2026-07-07_multi-tournament-4up_*.md`)。
-- **次のアクション(新セッション)**: 前原が「`.cc-briefs/2026-07-07_multi-tournament-4up_phase2_brief.md` を読んで進めて」で再開 → Phase 2(区画独立 PRE_START+mirror用キーボード保険+フィラー画像/テキスト拡充)。着手時に本表へ 🟢 行更新・feature ブランチ新設(`feature/multi-tournament-4up-phase2`)。**推測着手禁止**。
+- **git**: `feature/multi-tournament-4up-phase2`(feat `6748195`+docs)。`main` は `1512cac`+docs のまま・**前原 GO まで main merge/push しない**。配信は tag `v2.6.6`(Latest・自動更新有効)のまま(マルチモードは未配信機能)。
+- **直前作業(2026-07-07)**: multi-tournament-4up **Phase 2 実装完了**=①区画独立の「スタートまでカウントダウン」(単一モード PRE_START 忠実・0着地自動 Level 1)②キーボード操作フォールバック(multi-control keydown 方式・globalShortcut 不使用・R は2度押し確認)③フィラー拡充(任意画像/テキスト・transient)。単一モード diff ゼロ・致命5件非接触・テスト1477件全PASS。report `.cc-reports/2026-07-07_multi-tournament-4up_phase2.md`。
+- **次のアクション**: 完了review(cc-review2)→前原実機確認(report §7.x の4項目・マルチモードでのカウントダウン/キー操作/フィラー目視)→GO なら main merge。その後は Phase 3(仕上げ・堅牢化・配信/roadmap §5)。**推測着手禁止**。
 
 ---
 
