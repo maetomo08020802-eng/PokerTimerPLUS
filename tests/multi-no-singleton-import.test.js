@@ -132,6 +132,34 @@ test('main.js: 既存 dual 系コアは無改変（_publishDualState の hallWin
     '_publishDualState が multi ウィンドウに送信している（別チャンネル原則違反）');
 });
 
+// ============================================================
+// 6. phase1b-grid-parity: 区画 = 単一モード会場画面の 1/4 忠実縮小の構造担保
+// ============================================================
+test('phase1b: 区画テンプレートが単一モードの構造クラスを持つ（.clock 3カラム / カード / 統計群）', () => {
+  const required = ['clock__left', 'clock__center', 'clock__right', 'event-header', 'event-title',
+    'event-subtitle', 'event-game-type', 'event-prize-category', 'level-display', 'clock__time',
+    'clock__timer', 'card-stack', 'card-blinds', 'card-next', 'blinds-content', 'blinds-field__value',
+    'stat-group', 'stat-value--xl', 'next-break-value', 'payouts-list', 'payouts-row',
+    'clock__presented-by', 'clock__pool-note', 'clock__pause-label',
+    'clock__finished-overlay', 'clock__timer-finished-overlay', 'clock__logo-placeholder'];
+  for (const cls of required) {
+    assert.ok(code['multi-grid.js'].includes(cls), `multi-grid.js のテンプレートに ${cls} がない`);
+    assert.ok(code['multi.css'].includes(`.${cls.split(' ')[0]}`) || code['multi.css'].includes(cls), `multi.css に ${cls} のスタイルがない`);
+  }
+});
+
+test('phase1b: multi.css は cq 単位移植（レイアウトに vw/vh を使わない = 区画基準の 1/4 縮小）', () => {
+  assert.ok(/cq[wh]/.test(code['multi.css']), 'multi.css に cq 単位がない');
+  // .mgrid のビューポート全面指定（100vw/100vh）だけは許容。それ以外の vw/vh はページ全体基準に
+  // なってしまい区画縮小が壊れるため禁止。
+  const withoutGrid = code['multi.css'].replace(/100vw|100vh/g, '');
+  assert.ok(!/[\d.](vw|vh)\b/.test(withoutGrid), 'multi.css のレイアウトに vw/vh が残っている');
+  // 単一モードと同じ data 属性セレクタ（状態表現の互換）
+  for (const sel of ['[data-status="PAUSED"]', '[data-status="BREAK"]', '[data-timer-state="warn"]', '[data-timer-state="danger"]', '[data-structure="LIMIT_BLIND"]', '[data-max-digits="8"]']) {
+    assert.ok(code['multi.css'].includes(sel), `multi.css に ${sel} がない`);
+  }
+});
+
 test('multi-grid.js は rAF ループ 1 本（requestAnimationFrame の自己再帰が 1 箇所）', () => {
   const count = (code['multi-grid.js'].match(/requestAnimationFrame\(/g) || []).length;
   // tickLoop 内の自己再帰 + 起動時の 1 回 = 2 呼出箇所まで（ループ自体は 1 本）

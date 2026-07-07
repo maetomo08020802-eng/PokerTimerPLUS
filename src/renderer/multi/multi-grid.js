@@ -1,12 +1,15 @@
-// PokerTimerPLUS+ multi-tournament-4up Phase 1 — 会場側 2×2 グリッド（表示専用）
+// PokerTimerPLUS+ multi-tournament-4up Phase 1b — 会場側 2×2 グリッド（表示専用）
 //
-// 設計原則（Phase 1 brief B / F / H）:
+// 設計原則（Phase 1 brief B / F / H + phase1b-grid-parity）:
+//   - 各区画 = 単一モード会場画面（index.html の .clock + event-header）と同一の DOM 構造。
+//     見た目は multi.css が style.css の値を cqw/cqh 換算で移植した「忠実な 1/4 縮小」。
+//     JS 参照フックは js-* クラス（id は 4 区画で重複するため使わない）。
 //   - 独立 HTML の純粋 consumer。既存 renderer.js / state.js / timer.js / audio.js は import しない
 //   - 状態の真実源は multi-control。ここは multi:state-sync（edge イベント）を受けて
 //     endAtMs seed で自走描画する（hall の renderHallTickFrame と同じ実証済みパターン・ポーリングなし）
 //   - rAF ループは 1 本（4 区画ぶんを 1 ループで回す）
 //   - DOM 書込は「表示文字列が変わった時のみ」（rAF は判定のみ・毎秒粒度）
-//   - store への書込は一切しない（読み取りすらしない: 必要データは control が snapshot で送る）
+//   - store への書込は一切しない（必要データは control が snapshot で送る）
 //   - 音 / スライドショー / テロップ / PIP / ミュートバッジは DOM ごと存在しない
 
 import { computePaneNow, computeNextBreakMsFor, computeTotalGameTimeMsFor, ENGINE_STATUS } from './multi-engine.mjs';
@@ -63,6 +66,8 @@ const WARN_MS = 60 * 1000;
 const DANGER_MS = 10 * 1000;
 const VALID_BG = new Set(['black', 'navy', 'carbon', 'felt', 'burgundy', 'midnight', 'emerald', 'obsidian', 'image']);
 const VALID_FONT = new Set(['jetbrains', 'roboto', 'space']);
+// engine 状態 → 単一モードの data-status 値（CSS セレクタ互換のため大文字表記に揃える）
+const STATUS_ATTR = Object.freeze({ idle: 'IDLE', running: 'RUNNING', paused: 'PAUSED', finished: 'IDLE' });
 
 // ===== 賞金計算（renderer.js computeCalculatedPool / computeTotalPool / computeAvgStack /
 //        computeRoundedAmounts の移植・snapshot 引数化版） =====
@@ -118,9 +123,9 @@ function computeRoundedAmountsFor(snap) {
   return amounts;
 }
 
-// ===== 区画 DOM 構築 =====
+// ===== 区画 DOM 構築（単一モード index.html の会場表示部と同一構造） =====
 const gridRoot = document.getElementById('js-mgrid');
-const panes = []; // { root, els, data: {assigned, filler, snapshot, engine}, last: {…表示キャッシュ} }
+const panes = []; // { root, clock, els, data, last }
 
 function buildPane(index) {
   const root = document.createElement('section');
@@ -130,71 +135,89 @@ function buildPane(index) {
   root.dataset.bg = 'black';
   root.innerHTML = `
     <div class="pane-bg-image"></div>
-    <div class="pane-inner">
-      <header class="mp-header">
-        <div class="mp-title js-title"></div>
-        <div class="mp-subtitle js-subtitle"></div>
-        <div class="mp-gametype js-gametype"></div>
-        <div class="mp-prize-category js-prize-category"></div>
-      </header>
-      <div class="mp-body">
-        <div class="mp-col mp-left">
-          <div class="mp-logo-box">
-            <img class="mp-logo-img js-logo" alt="" hidden>
-            <span class="mp-logo-placeholder js-logo-placeholder">PokerTimerPLUS+</span>
-            <span class="mp-presented-by js-presented-by"></span>
+    <main class="clock js-clock" data-status="IDLE" data-timer-state="normal">
+      <aside class="clock__left">
+        <div class="left-group left-group--top clock__logo">
+          <div class="clock__logo-placeholder js-logo-placeholder">
+            <span class="clock__logo-placeholder-icon">📷</span>
+            <span class="clock__logo-placeholder-text">ここにロゴを<br>入れてください</span>
           </div>
-          <span class="mp-section-label">PAYOUTS</span>
-          <div class="mp-payouts js-payouts"></div>
-          <span class="mp-total-pool-label">TOTAL PRIZE POOL</span>
-          <span class="mp-total-pool js-total-pool"></span>
-          <span class="mp-pool-note js-pool-note">（GTD）</span>
+          <img src="" alt="" class="clock__logo-img js-logo" hidden>
+          <div class="clock__presented-by js-presented-by"></div>
         </div>
-        <div class="mp-col mp-center">
-          <div class="mp-level js-level"></div>
-          <div class="mp-time js-time">--:--</div>
-          <div class="mp-blinds-cards">
-            <div class="mp-blinds-card">
-              <div class="mp-blinds-card__label">BLINDS</div>
-              <div class="mp-blinds-content js-blinds-current"></div>
+        <div class="left-group left-group--mid clock__payouts">
+          <div class="stat-label">PAYOUTS</div>
+          <div class="payouts-list js-payouts"></div>
+        </div>
+        <div class="left-group left-group--bot clock__pool">
+          <div class="stat-label">TOTAL PRIZE POOL</div>
+          <div class="stat-value stat-value--gold stat-value--xl js-total-pool">¥0</div>
+          <div class="clock__pool-note js-pool-note">（GTD）</div>
+        </div>
+      </aside>
+      <section class="clock__center">
+        <header class="event-header">
+          <div class="event-title-wrap"><div class="event-title js-title">ポーカートーナメント</div></div>
+          <div class="event-subtitle-wrap"><div class="event-subtitle js-subtitle"></div></div>
+          <div class="event-game-type js-gametype"></div>
+          <div class="event-prize-category js-prize-category"></div>
+          <div class="level-display js-level">Level 1</div>
+        </header>
+        <div class="clock__timer">
+          <div class="clock__pre-start-label">トーナメントスタートまで</div>
+          <div class="clock__time js-time">--:--</div>
+          <div class="clock__pause-label">一時停止中</div>
+          <div class="clock__finished-overlay">TOURNAMENT FINISHED</div>
+          <div class="clock__timer-finished-overlay">
+            <span class="clock__timer-finished-main">トーナメント終了</span>
+            <span class="clock__timer-finished-sub">TOURNAMENT COMPLETE</span>
+          </div>
+        </div>
+        <div class="card-stack">
+          <div class="card card-blinds">
+            <div class="card-label">BLINDS</div>
+            <div class="blinds-content js-blinds-current" data-structure="BLIND" data-state="empty"></div>
+          </div>
+          <div class="card card-next">
+            <div class="card-label">NEXT LEVEL</div>
+            <div class="blinds-content blinds-content--next js-blinds-next" data-structure="BLIND" data-state="empty"></div>
+          </div>
+        </div>
+      </section>
+      <aside class="clock__right">
+        <div class="stat-group stat-group--top">
+          <div class="stat stat--right">
+            <div class="stat-label js-break-label">NEXT BREAK IN</div>
+            <div class="next-break-value js-next-break">00:00:00</div>
+          </div>
+        </div>
+        <div class="stat-group stat-group--mid">
+          <div class="stat stat--right">
+            <div class="stat-label">AVG STACK</div>
+            <div class="stat-value js-avg-stack">0</div>
+          </div>
+        </div>
+        <div class="stat-group stat-group--bot">
+          <div class="stat stat--right stat--lead">
+            <div class="stat-label">PLAYERS</div>
+            <div class="stat-value stat-value--md js-players">0 / 0</div>
+          </div>
+          <div class="stat-group__inline">
+            <div class="stat-row stat-row--right stat-row--optional js-reentry-row">
+              <span class="stat-label-inline">REENTRY</span>
+              <span class="stat-value-small js-reentry">0</span>
             </div>
-            <div class="mp-blinds-card mp-blinds-card--next">
-              <div class="mp-blinds-card__label">NEXT LEVEL</div>
-              <div class="mp-blinds-content js-blinds-next"></div>
+            <div class="stat-row stat-row--right stat-row--optional js-addon-row">
+              <span class="stat-label-inline">ADDON</span>
+              <span class="stat-value-small js-addon">0</span>
+            </div>
+            <div class="stat-row stat-row--right stat-row--optional special-stack-row js-special-stack-row">
+              <span class="special-stack-text js-special-stack">—</span>
             </div>
           </div>
         </div>
-        <div class="mp-col mp-right">
-          <div class="mp-stat">
-            <span class="mp-stat__label js-break-label">NEXT BREAK IN</span>
-            <span class="mp-stat__value js-next-break">--:--:--</span>
-          </div>
-          <div class="mp-stat">
-            <span class="mp-stat__label">AVG STACK</span>
-            <span class="mp-stat__value js-avg-stack">0</span>
-          </div>
-          <div class="mp-stat">
-            <span class="mp-stat__label">PLAYERS</span>
-            <span class="mp-stat__value js-players">0 / 0</span>
-          </div>
-          <div class="mp-stat mp-stat--optional js-reentry-row">
-            <span class="mp-stat__label">REENTRY</span>
-            <span class="mp-stat__value js-reentry">0</span>
-          </div>
-          <div class="mp-stat mp-stat--optional js-addon-row">
-            <span class="mp-stat__label">ADDON</span>
-            <span class="mp-stat__value js-addon">0</span>
-          </div>
-          <div class="mp-special-stack js-special-stack"></div>
-        </div>
-      </div>
-    </div>
-    <div class="mp-finished-overlay"><span class="mp-finished-label">TOURNAMENT FINISHED</span></div>
-    <div class="mp-pause-overlay"><span class="mp-pause-label">一時停止中</span></div>
-    <div class="mp-complete-overlay">
-      <span class="mp-complete-label">トーナメント終了</span>
-      <span class="mp-complete-sub">TOURNAMENT COMPLETE</span>
-    </div>
+      </aside>
+    </main>
     <div class="pane-filler" data-filler="blank">
       <img class="pane-filler__logo" src="../../assets/logo-plus2-default.png" alt="">
     </div>`;
@@ -202,6 +225,7 @@ function buildPane(index) {
   const q = (sel) => root.querySelector(sel);
   return {
     root,
+    clock: q('.js-clock'),
     els: {
       bgImage: q('.pane-bg-image'),
       title: q('.js-title'), subtitle: q('.js-subtitle'),
@@ -214,7 +238,7 @@ function buildPane(index) {
       avgStack: q('.js-avg-stack'), players: q('.js-players'),
       reentryRow: q('.js-reentry-row'), reentry: q('.js-reentry'),
       addonRow: q('.js-addon-row'), addon: q('.js-addon'),
-      specialStack: q('.js-special-stack'),
+      specialStackRow: q('.js-special-stack-row'), specialStack: q('.js-special-stack'),
       filler: q('.pane-filler')
     },
     data: { assigned: false, filler: 'blank', snapshot: null, engine: null },
@@ -222,29 +246,47 @@ function buildPane(index) {
   };
 }
 
-// ===== 静的部分の描画（割当 / runtime 変更などの edge イベント時のみ） =====
-function renderBlindsInto(targetEl, level, structureType, isNext) {
+// ===== 静的部分の描画（割当 / edge イベント時のみ） =====
+// renderer.js renderBlindsContent の移植: 単一モードと同一の data 属性 + セル構造で描画する
+function renderBlindsInto(targetEl, level, structureType) {
+  if (!targetEl) return;
   let effective = structureType;
   if (structureType === 'MIX' && level && !level.isBreak && typeof level.subStructureType === 'string'
       && STRUCTURE_FIELDS[level.subStructureType] && level.subStructureType !== 'MIX') {
     effective = level.subStructureType;
   }
+  targetEl.dataset.structure = effective;
   if (!level) {
-    targetEl.innerHTML = `<div class="mp-blinds-field mp-blinds-field--full"><span class="mp-blinds-field__value">— (最終)</span></div>`;
+    targetEl.dataset.state = 'empty';
+    delete targetEl.dataset.maxDigits;
+    targetEl.innerHTML = `<div class="blinds-field blinds-field--full"><span class="blinds-field__value">— (最終)</span></div>`;
     return;
   }
   if (level.isBreak) {
+    targetEl.dataset.state = 'break';
+    delete targetEl.dataset.maxDigits;
     const label = level.label || 'ブレイク';
-    targetEl.innerHTML = `<div class="mp-blinds-field mp-blinds-field--full"><span class="mp-blinds-field__value">${escapeHtml(label)}</span></div>`;
+    targetEl.innerHTML = `<div class="blinds-field blinds-field--full"><span class="blinds-field__value">${escapeHtml(label)}</span></div>`;
     return;
   }
+  targetEl.dataset.state = 'normal';
   const fields = STRUCTURE_FIELDS[effective] || STRUCTURE_FIELDS.BLIND;
+  let maxDigits = 0;
+  for (const f of fields) {
+    const v = level[f];
+    if (typeof v === 'number' && v > 0) {
+      const d = String(Math.floor(Math.abs(v))).length;
+      if (d > maxDigits) maxDigits = d;
+    }
+  }
+  if (maxDigits > 0) targetEl.dataset.maxDigits = String(maxDigits);
+  else delete targetEl.dataset.maxDigits;
   targetEl.innerHTML = fields.map((f) => {
     const v = level[f];
     const value = (typeof v === 'number') ? formatNumber(v) : '—';
-    return `<div class="mp-blinds-field">
-      <span class="mp-blinds-field__label">${escapeHtml(FIELD_LABEL[f] || f)}</span>
-      <span class="mp-blinds-field__value">${escapeHtml(value)}</span>
+    return `<div class="blinds-field" data-field="${f}">
+      <span class="blinds-field__label">${escapeHtml(FIELD_LABEL[f] || f)}</span>
+      <span class="blinds-field__value">${escapeHtml(value)}</span>
     </div>`;
   }).join('');
 }
@@ -291,13 +333,13 @@ function renderPaneStatic(pane, globalData) {
   els.bgImage.style.backgroundImage = (ds.background === 'image' && typeof snap.backgroundImage === 'string' && snap.backgroundImage)
     ? `url("${snap.backgroundImage}")` : '';
 
-  // ヘッダ
-  pane.root.style.setProperty('--pane-title-color', /^#[0-9a-fA-F]{6}$/.test(snap.titleColor || '') ? snap.titleColor : '#FFFFFF');
+  // ヘッダ（タイトル色は単一モードと同じ --title-color 変数を区画 .clock スコープで適用）
+  pane.clock.style.setProperty('--title-color', /^#[0-9a-fA-F]{6}$/.test(snap.titleColor || '') ? snap.titleColor : '#FFFFFF');
   els.title.textContent = snap.title || 'ポーカートーナメント';
   els.subtitle.textContent = snap.subtitle || '';
   els.prizeCategory.textContent = snap.prizeCategory ? `※ PRIZEは${snap.prizeCategory}として付与` : '';
 
-  // ロゴ / presented by（グローバル設定・全区画共通）
+  // ロゴ / presented by（グローバル設定・全区画共通。renderer.js applyLogo と同じ 3 モード）
   const logo = globalData?.logo || { kind: 'placeholder' };
   if (logo.kind === 'plus2') {
     els.logo.src = '../../assets/logo-plus2-default.png';
@@ -316,13 +358,17 @@ function renderPaneStatic(pane, globalData) {
   const symbol = snap.currencySymbol || '¥';
   const pool = computeTotalPoolFor(snap);
   els.totalPool.textContent = `${symbol}${formatNumber(pool)}`;
+  els.totalPool.classList.toggle('is-7digit', String(Math.floor(Math.abs(pool))).length >= 7);
   els.poolNote.classList.toggle('is-visible', isGuaranteeActiveFor(snap));
   const amounts = computeRoundedAmountsFor(snap);
   els.payouts.innerHTML = (snap.payouts || []).map((p, i) =>
-    `<div class="mp-payouts-row${i >= 3 ? ' mp-payouts-row--secondary' : ''}">
-      <span>${escapeHtml(String(p.rank))}位</span><span>${escapeHtml(symbol + formatNumber(amounts[i] ?? 0))}</span>
+    `<div class="payouts-row${i >= 3 ? ' payouts-row--secondary' : ''}">
+      <span class="payouts-row__rank">${escapeHtml(String(p.rank))}位</span>
+      <span class="payouts-row__amount">${escapeHtml(symbol + formatNumber(amounts[i] ?? 0))}</span>
     </div>`).join('');
-  els.avgStack.textContent = formatNumber(computeAvgStackFor(snap));
+  const avgValue = computeAvgStackFor(snap);
+  els.avgStack.textContent = formatNumber(avgValue);
+  els.avgStack.classList.toggle('is-8digit', String(Math.floor(Math.abs(avgValue))).length >= 8);
   const rt = snap.runtime || { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 };
   els.players.textContent = `${rt.playersRemaining || 0} / ${rt.playersInitial || 0}`;
   els.reentry.textContent = String(rt.reentryCount || 0);
@@ -331,14 +377,14 @@ function renderPaneStatic(pane, globalData) {
   els.addonRow.classList.toggle('is-visible', (rt.addOnCount || 0) > 0);
   const ss = snap.specialStack || { enabled: false };
   const ssVisible = !!ss.enabled && (Number(ss.appliedCount) || 0) > 0;
-  els.specialStack.classList.toggle('is-visible', ssVisible);
+  els.specialStackRow.classList.toggle('is-visible', ssVisible);
   if (ssVisible) {
     const total = (Number(ss.chips) || 0) * (Number(ss.appliedCount) || 0);
     const label = (ss.label || '').trim();
     els.specialStack.textContent = label ? `特殊配布: ${label} ${formatNumber(total)}` : `特殊配布: ${formatNumber(total)}`;
   }
-  // 残0人オーバーレイ（TOURNAMENT FINISHED）
-  pane.root.classList.toggle('is-players-finished', (rt.playersInitial || 0) > 0 && (rt.playersRemaining || 0) === 0);
+  // 残0人オーバーレイ（TOURNAMENT FINISHED = 単一モードの clock--finished と同じクラス運用）
+  pane.clock.classList.toggle('clock--finished', (rt.playersInitial || 0) > 0 && (rt.playersRemaining || 0) === 0);
 
   // タイマー系キャッシュを無効化して次フレームで必ず再描画
   pane.last = { time: null, levelIndex: null, status: null, timerState: null, nextBreak: null };
@@ -360,18 +406,23 @@ function renderPaneTick(pane, nowMs) {
   // 警告色（RUNNING 中のみ。BREAK は金色 = data-status 側で表現、renderer.js renderTime と同義）
   const timerState = (now.status === ENGINE_STATUS.RUNNING && !isBreak) ?
     (now.remainingMs <= DANGER_MS ? 'danger' : (now.remainingMs <= WARN_MS ? 'warn' : 'normal')) : 'normal';
-  if (timerState !== last.timerState) { pane.root.dataset.timerState = timerState; last.timerState = timerState; }
+  if (timerState !== last.timerState) { pane.clock.dataset.timerState = timerState; last.timerState = timerState; }
 
-  // 区画状態（idle / running / break / paused / finished）
-  const status = (now.status === ENGINE_STATUS.RUNNING && isBreak) ? 'break' : now.status;
-  if (status !== last.status) { pane.root.dataset.status = status; last.status = status; }
+  // 区画状態: 単一モードと同一の data-status 値（BREAK は RUNNING + isBreak から導出）+
+  //           全レベル完走は clock--timer-finished クラス（単一モードの storage 'finished' 相当）
+  const statusKey = (now.status === ENGINE_STATUS.RUNNING && isBreak) ? 'break' : now.status;
+  if (statusKey !== last.status) {
+    pane.clock.dataset.status = statusKey === 'break' ? 'BREAK' : (STATUS_ATTR[now.status] || 'IDLE');
+    pane.clock.classList.toggle('clock--timer-finished', now.status === ENGINE_STATUS.FINISHED);
+    last.status = statusKey;
+  }
 
   // レベル表示 + ブラインドカード + MIX ラベル（レベルが変わった時のみ）
   if (now.levelIndex !== last.levelIndex) {
     els.level.textContent = isBreak ? 'BREAK' : `Level ${level ? level.level : now.levelIndex + 1}`;
     const structureType = GAME_STRUCTURE_TYPE[data.snapshot.gameType] || 'BLIND';
-    renderBlindsInto(els.blindsCurrent, level, structureType, false);
-    renderBlindsInto(els.blindsNext, levels[now.levelIndex + 1] || null, structureType, true);
+    renderBlindsInto(els.blindsCurrent, level, structureType);
+    renderBlindsInto(els.blindsNext, levels[now.levelIndex + 1] || null, structureType);
     renderGameTypeLabel(pane, now.levelIndex);
     last.levelIndex = now.levelIndex;
   }
