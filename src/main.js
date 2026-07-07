@@ -1978,6 +1978,12 @@ async function _writeMultiSession() {
     });
     // tmp へ書いて rename（書込中の電源断でも旧ファイルが生存。中途破損は parse 失敗 → 復元せず破棄の網にかかる）
     await fs.promises.writeFile(tmp, payload, 'utf8');
+    // 書込（非同期）中に exitMultiMode の削除が走った場合、rename でファイルが復活し
+    // 「正常終了なのに残存 = 偽の復元確認」になる競合窓を閉じる（rename 直前に再チェック）
+    if (!_multiModeActive) {
+      try { await fs.promises.unlink(tmp); } catch (_) { /* ignore */ }
+      return;
+    }
     await fs.promises.rename(tmp, file);
   } catch (_) { /* 書出し失敗は無視（次の debounce で再試行） */ }
 }

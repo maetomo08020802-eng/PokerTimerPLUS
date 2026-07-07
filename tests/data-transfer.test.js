@@ -31,7 +31,10 @@ const electronStub = {
     showOpenDialog: async () => ({ canceled: true })
   },
   globalShortcut: { register: () => {}, unregisterAll: () => {} },
-  ipcMain: { handle: () => {} },
+  // multi Phase 1 以降、main.js はロード時に registerMultiIpcHandlers() で ipcMain.on も呼ぶ。
+  // on が無いと require 時例外 → main.js の uncaughtException で握りつぶされ exit 0 =
+  // 「0 件実行の偽 PASS」になっていた（2026-07-07 phase2e 完了 review 懐疑役が検出・是正）
+  ipcMain: { handle: () => {}, on: () => {} },
   shell: { openExternal: () => {} },
   powerMonitor: { on: () => {} }
 };
