@@ -1882,6 +1882,7 @@ function setupDisplayChangeListeners() {
 
   screen.on('display-added', async () => {
     if (_displayAddedPending) return;
+    if (_multiModeActive) return;   // multi-tournament-4up Phase 1: マルチ表示中は picker を出さない（HDMI 本格追従は Phase 3）
     if (hallWindow && !hallWindow.isDestroyed()) return;   // 既に 2 画面状態
     _displayAddedPending = true;
     // v2.0.4-rc15 タスク 2: rolling ログに記録（`_displayAddedPending` チェック後で確実に 1 回）
@@ -1922,6 +1923,220 @@ async function createMainWindow() {
   createHallWindow(hallDisplay);
   return mainWindow;
 }
+
+// ===== multi-tournament-4up Phase 1: マルチ4分割表示モード（新規追加ブロック・既存関数は無改変） =====
+//   設計: .cc-plans/2026-07-07_multi-tournament-4up_phase1_plan.md（Phase 0 plan §5 の確定設計）
+//   - 第3のウィンドウ種別 role='multi-control'（手元PC操作盤・状態の真実源）/ 'multi-grid'（会場2×2表示専用）。
+//     両方とも独立 HTML（renderer/index.html を読まない = display-picker 前例）。
+//   - 状態同期は multi:* の別チャンネル + 別キャッシュ（既存 dual:* / _dualStateCache には触れない）。
+//   - store への書込なし（トーナメントは読み取り専用 snapshot。致命保護⑤ runtime 永続化と構造的に非衝突）。
+//   - HDMI 抜き差しの本格追従は Phase 3（マルチ中は display-added の picker 起動のみ 1 行ガードで抑止）。
+let multiControlWindow = null;
+let multiGridWindow = null;
+let _multiModeActive = false;
+let _multiTransitioning = false; // enter/exit 中の再入・close 連鎖ガード
+const _multiPaneCache = [null, null, null, null]; // multi:publish kind='pane' のキャッシュ（grid 初期同期用）
+
+function _resetMultiPaneCache() {
+  for (let i = 0; i < _multiPaneCache.length; i++) _multiPaneCache[i] = null;
+}
+
+// 会場側 2×2 グリッドウィンドウ（createHallWindow の配置パターンを踏襲した新関数）
+function createMultiGridWindow(targetDisplay) {
+  if (multiGridWindow && !multiGridWindow.isDestroyed()) {
+    try { multiGridWindow.close(); } catch (_) { /* ignore */ }
+  }
+  multiGridWindow = null;
+  const opts = {
+    title: WINDOW_TITLE + ' (Multi Grid)',
+    width: 1280,
+    height: 720,
+    fullscreen: true,
+    focusable: false,           // 会場モニターはフォーカス不可（操作は手元 PC、hall と同じ思想）
+    show: true,
+    backgroundColor: '#000000',
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    webPreferences: {
+      ...buildWebPreferences('multi-grid'),
+      paintWhenInitiallyHidden: true
+    }
+  };
+  if (targetDisplay && targetDisplay.bounds) {
+    opts.x = targetDisplay.bounds.x + 40;
+    opts.y = targetDisplay.bounds.y + 40;
+  }
+  const win = new BrowserWindow(opts);
+  multiGridWindow = win;
+  win.on('page-title-updated', (event) => event.preventDefault());
+  win.setTitle(WINDOW_TITLE + ' (Multi Grid)');
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.loadFile(path.join(__dirname, 'renderer', 'multi', 'multi-grid.html'));
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed() && !win.isFullScreen()) win.setFullScreen(true);
+  });
+  win.on('closed', () => {
+    if (multiGridWindow === win) multiGridWindow = null;
+    // grid が不意に消えた場合は孤児操作盤を残さない（exitMultiMode 内の close 連鎖は
+    // _multiModeActive=false 済のため再入しない）
+    if (_multiModeActive) exitMultiMode();
+  });
+  return win;
+}
+
+// 手元 PC 側 操作盤ウィンドウ
+function createMultiControlWindow(targetDisplay) {
+  if (multiControlWindow && !multiControlWindow.isDestroyed()) {
+    try { multiControlWindow.close(); } catch (_) { /* ignore */ }
+  }
+  multiControlWindow = null;
+  const opts = {
+    title: WINDOW_TITLE + ' (Multi Control)',
+    width: 1100,
+    height: 700,
+    minWidth: 900,
+    minHeight: 560,
+    backgroundColor: '#0A1F3D',
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    webPreferences: buildWebPreferences('multi-control')
+  };
+  if (targetDisplay && targetDisplay.bounds) {
+    opts.x = targetDisplay.bounds.x + 40;
+    opts.y = targetDisplay.bounds.y + 40;
+  }
+  const win = new BrowserWindow(opts);
+  multiControlWindow = win;
+  win.on('page-title-updated', (event) => event.preventDefault());
+  win.setTitle(WINDOW_TITLE + ' (Multi Control)');
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.loadFile(path.join(__dirname, 'renderer', 'multi', 'multi-control.html'));
+  win.on('closed', () => {
+    if (multiControlWindow === win) multiControlWindow = null;
+    // × で操作盤を閉じた場合も通常モードへ復帰（grid 孤児化 = 操作不能状態を防ぐ。
+    //   exitMultiMode 経由の close は _multiModeActive=false 済のため再入しない）
+    if (_multiModeActive) exitMultiMode();
+  });
+  return win;
+}
+
+// マルチ表示モードへ入る（operator の設定画面から multi:enter IPC 経由）
+async function enterMultiMode() {
+  if (_multiModeActive || _multiTransitioning) return { ok: false, reason: 'already' };
+  if (_isSwitchingMode) return { ok: false, reason: 'busy' };
+  // 安全ゲート: 単一モードのタイマー進行中は開始不可（Phase 1 仕様）。
+  //   operator は hide されるが renderer は生き続けるため、backgroundThrottling(role='operator')
+  //   により rAF が絞られ「隠れたタイマーが遅れて進む」事故が起き得る。入口で構造的に排除する。
+  //   判定は confirmQuit と同じ store 参照 + PRE_START は dual cache 参照（読み取りのみ）。
+  try {
+    const activeId = store.get('activeTournamentId');
+    const list = store.get('tournaments') || [];
+    const active = list.find((t) => t.id === activeId);
+    const status = active?.timerState?.status;
+    if (status === 'running' || status === 'paused' || status === 'break') {
+      return { ok: false, reason: 'timer-active' };
+    }
+  } catch (_) { /* store 判定不能は稀。PRE_START ガードは下で別途効く */ }
+  if (_dualStateCache.preStartState && _dualStateCache.preStartState.isActive) {
+    return { ok: false, reason: 'pre-start-active' };
+  }
+  _multiTransitioning = true;
+  try {
+    // グリッド表示モニターの選択（2 画面以上なら picker = 既存 chooseHallDisplayInteractive を呼ぶだけ。
+    //   単画面なら primary に全画面表示（動作確認用途。実運用は extend = 2 画面）
+    const displays = screen.getAllDisplays();
+    let gridDisplay = screen.getPrimaryDisplay();
+    if (displays && displays.length >= 2) {
+      const gridId = await chooseHallDisplayInteractive(displays);
+      if (gridId == null) return { ok: false, reason: 'cancelled' };
+      gridDisplay = displays.find((d) => d.id === gridId) || gridDisplay;
+    }
+    _multiModeActive = true;
+    _resetMultiPaneCache();
+    // 既存 hall は閉じる（dual broadcast は hallWindow null で自動 no-op = 既存 STEP 2 設計）
+    if (hallWindow && !hallWindow.isDestroyed()) {
+      try { hallWindow.close(); } catch (_) { /* ignore */ }
+      hallWindow = null;
+    }
+    // operator は close せず hide（close 確認ダイアログ・再生成 race を持ち込まない）
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try { mainWindow.hide(); } catch (_) { /* ignore */ }
+    }
+    const controlDisplay = (screen.getAllDisplays() || []).find((d) => d.id !== gridDisplay.id)
+      || screen.getPrimaryDisplay();
+    // grid → control の順で生成（単画面動作確認時に操作盤が全画面 grid の前面に来るように）
+    createMultiGridWindow(gridDisplay);
+    createMultiControlWindow(controlDisplay);
+    try { rollingLog('multi:enter', { gridDisplayId: gridDisplay && gridDisplay.id }); } catch (_) { /* ignore */ }
+    return { ok: true };
+  } finally {
+    _multiTransitioning = false;
+  }
+}
+
+// マルチ表示モードを終了して通常モードへ復帰
+async function exitMultiMode() {
+  if (!_multiModeActive) return { ok: false, reason: 'not-active' };
+  if (_multiTransitioning) return { ok: false, reason: 'busy' };
+  _multiTransitioning = true;
+  try {
+    _multiModeActive = false; // 先に落とす = close 連鎖（closed ハンドラ）の再入を構造的に防ぐ
+    const gw = multiGridWindow; multiGridWindow = null;
+    const cw = multiControlWindow; multiControlWindow = null;
+    if (gw && !gw.isDestroyed()) { try { gw.close(); } catch (_) { /* ignore */ } }
+    if (cw && !cw.isDestroyed()) { try { cw.close(); } catch (_) { /* ignore */ } }
+    _resetMultiPaneCache();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try { app.focus({ steal: true }); } catch (_) { /* ignore */ }
+      try { mainWindow.show(); } catch (_) { /* ignore */ }
+      try { mainWindow.focus(); } catch (_) { /* ignore */ }
+      // hall の再生成は起動時と同じ「毎回手動選択」フロー（既存ヘルパを呼ぶだけ・switch 系には触れない）
+      const displays = screen.getAllDisplays();
+      if (displays && displays.length >= 2) {
+        const hallId = await chooseHallDisplayInteractive(displays);
+        const hallDisplay = (hallId != null) ? displays.find((d) => d.id === hallId) : null;
+        if (hallDisplay) {
+          createHallWindow(hallDisplay);
+          try { mainWindow.webContents.send('dual:role-changed', 'operator'); } catch (_) { /* ignore */ }
+          try { rollingLog('multi:exit', { restored: 'dual' }); } catch (_) { /* ignore */ }
+          return { ok: true };
+        }
+      }
+      // 単画面 or picker キャンセル → operator-solo 表示（既存の動的 role 切替 IPC・idempotent）
+      try { mainWindow.webContents.send('dual:role-changed', 'operator-solo'); } catch (_) { /* ignore */ }
+    }
+    try { rollingLog('multi:exit', { restored: 'solo' }); } catch (_) { /* ignore */ }
+    return { ok: true };
+  } finally {
+    _multiTransitioning = false;
+  }
+}
+
+// multi:* IPC 登録（モジュールロード時に即登録。registerIpcHandlers 本体には触れない）
+function registerMultiIpcHandlers() {
+  ipcMain.handle('multi:enter', () => enterMultiMode());
+  ipcMain.handle('multi:exit', () => exitMultiMode());
+  // multi-control（真実源）→ main（キャッシュ）→ multi-grid の edge イベント中継
+  ipcMain.on('multi:publish', (_event, payload) => {
+    if (!_multiModeActive) return;
+    if (!payload || payload.kind !== 'pane' || !payload.value || typeof payload.value !== 'object') return;
+    const idx = Number(payload.value.index);
+    if (!Number.isInteger(idx) || idx < 0 || idx > 3) return;
+    _multiPaneCache[idx] = payload.value.pane || null;
+    if (multiGridWindow && !multiGridWindow.isDestroyed()) {
+      try { multiGridWindow.webContents.send('multi:state-sync', payload); } catch (_) { /* ignore */ }
+    }
+  });
+  // grid 起動時の全量 1 回同期（venueName / logo は store 読み取りのみ）
+  ipcMain.handle('multi:state-sync-init', () => ({
+    panes: _multiPaneCache.slice(),
+    global: {
+      venueName: store.get('venueName') || '',
+      logo: store.get('logo') || null
+    }
+  }));
+}
+registerMultiIpcHandlers();
 
 function toggleFullScreen() {
   // v2.0.4-rc6 Fix 3: 2 画面モード時は常に hall を toggle（hall 側全画面解除等の操作者ニーズ）。

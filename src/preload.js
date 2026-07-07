@@ -183,5 +183,19 @@ contextBridge.exposeInMainWorld('api', {
       catch (_) { /* never throw from logging */ }
     },
     openFolder: () => _measuredInvoke('logs:openFolder')
+  },
+  // multi-tournament-4up Phase 1: 4分割マルチ表示モードのブリッジ。
+  //   enter/exit: モード切替（main がウィンドウ生成/復元を担う。enter は単一モード IDLE 時のみ許可）
+  //   publish: multi-control（真実源）→ main → multi-grid の edge イベント中継（既存 dual:* とは別チャンネル）
+  //   fetchInitialState / subscribeStateSync: multi-grid 起動時の全量 1 回 + 以後の差分購読（ポーリング禁止）
+  multi: {
+    enter: () => _measuredInvoke('multi:enter'),
+    exit: () => _measuredInvoke('multi:exit'),
+    publish: (payload) => ipcRenderer.send('multi:publish', payload),
+    fetchInitialState: () => _measuredInvoke('multi:state-sync-init'),
+    subscribeStateSync: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('multi:state-sync', (_event, payload) => callback(payload));
+    }
   }
 });
