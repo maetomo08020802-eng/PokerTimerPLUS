@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-08** — multi-tournament-4up **Phase 2〜2e 前原実機確認OK** + **Phase 2f(復元方式の選択)+追補(ダイアログに経過時間表示)実装完了・前原GO受領**。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチモードは未配信機能・単一モード非接触)・テスト**1514件**全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-08** — multi-tournament-4up **Phase 2〜2f+追補 main merge 済(`e9943f3`・push済)** + **追補2(モード開始時のデータ非保存 確認モーダル)実装完了**。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチは main 入りだが未配信=配信はPhase 3判断)・テスト**1515件**全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -52,16 +52,16 @@
 | 配信済リリース | 15件(v1.0.0〜v2.6.6)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件(安定運用フェーズ)|
-| 最新テスト件数 | 1514件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +1) |
+| 最新テスト件数 | 1515件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +2) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = merge `e9943f3`(Phase 2〜2f+追補・前原GO 2026-07-08・push 済)。feature branch `feature/multi-tournament-4up-phase2` は役目終了(温存中・削除可)。配信は tag `v2.6.6`(Latest・自動更新有効)のまま=**マルチモードは main には入ったが未配信**(tag/.exe/Release は Phase 3 の配信判断で)。
-- **直前作業(2026-07-08)**: Phase 2〜2f 前原実機確認OK+GO受領→main merge。**Phase 2f=復元方式の選択制**(4ボタンダイアログ・`toPowerLossElapsedRecord`・どちらも復元直後は一時停止・schema=1無改変)+**追補=ダイアログに「終了から約N分」動的表示**。完了review: 2f=承認・追補=条件付き承認(PROGRESS未更新指摘→是正済)。テスト1514件全PASS(merge後のmainでも実走確認)・致命5件非接触・store書込ゼロ維持。report 2本 `.cc-reports/2026-07-08_multi-tournament-4up_phase2f-*.md`。
-- **次のアクション**: Phase 3(仕上げ・堅牢化・配信/roadmap §5)の brief 起案(前原の着手指示で開始)。実機軽確認(経過時間表示の実値)は 2f シナリオ#1 に相乗り。
+- **git**: `main` = merge `e9943f3`(Phase 2〜2f+追補・前原GO・push済) + **追補2 commit(ローカル・push は完了review承認後)**。feature branch は役目終了(温存中・削除可)。配信は tag `v2.6.6`(Latest・自動更新有効)のまま=**マルチは main 入りだが未配信**(tag/.exe/Release は Phase 3 の配信判断で)。
+- **直前作業(2026-07-08)**: ①Phase 2〜2f+追補(経過時間表示)を前原GOで main merge+push ②前原指示で**追補2=モード開始時の確認モーダル**(「登録トーナメントは読み込むだけ・進行/操作は保存・上書きされない・停電復帰のみ対応」を開始前に明示。キャンセル=既存 'cancelled' 経路・renderer 無改変)。テスト1515件全PASS・致命5件非接触・store書込ゼロ維持。report `.cc-reports/2026-07-08_multi-tournament-4up_phase2f-start-confirm-modal.md`。
+- **次のアクション**: 追補2の完了review承認→main push→Phase 3(仕上げ・堅牢化・配信/roadmap §5)の brief 起案(前原の着手指示で開始)。
 
 ---
 
