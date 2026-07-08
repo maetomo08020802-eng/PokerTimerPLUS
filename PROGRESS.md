@@ -12,8 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| multi-tournament-4up Phase 2〜2e(独立PRE_START+キーボード保険+フィラー+実機FB 4弾対応=停電復帰まで) | ✅ 前原実機確認OK(2026-07-08)・GO待ち(2f と合わせて merge 判断) | report 5本 `.cc-reports/2026-07-07_multi-tournament-4up_phase2*.md` / branch `feature/multi-tournament-4up-phase2`(2d=`e7a8de6`/2e=`cf74a96`) |
-| multi-tournament-4up Phase 2f(復元方式の選択=そこから再開/経過を反映・実機FB第5弾)+追補(経過時間表示) | 🟡 GO受領・main merge 作業中 | report 2本 `.cc-reports/2026-07-08_multi-tournament-4up_phase2f-*.md` / 同 branch(2f=`f07f84d`/追補=`babafbb`) |
+| multi-tournament-4up Phase 3(仕上げ・堅牢化・配信/roadmap §5) | 📝 brief起案待ち(前原の着手指示で開始) | 正典 `docs/multi-tournament-4up_roadmap.md` / Phase 2〜2f+追補は main merge 済(`e9943f3`) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -60,9 +59,9 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `feature/multi-tournament-4up-phase2`(2f=`f07f84d`/追補=`babafbb`)。**前原 GO 受領済(2026-07-08)= main merge + push 実施中**(tag/.exe/Release は Phase 3 の配信判断まで行わない)。配信は tag `v2.6.6`(Latest・自動更新有効)のまま(マルチモードは未配信機能)。
-- **直前作業(2026-07-08)**: Phase 2〜2f 前原実機確認OK+GO受領。**Phase 2f=復元方式の選択制**(4ボタンダイアログ・`toPowerLossElapsedRecord`・どちらも復元直後は一時停止・schema=1無改変)+**追補=ダイアログに「終了から約N分」動的表示**(`_formatMultiSessionAge`)。完了review: 2f=承認・追補=条件付き承認(PROGRESS未更新指摘→本編集で是正)。テスト1514件全PASS・致命5件非接触・store書込ゼロ維持。report 2本 `.cc-reports/2026-07-08_multi-tournament-4up_phase2f-*.md`。
-- **次のアクション**: main merge + push 完了確認→Phase 3(仕上げ・堅牢化・配信/roadmap §5)の brief 起案。実機軽確認(経過時間表示の実値)は 2f シナリオ#1 に相乗り。
+- **git**: `main` = merge `e9943f3`(Phase 2〜2f+追補・前原GO 2026-07-08・push 済)。feature branch `feature/multi-tournament-4up-phase2` は役目終了(温存中・削除可)。配信は tag `v2.6.6`(Latest・自動更新有効)のまま=**マルチモードは main には入ったが未配信**(tag/.exe/Release は Phase 3 の配信判断で)。
+- **直前作業(2026-07-08)**: Phase 2〜2f 前原実機確認OK+GO受領→main merge。**Phase 2f=復元方式の選択制**(4ボタンダイアログ・`toPowerLossElapsedRecord`・どちらも復元直後は一時停止・schema=1無改変)+**追補=ダイアログに「終了から約N分」動的表示**。完了review: 2f=承認・追補=条件付き承認(PROGRESS未更新指摘→是正済)。テスト1514件全PASS(merge後のmainでも実走確認)・致命5件非接触・store書込ゼロ維持。report 2本 `.cc-reports/2026-07-08_multi-tournament-4up_phase2f-*.md`。
+- **次のアクション**: Phase 3(仕上げ・堅牢化・配信/roadmap §5)の brief 起案(前原の着手指示で開始)。実機軽確認(経過時間表示の実値)は 2f シナリオ#1 に相乗り。
 
 ---
 
