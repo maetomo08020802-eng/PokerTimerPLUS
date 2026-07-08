@@ -392,6 +392,11 @@ test('phase3a: 走行中差し替えの誤操作ガード（進行中のみ conf
   // ガード対象は進行中 3 状態のみ（finished / idle は摩擦なし = 終了区画の手動切替を阻害しない）
   assert.ok(/ENGINE_STATUS\.RUNNING \|\|\s*\n?\s*cur\.status === ENGINE_STATUS\.PRESTART \|\| cur\.status === ENGINE_STATUS\.PAUSED/.test(c),
     'ガード対象が running/prestart/paused になっていない');
+  // ①割当変更: 差し替え確定後は新規 engine（新規状態で読込 = 前区画の進行を持ち越さない）
+  assert.ok(/pane\.engine = createClockEngine\(pane\.snapshot\.levels\)/.test(c),
+    '割当変更が新規 engine 読込になっていない');
+  // ④終了区画: grid は FINISHED を終了表示で継続（自動フィラー化しない = 手動方式）
+  assert.ok(/clock--timer-finished/.test(code['multi-grid.js']), 'grid に終了表示継続の配線がない');
 });
 
 test('phase3a: マルチ専用 HDMI 追従（独立リスナー・picker なし・hide 方式・既存 dual 経路無改変）', () => {
