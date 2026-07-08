@@ -2141,6 +2141,14 @@ body:not(.has-marquee) .marquee { display: none; }
   font-weight: 700;
   letter-spacing: 4px;
 }
+/* 1b-qr: 接続 URL の QR（設定ダイアログ内・固定サイズでレイアウトシフト非影響） */
+.remote-conn__qr {
+  width: 150px;
+  height: 150px;
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 0;
+}
 
 /* ===== ハウス情報タブ（branding.md §15.2 準拠の Yu Shimomachi/PLUS2 クレジット欄は編集不可） ===== */
 

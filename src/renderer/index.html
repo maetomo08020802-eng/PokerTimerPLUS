@@ -1144,6 +1144,12 @@
             <span class="form-row__label">接続 URL（スマホのブラウザで開く）</span>
             <code id="js-remote-url" class="remote-conn__url">—</code>
           </div>
+          <!-- 1b-qr: 接続 URL の QR（スマホのカメラで読む）。PIN は QR に含めない（別チャネル手入力）。
+               vendored 自作 QR 生成（依存ゼロ）で canvas に描画。テキスト URL は上に残す。 -->
+          <div class="form-row form-row--qr">
+            <span class="form-row__label">QR で開く（スマホのカメラ）</span>
+            <canvas id="js-remote-qr" class="remote-conn__qr" width="150" height="150" aria-label="接続 URL の QR コード"></canvas>
+          </div>
           <div class="form-row">
             <span class="form-row__label">PIN（スマホに入力）</span>
             <code id="js-remote-pin" class="remote-conn__pin">—</code>

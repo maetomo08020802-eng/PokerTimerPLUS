@@ -18,6 +18,9 @@ const Store = require('electron-store');
 //   認証境界（PIN / Origin / Host / Content-Type / レート制限）は src/remote/server.js に集約。
 const remoteServer = require('./remote/server');
 const remoteDiscover = require('./remote/discover');
+// 1b-qr: 接続 URL の QR を main（node）側で生成し行列を IPC で renderer へ渡す（本体 renderer に
+//   新規 script を読ませない＝CSP `script-src 'self'` を一切触らない）。vendored 自作・依存ゼロ。
+const remoteQr = require('./remote/vendor/qrcode');
 
 // STEP 6.21.4.2: Chromium AutoPlay Policy を無効化（起動直後から音再生を許可）
 // app.whenReady() より前に必ず設定（Electron 起動フラグのため）
@@ -2492,13 +2495,19 @@ function _remoteStatus() {
   const enabled = !!(store.get('remoteControl') || {}).enabled;
   const running = !!_remoteServerHandle;
   const conn = running ? _remoteConnectUrl() : null;
+  // 1b-qr: 稼働中は接続 URL の QR 行列を同梱（PIN は含めない＝URL のみ）。生成失敗は null（UI は非表示）。
+  let qr = null;
+  if (conn && conn.url) {
+    try { qr = remoteQr.generate(conn.url); } catch (_) { qr = null; }
+  }
   return {
     enabled,
     running,
     pin: running ? _remotePin : null,
     ip: conn ? conn.ip : null,
     port: conn ? conn.port : null,
-    url: conn ? conn.url : null
+    url: conn ? conn.url : null,
+    qr // { size, modules } or null
   };
 }
 

@@ -4014,6 +4014,8 @@ function applyRemoteStatus(status) {
   if (conn) conn.hidden = !s.running;
   if (urlEl) urlEl.textContent = s.url || '—';
   if (pinEl) pinEl.textContent = s.pin || '—';
+  // 1b-qr: 接続 URL の QR を canvas に描画（main が生成した行列を受け取り描くだけ）。
+  drawRemoteQr(s.qr);
   if (statusEl) {
     // ON にしたのに running=false（LAN IP 取得不可等）の場合の注記
     if (s.enabled && !s.running) {
@@ -4022,6 +4024,32 @@ function applyRemoteStatus(status) {
     } else {
       statusEl.hidden = true;
       statusEl.textContent = '';
+    }
+  }
+}
+
+// 1b-qr: main が生成した QR 行列（{ size, modules }）を canvas に描画する（描くだけ・生成しない）。
+//   クワイエットゾーン（周囲 4 モジュールの余白）を確保しないとスキャンできないため必ず付ける。
+function drawRemoteQr(qr) {
+  const canvas = document.getElementById('js-remote-qr');
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!qr || !qr.modules || !qr.size) { canvas.style.visibility = 'hidden'; return; }
+  canvas.style.visibility = 'visible';
+  const quiet = 4;
+  const total = qr.size + quiet * 2;
+  const scale = Math.floor(Math.min(W, H) / total) || 1;
+  const offset = Math.floor((Math.min(W, H) - scale * total) / 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H); // 白背景 + クワイエットゾーン
+  ctx.fillStyle = '#000000';
+  for (let r = 0; r < qr.size; r++) {
+    for (let c = 0; c < qr.size; c++) {
+      if (qr.modules[r][c]) {
+        ctx.fillRect(offset + (c + quiet) * scale, offset + (r + quiet) * scale, scale, scale);
+      }
     }
   }
 }

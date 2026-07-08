@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-08** — **remote-control Phase 1a 完了 + 1b-core 実装完了(cc-review2待ち)**(feature/remote-control-phase1・未merge/未push)。1b-core=セッショントークン+状態SSE(案A fetch streaming)+危険操作confirm+卓名。QRは1b-qrへ分離。テスト1578件全PASS(既存1519+1a35+1b24)。直前=v2.7.0配信。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-08** — **remote-control Phase 1a+1b-core 承認クローズ + 1b-qr 実装完了(cc-review2待ち)**(feature/remote-control-phase1・未merge/未push)。1b機能完成=トークン+状態SSE(案A)+危険操作confirm+卓名+QR(依存ゼロ自作・規格照合)。残=1c(配信準備)のみ。テスト1589件全PASS(既存1519+1a35+1b24+1b-qr11)。直前=v2.7.0配信。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 1 | 🔵 レビュー待ち(1a=クローズ済 / 1b-core=実装完了・cc-review2待ち / 1b-qr+1c=残) | 1a `.cc-reports/2026-07-08_remote-control_phase1a-core.md`(承認) / 1b-core `.cc-reports/2026-07-08_remote-control_phase1b-core.md`(トークン/SSE/confirm/卓名・QRは1b-qrへ分離) / 正典 `docs/remote-control_roadmap.md` §4.5 / 会場Wi-Fi/クリーンPC FW(6-B)は物理未 |
+| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 1 | 🔵 レビュー待ち(1a+1b-core=承認クローズ / 1b-qr=実装完了・cc-review2待ち / 1c=残) | 1b-qr `.cc-reports/2026-07-08_remote-control_phase1b-qr.md`(QR=依存ゼロ自作・規格照合・CSP無改変・main生成+IPC) / 1b-core同承認 / 正典 `docs/remote-control_roadmap.md` §4.5 / 残=1c(配信準備)のみ / 会場Wi-Fi/FW/QRスキャン(6-B)は物理未 |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -53,7 +53,7 @@
 | 配信済リリース | 16件(v1.0.0〜v2.7.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 1件(remote-control Phase 1a・実装完了→cc-review2待ち)|
-| 最新テスト件数 | 1578件 全PASS(既存1519 + remote-control 1a +35 + 1b +24) |
+| 最新テスト件数 | 1589件 全PASS(既存1519 + remote-control 1a +35 + 1b +24 + 1b-qr +11) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
@@ -65,7 +65,8 @@
 - **1a 完了・1b Plan 承認済(2026-07-08 前原GO後)**: 1a=cc-review2 承認・懐疑役 懸念ゼロでクローズ。1b=brief起案(cc-kouchikushi2)→Plan書出→Plan軽量review 承認(**escalate不要**)。認証境界の核=SSEトークン渡しは**案A(EventSourceではなくfetch streaming+`Authorization: Bearer`=トークンをURLに出さない)**で解決確認済(案BのURLクエリより構造的に安全・CSRF三重ブロック・7層維持・致命⑤非接触)。
 - **1b-core 実装完了(2026-07-08)**: server.js=共通ゲート抽出+トークン層(`/api/auth`発行256bit・`/api/op`/`/api/events`はAuthorizationヘッダ検証でPIN撤去・失効=OFF/PIN再生成/idle・**失効時は開いてるSSE即close**・失敗もレート制限)。SSE=**案A fetch streaming+Authorization**(トークンをURLに出さない)。main=状態の読み取り橋渡し(`_remoteState`/`remote:state` IPC・**store書込ゼロ**)。preload=`publishState`。renderer=`publishRemoteState`(`_remoteEnabled`ゲートでOFF時完全no-op・setRuntime非呼出)。phone.html=トークン取得+SSE表示+危険操作confirm+卓名。1a認証7層は無改変で上載せ。Plan review 実装時確認4点(共通ゲート抽出後1a35件全PASSで挙動不変証明/層7ロック3エンドポイント最前段/失効時SSE即close/events認可テスト)全充足。テスト1578件全PASS。
 - **QRは1b-qrへ意図的分離**: vendored MIT単一ファイルをオフラインで確実に同梱できず自作は非スキャンリスク大のため切出(1aテキストURL稼働ゆえ接続は可能)。roadmap §4.5/specs §13.1明記。
-- **次のアクション**: **cc-review2(懐疑役つきフルフロー完了review)実行** report `.cc-reports/2026-07-08_remote-control_phase1b-core.md`。承認後 → **1b-qr**(QR vendored MIT・依存ゼロ・CSP無改変)→ **1c**(FW案内/.exe/リリースノート/**前原GOで配信・一度だけ**・merge前にspike同梱可否判断)。6-B(トークン接続/状態追従/失効/会場Wi-Fi・FW)は並行で前原実機推奨。
+- **1b-qr 実装完了(2026-07-08)**: 接続URLのQR=**依存ゼロ自作**(`src/remote/vendor/qrcode.js`・byte/level L/version1-5単一ブロック)。**main(node)で行列生成→IPCでrenderer→canvas描画**=本体CSP `script-src 'self'`無改変(新規script読ませない)。QR正確性は**ISO/IEC 18004の生成多項式/BCH/GFを規格既知値で照合**(rsGenPoly逆順の実バグ1件を規格照合で検出・修正=自己整合テストだけでは見逃す罠)。PIN非含有・テキストURLは残す。段階1スキップ運用(認証境界外・致命5件非接触)。テスト+11=1589件全PASS。
+- **次のアクション**: **cc-review2(1b-qr完了review)実行** report `.cc-reports/2026-07-08_remote-control_phase1b-qr.md`。承認後 → **1c**(FW例外案内/.exe/リリースノート[完全ローカル→LAN許容改訂明記]/**前原GOで配信・一度だけ**・merge前に`spike-remote-control/`同梱可否判断)。**Phase 1機能は1a+1b(core+qr)で完成・残は1c配信準備のみ**。6-B(QRスキャン/トークン接続/状態追従/失効/会場Wi-Fi・FW)は前原実機。QRの「自作 vs vendored MIT」は完了reviewで追認待ち。
 
 ---
 
