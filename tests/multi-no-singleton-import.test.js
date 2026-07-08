@@ -452,6 +452,9 @@ test('phase3c: 終了確認の配線（進行中判定・両経路 gate・専用
     '進行中なし素通し → preventDefault の順になっていない');
   // 二重ダイアログ防止: exitMultiMode が close 前に suppress
   assert.ok(/cw\._suppressMultiExitConfirm = true; cw\.close\(\)/.test(MAIN), 'exitMultiMode の suppress 1 行がない');
+  // 第4経路（Ctrl+Q confirmQuit）: 確認済 quit が control インターセプトで中断されない（懐疑役指摘対応）
+  assert.ok(/multiControlWindow\._suppressMultiExitConfirm = true;[\s\S]{0,80}app\.quit\(\)/.test(MAIN),
+    'confirmQuit がマルチ用 suppress を立てていない（Ctrl+Q が二つ目の確認で中断される）');
   // 単一モードの suppress フラグと共有していない（multi ブロックにプロパティ参照 ._suppressCloseConfirm 非混入。
   // コメント内の言及は許容 = ドット付きアクセスのみ検査）
   const mb = MAIN.match(/\/\/ ===== multi-tournament-4up Phase 1[\s\S]*?registerMultiIpcHandlers\(\);/)[0];

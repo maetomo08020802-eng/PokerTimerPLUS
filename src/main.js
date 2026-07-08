@@ -2486,6 +2486,9 @@ async function confirmQuit() {
     // v2.0.4-rc3: confirmQuit 経由は専用ダイアログで既に確認済のため、
     //   close ハンドラの二重ダイアログを抑制してから app.quit へ。
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow._suppressCloseConfirm = true;
+    // Phase 3c 追補（完了 review 懐疑役指摘）: マルチ表示中の Ctrl+Q も確認済扱い =
+    // control の close インターセプト（第4経路）で quit が中断されないよう suppress を立てる
+    if (multiControlWindow && !multiControlWindow.isDestroyed()) multiControlWindow._suppressMultiExitConfirm = true;
     app.quit();
   }
 }
