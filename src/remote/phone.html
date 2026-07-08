@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<!-- remote-control Phase 1a — スマホ操作ページ（LAN サーバが別オリジンで配信）。
+     本体 renderer(index.html) とは別ドキュメント・別オリジンのため、本体 CSP(script-src 'self') には非影響。
+     Phase 1a は PIN 手入力 + 全操作ボタンの最小 UI。状態表示(SSE)・危険操作の確認ダイアログ・卓名同期・
+     QR・セッショントークンは Phase 1b。fetch は Content-Type: application/json（サーバの層2 必須要件）。 -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>PokerTimerPLUS+ リモコン</title>
+<style>
+  :root { --bg:#0A1F3D; --card:#12305c; --fg:#eaf1ff; --accent:#4fc3f7; --danger:#e0524a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding:14px 16px; background:#081831; position:sticky; top:0; }
+  header .table { font-size:13px; opacity:.8; }
+  header h1 { font-size:18px; margin:2px 0 0; }
+  .pin { padding:12px 16px; display:flex; gap:8px; align-items:center; }
+  .pin input { flex:0 0 120px; font-size:20px; padding:8px; border-radius:8px; border:1px solid #2a4d80; background:#0d244a; color:var(--fg); text-align:center; letter-spacing:4px; }
+  .pin .status { font-size:13px; opacity:.85; }
+  .grid { padding:12px 16px 40px; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .grid h2 { grid-column:1/-1; font-size:13px; opacity:.7; margin:14px 0 2px; }
+  button.op { font-size:17px; padding:16px 10px; border-radius:12px; border:none; background:var(--card); color:var(--fg); font-weight:600; }
+  button.op:active { background:var(--accent); color:#062038; }
+  button.op.danger { background:#3a1512; }
+  button.op.danger:active { background:var(--danger); color:#fff; }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#000c; color:#fff; padding:8px 16px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .2s; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="table">操作対象（卓）: <span id="tableName">この PC のトーナメント</span></div>
+    <h1>PokerTimerPLUS+ リモコン</h1>
+  </header>
+
+  <div class="pin">
+    <input id="pin" type="tel" inputmode="numeric" placeholder="PIN" maxlength="8" autocomplete="off">
+    <span class="status" id="status">PC 画面に表示された PIN を入力してボタンを押してください</span>
+  </div>
+
+  <div class="grid">
+    <h2>タイマー</h2>
+    <button class="op" data-op="startPause">開始 / 一時停止</button>
+    <button class="op" data-op="plus30">+30秒</button>
+    <button class="op" data-op="minus30">-30秒</button>
+
+    <h2>人数・エントリー</h2>
+    <button class="op" data-op="entryAdd">エントリー +1</button>
+    <button class="op" data-op="eliminate">脱落</button>
+    <button class="op" data-op="reentryPlus">リエントリー +1</button>
+    <button class="op danger" data-op="reentryMinus">リエントリー -1</button>
+    <button class="op" data-op="addOnPlus">アドオン +1</button>
+    <button class="op danger" data-op="addOnMinus">アドオン -1</button>
+    <button class="op" data-op="revive">復活</button>
+    <button class="op danger" data-op="entryCancel">エントリー取消</button>
+    <button class="op" data-op="specialPlus">特殊スタック +1</button>
+    <button class="op danger" data-op="specialMinus">特殊スタック -1</button>
+
+    <h2>表示・その他</h2>
+    <button class="op" data-op="toggleTelop">テロップ表示</button>
+    <button class="op" data-op="toggleBottomBar">ボトムバー</button>
+    <button class="op" data-op="mute">ミュート</button>
+    <button class="op danger" data-op="resetDialog">リセット確認</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  // Phase 1a スクリプト。本ページ独自（本体 renderer とは別オリジン配信のため本体 CSP に非影響）。
+  // 危険操作(danger)の確認ダイアログは Phase 1b（1a は色だけ区別）。
+  var pinEl = document.getElementById('pin');
+  var statusEl = document.getElementById('status');
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+  function toast(msg, ok) {
+    toastEl.textContent = msg;
+    toastEl.style.background = ok ? '#0a7d3aee' : '#a11e1eee';
+    toastEl.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1400);
+  }
+  async function sendOp(op) {
+    var pin = (pinEl.value || '').trim();
+    if (!pin) { toast('PIN を入力してください', false); return; }
+    try {
+      var res = await fetch('/api/op', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pin, op: op })
+      });
+      var data = await res.json();
+      if (res.ok && data.ok) { toast('送信: ' + op, true); statusEl.textContent = '最後の操作: ' + op; }
+      else if (res.status === 401) { toast('PIN が違います', false); statusEl.textContent = 'PIN 不一致'; }
+      else if (res.status === 429) { toast('試行が多すぎます。少し待ってください', false); statusEl.textContent = 'ロック中'; }
+      else { toast('失敗: ' + (data.reason || res.status), false); }
+    } catch (e) {
+      toast('通信エラー（同じ Wi-Fi か確認）', false);
+      statusEl.textContent = '通信エラー';
+    }
+  }
+  document.querySelectorAll('button.op').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var op = b.getAttribute('data-op');
+      sendOp(op);
+    });
+  });
+</script>
+</body>
+</html>

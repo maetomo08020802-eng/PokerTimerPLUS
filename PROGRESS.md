@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-08** — **v2.7.0 配信(マルチトーナメント4分割表示・前原実機確認OK+配信GO)**。multi-tournament-4up 案件クローズ(Phase 0〜3c)・テスト**1519件**全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-08** — **remote-control Phase 1a(スマホ遠隔操作コア)実装完了・cc-review2待ち**(feature/remote-control-phase1・未merge/未push)。認証7層+配線2点+完全ローカル文言改訂+後方互換・テスト**1554件**全PASS。直前=v2.7.0配信(multi-tournament-4up クローズ)。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 1a(コア) | 🟢 実装着手待ち(brief起案済・前原GO全ゲート承認・6-B①疎通実機OK) | brief `.cc-briefs/2026-07-08_remote-control_phase1a-core_brief.md` / 正典 `docs/remote-control_roadmap.md` / 会場本番Wi-Fi/クリーンPCファイアウォール(6-B②③)は物理未 |
+| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 1a(コア) | 🔵 レビュー待ち(実装完了・cc-review2待ち・feature未merge/未push) | report `.cc-reports/2026-07-08_remote-control_phase1a-core.md` / Plan review `.cc-briefs/..._phase1a-core_plan_review.md`(承認) / 正典 `docs/remote-control_roadmap.md` / 会場本番Wi-Fi/クリーンPCファイアウォール(6-B②③)は物理未 |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,17 +52,17 @@
 |------|----|
 | 配信済リリース | 16件(v1.0.0〜v2.7.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 1件(remote-control Phase 0 brief起案中・2026-07-08 着手)|
-| 最新テスト件数 | 1519件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +2・3a +3・3c +1) |
+| オープン作業 | 1件(remote-control Phase 1a・実装完了→cc-review2待ち)|
+| 最新テスト件数 | 1554件 全PASS(既存1519 + remote-control Phase 1a +35) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.7.0 配信済(tag v2.7.0・Latest)。作業中ブランチ `spike/remote-control-phase0`(Phase 0 スパイク + roadmap + PROGRESS・main 未 merge・本体 src 無改変)。Phase 1a は**新規 feature ブランチ `feature/remote-control-phase1`** で着手予定(main から分岐推奨)。
-- **直前作業(2026-07-08)**: remote-control Phase 0 完了→**前原GO(全ゲート承認: ①完全ローカル文言をLAN内許可へ改訂 ②QR=vendored小MIT単一ファイル ③認証=PIN+トークン+Origin検証+レート制限の堅牢版)**→**Phase 1a brief起案済**。さらに **6-B① 会場疎通の一次実機成功**(前原スマホ→同一Wi-Fi→PCサーバ疎通・PIN通過・startPause/entryAdd/addOnPlus が正しくキー変換されて到達をログ確認)。
-- **次のアクション(次セッション着手)**: **Phase 1a 本実装**。`.cc-briefs/2026-07-08_remote-control_phase1a-core_brief.md` を Read → feature ブランチ → Plan → 軽量review(認証境界=フルフロー・軽量トラック禁止) → 実装。1a内容=設定トグル「スマホ遠隔操作(実験的)」default OFF(OFF=現行完全同一・listener非生成)+ サーバmain常設 + operator-soloでも受信する `remote:op` 配線(既存 hall:forwarded-key は無改変) + PIN(起動ごと6桁生成・設定画面表示・QRにPIN含めない)+Origin検証+レート制限+入力ホワイトリスト + op-map全17操作をsrc昇格 + runtimeは既存setRuntime→sanitize経由死守 + 本体renderer CSP無改変(phone.html別オリジン) + 完全ローカル文言の実改訂(CLAUDE.md:51,93/specs.md:675) + node単体テスト。**認証設計(バインド先0.0.0.0 vs LAN限定・Origin許可範囲・レート制限単位)に確信持てなければescalate**。main merge/配信は 1c 完了+前原GO後の一度だけ。6-B②③(会場本番Wi-Fi/クリーンPCファイアウォール)は物理未確認・並行で前原実機推奨。
+- **git**: `main` = v2.7.0 配信済(tag v2.7.0・Latest)。作業中ブランチ **`feature/remote-control-phase1`**(spike tip から分岐=src は v2.7.0 と diff 空で同一・roadmap/spike参照/PROGRESS継続を保持)。**main 未 merge・未 push**(1a は配信しない)。
+- **直前作業(2026-07-08)**: remote-control **Phase 1a 本実装 完了**。①完全ローカル文言を LAN 例外込みに実改訂(CLAUDE.md INVARIANTS+禁止事項/specs.md §13+§13.1)②`src/remote/`(op-map 全17操作+DANGEROUS / server 認証7層 / discover / phone.html)昇格 ③main lifecycle(トグル default OFF・enabled時のみ起動・port自動リトライ・配線点① `remote:op` send・IPC getStatus/setEnabled・PIN=crypto.randomInt 6桁定数時間比較)④preload `remote` ブリッジ(既存 dual 無改変)⑤renderer 配線点②(operator-solo でも受信→dispatchClockShortcut のみ・既存 hall:forwarded-key 無改変)⑥設定に「スマホ操作」タブ+PIN/URL 表示(CSP 無改変)。**認証=PIN+Origin+Host厳格アンカー+Content-Type必須+レート制限+未知op破棄**(plan_review 追加条件: ACAO非返却テスト/サブドメイン偽装403テスト を実装済)。**Plan 軽量review(cc-kouchikushi2・フルフロー)承認・escalate不要判定**。npm test **1554件全PASS**(既存1519+新規35)。致命5件全件非接触・追加ライブラリゼロ。
+- **次のアクション**: **cc-review2(懐疑役つきフルフロー完了review)を実行**→前原へ 6-B(会場Wi-Fi疎通/APアイソレーション/クリーンPCファイアウォール/体感遅延)提示。承認後 Phase 1b(トークン/QR/SSE/危険操作confirm/卓名)着手。**main merge/配信は 1c 完了+前原GO後の一度だけ**。1c申し送り=spike同梱可否を merge前に判断。report `.cc-reports/2026-07-08_remote-control_phase1a-core.md`。
 
 ---
 

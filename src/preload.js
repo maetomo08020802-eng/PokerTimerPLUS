@@ -202,5 +202,17 @@ contextBridge.exposeInMainWorld('api', {
     // Phase 2: mirror（複製）運用の前面切替（grid は focusable:false のため focus は control に残る）
     gridFront: () => ipcRenderer.send('multi:grid-front'),
     controlFront: () => ipcRenderer.send('multi:control-front')
+  },
+  // remote-control Phase 1a: スマホ遠隔操作のブリッジ。
+  //   onRemoteOp: 配線点② = main が認証通過操作を remote:op で送る → renderer が dispatchClockShortcut に流す
+  //     （既存 dual.onHallForwardedKey は operator 限定・無改変。remote は operator-solo でも受信する別経路）。
+  //   getStatus/setEnabled: 設定画面のトグル + PIN/URL/ポート表示のための制御（invoke）。
+  remote: {
+    onRemoteOp: (callback) => {
+      if (typeof callback !== 'function') return;
+      ipcRenderer.on('remote:op', (_event, payload) => callback(payload));
+    },
+    getStatus: () => _measuredInvoke('remote:getStatus'),
+    setEnabled: (enabled) => _measuredInvoke('remote:setEnabled', !!enabled)
   }
 });

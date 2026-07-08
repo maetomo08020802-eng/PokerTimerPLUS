@@ -458,6 +458,7 @@
         <div class="settings-tab-group__row">
           <button type="button" class="settings-tab-btn"           data-tab="logo"       role="tab">ロゴ</button>
           <button type="button" class="settings-tab-btn"           data-tab="audio"      role="tab">音</button>
+          <button type="button" class="settings-tab-btn"           data-tab="remote"     role="tab">スマホ操作</button>
           <button type="button" class="settings-tab-btn"           data-tab="about"      role="tab">ハウス情報</button>
         </div>
       </div>
@@ -1123,6 +1124,39 @@
       </section>
 
       <!-- ハウス情報タブ: branding.md §15.2 準拠の Yu Shimomachi/PLUS2 クレジット欄（編集不可）+ 店舗名入力（編集可、venueName） -->
+      <!-- remote-control Phase 1a: スマホ遠隔操作（実験的機能・アプリ全体共通・既定 OFF）。
+           OFF ではサーバを起動しない（現行完全同一）。ON にすると main が LAN サーバを起動し、
+           下の PIN / 接続 URL を同一 Wi-Fi のスマホで開いて操作する。CSP は無改変（別オリジン配信）。 -->
+      <section class="settings-tab" data-tab="remote" role="tabpanel">
+        <div class="form-row form-row--checkbox">
+          <label><input type="checkbox" id="js-remote-enabled"> <span>スマホ遠隔操作（実験的機能）</span></label>
+        </div>
+        <p class="settings-hint">
+          手元 PC を離れても、同じ Wi-Fi につないだスマホのブラウザからこのトーナメントを操作できます（実験的機能）。<br>
+          <strong>OFF のときは何も起動しません（通常動作と完全に同じ）。</strong>
+        </p>
+
+        <!-- ON のときだけ表示。OFF 時も DOM 上に存在させ hidden 属性で制御（レイアウトシフト対策・
+             設定ダイアログ内はスクロール領域のためメイン画面 __autoCheck 対象外）。 -->
+        <div id="js-remote-conn" class="remote-conn" hidden>
+          <hr class="form-divider">
+          <div class="form-row">
+            <span class="form-row__label">接続 URL（スマホのブラウザで開く）</span>
+            <code id="js-remote-url" class="remote-conn__url">—</code>
+          </div>
+          <div class="form-row">
+            <span class="form-row__label">PIN（スマホに入力）</span>
+            <code id="js-remote-pin" class="remote-conn__pin">—</code>
+          </div>
+          <p class="settings-hint">
+            スマホで上の URL を開き、表示された画面に PIN を入力してから操作してください。<br>
+            ※ PIN はアプリを起動するたびに変わります。会場の Wi-Fi 設定によっては端末間の通信が
+            遮断されて使えない場合があります（その場合はこの機能は利用できません）。
+          </p>
+          <p class="settings-hint" id="js-remote-status" hidden></p>
+        </div>
+      </section>
+
       <section class="settings-tab" data-tab="about" role="tabpanel">
         <div class="about-content">
           <img src="../assets/logo-yushitamachi.svg" alt="Yu Shimomachi" class="about-logo">

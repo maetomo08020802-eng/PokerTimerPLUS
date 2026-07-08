@@ -3962,6 +3962,46 @@ function activateSettingsTab(tabName) {
     syncLogoModeRadioFromState();
     setLogoHint('', '');
   }
+  // remote-control Phase 1a: スマホ操作タブを開いた時は main から現行 status を取得して反映
+  if (tabName === 'remote') {
+    syncRemoteTabFromStatus();
+  }
+}
+
+// ===== remote-control Phase 1a: スマホ遠隔操作タブの表示同期 =====
+
+// main から取得した status（{ enabled, running, pin, url, port }）を DOM に反映する。
+//   トグルの ON/OFF・接続情報（PIN / URL）の表示を更新（表示専用・保存は setEnabled 経由）。
+function applyRemoteStatus(status) {
+  const s = status || {};
+  const toggle = document.getElementById('js-remote-enabled');
+  const conn = document.getElementById('js-remote-conn');
+  const urlEl = document.getElementById('js-remote-url');
+  const pinEl = document.getElementById('js-remote-pin');
+  const statusEl = document.getElementById('js-remote-status');
+  if (toggle) toggle.checked = !!s.enabled;
+  // 接続情報は「ON かつ稼働中」のときだけ表示（レイアウトシフト対策で hidden 属性トグル）
+  if (conn) conn.hidden = !s.running;
+  if (urlEl) urlEl.textContent = s.url || '—';
+  if (pinEl) pinEl.textContent = s.pin || '—';
+  if (statusEl) {
+    // ON にしたのに running=false（LAN IP 取得不可等）の場合の注記
+    if (s.enabled && !s.running) {
+      statusEl.hidden = false;
+      statusEl.textContent = 'サーバの起動に失敗しました。ネットワーク接続を確認してください。';
+    } else {
+      statusEl.hidden = true;
+      statusEl.textContent = '';
+    }
+  }
+}
+
+// main から現行 status を取得して反映（タブ表示時・トグル操作後に呼ぶ）。
+async function syncRemoteTabFromStatus() {
+  try {
+    const status = await window.api?.remote?.getStatus?.();
+    applyRemoteStatus(status);
+  } catch (_) { /* ignore — remote ブリッジ未提供環境では何もしない */ }
 }
 
 // ===== STEP 9-B: 左上ロゴ管理 =====
@@ -7727,6 +7767,29 @@ if (typeof window !== 'undefined' && window.appRole === 'operator') {
   });
 }
 
+// remote-control Phase 1a: スマホ遠隔操作の受信配線（配線点②・既存 hall:forwarded-key ブロックは無改変）。
+//   既存 hall:forwarded-key は appRole==='operator'（2画面）限定のため単一モードでは発火しない。
+//   remote:op は operator-solo（単一モード）でも operator（2画面 PC 側）でも受信する別経路として新設。
+//   hall は受信しない（remote UI は hall に無く、main は mainWindow 宛にのみ send するため hall には届かない）。
+//   runtime を変える操作も含め、必ず既存 dispatchClockShortcut を呼ぶだけ（独自の runtime 直書き / store 書込は
+//   一切しない＝致命バグ保護⑤ runtime 永続化 8 箇所を割らない。setRuntime→sanitizeRuntime→既存 debounce 経由）。
+if (typeof window !== 'undefined' && (window.appRole === 'operator-solo' || window.appRole === 'operator')) {
+  window.api?.remote?.onRemoteOp?.((data) => {
+    if (!data || typeof data.code !== 'string') return;
+    try { window.api?.log?.write?.('ui:keypress', { key: data.key, code: data.code, ctrl: !!data.control, shift: !!data.shift, ctx: 'renderer:remote-op', role: window.appRole }); } catch (_) {}
+    dispatchClockShortcut({
+      code: data.code,
+      key: data.key,
+      ctrlKey: !!data.control,
+      shiftKey: !!data.shift,
+      altKey: !!data.alt,
+      metaKey: !!data.meta,
+      preventDefault: () => {},
+      stopPropagation: () => {}
+    });
+  });
+}
+
 // v2.0.4-rc9 Fix 3-C: 手元 PC のフォーカス可視化バナー更新関数。
 //   document.hasFocus() を見て is-focused / is-blurred クラスと文言を切替。
 //   role が operator のときのみ動作（operator-solo / hall は CSS で完全非表示）。
@@ -8183,6 +8246,23 @@ async function initialize() {
             await window.api.log.openFolder();
           }
         } catch (_) { /* ignore */ }
+      });
+    }
+  } catch (_) { /* ignore */ }
+  // remote-control Phase 1a: スマホ遠隔操作トグルの change ハンドラ登録（スマホ操作タブ）。
+  //   ON/OFF → main の setEnabled（store 保存 + サーバ起動/停止）→ 戻り status を DOM に反映。
+  try {
+    const _remoteToggle = document.getElementById('js-remote-enabled');
+    if (_remoteToggle && !_remoteToggle._remoteBound) {
+      _remoteToggle._remoteBound = true;
+      _remoteToggle.addEventListener('change', async () => {
+        try {
+          const status = await window.api?.remote?.setEnabled?.(_remoteToggle.checked);
+          applyRemoteStatus(status);
+        } catch (_) {
+          // 失敗時は現行 status を取り直して UI を実態へ戻す
+          syncRemoteTabFromStatus();
+        }
       });
     }
   } catch (_) { /* ignore */ }
