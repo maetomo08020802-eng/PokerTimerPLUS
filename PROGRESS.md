@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | — | — |
+| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 0(技術検証スパイク) | 🟡 実装完了・前原GO判断待ち(6-B: 会場Wi-Fi/ファイアウォール実機) | report `.cc-reports/2026-07-08_remote-control_phase0-spike.md` / 正典 `docs/remote-control_roadmap.md` / branch `spike/remote-control-phase0`(main未merge) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,7 +52,7 @@
 |------|----|
 | 配信済リリース | 16件(v1.0.0〜v2.7.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 0件(安定運用フェーズ・multi-tournament-4up クローズ 2026-07-08)|
+| オープン作業 | 1件(remote-control Phase 0 brief起案中・2026-07-08 着手)|
 | 最新テスト件数 | 1519件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +2・3a +3・3c +1) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
@@ -60,9 +60,9 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.7.0 配信 commit 群を push 済・tag `v2.7.0`(Latest・自動更新有効)。feature branch(phase2/exit-confirm)は役目終了(削除可)。
-- **直前作業(2026-07-08)**: **v2.7.0 配信** = マルチトーナメント4分割表示(Phase 0〜3c・実機FB全6弾+追補2件)。3c 実機確認時の「モーダルが出ない」は前原操作ミスではなく**旧ビルド(12:25=3c前)をインストール済み**が原因と asar 検証で特定→最新版再インストールで OK。GitHub Release に .exe/latest.yml/blockmap を添付・リリースノートは `docs/release-notes-v2.7.0.md` の文案を使用。テスト1519件全PASS・致命5件完全維持。
-- **次のアクション**: なし(安定運用フェーズ)。v2.6.6 利用者への自動更新降下の実機確認(任意)のみ。温存候補は「📋 温存中の次期バージョン候補」参照。
+- **git**: `main` = v2.7.0 配信済(tag v2.7.0・Latest)。**別ブランチ `spike/remote-control-phase0`** に remote-control Phase 0 スパイク(main 未 merge・本体 src 無改変)。
+- **直前作業(2026-07-08)**: 新案件 remote-control(スマホ遠隔操作・LANシンクライアント)の **Phase 0 技術検証スパイク完了**。隔離スパイク `spike-remote-control/`(Node標準httpのみ・追加ライブラリ0)で「LANサーバ+PIN+全17操作写像+IP自動発見」を実証(harness 10/10・別プロセスcurlでonOp発火)。**主要発見: 既存 hall:forwarded-key 受信は operator(2画面)限定=単一モードoperator-soloでは発火せず、Phase 1 で専用 remote:op リスナー必須**。本体無改変(src diff空)・テスト1519件不変。会場Wi-Fi/ファイアウォール/QR画像生成は 6-B・Phase 1 判断。正典 `docs/remote-control_roadmap.md`。
+- **次のアクション**: cc-review2 完了review→前原 6-B(会場想定Wi-Fi疎通・クリーンPCのファイアウォール)→**GOゲート**(特に「完全ローカル動作」不変条件をLAN内許可へ改訂するか=Noなら不成立)→GOなら Phase 1 本実装 brief(認証境界フルフロー)。
 
 ---
 
