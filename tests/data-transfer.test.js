@@ -35,6 +35,9 @@ const electronStub = {
   // on が無いと require 時例外 → main.js の uncaughtException で握りつぶされ exit 0 =
   // 「0 件実行の偽 PASS」になっていた（2026-07-07 phase2e 完了 review 懐疑役が検出・是正）
   ipcMain: { handle: () => {}, on: () => {} },
+  // Phase 3a: screen も同じ罠の防波堤として stub（本体は遅延登録でロード時に screen へ触れないが、
+  // 将来の回帰で偽 PASS 化しないよう harness 側でも二重に守る）
+  screen: { on: () => {}, getAllDisplays: () => [], getPrimaryDisplay: () => ({ id: 0, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }) },
   shell: { openExternal: () => {} },
   powerMonitor: { on: () => {} }
 };

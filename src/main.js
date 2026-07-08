@@ -2194,6 +2194,7 @@ async function enterMultiMode() {
       gridDisplay = displays.find((d) => d.id === gridId) || gridDisplay;
     }
     _multiModeActive = true;
+    setupMultiDisplayChangeListeners(); // Phase 3a: HDMI 抜き差し追従（初回のみ登録・idempotent）
     _resetMultiPaneCache();
     // Phase 2e/2f: 復元 prime。engine record はここで選択方式に応じて「書出し時点で一時停止」（paused）
     //   or「経過を反映した位置で一時停止」（elapsed）へ変換してから配る
@@ -2346,6 +2347,55 @@ function registerMultiIpcHandlers() {
   });
 }
 registerMultiIpcHandlers();
+
+// ----- Phase 3a: マルチ表示中の HDMI 抜き差し追従 -----
+//   既存 setupDisplayChangeListeners は無改変（マルチ中は display-removed が hallWindow ガード、
+//   display-added が _multiModeActive ガードで元々 no-op）。screen.on の多重登録で独立に追加する。
+//   運用方針 A（PC + HDMI 1 本・v2.0.4-rc23 で確立）: マルチ中の display-removed = 会場スクリーン消失と同義。
+//   grid は close せず hide（close は closed → exitMultiMode 連鎖でモードごと終了してしまう。
+//   タイマー進行の真実源は control 側のため、表示喪失中も各区画は継続する）。
+//   挿し直しは picker を出さず新 display へ自動復帰（状態は control が真実源のため無損失）。
+//   Windows は抜き差しで display イベントを複数発火することがあるため、時間窓 debounce で吸収する
+//   （既存 _displayAddedPending / _displayRemovedPending とは別管理 = 単一モード経路と共有しない）。
+//   登録はモジュールロード時ではなく enterMultiMode 初回の遅延 1 回（idempotent）。モジュールロード時に
+//   screen へ触れると、electron を stub して main.js を require する静的テスト（data-transfer 等）が
+//   uncaughtException → exit 0 の「0 件実行の偽 PASS」になる罠（2e 懐疑役検出と同型）を構造的に避ける。
+const MULTI_DISPLAY_EVENT_DEBOUNCE_MS = 1500;
+let _multiDisplayRemovedAtMs = 0;
+let _multiDisplayAddedAtMs = 0;
+let _multiDisplayListenersInstalled = false;
+
+function setupMultiDisplayChangeListeners() {
+  if (_multiDisplayListenersInstalled) return;
+  _multiDisplayListenersInstalled = true;
+  screen.on('display-removed', () => {
+    if (!_multiModeActive) return;
+    if (!multiGridWindow || multiGridWindow.isDestroyed()) return;
+    const now = Date.now();
+    if (now - _multiDisplayRemovedAtMs < MULTI_DISPLAY_EVENT_DEBOUNCE_MS) return;
+    _multiDisplayRemovedAtMs = now;
+    try { multiGridWindow.hide(); } catch (_) { /* ignore */ }
+    try { rollingLog('multi:display-removed:grid-hidden', null); } catch (_) { /* ignore */ }
+  });
+  screen.on('display-added', (_event, newDisplay) => {
+    if (!_multiModeActive) return;
+    if (!multiGridWindow || multiGridWindow.isDestroyed()) return;
+    const now = Date.now();
+    if (now - _multiDisplayAddedAtMs < MULTI_DISPLAY_EVENT_DEBOUNCE_MS) return;
+    _multiDisplayAddedAtMs = now;
+    try {
+      // fullscreen ウィンドウの display 間移動は 一旦解除 → bounds 移動 → 再全画面 が必要
+      if (newDisplay && newDisplay.bounds) {
+        multiGridWindow.setFullScreen(false);
+        multiGridWindow.setBounds({ x: newDisplay.bounds.x + 40, y: newDisplay.bounds.y + 40, width: 1280, height: 720 });
+      }
+      multiGridWindow.show();   // focusable:false のため focus は control に残る（キーボード操作継続）
+      multiGridWindow.setFullScreen(true);
+      multiGridWindow.moveTop();
+      rollingLog('multi:display-added:grid-restored', { displayId: newDisplay && newDisplay.id });
+    } catch (_) { /* ignore */ }
+  });
+}
 
 function toggleFullScreen() {
   // v2.0.4-rc6 Fix 3: 2 画面モード時は常に hall を toggle（hall 側全画面解除等の操作者ニーズ）。

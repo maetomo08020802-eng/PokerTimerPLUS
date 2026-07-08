@@ -311,6 +311,21 @@ function buildPaneUI(index) {
 
   pane.els.select.addEventListener('change', async () => {
     const id = pane.els.select.value;
+    // Phase 3a: 走行中差し替えの誤操作ガード。進行中データがある区画（running / prestart / paused）のみ
+    // 確認を挟む（確認手段は既存リセットボタンと同じ window.confirm）。finished / idle はガードなし
+    // = 終了区画の手動切替（Phase 3a ④手動方式）と開始前の差し替えに摩擦を足さない。
+    // engine null（未割当区画への新規割当）もガード対象外。
+    const cur = pane.engine ? pane.engine.getRecord() : null;
+    const inProgress = !!cur && (cur.status === ENGINE_STATUS.RUNNING ||
+      cur.status === ENGINE_STATUS.PRESTART || cur.status === ENGINE_STATUS.PAUSED);
+    if (inProgress) {
+      const action = id ? '別のトーナメントに差し替え' : '割当を解除';
+      const msg = `区画 ${index + 1} は進行中です。${action}すると現在の進行状況（タイマー・人数など）は失われます。よろしいですか？（他の区画には影響しません）`;
+      if (!window.confirm(msg)) {
+        pane.els.select.value = pane.tournamentId || ''; // キャンセル = 変更前の割当へ巻き戻し
+        return;
+      }
+    }
     if (!id) {
       pane.tournamentId = null; pane.snapshot = null; pane.engine = null; pane.assignRuntime = null;
       root.dataset.assigned = 'false';

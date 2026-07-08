@@ -8574,7 +8574,9 @@ if (__appRole === 'hall') {
     'timer-active': '単一モードのタイマーが進行中（または一時停止中）です。タイマーをリセットしてから開始してください。',
     'pre-start-active': '開始前カウントダウンが進行中です。カウントダウンを終了してから開始してください。',
     'busy': '画面切替の処理中です。少し待ってからもう一度お試しください。',
-    'already': 'マルチ表示モードは既に起動しています。'
+    'already': 'マルチ表示モードは既に起動しています。',
+    // Phase 3a: 復元キャンセルの専用文言（汎用「開始できませんでした」だと失敗に見えるため）
+    'restore-cancelled': '復元をキャンセルしたため、マルチ表示モードを開始しませんでした。登録トーナメントのデータは変更されていません（次回開始時にもう一度復元を選べます）。'
   };
   btn.addEventListener('click', async () => {
     if (hint) { hint.hidden = true; hint.classList.remove('settings-hint--error'); hint.textContent = ''; }
