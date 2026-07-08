@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-08** — **remote-control Phase 1 全実装完了・📦配信準備完了**(feature/remote-control-phase1・未merge/未push)。1a(認証コア)+1b(トークン/SSE/confirm/卓名/QR)+1c(案内文言/CHANGELOG v2.8.0/配信手順/.exeビルド成功)。**あとは前原の6-B実機OK+最終GOで配信のみ**(main merge/tag/push/Release/spike除去/v2.8.0 bump)。テスト1589件全PASS・致命5件維持・追加ライブラリゼロ・CSP無改変。直前=v2.7.0配信。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-08** — **v2.8.0 配信完了(スマホ遠隔操作・remote-control 案件クローズ)**。GitHub Release v2.8.0 Latest・自動更新マニフェスト込み。main merge `c8eb931`/tag v2.8.0/spike除去済。テスト1589件全PASS・致命5件維持・追加ライブラリゼロ・CSP無改変・既定OFFで後方互換。オープン作業0件・安定運用フェーズ。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 1 | 📦 配信準備完了(1a/1b/1c 全実装完・cc-review2 1c待ち・**前原6-B+最終GOで配信**) | 1c `.cc-reports/2026-07-08_remote-control_phase1c-release-prep.md`(案内文言/CHANGELOG v2.8.0/配信手順roadmap§9/.exeビルド成功) / 配信手順=`docs/remote-control_roadmap.md` §9 / 前原確認=①版番v2.8.0 ②spike除去 ③〜⑥6-B実機 ⑦配信GO |
+| (なし) | — | remote-control Phase 1 は v2.8.0 で配信完了・クローズ。次案件は前原指示待ち |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -21,6 +21,7 @@
 
 | 配信日 | バージョン | 主要変更(1行) | report |
 |--------|-----------|---------|--------|
+| 2026-07-08 | **v2.8.0** | **スマホ遠隔操作(実験的機能・単一モードのみ)**。同一LAN内スマホから全操作(PIN+セッショントークン+Origin+Host厳格アンカー+レート制限・状態SSE=fetch streaming・危険操作confirm・卓名・QR=依存ゼロ自作)。既定OFFで現行完全同一・完全ローカル文言をLAN例外込みに改訂・追加ライブラリゼロ・CSP無改変。merge `c8eb931`/tag v2.8.0(Latest・自動更新) | `.cc-reports/2026-07-08_remote-control_phase1{a-core,b-core,b-qr,c-release-prep}.md` |
 | 2026-07-08 | **v2.7.0** | **マルチトーナメント4分割表示モード**(2×2独立時計・操作盤+キーボード・フィラー・停電復帰=復元方式選択+経過時間表示・開始/終了確認モーダル・HDMI追従・走行中差し替えガード)。単一モード完全非接触・store書込ゼロ。tag v2.7.0(Latest・自動更新) | `.cc-reports/2026-07-08_multi-tournament-4up_phase3b-release-prep.md`(+3c report) |
 | 2026-06-24 | v2.6.6 | テロップ色プレビュー枠に「プレビュー(表示見本・編集不可)」ラベル明示(v2.6.5 で枠を編集領域と誤認した件の fix)。UI/文言のみ・2箇所整合・致命5件非接触。merge直push `df919b9`/tag v2.6.6(Latest・自動更新)。軽量トラック | `.cc-briefs/2026-06-24_telop-preview-label_lightweight_review.md` |
 | 2026-06-24 | **v2.6.5** | テロップ色変えを「文字を選択→色ボタン」方式に作り直し(手打ち記法不要・9色+任意色+色を消す+編集中プレビュー・設定タブ/Ctrl+T 2箇所)。保存形式/marquee.js安全パーサ無改変=旧データ100%互換・XSS後退ゼロ。致命5件非接触。merge `e680436`/tag v2.6.5(Latest・自動更新) | `.cc-reports/2026-06-24_telop-color-ux-simplify.md` |
@@ -50,19 +51,19 @@
 
 | 指標 | 値 |
 |------|----|
-| 配信済リリース | 16件(v1.0.0〜v2.7.0)|
+| 配信済リリース | 17件(v1.0.0〜v2.8.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 1件(remote-control Phase 1a・実装完了→cc-review2待ち)|
-| 最新テスト件数 | 1589件 全PASS(既存1519 + remote-control 1a +35 + 1b +24 + 1b-qr +11) |
+| オープン作業 | 0件(remote-control v2.8.0 クローズ・安定運用フェーズ)|
+| 最新テスト件数 | 1589件 全PASS(remote-control: 1a +35 / 1b +24 / 1b-qr +11) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.7.0 配信済(tag v2.7.0・Latest)。作業中ブランチ **`feature/remote-control-phase1`**(HEAD `87ba8e2`・**main 未 merge・未 push**・spike tip 由来で src は v2.7.0 と同一土台)。
-- **現在地(2026-07-08)**: remote-control **Phase 1 全実装完了・📦配信準備完了**(1a〜1c すべて cc-review2 承認・懐疑役 懸念ゼロ)。機能=単一モードのクロックを同一LAN内スマホから遠隔操作。認証=PIN+**セッショントークン(256bit・Authorizationヘッダ・失効=OFF/PIN再生成/idle・失効時SSE即close)**+Origin+Host厳格アンカー+Content-Type必須+レート制限。状態SSE=**案A(fetch streaming+Authorization=トークンをURLに出さない・読み取り専用でstore書込ゼロ)**で人数/RE/AO/特殊/卓名をpush。危険操作はスマホ側confirm。QR=**依存ゼロ自作**(main生成+IPC・**CSP無改変**・ISO/IEC 18004規格照合済)。既定OFFで現行完全同一(後方互換)。1c=FW/運用案内文言+CHANGELOG v2.8.0(ポリシー改訂告知)+配信手順roadmap§9+**.exeビルドCC自走成功**。テスト**1589件全PASS**・致命5件維持・追加ライブラリゼロ。
-- **次のアクション=前原の6-B実機OK+最終GO待ち**→GOで **roadmap §9 手順を一度だけ実行**(spike除去→main merge→v2.8.0 bump→tag→push→署名ビルド→GitHub Release→Latest)=案件クローズ。**前原確認=①版番v2.8.0 ②spike除去 ③〜⑥6-B(会場Wi-Fi/クリーンPC FW/APアイソレーション/QRスキャン・トークン接続・状態追従・失効) ⑦配信GO**。CCの自走はここまで(配信操作・実機は前原)。詳細report=`.cc-reports/2026-07-08_remote-control_phase1{a-core,b-core,b-qr,c-release-prep}.md`。
+- **git**: `main` = **v2.8.0 配信済**(merge `c8eb931`・tag v2.8.0・**GitHub Release Latest・自動更新有効**・push 済)。feature/remote-control-phase1 は役目終了(削除可)。オープンブランチなし。
+- **現在地(2026-07-08)**: remote-control **v2.8.0 配信完了・案件クローズ**。機能=単一モードのクロックを同一LAN内スマホから遠隔操作(既定OFF=現行完全同一)。認証=PIN+セッショントークン(256bit・Authorizationヘッダ・失効=OFF/PIN再生成/idle・失効時SSE即close)+Origin+Host厳格アンカー+Content-Type必須+レート制限。状態SSE=fetch streaming+Authorization(トークンをURLに出さない・読み取り専用でstore書込ゼロ)で人数/RE/AO/特殊/卓名push。危険操作はスマホ側confirm。QR=依存ゼロ自作(main生成+IPC・CSP無改変・ISO/IEC 18004規格照合済)。完全ローカル文言はLAN例外込みに改訂済(CLAUDE.md/specs.md)。**リモコンは1タップ操作の補助**(モーダルが出る操作はPC操作も必要)を3箇所に明記。1a〜1c 全て cc-review2 承認・懐疑役 懸念ゼロ。テスト1589件全PASS・致命5件維持・追加ライブラリゼロ。前原6-B実機OK。
+- **次のアクション=なし(安定運用フェーズ)**。次案件は前原指示待ち。remote-control 将来拡張(スコープ外・roadmap §8)=マルチ4分割の遠隔操作/複数スマホ権限管理/HTTPS/mDNS。温存候補=v2.3.0 PRE_START永続化(前原判断)。詳細report=`.cc-reports/2026-07-08_remote-control_phase1{a-core,b-core,b-qr,c-release-prep}.md`。
 
 ---
 
