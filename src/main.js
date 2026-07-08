@@ -13,6 +13,14 @@ catch (_) { /* electron-updater 未インストール時は no-op */ }
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
+// remote-control Phase 1a: 同一 LAN 内スマホ遠隔操作サーバ（Node 標準 http のみ・追加ライブラリなし）。
+//   既定 OFF（設定トグル remoteControl.enabled）。ON の時だけ main が LAN サーバを起動する。
+//   認証境界（PIN / Origin / Host / Content-Type / レート制限）は src/remote/server.js に集約。
+const remoteServer = require('./remote/server');
+const remoteDiscover = require('./remote/discover');
+// 1b-qr: 接続 URL の QR を main（node）側で生成し行列を IPC で renderer へ渡す（本体 renderer に
+//   新規 script を読ませない＝CSP `script-src 'self'` を一切触らない）。vendored 自作・依存ゼロ。
+const remoteQr = require('./remote/vendor/qrcode');
 
 // STEP 6.21.4.2: Chromium AutoPlay Policy を無効化（起動直後から音再生を許可）
 // app.whenReady() より前に必ず設定（Electron 起動フラグのため）
@@ -808,7 +816,10 @@ const store = new Store({
       poolRatesDefault: { buyIn: 0, reentry: 0, addOn: 0 },
       // v2.6.0: 店舗デフォルトの POT（店内通貨 $ の1件あたり拠出、新規トーナメントにコピー）。既定 0。
       potDefaults: { buyIn: 0, reentry: 0, addOn: 0 }
-    }
+    },
+    // remote-control Phase 1a: スマホ遠隔操作（実験的機能）。既定 OFF ＝ サーバを一切起動しない
+    //   ＝現行と完全同一（後方互換）。ON にした時だけ main が LAN サーバを起動する。
+    remoteControl: { enabled: false }
   }
 });
 
@@ -2399,6 +2410,128 @@ function registerMultiIpcHandlers() {
 }
 registerMultiIpcHandlers();
 
+// ===== remote-control Phase 1a: スマホ遠隔操作サーバの lifecycle + IPC（新規ブロック・既存関数は無改変） =====
+//   設計: .cc-plans/2026-07-08_remote-control_phase1a-core_plan.md / 正典 docs/remote-control_roadmap.md
+//   - 既定 OFF（store.remoteControl.enabled）。ON の時だけ LAN サーバを起動（OFF=現行完全同一・後方互換）。
+//   - 配線点①（本ブロック）: server.onOp → mainWindow.webContents.send('remote:op', payload)。
+//     配線点②（renderer.js）: operator-solo でも受信するリスナー → dispatchClockShortcut(payload)。
+//   - PIN は起動のたびにランダム 6 桁生成（設定画面に表示・QR には含めない＝Phase 1b）。
+//   - runtime を変える操作は既存 dispatchClockShortcut→setRuntime→sanitizeRuntime→既存 debounce のみ経由
+//     （独自の store 書込経路は作らない＝致命バグ保護⑤ runtime 永続化 8 箇所を割らない）。
+let _remoteServerHandle = null; // remoteServer.start() の戻り { server, port, host, close, pushState }
+let _remotePin = null;          // 現行 PIN（サーバ起動のたび再生成・停止で null）
+let _remoteStarting = false;    // 起動処理の再入ガード
+// 1b: スマホへ SSE で送る現在状態スナップショット。renderer（真実源）からの【読み取り送信】で更新するだけ。
+//   ここでは store へ一切書かない（致命バグ保護⑤ runtime 永続化 8 箇所に非接触）。
+let _remoteState = null;
+
+// 1b: renderer から来た状態を安全な原始値のみに正規化（過大 / 予期せぬ型を弾く・読み取り専用）。
+function _sanitizeRemoteState(s) {
+  if (!s || typeof s !== 'object') return null;
+  const num = (v) => (Number.isFinite(v) ? v : 0);
+  const str = (v) => (typeof v === 'string' ? v.slice(0, 120) : '');
+  return {
+    playersInitial: num(s.playersInitial),
+    playersRemaining: num(s.playersRemaining),
+    reentryCount: num(s.reentryCount),
+    addOnCount: num(s.addOnCount),
+    specialCount: num(s.specialCount),
+    tableName: str(s.tableName)
+  };
+}
+
+function _generateRemotePin() {
+  // crypto.randomInt で一様な 6 桁（000000〜999999）。Math.random は使わない。
+  const n = _hashPIICrypto.randomInt(0, 1000000);
+  return String(n).padStart(6, '0');
+}
+
+function _remoteConnectUrl() {
+  if (!_remoteServerHandle) return null;
+  const lan = remoteDiscover.primaryLanIPv4();
+  const ip = lan ? lan.address : '127.0.0.1';
+  return { ip, port: _remoteServerHandle.port, url: `http://${ip}:${_remoteServerHandle.port}` };
+}
+
+async function startRemoteServer() {
+  if (_remoteServerHandle || _remoteStarting) return; // 既に稼働 / 起動中なら no-op
+  _remoteStarting = true;
+  try {
+    _remotePin = _generateRemotePin();
+    _remoteServerHandle = await remoteServer.start({
+      getPin: () => _remotePin,
+      port: 0,          // OS 空きポート自動選択（ポート衝突を構造的に回避）
+      host: '0.0.0.0',  // LAN バインド（別端末=スマホから到達可能）
+      onOp: (payload) => {
+        // 配線点①: 認証を通過した操作のみ renderer へ。runtime は触らない（payload を渡すだけ）。
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        try { mainWindow.webContents.send('remote:op', payload); } catch (_) { /* transition 中は無視 */ }
+      },
+      // 1b: SSE 接続時の初期状態送信用（読み取りのみ・server は状態を保持しない）。
+      getState: () => _remoteState
+    });
+    try { rollingLog('remote:started', { port: _remoteServerHandle.port }); } catch (_) {}
+  } catch (err) {
+    _remotePin = null;
+    _remoteServerHandle = null;
+    try { rollingLog('remote:start-error', { message: err && err.message }); } catch (_) {}
+  } finally {
+    _remoteStarting = false;
+  }
+}
+
+async function stopRemoteServer() {
+  const h = _remoteServerHandle;
+  _remoteServerHandle = null;
+  _remotePin = null;
+  _remoteState = null;
+  if (h) {
+    try { await h.close(); } catch (_) { /* ignore */ }
+    try { rollingLog('remote:stopped', null); } catch (_) {}
+  }
+}
+
+function _remoteStatus() {
+  const enabled = !!(store.get('remoteControl') || {}).enabled;
+  const running = !!_remoteServerHandle;
+  const conn = running ? _remoteConnectUrl() : null;
+  // 1b-qr: 稼働中は接続 URL の QR 行列を同梱（PIN は含めない＝URL のみ）。生成失敗は null（UI は非表示）。
+  let qr = null;
+  if (conn && conn.url) {
+    try { qr = remoteQr.generate(conn.url); } catch (_) { qr = null; }
+  }
+  return {
+    enabled,
+    running,
+    pin: running ? _remotePin : null,
+    ip: conn ? conn.ip : null,
+    port: conn ? conn.port : null,
+    url: conn ? conn.url : null,
+    qr // { size, modules } or null
+  };
+}
+
+// remote:* IPC 登録（registerMultiIpcHandlers と同型・registerIpcHandlers 本体には触れない）
+function registerRemoteIpcHandlers() {
+  ipcMain.handle('remote:getStatus', () => _remoteStatus());
+  ipcMain.handle('remote:setEnabled', async (_event, enabled) => {
+    const on = !!enabled;
+    const cur = store.get('remoteControl') || {};
+    store.set('remoteControl', { ...cur, enabled: on });
+    if (on) await startRemoteServer();
+    else await stopRemoteServer();
+    return _remoteStatus();
+  });
+  // 1b: renderer（真実源）→ main への【読み取り送信】。現在状態を SSE 用スナップショットに反映して
+  //   全 SSE クライアントへ push するだけ（store 書込ゼロ・setRuntime/sanitizeRuntime 経路に非接触）。
+  ipcMain.on('remote:state', (_event, state) => {
+    if (!_remoteServerHandle) return; // OFF/停止中は破棄
+    _remoteState = _sanitizeRemoteState(state);
+    try { _remoteServerHandle.pushState(_remoteState); } catch (_) { /* ignore */ }
+  });
+}
+registerRemoteIpcHandlers();
+
 // ----- Phase 3a: マルチ表示中の HDMI 抜き差し追従 -----
 //   既存 setupDisplayChangeListeners は無改変（マルチ中は display-removed が hallWindow ガード、
 //   display-added が _multiModeActive ガードで元々 no-op）。screen.on の多重登録で独立に追加する。
@@ -3686,6 +3819,8 @@ function registerIpcHandlers() {
     _appSuspensionBlockerId = null;
     // 2 つ目の will-quit ハンドラから統合
     try { globalShortcut.unregisterAll(); } catch (_) { /* ignore */ }
+    // remote-control Phase 1a: 遠隔操作サーバが稼働中なら終了時に閉じる（fire-and-forget）。
+    try { stopRemoteServer(); } catch (_) { /* ignore */ }
     // v2.0.4-rc18 第 1 弾 タスク 3: 終了直前に最終 flush（fire-and-forget、5,000 件 buffer × 5 分 retention）
     try { _flushRollingLog(); } catch (_) { /* never throw from logging */ }
   });
@@ -3994,6 +4129,14 @@ app.whenReady().then(async () => {
   registerShortcuts();
   // v2.0.0 STEP 5: HDMI 抜き差しイベント駆動追従の購読開始（ポーリング禁止、screen API のみ）
   setupDisplayChangeListeners();
+
+  // remote-control Phase 1a: 起動時に remoteControl.enabled=true の時だけ LAN サーバを起動する。
+  //   既定 OFF のため通常起動では一切サーバを立てない（listener 非生成＝現行完全同一・後方互換）。
+  try {
+    if ((store.get('remoteControl') || {}).enabled === true) {
+      startRemoteServer(); // fire-and-forget（await しても whenReady 後続に依存関係なし）
+    }
+  } catch (_) { /* remote 起動失敗はアプリ本体に影響させない */ }
 
   // STEP 9.fix2: 全権限要求を明示的に拒否（位置情報・カメラ・マイク・通知等は一切使用しない）。
   //   配布版 Windows 側で「位置情報を許可しますか？」ダイアログが出る件を抑止。

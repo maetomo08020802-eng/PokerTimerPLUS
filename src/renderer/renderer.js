@@ -1211,6 +1211,8 @@ function renderStaticInfo() {
   renderSpecialStackRow();
   renderPayouts();
   updateFinishedOverlay();
+  // 1b: 現在状態をスマホへ読み取り送信（_remoteEnabled=false の間は完全 no-op＝OFF で無コスト）。
+  publishRemoteState();
 }
 
 // STEP 6.11: カウント行の表示制御（0 時は visibility: hidden、0→1 で reveal アニメーション）
@@ -3962,6 +3964,102 @@ function activateSettingsTab(tabName) {
     syncLogoModeRadioFromState();
     setLogoHint('', '');
   }
+  // remote-control Phase 1a: スマホ操作タブを開いた時は main から現行 status を取得して反映
+  if (tabName === 'remote') {
+    syncRemoteTabFromStatus();
+  }
+}
+
+// ===== remote-control Phase 1a/1b: スマホ遠隔操作タブの表示同期 + 状態送信 =====
+
+// 1b: 遠隔操作サーバが稼働中か（renderer 側キャッシュ）。false の間は publishRemoteState を完全 no-op に保ち、
+//   OFF 時に per-frame の IPC を一切出さない（＝現行完全同一・後方互換）。
+let _remoteEnabled = false;
+
+// 1b: 現在状態（人数/RE/AO/特殊/卓名）を main へ【読み取り送信】する（SSE でスマホへ push される）。
+//   runtime を変えない読み取りのみ（致命バグ保護⑤ 非接触）。OFF / hall では送らない。
+function publishRemoteState() {
+  if (typeof window === 'undefined' || window.appRole === 'hall') return; // hall は consumer（逆送信しない）
+  if (!_remoteEnabled) return; // OFF 時は完全 no-op（新しい per-frame コストを出さない）
+  try {
+    const name = (tournamentState && (tournamentState.name || tournamentState.title)) || '';
+    const ss = (tournamentState && tournamentState.specialStack) || null;
+    const specialCount = (ss && ss.enabled) ? (Number(ss.appliedCount) || 0) : 0;
+    window.api?.remote?.publishState?.({
+      playersInitial: tournamentRuntime.playersInitial,
+      playersRemaining: tournamentRuntime.playersRemaining,
+      reentryCount: tournamentRuntime.reentryCount,
+      addOnCount: tournamentRuntime.addOnCount,
+      specialCount,
+      tableName: name
+    });
+  } catch (_) { /* never throw */ }
+}
+
+// main から取得した status（{ enabled, running, pin, url, port }）を DOM に反映する。
+//   トグルの ON/OFF・接続情報（PIN / URL）の表示を更新（表示専用・保存は setEnabled 経由）。
+function applyRemoteStatus(status) {
+  const s = status || {};
+  // 1b: 稼働状態をキャッシュ（publishRemoteState のゲート）。ON になった直後は最新状態を 1 回送る。
+  const wasEnabled = _remoteEnabled;
+  _remoteEnabled = !!s.running;
+  if (_remoteEnabled && !wasEnabled) { try { publishRemoteState(); } catch (_) {} }
+  const toggle = document.getElementById('js-remote-enabled');
+  const conn = document.getElementById('js-remote-conn');
+  const urlEl = document.getElementById('js-remote-url');
+  const pinEl = document.getElementById('js-remote-pin');
+  const statusEl = document.getElementById('js-remote-status');
+  if (toggle) toggle.checked = !!s.enabled;
+  // 接続情報は「ON かつ稼働中」のときだけ表示（レイアウトシフト対策で hidden 属性トグル）
+  if (conn) conn.hidden = !s.running;
+  if (urlEl) urlEl.textContent = s.url || '—';
+  if (pinEl) pinEl.textContent = s.pin || '—';
+  // 1b-qr: 接続 URL の QR を canvas に描画（main が生成した行列を受け取り描くだけ）。
+  drawRemoteQr(s.qr);
+  if (statusEl) {
+    // ON にしたのに running=false（LAN IP 取得不可等）の場合の注記
+    if (s.enabled && !s.running) {
+      statusEl.hidden = false;
+      statusEl.textContent = 'サーバの起動に失敗しました。ネットワーク接続を確認してください。';
+    } else {
+      statusEl.hidden = true;
+      statusEl.textContent = '';
+    }
+  }
+}
+
+// 1b-qr: main が生成した QR 行列（{ size, modules }）を canvas に描画する（描くだけ・生成しない）。
+//   クワイエットゾーン（周囲 4 モジュールの余白）を確保しないとスキャンできないため必ず付ける。
+function drawRemoteQr(qr) {
+  const canvas = document.getElementById('js-remote-qr');
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!qr || !qr.modules || !qr.size) { canvas.style.visibility = 'hidden'; return; }
+  canvas.style.visibility = 'visible';
+  const quiet = 4;
+  const total = qr.size + quiet * 2;
+  const scale = Math.floor(Math.min(W, H) / total) || 1;
+  const offset = Math.floor((Math.min(W, H) - scale * total) / 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H); // 白背景 + クワイエットゾーン
+  ctx.fillStyle = '#000000';
+  for (let r = 0; r < qr.size; r++) {
+    for (let c = 0; c < qr.size; c++) {
+      if (qr.modules[r][c]) {
+        ctx.fillRect(offset + (c + quiet) * scale, offset + (r + quiet) * scale, scale, scale);
+      }
+    }
+  }
+}
+
+// main から現行 status を取得して反映（タブ表示時・トグル操作後に呼ぶ）。
+async function syncRemoteTabFromStatus() {
+  try {
+    const status = await window.api?.remote?.getStatus?.();
+    applyRemoteStatus(status);
+  } catch (_) { /* ignore — remote ブリッジ未提供環境では何もしない */ }
 }
 
 // ===== STEP 9-B: 左上ロゴ管理 =====
@@ -7727,6 +7825,29 @@ if (typeof window !== 'undefined' && window.appRole === 'operator') {
   });
 }
 
+// remote-control Phase 1a: スマホ遠隔操作の受信配線（配線点②・既存 hall:forwarded-key ブロックは無改変）。
+//   既存 hall:forwarded-key は appRole==='operator'（2画面）限定のため単一モードでは発火しない。
+//   remote:op は operator-solo（単一モード）でも operator（2画面 PC 側）でも受信する別経路として新設。
+//   hall は受信しない（remote UI は hall に無く、main は mainWindow 宛にのみ send するため hall には届かない）。
+//   runtime を変える操作も含め、必ず既存 dispatchClockShortcut を呼ぶだけ（独自の runtime 直書き / store 書込は
+//   一切しない＝致命バグ保護⑤ runtime 永続化 8 箇所を割らない。setRuntime→sanitizeRuntime→既存 debounce 経由）。
+if (typeof window !== 'undefined' && (window.appRole === 'operator-solo' || window.appRole === 'operator')) {
+  window.api?.remote?.onRemoteOp?.((data) => {
+    if (!data || typeof data.code !== 'string') return;
+    try { window.api?.log?.write?.('ui:keypress', { key: data.key, code: data.code, ctrl: !!data.control, shift: !!data.shift, ctx: 'renderer:remote-op', role: window.appRole }); } catch (_) {}
+    dispatchClockShortcut({
+      code: data.code,
+      key: data.key,
+      ctrlKey: !!data.control,
+      shiftKey: !!data.shift,
+      altKey: !!data.alt,
+      metaKey: !!data.meta,
+      preventDefault: () => {},
+      stopPropagation: () => {}
+    });
+  });
+}
+
 // v2.0.4-rc9 Fix 3-C: 手元 PC のフォーカス可視化バナー更新関数。
 //   document.hasFocus() を見て is-focused / is-blurred クラスと文言を切替。
 //   role が operator のときのみ動作（operator-solo / hall は CSS で完全非表示）。
@@ -8186,6 +8307,26 @@ async function initialize() {
       });
     }
   } catch (_) { /* ignore */ }
+  // remote-control Phase 1a: スマホ遠隔操作トグルの change ハンドラ登録（スマホ操作タブ）。
+  //   ON/OFF → main の setEnabled（store 保存 + サーバ起動/停止）→ 戻り status を DOM に反映。
+  try {
+    const _remoteToggle = document.getElementById('js-remote-enabled');
+    if (_remoteToggle && !_remoteToggle._remoteBound) {
+      _remoteToggle._remoteBound = true;
+      _remoteToggle.addEventListener('change', async () => {
+        try {
+          const status = await window.api?.remote?.setEnabled?.(_remoteToggle.checked);
+          applyRemoteStatus(status);
+        } catch (_) {
+          // 失敗時は現行 status を取り直して UI を実態へ戻す
+          syncRemoteTabFromStatus();
+        }
+      });
+    }
+  } catch (_) { /* ignore */ }
+  // 1b: 起動時に remote 稼働状態を 1 回同期（_remoteEnabled を確定＝publishRemoteState のゲート初期化）。
+  //   OFF（既定）なら _remoteEnabled=false のまま＝状態送信は一切走らない（後方互換）。
+  try { syncRemoteTabFromStatus(); } catch (_) { /* ignore */ }
   // perf-heaviness: rAF Hz 計測 flush 起動（window.__PERF_METRICS true 時のみ。本番は no-op）。
   _startPerfRafFlush();
   renderStaticInfo();

@@ -50,22 +50,24 @@ function navBlock() {
   return m[0];
 }
 
-const ALL_TABS = ['tournament', 'blinds', 'display', 'marquee', 'logo', 'audio', 'about'];
+// remote-control Phase 1a: アプリ全体共通グループに「スマホ操作」(data-tab="remote") を追加（7→8タブ）。
+const ALL_TABS = ['tournament', 'blinds', 'display', 'marquee', 'logo', 'audio', 'remote', 'about'];
 const GROUP_TOURNAMENT = ['tournament', 'blinds', 'display', 'marquee'];
-const GROUP_APP = ['logo', 'audio', 'about'];
+const GROUP_APP = ['logo', 'audio', 'remote', 'about'];
 
 // ============================================================
-// T1: data-tab 識別子は全7タブで不変（並び替え・グループ化しても値を変えない）
+// T1: data-tab 識別子は全8タブで不変（並び替え・グループ化しても値を変えない）
+//   remote-control Phase 1a で「スマホ操作」(remote) が app スコープに追加され 7→8。
 // ============================================================
-test('T1: nav に全7タブの data-tab 値が存在（識別子不変の回帰防止）', () => {
+test('T1: nav に全8タブの data-tab 値が存在（識別子不変の回帰防止）', () => {
   const nav = navBlock();
   for (const tab of ALL_TABS) {
     assert.match(nav, new RegExp(`data-tab="${tab}"`),
       `data-tab="${tab}" が nav に存在しない（識別子が変わった可能性）`);
   }
-  // 7個ちょうど（余計な data-tab 追加・欠落なし）
+  // 8個ちょうど（余計な data-tab 追加・欠落なし）
   const count = (nav.match(/data-tab="/g) || []).length;
-  assert.equal(count, 7, `nav の data-tab 数が ${count}（期待 7）`);
+  assert.equal(count, ALL_TABS.length, `nav の data-tab 数が ${count}（期待 ${ALL_TABS.length}）`);
 });
 
 // ============================================================
@@ -203,7 +205,7 @@ test('T11: 本案件追加クラスに transform: scale / position: fixed がな
 // ============================================================
 test('version: package.json は 2.5.1', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.7.0', `package.json version が ${pkg.version}（期待 2.5.1）`);
+  assert.equal(pkg.version, '2.8.0', `package.json version が ${pkg.version}（期待 2.5.1）`);
 });
 
 test('version: scripts.test に v254-settings-scope-clarity.test.js が含まれる', () => {

@@ -2124,6 +2124,49 @@ body:not(.has-marquee) .marquee { display: none; }
   font-style: italic;
 }
 
+/* ===== remote-control Phase 1a: スマホ操作タブの接続情報（PIN / URL）表示 ===== */
+/* 設定ダイアログ内のスクロール領域のためメイン画面レイアウト（__autoCheck）には非影響。 */
+.remote-conn__url,
+.remote-conn__pin {
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 1.15vw;
+  letter-spacing: 1px;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.2em 0.5em;
+  border-radius: 6px;
+  user-select: all;
+}
+.remote-conn__pin {
+  font-weight: 700;
+  letter-spacing: 4px;
+}
+/* 1b-qr: 接続 URL の QR（設定ダイアログ内・固定サイズでレイアウトシフト非影響） */
+.remote-conn__qr {
+  width: 150px;
+  height: 150px;
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 0;
+}
+/* 1c: ファイアウォール / 運用の案内（設定ダイアログ内・折りたたみ・レイアウトシフト非影響） */
+.remote-help {
+  margin-top: var(--space-md);
+  font-size: 0.9vw;
+  color: var(--text-muted);
+}
+.remote-help > summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  opacity: 0.85;
+}
+.remote-help__list {
+  margin: var(--space-sm) 0 0;
+  padding-left: 1.4em;
+  line-height: 1.7;
+}
+.remote-help__list li { margin-bottom: 0.4em; }
+
 /* ===== ハウス情報タブ（branding.md §15.2 準拠の Yu Shimomachi/PLUS2 クレジット欄は編集不可） ===== */
 
 .about-content {

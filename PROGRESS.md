@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-08** — **v2.7.0 配信(マルチトーナメント4分割表示・前原実機確認OK+配信GO)**。multi-tournament-4up 案件クローズ(Phase 0〜3c)・テスト**1519件**全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-08** — **remote-control Phase 1 全実装完了・📦配信準備完了**(feature/remote-control-phase1・未merge/未push)。1a(認証コア)+1b(トークン/SSE/confirm/卓名/QR)+1c(案内文言/CHANGELOG v2.8.0/配信手順/.exeビルド成功)。**あとは前原の6-B実機OK+最終GOで配信のみ**(main merge/tag/push/Release/spike除去/v2.8.0 bump)。テスト1589件全PASS・致命5件維持・追加ライブラリゼロ・CSP無改変。直前=v2.7.0配信。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | — | — |
+| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 1 | 📦 配信準備完了(1a/1b/1c 全実装完・cc-review2 1c待ち・**前原6-B+最終GOで配信**) | 1c `.cc-reports/2026-07-08_remote-control_phase1c-release-prep.md`(案内文言/CHANGELOG v2.8.0/配信手順roadmap§9/.exeビルド成功) / 配信手順=`docs/remote-control_roadmap.md` §9 / 前原確認=①版番v2.8.0 ②spike除去 ③〜⑥6-B実機 ⑦配信GO |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,17 +52,17 @@
 |------|----|
 | 配信済リリース | 16件(v1.0.0〜v2.7.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 0件(安定運用フェーズ・multi-tournament-4up クローズ 2026-07-08)|
-| 最新テスト件数 | 1519件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +2・3a +3・3c +1) |
+| オープン作業 | 1件(remote-control Phase 1a・実装完了→cc-review2待ち)|
+| 最新テスト件数 | 1589件 全PASS(既存1519 + remote-control 1a +35 + 1b +24 + 1b-qr +11) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.7.0 配信 commit 群を push 済・tag `v2.7.0`(Latest・自動更新有効)。feature branch(phase2/exit-confirm)は役目終了(削除可)。
-- **直前作業(2026-07-08)**: **v2.7.0 配信** = マルチトーナメント4分割表示(Phase 0〜3c・実機FB全6弾+追補2件)。3c 実機確認時の「モーダルが出ない」は前原操作ミスではなく**旧ビルド(12:25=3c前)をインストール済み**が原因と asar 検証で特定→最新版再インストールで OK。GitHub Release に .exe/latest.yml/blockmap を添付・リリースノートは `docs/release-notes-v2.7.0.md` の文案を使用。テスト1519件全PASS・致命5件完全維持。
-- **次のアクション**: なし(安定運用フェーズ)。v2.6.6 利用者への自動更新降下の実機確認(任意)のみ。温存候補は「📋 温存中の次期バージョン候補」参照。
+- **git**: `main` = v2.7.0 配信済(tag v2.7.0・Latest)。作業中ブランチ **`feature/remote-control-phase1`**(HEAD `87ba8e2`・**main 未 merge・未 push**・spike tip 由来で src は v2.7.0 と同一土台)。
+- **現在地(2026-07-08)**: remote-control **Phase 1 全実装完了・📦配信準備完了**(1a〜1c すべて cc-review2 承認・懐疑役 懸念ゼロ)。機能=単一モードのクロックを同一LAN内スマホから遠隔操作。認証=PIN+**セッショントークン(256bit・Authorizationヘッダ・失効=OFF/PIN再生成/idle・失効時SSE即close)**+Origin+Host厳格アンカー+Content-Type必須+レート制限。状態SSE=**案A(fetch streaming+Authorization=トークンをURLに出さない・読み取り専用でstore書込ゼロ)**で人数/RE/AO/特殊/卓名をpush。危険操作はスマホ側confirm。QR=**依存ゼロ自作**(main生成+IPC・**CSP無改変**・ISO/IEC 18004規格照合済)。既定OFFで現行完全同一(後方互換)。1c=FW/運用案内文言+CHANGELOG v2.8.0(ポリシー改訂告知)+配信手順roadmap§9+**.exeビルドCC自走成功**。テスト**1589件全PASS**・致命5件維持・追加ライブラリゼロ。
+- **次のアクション=前原の6-B実機OK+最終GO待ち**→GOで **roadmap §9 手順を一度だけ実行**(spike除去→main merge→v2.8.0 bump→tag→push→署名ビルド→GitHub Release→Latest)=案件クローズ。**前原確認=①版番v2.8.0 ②spike除去 ③〜⑥6-B(会場Wi-Fi/クリーンPC FW/APアイソレーション/QRスキャン・トークン接続・状態追従・失効) ⑦配信GO**。CCの自走はここまで(配信操作・実機は前原)。詳細report=`.cc-reports/2026-07-08_remote-control_phase1{a-core,b-core,b-qr,c-release-prep}.md`。
 
 ---
 
