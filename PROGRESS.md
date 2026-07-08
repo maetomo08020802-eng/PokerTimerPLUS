@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-08** — multi-tournament-4up **Phase 2〜2f+追補 main merge 済(`e9943f3`・push済)** + **追補2(モード開始時のデータ非保存 確認モーダル)実装完了**。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチは main 入りだが未配信=配信はPhase 3判断)・テスト**1515件**全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-08** — multi-tournament-4up **Phase 3a(堅牢化・エッジケース=走行中差し替えガード/HDMI抜き差し追従/復元キャンセル文言)実装完了・前原実機確認待ち**。配信中は **v2.6.6(Latest・自動更新有効)**のまま(マルチは main 入りだが未配信=配信は 3b で v2.7.0 予定)・テスト**1518件**全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,8 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| multi-tournament-4up Phase 3(仕上げ・堅牢化・配信/roadmap §5) | 📝 brief起案待ち(前原の着手指示で開始) | 正典 `docs/multi-tournament-4up_roadmap.md` / Phase 2〜2f+追補は main merge 済(`e9943f3`) |
+| multi-tournament-4up Phase 3a(堅牢化・エッジケース) | 🟡 実装完了・前原実機確認待ち(HDMI抜き差し/差し替えガード/巨大スクリーン) | report `.cc-reports/2026-07-08_multi-tournament-4up_phase3a.md` / main ローカル `949671e`(push は GO 後) |
+| multi-tournament-4up Phase 3b(配信準備=v2.7.0/CHANGELOG/specs/.exe/Release) | ⏳ 3a の前原 GO 後に brief 起案 | 正典 `docs/multi-tournament-4up_roadmap.md` §5 |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,16 +53,16 @@
 | 配信済リリース | 15件(v1.0.0〜v2.6.6)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件(安定運用フェーズ)|
-| 最新テスト件数 | 1515件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +2) |
+| 最新テスト件数 | 1518件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +2・3a +3) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = Phase 2〜2f+追補(merge `e9943f3`)+追補2(開始確認モーダル)まで**全 push 済(前原GO 2026-07-08 ×2)**。feature branch は役目終了(温存中・削除可)。配信は tag `v2.6.6`(Latest・自動更新有効)のまま=**マルチは main 入りだが未配信**(tag/.exe/Release は Phase 3 の配信判断で)。
-- **直前作業(2026-07-08)**: ①Phase 2〜2f+追補(復元方式選択+経過時間表示)を main merge+push ②**追補2=モード開始時の確認モーダル**(「登録トーナメントは読み込むだけ・進行/操作は保存・上書きされない・停電復帰のみ対応」を開始前に明示)を完了review承認+前原GO(文言確認)で push。テスト1515件全PASS・致命5件非接触・store書込ゼロ維持。report `.cc-reports/2026-07-08_multi-tournament-4up_phase2f-start-confirm-modal.md`。
-- **次のアクション**: Phase 3(仕上げ・堅牢化・配信/roadmap §5)の brief 起案(前原の着手指示で開始)。
+- **git**: `main` = `949671e`(Phase 3a・**ローカルのみ・push は前原実機確認 GO 後**)。push 済は `05aa572`(追補2)まで。配信は tag `v2.6.6`(Latest・自動更新有効)のまま=**マルチは main 入りだが未配信**(3b で v2.7.0 として tag/.exe/Release 予定・前原専権)。
+- **直前作業(2026-07-08)**: 前原の Phase 3 着手指示→brief(3a/3b 分割・v2.7.0 確定)→**Phase 3a=堅牢化・エッジケース**。監査で①割当変更④終了区画=現状で確定挙動充足(実装なし)、実装は②走行中差し替えの確認ガード③HDMI抜き差し追従(マルチ専用リスナー・既存dual経路無改変・hide/自動復帰・遅延登録)⑥復元キャンセル専用文言。実装中に data-transfer 7件の偽PASS化(stub に screen 不在)を自己検出→遅延登録+stub強化で是正。テスト1518件全PASS・致命5件非接触・store書込ゼロ維持。
+- **次のアクション**: cc-review2 完了review→前原実機確認(HDMI抜き差し/差し替えガード/巨大スクリーン性能 等 6-B 5件)→GO で push→3b(配信準備)brief 起案。
 
 ---
 
