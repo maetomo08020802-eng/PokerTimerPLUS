@@ -124,7 +124,7 @@ test('S1 (保護): 致命バグ保護（resetBlindProgressOnly / ensureEditorEdi
 });
 
 test('S2: version 2.6.0（配信 bump 済）+ v262 登録', () => {
-  assert.equal(PKG.version, '2.6.6', `version が ${PKG.version}`);
+  assert.equal(PKG.version, '2.7.0', `version が ${PKG.version}`);
   assert.ok(PKG.scripts.test.includes('v262-fee-pot-yen-step2.test.js'), 'v262 未登録');
 });
 

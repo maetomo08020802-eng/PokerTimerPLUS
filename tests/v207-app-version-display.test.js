@@ -133,7 +133,7 @@ test('T5: main.js の ipcMain.handle("app:getVersion", () => app.getVersion()) �
 
 test('version: package.json は 2.5.1', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.6.6',
+  assert.equal(pkg.version, '2.7.0',
     `package.json version が ${pkg.version}（期待 2.5.1）`);
 });
 

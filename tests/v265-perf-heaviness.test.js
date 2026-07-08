@@ -165,7 +165,7 @@ test('P1 (保護): 致命バグ保護 5 件すべて維持', () => {
 });
 
 test('P2: version 2.6.0 据置（早期 bump なし）+ v265 登録', () => {
-  assert.equal(PKG.version, '2.6.6', `version が ${PKG.version}`);
+  assert.equal(PKG.version, '2.7.0', `version が ${PKG.version}`);
   assert.ok(PKG.scripts.test.includes('v265-perf-heaviness.test.js'), 'v265 未登録');
 });
 
