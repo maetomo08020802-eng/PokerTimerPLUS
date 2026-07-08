@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 0(技術検証スパイク) | 🟡 実装完了・前原GO判断待ち(6-B: 会場Wi-Fi/ファイアウォール実機) | report `.cc-reports/2026-07-08_remote-control_phase0-spike.md` / 正典 `docs/remote-control_roadmap.md` / branch `spike/remote-control-phase0`(main未merge) |
+| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 1(本実装) | 📝 brief起案中(前原GO 2026-07-08=完全ローカル文言改訂/QR vendored/認証堅牢版=全て承認) | 正典 `docs/remote-control_roadmap.md` / Phase0 report `.cc-reports/2026-07-08_remote-control_phase0-spike.md` / 会場Wi-Fi疎通(6-B①〜③)は物理検証未・並行推奨 |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
