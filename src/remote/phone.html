@@ -15,6 +15,7 @@
   header { padding:14px 16px; background:#081831; position:sticky; top:0; z-index:5; }
   header .table { font-size:13px; opacity:.8; }
   header h1 { font-size:18px; margin:2px 0 0; }
+  header .note { font-size:12px; opacity:.7; margin:6px 0 0; line-height:1.5; }
   .stats { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:6px; font-size:13px; opacity:.9; }
   .stats span b { color:var(--accent); font-weight:700; }
   .pin { padding:12px 16px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -38,6 +39,7 @@
   <header>
     <div class="table">操作対象（卓）: <span id="tableName">—</span><span class="conn-dot" id="connDot" title="状態接続"></span></div>
     <h1>PokerTimerPLUS+ リモコン</h1>
+    <p class="note">※ このリモコンは 1 タップでできる操作の補助用です。「開始」など、PC 画面に設定ウィンドウ（例: 開始まで何分か決める画面）が出る操作は、PC 側での操作も必要です。</p>
     <div class="stats" id="stats" hidden>
       <span>残り <b id="stPlayers">—</b></span>
       <span>RE <b id="stReentry">—</b></span>
