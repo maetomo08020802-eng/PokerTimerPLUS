@@ -2149,6 +2149,23 @@ body:not(.has-marquee) .marquee { display: none; }
   border-radius: 6px;
   padding: 0;
 }
+/* 1c: ファイアウォール / 運用の案内（設定ダイアログ内・折りたたみ・レイアウトシフト非影響） */
+.remote-help {
+  margin-top: var(--space-md);
+  font-size: 0.9vw;
+  color: var(--text-muted);
+}
+.remote-help > summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  opacity: 0.85;
+}
+.remote-help__list {
+  margin: var(--space-sm) 0 0;
+  padding-left: 1.4em;
+  line-height: 1.7;
+}
+.remote-help__list li { margin-bottom: 0.4em; }
 
 /* ===== ハウス情報タブ（branding.md §15.2 準拠の Yu Shimomachi/PLUS2 クレジット欄は編集不可） ===== */
 

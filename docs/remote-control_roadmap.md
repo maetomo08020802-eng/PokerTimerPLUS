@@ -72,3 +72,25 @@ Phase 1 本実装（別 brief・認証境界=フルフロー/push前確認必須
 
 ## 8. スコープ外（将来）
 - マルチ4分割モードの遠隔操作 / 複数スマホの権限管理 / HTTPS 化 / mDNS 自動発見。
+
+## 9. 配信手順（Phase 1c・**前原の最終 GO 後に一度だけ**実行）
+
+> ⚠️ **前提**: 下記 6-B 実機の前原確認が OK であること。この前提が満たされるまで配信しない。
+> - 6-B: 会場想定 Wi-Fi 疎通 / クリーン PC のファイアウォール初回許可 / AP アイソレーション影響 / QR スキャン / トークン接続 / 状態追従 / 失効。
+> ⚠️ CC は 1c 実装フェーズで**この手順を実行しない**（準備物を揃えるところまで）。実行は前原 GO 後。
+
+**前原確認事項（配信前に確定）**:
+- **バージョン採番**: 構築士2 推奨 = **v2.8.0**（新機能追加・後方互換維持ゆえマイナー bump）。
+- **`spike-remote-control/` 除去**: 構築士2 推奨 = **除去**（Phase 0 スパイク＝PIN 一段のみの未強化認証コード。`src/remote/` へ昇格済＝役目終了。配信リポジトリに未強化コードを載せない）。履歴には残るので後から参照可。
+
+**手順（前原 GO 後・一度だけ）**:
+0. **（前原承認済なら）`git rm -r spike-remote-control/`** をコミット（feature ブランチ内・履歴保持）。※ 除去しない判断なら README に「参照用・未強化・本番非使用」を明記し electron-builder の `files` から除外。
+1. `feature/remote-control-phase1` → **main へ merge**。
+2. **バージョン bump**: `package.json` の `version` を `2.8.0` に更新（About 画面は `app.getVersion()` 参照ゆえ自動追従・CHANGELOG 見出しの日付を配信日に確定）。
+3. **tag 付与**: `git tag v2.8.0`。
+4. **main push**（tag も push）。
+5. **.exe ビルド（署名込み）**: `npm run build:win`（署名は前原環境）。
+6. **GitHub Release 作成** + `.exe` / `latest.yml`（自動更新用）アップロード。
+7. **Latest 指定**（自動更新が拾う）。
+
+> ※ バージョン文字列を書き込む実体は `package.json` version と CHANGELOG 見出しのみ（About 画面・ウィンドウタイトルは実行時に `app.getVersion()` から取得＝手動書換不要）。GO 前は実 bump commit を打たない。

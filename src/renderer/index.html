@@ -1136,6 +1136,17 @@
           <strong>OFF のときは何も起動しません（通常動作と完全に同じ）。</strong>
         </p>
 
+        <!-- 1c: ファイアウォール / 運用上の案内（利用者が ON にした瞬間に目に入る位置）。テキスト追加のみ・CSP 無改変。 -->
+        <details class="remote-help">
+          <summary>使う前に / 接続できないときは</summary>
+          <ul class="remote-help__list">
+            <li><strong>初回だけ Windows の許可が出ることがあります。</strong>ON にした直後に「Windows セキュリティ（ファイアウォール）」の確認が出たら「<strong>アクセスを許可する</strong>」を選んでください。管理者パスワードを求められる場合があります。</li>
+            <li><strong>スマホと PC を同じ Wi-Fi につないでください。</strong>別々のネットワークやスマホの回線（4G/5G）では接続できません。</li>
+            <li><strong>会場の Wi-Fi によっては使えないことがあります。</strong>ゲスト用 Wi-Fi など「端末どうしの通信を遮断する設定（AP アイソレーション）」の Wi-Fi では、アプリ側では解決できず接続できません。その場合は、スマホのテザリングや別の Wi-Fi をお試しください。</li>
+            <li>この機能は<strong>実験的機能</strong>です。うまく動かない場合は OFF にすれば、これまでどおり完全にオフラインで動作します。</li>
+          </ul>
+        </details>
+
         <!-- ON のときだけ表示。OFF 時も DOM 上に存在させ hidden 属性で制御（レイアウトシフト対策・
              設定ダイアログ内はスクロール領域のためメイン画面 __autoCheck 対象外）。 -->
         <div id="js-remote-conn" class="remote-conn" hidden>
