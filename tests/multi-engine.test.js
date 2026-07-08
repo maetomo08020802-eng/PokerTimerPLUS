@@ -673,6 +673,101 @@ const MIN = 60 * 1000;
     assert.equal(e.getRecord().status, 'idle', '第2引数省略は従来どおり idle 初期化');
   });
 
+  // ============================================================
+  // 8. Phase 2f: 復元方式「経過を反映」（toPowerLossElapsedRecord）
+  // ============================================================
+  const { toPowerLossElapsedRecord } = engineModule;
+
+  test('経過反映: 現レベル内の経過 → 同レベル・残減で PAUSED', () => {
+    const T = 1_000_000;
+    const rec = { status: 'running', currentLevelIndex: 0, endAtMs: T + 10 * MIN, pausedRemainingMs: null, preStartTotalMs: null };
+    const out = toPowerLossElapsedRecord(rec, LEVELS, T + 4 * MIN);
+    assert.equal(out.status, 'paused');
+    assert.equal(out.currentLevelIndex, 0);
+    assert.equal(out.pausedRemainingMs, 6 * MIN);
+    assert.equal(out.preStartTotalMs, null);
+  });
+
+  test('経過反映: レベル跨ぎの経過 → 繰上げ位置で PAUSED（「そこから再開」との差分明示）', () => {
+    const T = 1_000_000;
+    const rec = { status: 'running', currentLevelIndex: 0, endAtMs: T + 10 * MIN, pausedRemainingMs: null, preStartTotalMs: null };
+    const out = toPowerLossElapsedRecord(rec, LEVELS, T + 15 * MIN); // Level 1 残 10 分を超え Level 2 へ 5 分侵入
+    assert.equal(out.status, 'paused');
+    assert.equal(out.currentLevelIndex, 1, 'レベル繰上げを反映');
+    assert.equal(out.pausedRemainingMs, 15 * MIN, 'Level 2（20分）の残 15 分');
+    // 同入力の「そこから再開」は 0 クランプ・レベル非前進（両方式の違い）
+    const frozen = toPowerLossPausedRecord(rec, T + 15 * MIN);
+    assert.equal(frozen.currentLevelIndex, 0);
+    assert.equal(frozen.pausedRemainingMs, 0);
+  });
+
+  test('経過反映: 全レベル超過 → FINISHED として復元', () => {
+    const T = 1_000_000;
+    const rec = { status: 'running', currentLevelIndex: 0, endAtMs: T + 10 * MIN, pausedRemainingMs: null, preStartTotalMs: null };
+    // 停電時点の残り: L1 10 + L2 20 + L3 15 + Break 10 + L4 30 = 85 分
+    const out = toPowerLossElapsedRecord(rec, LEVELS, T + 86 * MIN);
+    assert.equal(out.status, 'finished');
+    assert.equal(out.currentLevelIndex, LEVELS.length - 1);
+    assert.equal(out.pausedRemainingMs, null);
+  });
+
+  test('経過反映: prestart 経過<残 → カウントダウン PAUSED（preStartTotalMs 維持・resume で復帰）', () => {
+    const T = 5_000_000;
+    const rec = { status: 'prestart', currentLevelIndex: 0, endAtMs: T + 8 * MIN, pausedRemainingMs: null, preStartTotalMs: 10 * MIN };
+    const out = toPowerLossElapsedRecord(rec, LEVELS, T + 3 * MIN);
+    assert.equal(out.status, 'paused');
+    assert.equal(out.currentLevelIndex, 0);
+    assert.equal(out.pausedRemainingMs, 5 * MIN);
+    assert.equal(out.preStartTotalMs, 10 * MIN, 'prestart 由来の印を維持');
+    const e = createClockEngine(LEVELS, out);
+    e.resume(9_000_000);
+    assert.equal(e.computeNow(9_000_000 + 1 * MIN).status, ENGINE_STATUS.PRESTART, '再開でカウントダウンへ復帰');
+  });
+
+  test('経過反映: prestart 経過≥残 → 0 着地して running 派生位置で PAUSED（preStartTotalMs null）', () => {
+    const T = 5_000_000;
+    const rec = { status: 'prestart', currentLevelIndex: 0, endAtMs: T + 8 * MIN, pausedRemainingMs: null, preStartTotalMs: 10 * MIN };
+    const out = toPowerLossElapsedRecord(rec, LEVELS, T + 13 * MIN); // 着地後 5 分 = Level 1 残 15 分
+    assert.equal(out.status, 'paused');
+    assert.equal(out.currentLevelIndex, 0);
+    assert.equal(out.pausedRemainingMs, 15 * MIN);
+    assert.equal(out.preStartTotalMs, null, 'もう prestart ではない');
+    // さらに超過すればレベル繰上げ / 全レベル完走で FINISHED まで反映
+    const advanced = toPowerLossElapsedRecord(rec, LEVELS, T + 8 * MIN + 25 * MIN);
+    assert.equal(advanced.currentLevelIndex, 1);
+    const done = toPowerLossElapsedRecord(rec, LEVELS, T + 8 * MIN + 95 * MIN + 1);
+    assert.equal(done.status, 'finished');
+  });
+
+  test('経過反映: idle / paused / finished は不変（時計を進めない）', () => {
+    for (const rec of [
+      { status: 'idle', currentLevelIndex: 0, endAtMs: null, pausedRemainingMs: null, preStartTotalMs: null },
+      { status: 'paused', currentLevelIndex: 1, endAtMs: null, pausedRemainingMs: 5 * MIN, preStartTotalMs: null },
+      { status: 'finished', currentLevelIndex: 4, endAtMs: null, pausedRemainingMs: null, preStartTotalMs: null }
+    ]) {
+      assert.deepEqual(toPowerLossElapsedRecord(rec, LEVELS, 9_999_999), rec, `${rec.status} は不変`);
+    }
+  });
+
+  test('経過反映: 防御 — levels 欠落 / nowMs 非有限でも生きた時計を返さない（paused 版へフォールバック）', () => {
+    const T = 1_000_000;
+    const rec = { status: 'running', currentLevelIndex: 2, endAtMs: T + 7 * MIN, pausedRemainingMs: null, preStartTotalMs: null };
+    const noLevels = toPowerLossElapsedRecord(rec, [], T + 1 * MIN);
+    assert.deepEqual(noLevels, toPowerLossPausedRecord(rec, T + 1 * MIN), 'levels 空は「そこから再開」凍結と一致');
+    const badNow = toPowerLossElapsedRecord(rec, LEVELS, NaN);
+    assert.equal(badNow.status, 'paused', 'nowMs 非有限でも paused（running を返さない）');
+  });
+
+  test('経過反映: round-trip — 変換後 record を seed に同一派生・resume で続行できる', () => {
+    const T = 1_000_000;
+    const rec = { status: 'running', currentLevelIndex: 0, endAtMs: T + 10 * MIN, pausedRemainingMs: null, preStartTotalMs: null };
+    const out = toPowerLossElapsedRecord(rec, LEVELS, T + 15 * MIN);
+    const e = createClockEngine(LEVELS, out);
+    assert.deepEqual(e.getRecord(), out, 'sanitize を通しても同一 record（決定論）');
+    e.resume(2_000_000);
+    assert.equal(e.computeNow(2_000_000 + 5 * MIN).remainingMs, 10 * MIN, '再開して続行できる');
+  });
+
   test('同値検証: prestart 0 着地後のレベル・残時間が computeLiveTimerState（着地時刻起点）と一致', () => {
     const factory = extractComputeLiveTimerState();
     const T0 = 1_700_000_000_000;

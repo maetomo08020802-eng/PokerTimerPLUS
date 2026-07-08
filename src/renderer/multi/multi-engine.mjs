@@ -129,7 +129,8 @@ export function sanitizeRecord(record, levels) {
 //   - remaining = endAtMs − savedAtMs（0 未満は 0 クランプ・レベルは前進させない = 勝手に進めない安全側）
 //   - prestart は preStartTotalMs を維持 = 再開でカウントダウンへ復帰
 //   - idle / paused / finished は不変（時計を進めない）
-// 壁時計継続（停電中も進んだ扱い）は不採用。main プロセスからも動的 import で共用（二重実装回避）。
+// 壁時計継続（停電中も進んだ扱い）は Phase 2f で選択制になった（対になる toPowerLossElapsedRecord 参照）。
+// main プロセスからも動的 import で共用（二重実装回避）。
 export function toPowerLossPausedRecord(record, savedAtMs) {
   if (!record || typeof record !== 'object') return record;
   if (record.status !== ENGINE_STATUS.RUNNING && record.status !== ENGINE_STATUS.PRESTART) {
@@ -147,6 +148,54 @@ export function toPowerLossPausedRecord(record, savedAtMs) {
       ? ((Number.isFinite(record.preStartTotalMs) && record.preStartTotalMs > 0) ? record.preStartTotalMs : null)
       : null
   };
+}
+
+// Phase 2f: 停電・クラッシュ復帰の「経過を反映」方式（前原 FB 第 5 弾。2e 壁打ちの「壁時計継続は
+// 不採用」を選択制へ上書き）。進行中（running / prestart）の record を「復元時刻（nowMs）まで
+// 壁時計どおり進んだ位置で一時停止した状態」へ変換する。
+//   - computePaneNow の派生をそのまま凍結（レベル繰上げ・prestart 0 着地 → running・全レベル完走
+//     なら FINISHED まで反映）
+//   - どんな入力でも生きた時計（running / prestart の record）は返さない =「復元直後は必ず一時停止・
+//     跳んだ時計を一瞬も見せない」（Phase 2e 確定思想）を関数レベルで保証
+//   - 派生を計算できない入力（nowMs 非有限・levels 欠落等 = 派生 idle）は「そこから再開」側の凍結
+//     （toPowerLossPausedRecord）へ落とす安全側フォールバック
+//   - idle / paused / finished は不変（時計を進めない）
+export function toPowerLossElapsedRecord(record, levels, nowMs) {
+  if (!record || typeof record !== 'object') return record;
+  if (record.status !== ENGINE_STATUS.RUNNING && record.status !== ENGINE_STATUS.PRESTART) {
+    return { ...record };
+  }
+  const now = Number(nowMs);
+  const derived = Number.isFinite(now) ? computePaneNow(record, levels, now) : null;
+  if (derived && derived.status === ENGINE_STATUS.FINISHED) {
+    return {
+      status: ENGINE_STATUS.FINISHED,
+      currentLevelIndex: (Array.isArray(levels) && levels.length > 0) ? levels.length - 1 : 0,
+      endAtMs: null,
+      pausedRemainingMs: null,
+      preStartTotalMs: null
+    };
+  }
+  if (derived && derived.status === ENGINE_STATUS.PRESTART) {
+    // 経過 < カウントダウン残: 縮んだ残りでカウントダウン一時停止（再開でカウントダウンへ復帰）
+    return {
+      status: ENGINE_STATUS.PAUSED,
+      currentLevelIndex: 0,
+      endAtMs: null,
+      pausedRemainingMs: Math.max(0, derived.remainingMs),
+      preStartTotalMs: (Number.isFinite(record.preStartTotalMs) && record.preStartTotalMs > 0) ? record.preStartTotalMs : null
+    };
+  }
+  if (derived && derived.status === ENGINE_STATUS.RUNNING) {
+    return {
+      status: ENGINE_STATUS.PAUSED,
+      currentLevelIndex: derived.levelIndex,
+      endAtMs: null,
+      pausedRemainingMs: Math.max(0, derived.remainingMs),
+      preStartTotalMs: null
+    };
+  }
+  return toPowerLossPausedRecord(record, now);
 }
 
 // 区画1つぶんの独立時計エンジンを生成する。

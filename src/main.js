@@ -2120,25 +2120,33 @@ async function enterMultiMode() {
   //   破損 / 版数不一致は確認を出さず破棄して新規開始（安全側）。
   //   キャンセル = マルチ開始自体を中止しファイルは温存（誤操作で復元機会を失わない）。
   let _restoreSession = null;
+  let _restoreMode = 'paused'; // Phase 2f: 'paused'=そこから再開（2e 現行挙動） / 'elapsed'=経過を反映
   try {
     if (fs.existsSync(_multiSessionPath())) {
       const data = _readMultiSession();
       if (!data) {
         _deleteMultiSession();
       } else {
+        // Phase 2f: 復元方式の選択（前原 FB 第 5 弾）。「そこから再開」= 2e 現行挙動（default・安全側）/
+        // 「経過を反映」= 停電〜再入場の実時間も進んだ扱い（2e 壁打ちの「壁時計継続は不採用」を選択制へ上書き）
         const choice = dialog.showMessageBoxSync(mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined, {
           type: 'question',
           title: 'マルチ表示の復元',
-          message: '前回のマルチ表示が正常に終了しませんでした。直前の状態を復元しますか？',
-          detail: '復元すると、各区画は前回終了時点の残り時間で一時停止した状態で戻ります（再開はスペースキー / 一時停止ボタンから）。',
-          buttons: ['復元する', '破棄して新規で始める', 'キャンセル'],
+          message: '前回のマルチ表示が正常に終了しませんでした。直前の状態をどう復元しますか？',
+          detail: 'そこから再開: 各区画は前回終了時点の残り時間で一時停止して戻ります（停電中に時計は進みません）。\n'
+            + '経過を反映: 前回終了から今までの経過時間ぶんタイマーを進めた位置で一時停止して戻ります（レベルが繰り上がり、全レベルを終えた区画は終了として戻ります）。\n'
+            + 'どちらもスペースキー / 一時停止ボタンで再開できます。',
+          buttons: ['そこから再開（時計は進めない）', '経過を反映して復元（時計を進める）', '破棄して新規で始める', 'キャンセル'],
           defaultId: 0,
-          cancelId: 2,
+          cancelId: 3,
           noLink: true
         });
-        if (choice === 2) return { ok: false, reason: 'restore-cancelled' };
-        if (choice === 1) _deleteMultiSession();
-        else _restoreSession = data;
+        if (choice === 3) return { ok: false, reason: 'restore-cancelled' };
+        if (choice === 2) _deleteMultiSession();
+        else {
+          _restoreSession = data;
+          _restoreMode = (choice === 1) ? 'elapsed' : 'paused';
+        }
       }
     }
   } catch (_) { /* 検出失敗時は新規開始 */ }
@@ -2155,21 +2163,28 @@ async function enterMultiMode() {
     }
     _multiModeActive = true;
     _resetMultiPaneCache();
-    // Phase 2e: 復元 prime。engine record はここで「書出し時点で一時停止」へ変換してから配る
+    // Phase 2e/2f: 復元 prime。engine record はここで選択方式に応じて「書出し時点で一時停止」（paused）
+    //   or「経過を反映した位置で一時停止」（elapsed）へ変換してから配る
     //   （grid / control とも最初から止まった時計を受け取る = 跳んだ時計を一瞬も見せない）。
     //   変換ロジックは multi-engine.mjs の純粋関数を動的 import で共用（二重実装を作らない）。
     if (_restoreSession) {
       try {
         const engineMod = await import(pathToFileURL(path.join(__dirname, 'renderer', 'multi', 'multi-engine.mjs')).href);
+        // Phase 2f: 「経過を反映」の基準時刻はループ前に 1 回だけ捕捉（全区画で同一値 = 区画間の一貫性）
+        const restoreNow = Date.now();
         for (let i = 0; i < _multiPaneCache.length; i++) {
           const p = _restoreSession.panes[i];
           if (!p || typeof p !== 'object') continue;
           const pane = { ...p };
-          if (pane.engine) pane.engine = engineMod.toPowerLossPausedRecord(pane.engine, _restoreSession.savedAtMs);
+          if (pane.engine) {
+            pane.engine = (_restoreMode === 'elapsed')
+              ? engineMod.toPowerLossElapsedRecord(pane.engine, (pane.snapshot && Array.isArray(pane.snapshot.levels)) ? pane.snapshot.levels : [], restoreNow)
+              : engineMod.toPowerLossPausedRecord(pane.engine, _restoreSession.savedAtMs);
+          }
           _multiPaneCache[i] = pane;
         }
         _multiUiCache = (_restoreSession.ui && typeof _restoreSession.ui === 'object') ? _restoreSession.ui : null;
-        try { rollingLog('multi:session-restored', { savedAtMs: _restoreSession.savedAtMs }); } catch (_) { /* ignore */ }
+        try { rollingLog('multi:session-restored', { savedAtMs: _restoreSession.savedAtMs, mode: _restoreMode }); } catch (_) { /* ignore */ }
       } catch (_) {
         _resetMultiPaneCache(); // 復元失敗は新規開始（安全側）
       }
