@@ -362,5 +362,25 @@ test('phase2e: 復元計算はエンジンの純粋関数を main/control で共
 });
 
 // ============================================================
+// 12. Phase 2f: 復元方式の選択（そこから再開 / 経過を反映）+ 経過時間表示
+// ============================================================
+test('phase2f: 復元方式選択の配線（4ボタン・elapsed 純関数共用・経過時間表示・schema/書出し無改変）', () => {
+  const b = MAIN.match(/\/\/ ===== multi-tournament-4up Phase 1[\s\S]*?registerMultiIpcHandlers\(\);/)[0];
+  // 4 ボタン（そこから再開=default / 経過を反映 / 破棄 / キャンセル=cancelId:3）
+  assert.ok(b.includes('そこから再開') && b.includes('経過を反映'), '復元方式 2 択のボタンがない');
+  assert.ok(/cancelId: 3/.test(b), 'キャンセルが index 3 でない（4 ボタン化されていない）');
+  // 経過反映はエンジン純粋関数を共用（main に二重実装しない）
+  assert.ok(code['multi-engine.mjs'].includes('toPowerLossElapsedRecord'), 'エンジンに経過反映の復元計算がない');
+  assert.ok(b.includes('toPowerLossElapsedRecord'), 'main が経過反映の復元計算を共用していない');
+  assert.ok(!/function toPowerLossElapsedRecord/.test(MAIN), 'main に経過反映計算の二重実装がある');
+  // ダイアログに「前回終了からの経過時間」の動的表示（復元方式を選ぶ判断材料）
+  assert.ok(/function _formatMultiSessionAge/.test(MAIN), '経過時間フォーマット関数がない');
+  assert.ok(b.includes('_formatMultiSessionAge(data.savedAtMs'), 'ダイアログに経過時間表示が配線されていない');
+  // 復元方式はファイルへ保存しない（書出し payload は 2e のまま = schema 1 無改変）
+  assert.ok(!/_restoreMode/.test(MAIN.match(/async function _writeMultiSession[\s\S]*?\n\}/)[0]),
+    '書出しに復元方式が混入している（復元時選択のみの原則違反）');
+});
+
+// ============================================================
 console.log(`\n=== Summary: ${pass} passed / ${fail} failed ===`);
 process.exit(fail === 0 ? 0 : 1);

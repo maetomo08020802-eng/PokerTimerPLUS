@@ -1997,6 +1997,18 @@ function _deleteMultiSession() {
   try { fs.unlinkSync(_multiSessionPath() + '.tmp'); } catch (_) { /* 不在なら無視 */ }
 }
 
+// Phase 2f 追補: 復元ダイアログ用「前回終了からの経過時間」表示（復元方式を選ぶ判断材料）。
+//   1 分未満 / 約N分 / 約N時間 / 約N時間M分。計算不能（非有限）は空文字 = 表示側で括弧ごと省略。
+function _formatMultiSessionAge(savedAtMs, nowMs) {
+  if (!Number.isFinite(savedAtMs) || !Number.isFinite(nowMs)) return '';
+  const mins = Math.floor(Math.max(0, nowMs - savedAtMs) / 60000);
+  if (mins < 1) return '1分未満';
+  if (mins < 60) return `約${mins}分`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `約${h}時間` : `約${h}時間${m}分`;
+}
+
 // 残存セッションの読取（破損 / スキーマ版数不一致は null = 復元せず破棄する安全側）
 function _readMultiSession() {
   try {
@@ -2129,10 +2141,11 @@ async function enterMultiMode() {
       } else {
         // Phase 2f: 復元方式の選択（前原 FB 第 5 弾）。「そこから再開」= 2e 現行挙動（default・安全側）/
         // 「経過を反映」= 停電〜再入場の実時間も進んだ扱い（2e 壁打ちの「壁時計継続は不採用」を選択制へ上書き）
+        const sessionAge = _formatMultiSessionAge(data.savedAtMs, Date.now());
         const choice = dialog.showMessageBoxSync(mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined, {
           type: 'question',
           title: 'マルチ表示の復元',
-          message: '前回のマルチ表示が正常に終了しませんでした。直前の状態をどう復元しますか？',
+          message: `前回のマルチ表示が正常に終了しませんでした${sessionAge ? `（終了から${sessionAge}）` : ''}。直前の状態をどう復元しますか？`,
           detail: 'そこから再開: 各区画は前回終了時点の残り時間で一時停止して戻ります（停電中に時計は進みません）。\n'
             + '経過を反映: 前回終了から今までの経過時間ぶんタイマーを進めた位置で一時停止して戻ります（レベルが繰り上がり、全レベルを終えた区画は終了として戻ります）。\n'
             + 'どちらもスペースキー / 一時停止ボタンで再開できます。',
