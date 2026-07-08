@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 1(本実装) | 📝 brief起案中(前原GO 2026-07-08=完全ローカル文言改訂/QR vendored/認証堅牢版=全て承認) | 正典 `docs/remote-control_roadmap.md` / Phase0 report `.cc-reports/2026-07-08_remote-control_phase0-spike.md` / 会場Wi-Fi疎通(6-B①〜③)は物理検証未・並行推奨 |
+| remote-control(スマホ遠隔操作・LANシンクライアント) Phase 1a(コア) | 🟢 実装着手待ち(brief起案済・前原GO全ゲート承認・6-B①疎通実機OK) | brief `.cc-briefs/2026-07-08_remote-control_phase1a-core_brief.md` / 正典 `docs/remote-control_roadmap.md` / 会場本番Wi-Fi/クリーンPCファイアウォール(6-B②③)は物理未 |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -60,9 +60,9 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.7.0 配信済(tag v2.7.0・Latest)。**別ブランチ `spike/remote-control-phase0`** に remote-control Phase 0 スパイク(main 未 merge・本体 src 無改変)。
-- **直前作業(2026-07-08)**: 新案件 remote-control(スマホ遠隔操作・LANシンクライアント)の **Phase 0 技術検証スパイク完了**。隔離スパイク `spike-remote-control/`(Node標準httpのみ・追加ライブラリ0)で「LANサーバ+PIN+全17操作写像+IP自動発見」を実証(harness 10/10・別プロセスcurlでonOp発火)。**主要発見: 既存 hall:forwarded-key 受信は operator(2画面)限定=単一モードoperator-soloでは発火せず、Phase 1 で専用 remote:op リスナー必須**。本体無改変(src diff空)・テスト1519件不変。会場Wi-Fi/ファイアウォール/QR画像生成は 6-B・Phase 1 判断。正典 `docs/remote-control_roadmap.md`。
-- **次のアクション**: cc-review2 完了review→前原 6-B(会場想定Wi-Fi疎通・クリーンPCのファイアウォール)→**GOゲート**(特に「完全ローカル動作」不変条件をLAN内許可へ改訂するか=Noなら不成立)→GOなら Phase 1 本実装 brief(認証境界フルフロー)。
+- **git**: `main` = v2.7.0 配信済(tag v2.7.0・Latest)。作業中ブランチ `spike/remote-control-phase0`(Phase 0 スパイク + roadmap + PROGRESS・main 未 merge・本体 src 無改変)。Phase 1a は**新規 feature ブランチ `feature/remote-control-phase1`** で着手予定(main から分岐推奨)。
+- **直前作業(2026-07-08)**: remote-control Phase 0 完了→**前原GO(全ゲート承認: ①完全ローカル文言をLAN内許可へ改訂 ②QR=vendored小MIT単一ファイル ③認証=PIN+トークン+Origin検証+レート制限の堅牢版)**→**Phase 1a brief起案済**。さらに **6-B① 会場疎通の一次実機成功**(前原スマホ→同一Wi-Fi→PCサーバ疎通・PIN通過・startPause/entryAdd/addOnPlus が正しくキー変換されて到達をログ確認)。
+- **次のアクション(次セッション着手)**: **Phase 1a 本実装**。`.cc-briefs/2026-07-08_remote-control_phase1a-core_brief.md` を Read → feature ブランチ → Plan → 軽量review(認証境界=フルフロー・軽量トラック禁止) → 実装。1a内容=設定トグル「スマホ遠隔操作(実験的)」default OFF(OFF=現行完全同一・listener非生成)+ サーバmain常設 + operator-soloでも受信する `remote:op` 配線(既存 hall:forwarded-key は無改変) + PIN(起動ごと6桁生成・設定画面表示・QRにPIN含めない)+Origin検証+レート制限+入力ホワイトリスト + op-map全17操作をsrc昇格 + runtimeは既存setRuntime→sanitize経由死守 + 本体renderer CSP無改変(phone.html別オリジン) + 完全ローカル文言の実改訂(CLAUDE.md:51,93/specs.md:675) + node単体テスト。**認証設計(バインド先0.0.0.0 vs LAN限定・Origin許可範囲・レート制限単位)に確信持てなければescalate**。main merge/配信は 1c 完了+前原GO後の一度だけ。6-B②③(会場本番Wi-Fi/クリーンPCファイアウォール)は物理未確認・並行で前原実機推奨。
 
 ---
 
