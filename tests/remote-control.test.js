@@ -72,6 +72,15 @@ const JSON_CT = { 'Content-Type': 'application/json' };
 function validOp(port, op, pin = '123456', extra = {}) {
   return request(port, { headers: { ...JSON_CT, ...extra }, body: JSON.stringify({ pin, op }) });
 }
+// 1b: /api/op はトークン必須へ移行（PIN は /api/auth のみ）。トークン取得 → Authorization: Bearer で操作。
+async function authToken(port, pin = '123456', extra = {}) {
+  const r = await request(port, { urlPath: '/api/auth', headers: { ...JSON_CT, ...extra }, body: JSON.stringify({ pin }) });
+  let token = null; try { token = JSON.parse(r.body).token; } catch (_) {}
+  return { status: r.status, token };
+}
+function opWithToken(port, op, token, extra = {}) {
+  return request(port, { headers: { ...JSON_CT, Authorization: 'Bearer ' + token, ...extra }, body: JSON.stringify({ op }) });
+}
 
 (async () => {
   // ============================================================
@@ -123,8 +132,12 @@ function validOp(port, op, pin = '123456', extra = {}) {
     assert.match(g.body, /data-op="reentryPlus"/);
   }));
 
-  await test('server: 正常 POST（json+正PIN）→ 200 + onOp 発火 + 正写像', () => withServer('123456', async ({ port, received }) => {
-    const r = await validOp(port, 'reentryPlus');
+  // 1b: /api/op 成功パスはトークン必須へ移行（PIN は /api/auth のみ・意図した契約変更）。
+  await test('server[1b]: /api/auth でトークン取得→Authorization で /api/op → 200 + onOp + 正写像', () => withServer('123456', async ({ port, received }) => {
+    const { status, token } = await authToken(port);
+    assert.equal(status, 200);
+    assert.ok(token, 'トークンが発行されない');
+    const r = await opWithToken(port, 'reentryPlus', token);
     const j = JSON.parse(r.body);
     assert.equal(r.status, 200);
     assert.equal(j.ok, true);
@@ -134,14 +147,15 @@ function validOp(port, op, pin = '123456', extra = {}) {
     assert.equal(received[0].payload.shift, false);
   }));
 
-  await test('server: PIN 不一致 → 401 + onOp 非発火', () => withServer('123456', async ({ port, received }) => {
-    const r = await validOp(port, 'reentryPlus', '000000');
+  await test('server[1b]: 有効トークン無しの /api/op → 401 + onOp 非発火', () => withServer('123456', async ({ port, received }) => {
+    const r = await validOp(port, 'reentryPlus'); // PIN を body に入れても /api/op はトークンを見る
     assert.equal(r.status, 401);
     assert.equal(received.length, 0);
   }));
 
-  await test('server: 未知 op → 400 で破棄', () => withServer('123456', async ({ port, received }) => {
-    const r = await validOp(port, 'definitely-not-an-op');
+  await test('server: 未知 op → 400 で破棄（トークンあり）', () => withServer('123456', async ({ port, received }) => {
+    const { token } = await authToken(port);
+    const r = await opWithToken(port, 'definitely-not-an-op', token);
     assert.equal(r.status, 400);
     assert.equal(received.length, 0);
   }));
@@ -166,7 +180,8 @@ function validOp(port, op, pin = '123456', extra = {}) {
   }));
 
   await test('server[条件1]: 正常 200 レスポンスにも Access-Control-Allow-Origin ヘッダが無い', () => withServer('123456', async ({ port }) => {
-    const r = await validOp(port, 'startPause');
+    const { token } = await authToken(port);
+    const r = await opWithToken(port, 'startPause', token);
     assert.equal(r.status, 200);
     assert.equal(r.headers['access-control-allow-origin'], undefined, '200 応答に ACAO が付いている');
   }));
@@ -181,7 +196,10 @@ function validOp(port, op, pin = '123456', extra = {}) {
 
   await test('server[層4]: 同一オリジン（Origin==Host）→ 200 許可', () => withServer('123456', async ({ port, received }) => {
     const host = `192.168.1.5:${port}`;
-    const r = await validOp(port, 'startPause', '123456', { 'Host': host, 'Origin': `http://${host}` });
+    const headers = { 'Host': host, 'Origin': `http://${host}` };
+    const auth = await authToken(port, '123456', headers);
+    assert.equal(auth.status, 200);
+    const r = await opWithToken(port, 'startPause', auth.token, headers);
     assert.equal(r.status, 200);
     assert.equal(received.length, 1);
   }));
@@ -222,18 +240,18 @@ function validOp(port, op, pin = '123456', extra = {}) {
     assert.equal(received.length, 0);
   }));
 
-  // ---- 層7: レート制限（PIN 総当り防止）----
-  await test('server[層7]: PIN 連続失敗でロック（11 回目は 429）', () => withServer('123456', async ({ port }) => {
-    let last = null;
+  // ---- 層7: レート制限（認証=トークン/PIN 総当り防止）----
+  await test('server[層7]: 認証連続失敗でロック（11 回目は 429）', () => withServer('123456', async ({ port }) => {
+    // /api/op を有効トークン無しで叩く = bad-token 失敗としてレート制限集計される
     for (let i = 0; i < 10; i++) {
       const r = await validOp(port, 'startPause', '999999');
       assert.equal(r.status, 401, `${i} 回目は 401 のはず`);
     }
-    last = await validOp(port, 'startPause', '999999'); // 11 回目
+    const last = await validOp(port, 'startPause', '999999'); // 11 回目
     assert.equal(last.status, 429, 'ロック後は 429 のはず');
-    // 正しい PIN でもロック中は 429（総当りコスト増）
-    const still = await validOp(port, 'startPause', '123456');
-    assert.equal(still.status, 429, 'ロック中は正 PIN でも 429');
+    // ロック中は最前段で弾かれる（/api/auth に正 PIN を出しても 429）
+    const still = await authToken(port, '123456');
+    assert.equal(still.status, 429, 'ロック中は最前段で 429');
   }));
 
   // ---- 層6: PIN 定数時間比較（推奨条件3）----

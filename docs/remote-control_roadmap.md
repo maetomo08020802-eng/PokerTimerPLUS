@@ -46,6 +46,13 @@ Phase 1 本実装（別 brief・認証境界=フルフロー/push前確認必須
 - **全操作の土台**: 全操作が `dispatchClockShortcut` の `event.code`+修飾キーで到達可能（写像表 = `spike-remote-control/op-map.js`）。「全操作リモート化」は写像を足すだけで届く。
 - **会場リスク（6-B/運用）**: Windows ファイアウォール初回 inbound 許可・会場 Wi-Fi の AP アイソレーション（端末間遮断なら物理的に不可）・DHCP で IP 変動（→ QR で毎回案内）。これらは実機（クリーン PC / 会場想定 Wi-Fi）で確認が必要。
 
+## 4.5 Phase 1 進捗（2026-07-08・前原 GO 後）
+
+- **Phase 1a（完了）**: 認証境界7層（PIN / Origin / Host 厳格アンカー / Content-Type / レート制限 / 未知op破棄 / ACAO 非返却）+ サーバ main 常設（設定トグル default OFF）+ 配線点①②（operator-solo でも受信）+ 完全ローカル文言の LAN 例外改訂 + 後方互換。cc-review2 承認・懸念ゼロ。
+- **Phase 1b-core（完了）**: セッショントークン（`/api/auth` 発行・`/api/op` と `/api/events` はトークン必須・PIN 毎送信を撤去・256bit メモリ限定・OFF/PIN再生成/idle で失効・失効時は開いている SSE も即 close）+ 状態 SSE（人数/RE/AO/特殊/卓名・**案A=fetch streaming + Authorization ヘッダ**でトークンを URL に出さない・読み取り専用）+ 危険操作のスマホ側 confirm + 卓名表示。認証7層は弱めず上載せ。
+- **Phase 1b-qr（実装予定）**: 接続 URL の QR 生成（PIN は含めない・vendored 単一 MIT ファイルで依存ゼロ・CSP 無改変）。1a のテキスト URL 表示は既に稼働のため、QR は接続の利便性向上（切り出しサブステップ）。
+- **Phase 1c（未着手）**: ファイアウォール例外案内 / .exe ビルド / リリースノート / 前原 GO で配信（1c merge 前に spike 同梱可否を判断）。
+
 ## 5. 前原ゲート項目（GO/NO-GO の判断材料）
 1. **★完全ローカル動作の不変条件の改訂可否**（下記文言案）。No なら本案件は不成立。
 2. QR 画像生成に小さな依存（vendored 単一ファイル or npm `qrcode`）を許すか（IP 発見自体は依存ゼロで成立済）。

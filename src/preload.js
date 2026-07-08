@@ -213,6 +213,12 @@ contextBridge.exposeInMainWorld('api', {
       ipcRenderer.on('remote:op', (_event, payload) => callback(payload));
     },
     getStatus: () => _measuredInvoke('remote:getStatus'),
-    setEnabled: (enabled) => _measuredInvoke('remote:setEnabled', !!enabled)
+    setEnabled: (enabled) => _measuredInvoke('remote:setEnabled', !!enabled),
+    // 1b: 現在状態（人数/RE/AO/特殊/卓名）を main へ【読み取り送信】（一方向・SSE でスマホへ push される）。
+    //   renderer が真実源。runtime を変えない読み取りのみ（致命バグ保護⑤ 非接触）。
+    publishState: (state) => {
+      try { ipcRenderer.send('remote:state', state || null); }
+      catch (_) { /* never throw */ }
+    }
   }
 });

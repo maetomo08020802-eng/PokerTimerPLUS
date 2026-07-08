@@ -2415,9 +2415,27 @@ registerMultiIpcHandlers();
 //   - PIN は起動のたびにランダム 6 桁生成（設定画面に表示・QR には含めない＝Phase 1b）。
 //   - runtime を変える操作は既存 dispatchClockShortcut→setRuntime→sanitizeRuntime→既存 debounce のみ経由
 //     （独自の store 書込経路は作らない＝致命バグ保護⑤ runtime 永続化 8 箇所を割らない）。
-let _remoteServerHandle = null; // remoteServer.start() の戻り { server, port, host, close }
+let _remoteServerHandle = null; // remoteServer.start() の戻り { server, port, host, close, pushState }
 let _remotePin = null;          // 現行 PIN（サーバ起動のたび再生成・停止で null）
 let _remoteStarting = false;    // 起動処理の再入ガード
+// 1b: スマホへ SSE で送る現在状態スナップショット。renderer（真実源）からの【読み取り送信】で更新するだけ。
+//   ここでは store へ一切書かない（致命バグ保護⑤ runtime 永続化 8 箇所に非接触）。
+let _remoteState = null;
+
+// 1b: renderer から来た状態を安全な原始値のみに正規化（過大 / 予期せぬ型を弾く・読み取り専用）。
+function _sanitizeRemoteState(s) {
+  if (!s || typeof s !== 'object') return null;
+  const num = (v) => (Number.isFinite(v) ? v : 0);
+  const str = (v) => (typeof v === 'string' ? v.slice(0, 120) : '');
+  return {
+    playersInitial: num(s.playersInitial),
+    playersRemaining: num(s.playersRemaining),
+    reentryCount: num(s.reentryCount),
+    addOnCount: num(s.addOnCount),
+    specialCount: num(s.specialCount),
+    tableName: str(s.tableName)
+  };
+}
 
 function _generateRemotePin() {
   // crypto.randomInt で一様な 6 桁（000000〜999999）。Math.random は使わない。
@@ -2445,7 +2463,9 @@ async function startRemoteServer() {
         // 配線点①: 認証を通過した操作のみ renderer へ。runtime は触らない（payload を渡すだけ）。
         if (!mainWindow || mainWindow.isDestroyed()) return;
         try { mainWindow.webContents.send('remote:op', payload); } catch (_) { /* transition 中は無視 */ }
-      }
+      },
+      // 1b: SSE 接続時の初期状態送信用（読み取りのみ・server は状態を保持しない）。
+      getState: () => _remoteState
     });
     try { rollingLog('remote:started', { port: _remoteServerHandle.port }); } catch (_) {}
   } catch (err) {
@@ -2461,6 +2481,7 @@ async function stopRemoteServer() {
   const h = _remoteServerHandle;
   _remoteServerHandle = null;
   _remotePin = null;
+  _remoteState = null;
   if (h) {
     try { await h.close(); } catch (_) { /* ignore */ }
     try { rollingLog('remote:stopped', null); } catch (_) {}
@@ -2491,6 +2512,13 @@ function registerRemoteIpcHandlers() {
     if (on) await startRemoteServer();
     else await stopRemoteServer();
     return _remoteStatus();
+  });
+  // 1b: renderer（真実源）→ main への【読み取り送信】。現在状態を SSE 用スナップショットに反映して
+  //   全 SSE クライアントへ push するだけ（store 書込ゼロ・setRuntime/sanitizeRuntime 経路に非接触）。
+  ipcMain.on('remote:state', (_event, state) => {
+    if (!_remoteServerHandle) return; // OFF/停止中は破棄
+    _remoteState = _sanitizeRemoteState(state);
+    try { _remoteServerHandle.pushState(_remoteState); } catch (_) { /* ignore */ }
   });
 }
 registerRemoteIpcHandlers();

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<!-- remote-control Phase 1a — スマホ操作ページ（LAN サーバが別オリジンで配信）。
+<!-- remote-control Phase 1a/1b — スマホ操作ページ（LAN サーバが別オリジンで配信）。
      本体 renderer(index.html) とは別ドキュメント・別オリジンのため、本体 CSP(script-src 'self') には非影響。
-     Phase 1a は PIN 手入力 + 全操作ボタンの最小 UI。状態表示(SSE)・危険操作の確認ダイアログ・卓名同期・
-     QR・セッショントークンは Phase 1b。fetch は Content-Type: application/json（サーバの層2 必須要件）。 -->
+     1b: PIN で1回だけトークン取得 → 以降は Authorization: Bearer で操作 / 状態 SSE 購読（fetch streaming・
+     トークンを URL に出さない案A）/ 危険操作の確認ダイアログ / 卓名・人数のリアルタイム表示。 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -12,31 +12,44 @@
   :root { --bg:#0A1F3D; --card:#12305c; --fg:#eaf1ff; --accent:#4fc3f7; --danger:#e0524a; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { padding:14px 16px; background:#081831; position:sticky; top:0; }
+  header { padding:14px 16px; background:#081831; position:sticky; top:0; z-index:5; }
   header .table { font-size:13px; opacity:.8; }
   header h1 { font-size:18px; margin:2px 0 0; }
-  .pin { padding:12px 16px; display:flex; gap:8px; align-items:center; }
+  .stats { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:6px; font-size:13px; opacity:.9; }
+  .stats span b { color:var(--accent); font-weight:700; }
+  .pin { padding:12px 16px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .pin input { flex:0 0 120px; font-size:20px; padding:8px; border-radius:8px; border:1px solid #2a4d80; background:#0d244a; color:var(--fg); text-align:center; letter-spacing:4px; }
-  .pin .status { font-size:13px; opacity:.85; }
+  .pin button { font-size:15px; padding:9px 16px; border-radius:8px; border:none; background:var(--accent); color:#062038; font-weight:700; }
+  .pin .status { font-size:13px; opacity:.85; flex:1 1 100%; }
   .grid { padding:12px 16px 40px; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .grid h2 { grid-column:1/-1; font-size:13px; opacity:.7; margin:14px 0 2px; }
   button.op { font-size:17px; padding:16px 10px; border-radius:12px; border:none; background:var(--card); color:var(--fg); font-weight:600; }
   button.op:active { background:var(--accent); color:#062038; }
   button.op.danger { background:#3a1512; }
   button.op.danger:active { background:var(--danger); color:#fff; }
-  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#000c; color:#fff; padding:8px 16px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .2s; }
+  button.op:disabled { opacity:.4; }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#000c; color:#fff; padding:8px 16px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .2s; z-index:10; }
   .toast.show { opacity:1; }
+  .conn-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#888; margin-left:6px; vertical-align:middle; }
+  .conn-dot.live { background:#2ecc71; }
 </style>
 </head>
 <body>
   <header>
-    <div class="table">操作対象（卓）: <span id="tableName">この PC のトーナメント</span></div>
+    <div class="table">操作対象（卓）: <span id="tableName">—</span><span class="conn-dot" id="connDot" title="状態接続"></span></div>
     <h1>PokerTimerPLUS+ リモコン</h1>
+    <div class="stats" id="stats" hidden>
+      <span>残り <b id="stPlayers">—</b></span>
+      <span>RE <b id="stReentry">—</b></span>
+      <span>AO <b id="stAddon">—</b></span>
+      <span>特殊 <b id="stSpecial">—</b></span>
+    </div>
   </header>
 
-  <div class="pin">
+  <div class="pin" id="pinRow">
     <input id="pin" type="tel" inputmode="numeric" placeholder="PIN" maxlength="8" autocomplete="off">
-    <span class="status" id="status">PC 画面に表示された PIN を入力してボタンを押してください</span>
+    <button id="connectBtn" type="button">接続</button>
+    <span class="status" id="status">PC 画面に表示された PIN を入力して「接続」を押してください</span>
   </div>
 
   <div class="grid">
@@ -67,12 +80,26 @@
   <div class="toast" id="toast"></div>
 
 <script>
-  // Phase 1a スクリプト。本ページ独自（本体 renderer とは別オリジン配信のため本体 CSP に非影響）。
-  // 危険操作(danger)の確認ダイアログは Phase 1b（1a は色だけ区別）。
+  // Phase 1b スクリプト。本ページ独自（本体 renderer とは別オリジン配信のため本体 CSP に非影響）。
+  // 危険操作（DANGEROUS）は送信前に確認ダイアログを挟む（前原決定(a)=PC限定にせず確認付きで全部できる）。
+  var DANGEROUS = { resetDialog:1, reentryMinus:1, addOnMinus:1, specialMinus:1, entryCancel:1 };
+  var DANGER_LABEL = {
+    resetDialog:'リセット確認を開く', reentryMinus:'リエントリー -1', addOnMinus:'アドオン -1',
+    specialMinus:'特殊スタック -1', entryCancel:'直前のエントリーを取消'
+  };
+  var token = null;        // /api/auth で取得（メモリのみ・localStorage 等へ保存しない＝短命）
+  var sseAbort = null;     // 進行中の SSE fetch を中断するための AbortController
+  var reconnectMs = 1000;  // SSE 再接続バックオフ
+
   var pinEl = document.getElementById('pin');
+  var connectBtn = document.getElementById('connectBtn');
   var statusEl = document.getElementById('status');
   var toastEl = document.getElementById('toast');
+  var pinRow = document.getElementById('pinRow');
+  var statsEl = document.getElementById('stats');
+  var connDot = document.getElementById('connDot');
   var toastTimer = null;
+
   function toast(msg, ok) {
     toastEl.textContent = msg;
     toastEl.style.background = ok ? '#0a7d3aee' : '#a11e1eee';
@@ -80,30 +107,131 @@
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 1400);
   }
-  async function sendOp(op) {
+
+  // --- 認証: PIN → トークン取得（1回だけ）---
+  async function connect() {
     var pin = (pinEl.value || '').trim();
     if (!pin) { toast('PIN を入力してください', false); return; }
+    connectBtn.disabled = true;
+    try {
+      var res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pin })
+      });
+      var data = await res.json();
+      if (res.ok && data.ok && data.token) {
+        token = data.token;
+        pinEl.value = '';
+        pinRow.hidden = true;      // 接続後は PIN 欄を隠す
+        statsEl.hidden = false;
+        statusEl.textContent = '接続済み';
+        toast('接続しました', true);
+        startEvents();             // 状態 SSE 購読開始
+      } else if (res.status === 429) {
+        toast('試行が多すぎます。少し待ってください', false);
+      } else {
+        toast('PIN が違います', false);
+      }
+    } catch (e) {
+      toast('通信エラー（同じ Wi-Fi か確認）', false);
+    } finally {
+      connectBtn.disabled = false;
+    }
+  }
+
+  // --- 操作送信: トークンを Authorization ヘッダで（PIN は送らない）---
+  async function sendOp(op) {
+    if (!token) { toast('先に PIN で接続してください', false); return; }
+    if (DANGEROUS[op]) {
+      if (!window.confirm('「' + (DANGER_LABEL[op] || op) + '」を実行します。よろしいですか？')) return;
+    }
     try {
       var res = await fetch('/api/op', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: pin, op: op })
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ op: op })
       });
-      var data = await res.json();
-      if (res.ok && data.ok) { toast('送信: ' + op, true); statusEl.textContent = '最後の操作: ' + op; }
-      else if (res.status === 401) { toast('PIN が違います', false); statusEl.textContent = 'PIN 不一致'; }
-      else if (res.status === 429) { toast('試行が多すぎます。少し待ってください', false); statusEl.textContent = 'ロック中'; }
-      else { toast('失敗: ' + (data.reason || res.status), false); }
+      if (res.ok) { toast('送信: ' + op, true); return; }
+      if (res.status === 401) { onTokenLost('接続が切れました。PIN を入れ直してください'); }
+      else if (res.status === 429) { toast('試行が多すぎます。少し待ってください', false); }
+      else { var d = await res.json().catch(function(){return {};}); toast('失敗: ' + (d.reason || res.status), false); }
     } catch (e) {
-      toast('通信エラー（同じ Wi-Fi か確認）', false);
-      statusEl.textContent = '通信エラー';
+      toast('通信エラー', false);
     }
   }
+
+  // トークン失効時: SSE を止めて PIN 入力へ戻す。
+  function onTokenLost(msg) {
+    token = null;
+    if (sseAbort) { try { sseAbort.abort(); } catch (_) {} sseAbort = null; }
+    connDot.classList.remove('live');
+    statsEl.hidden = true;
+    pinRow.hidden = false;
+    statusEl.textContent = msg || '再接続してください';
+    toast(msg || '再接続してください', false);
+  }
+
+  // --- 状態 SSE（案A: fetch streaming + Authorization。EventSource は使わない＝トークンを URL に出さない）---
+  async function startEvents() {
+    if (!token) return;
+    if (sseAbort) { try { sseAbort.abort(); } catch (_) {} }
+    sseAbort = new AbortController();
+    try {
+      var res = await fetch('/api/events', {
+        headers: { 'Authorization': 'Bearer ' + token },
+        signal: sseAbort.signal
+      });
+      if (res.status === 401) { onTokenLost('接続が切れました。PIN を入れ直してください'); return; }
+      if (!res.ok || !res.body) { scheduleReconnect(); return; }
+      connDot.classList.add('live');
+      reconnectMs = 1000;
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+      while (true) {
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buf += decoder.decode(chunk.value, { stream: true });
+        var parts = buf.split('\n\n');
+        buf = parts.pop();
+        for (var i = 0; i < parts.length; i++) {
+          var line = parts[i];
+          var m = /(^|\n)data: ?(.*)$/.exec(line);
+          if (!m) continue;
+          try { applyState(JSON.parse(m[2])); } catch (_) {}
+        }
+      }
+      // ストリームが正常終了（サーバ close 等）→ 再接続
+      connDot.classList.remove('live');
+      if (token) scheduleReconnect();
+    } catch (e) {
+      // abort 以外は再接続
+      connDot.classList.remove('live');
+      if (token && !(e && e.name === 'AbortError')) scheduleReconnect();
+    }
+  }
+
+  function scheduleReconnect() {
+    if (!token) return;
+    setTimeout(function () { if (token) startEvents(); }, reconnectMs);
+    reconnectMs = Math.min(reconnectMs * 2, 15000); // 指数バックオフ（ポーリングに退行させない）
+  }
+
+  function applyState(msg) {
+    if (!msg || msg.type !== 'state' || !msg.state) return;
+    var s = msg.state;
+    document.getElementById('tableName').textContent = s.tableName || 'この PC のトーナメント';
+    document.getElementById('stPlayers').textContent = (s.playersRemaining != null ? s.playersRemaining : '—') + ' / ' + (s.playersInitial != null ? s.playersInitial : '—');
+    document.getElementById('stReentry').textContent = (s.reentryCount != null ? s.reentryCount : '—');
+    document.getElementById('stAddon').textContent = (s.addOnCount != null ? s.addOnCount : '—');
+    document.getElementById('stSpecial').textContent = (s.specialCount != null ? s.specialCount : '—');
+  }
+
+  connectBtn.addEventListener('click', connect);
+  pinEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') connect(); });
   document.querySelectorAll('button.op').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var op = b.getAttribute('data-op');
-      sendOp(op);
-    });
+    b.addEventListener('click', function () { sendOp(b.getAttribute('data-op')); });
   });
 </script>
 </body>

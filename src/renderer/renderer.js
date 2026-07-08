@@ -1211,6 +1211,8 @@ function renderStaticInfo() {
   renderSpecialStackRow();
   renderPayouts();
   updateFinishedOverlay();
+  // 1b: 現在状態をスマホへ読み取り送信（_remoteEnabled=false の間は完全 no-op＝OFF で無コスト）。
+  publishRemoteState();
 }
 
 // STEP 6.11: カウント行の表示制御（0 時は visibility: hidden、0→1 で reveal アニメーション）
@@ -3968,12 +3970,40 @@ function activateSettingsTab(tabName) {
   }
 }
 
-// ===== remote-control Phase 1a: スマホ遠隔操作タブの表示同期 =====
+// ===== remote-control Phase 1a/1b: スマホ遠隔操作タブの表示同期 + 状態送信 =====
+
+// 1b: 遠隔操作サーバが稼働中か（renderer 側キャッシュ）。false の間は publishRemoteState を完全 no-op に保ち、
+//   OFF 時に per-frame の IPC を一切出さない（＝現行完全同一・後方互換）。
+let _remoteEnabled = false;
+
+// 1b: 現在状態（人数/RE/AO/特殊/卓名）を main へ【読み取り送信】する（SSE でスマホへ push される）。
+//   runtime を変えない読み取りのみ（致命バグ保護⑤ 非接触）。OFF / hall では送らない。
+function publishRemoteState() {
+  if (typeof window === 'undefined' || window.appRole === 'hall') return; // hall は consumer（逆送信しない）
+  if (!_remoteEnabled) return; // OFF 時は完全 no-op（新しい per-frame コストを出さない）
+  try {
+    const name = (tournamentState && (tournamentState.name || tournamentState.title)) || '';
+    const ss = (tournamentState && tournamentState.specialStack) || null;
+    const specialCount = (ss && ss.enabled) ? (Number(ss.appliedCount) || 0) : 0;
+    window.api?.remote?.publishState?.({
+      playersInitial: tournamentRuntime.playersInitial,
+      playersRemaining: tournamentRuntime.playersRemaining,
+      reentryCount: tournamentRuntime.reentryCount,
+      addOnCount: tournamentRuntime.addOnCount,
+      specialCount,
+      tableName: name
+    });
+  } catch (_) { /* never throw */ }
+}
 
 // main から取得した status（{ enabled, running, pin, url, port }）を DOM に反映する。
 //   トグルの ON/OFF・接続情報（PIN / URL）の表示を更新（表示専用・保存は setEnabled 経由）。
 function applyRemoteStatus(status) {
   const s = status || {};
+  // 1b: 稼働状態をキャッシュ（publishRemoteState のゲート）。ON になった直後は最新状態を 1 回送る。
+  const wasEnabled = _remoteEnabled;
+  _remoteEnabled = !!s.running;
+  if (_remoteEnabled && !wasEnabled) { try { publishRemoteState(); } catch (_) {} }
   const toggle = document.getElementById('js-remote-enabled');
   const conn = document.getElementById('js-remote-conn');
   const urlEl = document.getElementById('js-remote-url');
@@ -8266,6 +8296,9 @@ async function initialize() {
       });
     }
   } catch (_) { /* ignore */ }
+  // 1b: 起動時に remote 稼働状態を 1 回同期（_remoteEnabled を確定＝publishRemoteState のゲート初期化）。
+  //   OFF（既定）なら _remoteEnabled=false のまま＝状態送信は一切走らない（後方互換）。
+  try { syncRemoteTabFromStatus(); } catch (_) { /* ignore */ }
   // perf-heaviness: rAF Hz 計測 flush 起動（window.__PERF_METRICS true 時のみ。本番は no-op）。
   _startPerfRafFlush();
   renderStaticInfo();
