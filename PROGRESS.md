@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-08** — multi-tournament-4up **Phase 3c(終了確認モーダル・実機FB第6弾)実装完了・前原実機確認待ち**(3b 配信準備と合わせて v2.7.0 同梱・配信 GO は一括判断)。配信中は **v2.6.6(Latest)**のまま・テスト**1519件**全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-08** — **v2.7.0 配信(マルチトーナメント4分割表示・前原実機確認OK+配信GO)**。multi-tournament-4up 案件クローズ(Phase 0〜3c)・テスト**1519件**全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,8 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| multi-tournament-4up Phase 3b(v2.7.0 配信準備) | 📦 配信準備完了(配信 GO は 3c 完了後に一括判断) | report `.cc-reports/2026-07-08_multi-tournament-4up_phase3b-release-prep.md` / Release 文案=`docs/release-notes-v2.7.0.md` |
-| multi-tournament-4up Phase 3c(終了確認モーダル・実機FB第6弾) | 🟡 実装完了・前原実機確認待ち(v2.7.0 同梱・bump なし) | report `.cc-reports/2026-07-08_multi-tournament-4up_phase3c-exit-confirm.md` / branch `feature/multi-exit-confirm`(実装+文書 2 commit) |
+| (なし) | — | — |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -22,7 +21,8 @@
 
 | 配信日 | バージョン | 主要変更(1行) | report |
 |--------|-----------|---------|--------|
-| 2026-06-24 | **v2.6.6** | テロップ色プレビュー枠に「プレビュー(表示見本・編集不可)」ラベル明示(v2.6.5 で枠を編集領域と誤認した件の fix)。UI/文言のみ・2箇所整合・致命5件非接触。merge直push `df919b9`/tag v2.6.6(Latest・自動更新)。軽量トラック | `.cc-briefs/2026-06-24_telop-preview-label_lightweight_review.md` |
+| 2026-07-08 | **v2.7.0** | **マルチトーナメント4分割表示モード**(2×2独立時計・操作盤+キーボード・フィラー・停電復帰=復元方式選択+経過時間表示・開始/終了確認モーダル・HDMI追従・走行中差し替えガード)。単一モード完全非接触・store書込ゼロ。tag v2.7.0(Latest・自動更新) | `.cc-reports/2026-07-08_multi-tournament-4up_phase3b-release-prep.md`(+3c report) |
+| 2026-06-24 | v2.6.6 | テロップ色プレビュー枠に「プレビュー(表示見本・編集不可)」ラベル明示(v2.6.5 で枠を編集領域と誤認した件の fix)。UI/文言のみ・2箇所整合・致命5件非接触。merge直push `df919b9`/tag v2.6.6(Latest・自動更新)。軽量トラック | `.cc-briefs/2026-06-24_telop-preview-label_lightweight_review.md` |
 | 2026-06-24 | **v2.6.5** | テロップ色変えを「文字を選択→色ボタン」方式に作り直し(手打ち記法不要・9色+任意色+色を消す+編集中プレビュー・設定タブ/Ctrl+T 2箇所)。保存形式/marquee.js安全パーサ無改変=旧データ100%互換・XSS後退ゼロ。致命5件非接触。merge `e680436`/tag v2.6.5(Latest・自動更新) | `.cc-reports/2026-06-24_telop-color-ux-simplify.md` |
 | 2026-06-24 | **v2.6.4** | トーナメント開始ボイス選択(音タブ・なし+女性4+男性4=9・グローバル共通)。開始時(即時/0着地両方)に選択ボイス1回・start.mp3置換。8ボイス前原自作。致命5件(特にAudioContext resume)非接触。merge `ee16648`/tag v2.6.4(Latest) | `.cc-reports/2026-06-24_tournament-start-voice.md` |
 | 2026-06-24 | **v2.6.3** | ② 2画面 operator→hall 状態遷移の時差を案A(遷移時のみ即時送信)で最大500ms→約20〜60msに短縮。renderer.jsのみ・致命5件+PRE_START0着地ガード非接触。merge `184a25e`/tag v2.6.3 | `.cc-reports/2026-06-24_dualscreen-latency.md` |
@@ -50,9 +50,9 @@
 
 | 指標 | 値 |
 |------|----|
-| 配信済リリース | 15件(v1.0.0〜v2.6.6)|
+| 配信済リリース | 16件(v1.0.0〜v2.7.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 0件(安定運用フェーズ)|
+| オープン作業 | 0件(安定運用フェーズ・multi-tournament-4up クローズ 2026-07-08)|
 | 最新テスト件数 | 1519件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +2・3a +3・3c +1) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
@@ -60,9 +60,9 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main`(ローカル `afa41e1`=3b まで・push 済は `a41c331`=3a まで)+ **branch `feature/multi-exit-confirm`=3c 実装+文書 2 commit**(完了review承認後に main-local へ merge)。push/tag/Release は前原の配信 GO 後(前原専権)。配信は tag `v2.6.6`(Latest)のまま。
-- **直前作業(2026-07-08)**: 前原FB第6弾→**Phase 3c=正常終了の確認モーダル**。進行中区画(running/prestart/paused)がある時のみ「元に戻せません」確認(default=キャンセル)を ×/終了ボタン両経路に。専用 suppress フラグで二重ダイアログ防止・セッション削除挙動/schema=1 無改変・単一モード close 確認非接触。v2.7.0 同梱(bump なし)・CHANGELOG/Release文案/specs 各1行追記・.exe 再ビルド済(publish 未実行)。テスト1519件(+1)全PASS・致命5件非接触。
-- **次のアクション**: cc-review2 完了review→承認後 main-local merge→前原 6-B(3c: ×終了確認/摩擦ゼロ/文言 + 3b: インストーラ・単画面互換・マルチ総合)→**配信 GO で push+tag v2.7.0+GitHub Release**→CHANGELOG 配信日確定→リリース履歴1行→案件クローズ。
+- **git**: `main` = v2.7.0 配信 commit 群を push 済・tag `v2.7.0`(Latest・自動更新有効)。feature branch(phase2/exit-confirm)は役目終了(削除可)。
+- **直前作業(2026-07-08)**: **v2.7.0 配信** = マルチトーナメント4分割表示(Phase 0〜3c・実機FB全6弾+追補2件)。3c 実機確認時の「モーダルが出ない」は前原操作ミスではなく**旧ビルド(12:25=3c前)をインストール済み**が原因と asar 検証で特定→最新版再インストールで OK。GitHub Release に .exe/latest.yml/blockmap を添付・リリースノートは `docs/release-notes-v2.7.0.md` の文案を使用。テスト1519件全PASS・致命5件完全維持。
+- **次のアクション**: なし(安定運用フェーズ)。v2.6.6 利用者への自動更新降下の実機確認(任意)のみ。温存候補は「📋 温存中の次期バージョン候補」参照。
 
 ---
 
