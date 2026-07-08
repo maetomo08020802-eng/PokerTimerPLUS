@@ -196,6 +196,11 @@ contextBridge.exposeInMainWorld('api', {
     subscribeStateSync: (callback) => {
       if (typeof callback !== 'function') return;
       ipcRenderer.on('multi:state-sync', (_event, payload) => callback(payload));
-    }
+    },
+    // Phase 2: フィラー画像のファイル選択（main の dialog・完全ローカル）
+    pickFillerImage: () => _measuredInvoke('multi:pick-filler-image'),
+    // Phase 2: mirror（複製）運用の前面切替（grid は focusable:false のため focus は control に残る）
+    gridFront: () => ipcRenderer.send('multi:grid-front'),
+    controlFront: () => ipcRenderer.send('multi:control-front')
   }
 });

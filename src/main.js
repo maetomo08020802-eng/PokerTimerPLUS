@@ -1936,10 +1936,98 @@ let multiGridWindow = null;
 let _multiModeActive = false;
 let _multiTransitioning = false; // enter/exit 中の再入・close 連鎖ガード
 const _multiPaneCache = [null, null, null, null]; // multi:publish kind='pane' のキャッシュ（grid 初期同期用）
+let _multiUiCache = null; // Phase 2: multi:publish kind='ui'（キーボード操作の選択区画/ヘルプ）のキャッシュ
 
 function _resetMultiPaneCache() {
   for (let i = 0; i < _multiPaneCache.length; i++) _multiPaneCache[i] = null;
+  _multiUiCache = null;
 }
+
+// ----- Phase 2e: 停電・クラッシュ復帰用の一時セッションファイル -----
+//   保存先は electron-store の config とは別の専用ファイル（store.set 不使用 = store 書込ゼロ原則を維持。
+//   単一モードの tournaments / runtime 永続化 8 箇所には一切触れない）。
+//   「ファイルが残存 = 異常終了」を signal にする: 正常終了（exitMultiMode / アプリ正常 quit）では必ず削除し、
+//   電源断・クラッシュ・タスクキルでは削除経路が走らないため残存する。恒久保存機能ではない。
+const { pathToFileURL } = require('url');
+const MULTI_SESSION_SCHEMA = 1;
+let _multiSessionSaveTimer = null;
+
+function _multiSessionPath() {
+  return path.join(app.getPath('userData'), 'multi-session.json');
+}
+
+// publish（edge イベント）相乗りの debounce 書出し（1 秒。大会中の高頻度操作でも I/O を張り付かせない）
+function _scheduleMultiSessionSave() {
+  if (!_multiModeActive || _multiSessionSaveTimer) return;
+  _multiSessionSaveTimer = setTimeout(() => {
+    _multiSessionSaveTimer = null;
+    _writeMultiSession();
+  }, 1000);
+}
+
+async function _writeMultiSession() {
+  if (!_multiModeActive) return;
+  const file = _multiSessionPath();
+  const tmp = file + '.tmp';
+  try {
+    const payload = JSON.stringify({
+      schema: MULTI_SESSION_SCHEMA,
+      savedAtMs: Date.now(),
+      panes: _multiPaneCache,
+      ui: _multiUiCache
+    });
+    // tmp へ書いて rename（書込中の電源断でも旧ファイルが生存。中途破損は parse 失敗 → 復元せず破棄の網にかかる）
+    await fs.promises.writeFile(tmp, payload, 'utf8');
+    // 書込（非同期）中に exitMultiMode の削除が走った場合、rename でファイルが復活し
+    // 「正常終了なのに残存 = 偽の復元確認」になる競合窓を閉じる（rename 直前に再チェック）
+    if (!_multiModeActive) {
+      try { await fs.promises.unlink(tmp); } catch (_) { /* ignore */ }
+      return;
+    }
+    await fs.promises.rename(tmp, file);
+  } catch (_) { /* 書出し失敗は無視（次の debounce で再試行） */ }
+}
+
+function _deleteMultiSession() {
+  if (_multiSessionSaveTimer) {
+    clearTimeout(_multiSessionSaveTimer);
+    _multiSessionSaveTimer = null;
+  }
+  try { fs.unlinkSync(_multiSessionPath()); } catch (_) { /* 不在なら無視 */ }
+  try { fs.unlinkSync(_multiSessionPath() + '.tmp'); } catch (_) { /* 不在なら無視 */ }
+}
+
+// Phase 2f 追補: 復元ダイアログ用「前回終了からの経過時間」表示（復元方式を選ぶ判断材料）。
+//   1 分未満 / 約N分 / 約N時間 / 約N時間M分。計算不能（非有限）は空文字 = 表示側で括弧ごと省略。
+function _formatMultiSessionAge(savedAtMs, nowMs) {
+  if (!Number.isFinite(savedAtMs) || !Number.isFinite(nowMs)) return '';
+  const mins = Math.floor(Math.max(0, nowMs - savedAtMs) / 60000);
+  if (mins < 1) return '1分未満';
+  if (mins < 60) return `約${mins}分`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `約${h}時間` : `約${h}時間${m}分`;
+}
+
+// 残存セッションの読取（破損 / スキーマ版数不一致は null = 復元せず破棄する安全側）
+function _readMultiSession() {
+  try {
+    const raw = fs.readFileSync(_multiSessionPath(), 'utf8');
+    const data = JSON.parse(raw);
+    if (!data || data.schema !== MULTI_SESSION_SCHEMA || !Array.isArray(data.panes) || !Number.isFinite(data.savedAtMs)) {
+      return null;
+    }
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+// 削除経路は exitMultiMode（+ 復元確認での「破棄」/ 破損検出）に限定する設計。
+//   - マルチ在席中のアプリ終了は closed ハンドラ → exitMultiMode 連鎖で削除される（正常終了網羅）。
+//   - マルチ未使用のアプリ起動 / 終了ではファイルに触れない = 停電後に一度単一モードだけ使って
+//     終了しても復元機会が消えない（unconditional な will-quit 削除はこれを壊すため置かない。
+//     will-quit は v2.0.3 P4 で 1 ハンドラに統合済＝単一モード経路のため触れない）。
 
 // 会場側 2×2 グリッドウィンドウ（createHallWindow の配置パターンを踏襲した新関数）
 function createMultiGridWindow(targetDisplay) {
@@ -2040,6 +2128,41 @@ async function enterMultiMode() {
   if (_dualStateCache.preStartState && _dualStateCache.preStartState.isActive) {
     return { ok: false, reason: 'pre-start-active' };
   }
+  // Phase 2e: 異常終了セッションの検出と復元確認（picker 前）。
+  //   破損 / 版数不一致は確認を出さず破棄して新規開始（安全側）。
+  //   キャンセル = マルチ開始自体を中止しファイルは温存（誤操作で復元機会を失わない）。
+  let _restoreSession = null;
+  let _restoreMode = 'paused'; // Phase 2f: 'paused'=そこから再開（2e 現行挙動） / 'elapsed'=経過を反映
+  try {
+    if (fs.existsSync(_multiSessionPath())) {
+      const data = _readMultiSession();
+      if (!data) {
+        _deleteMultiSession();
+      } else {
+        // Phase 2f: 復元方式の選択（前原 FB 第 5 弾）。「そこから再開」= 2e 現行挙動（default・安全側）/
+        // 「経過を反映」= 停電〜再入場の実時間も進んだ扱い（2e 壁打ちの「壁時計継続は不採用」を選択制へ上書き）
+        const sessionAge = _formatMultiSessionAge(data.savedAtMs, Date.now());
+        const choice = dialog.showMessageBoxSync(mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined, {
+          type: 'question',
+          title: 'マルチ表示の復元',
+          message: `前回のマルチ表示が正常に終了しませんでした${sessionAge ? `（終了から${sessionAge}）` : ''}。直前の状態をどう復元しますか？`,
+          detail: 'そこから再開: 各区画は前回終了時点の残り時間で一時停止して戻ります（停電中に時計は進みません）。\n'
+            + '経過を反映: 前回終了から今までの経過時間ぶんタイマーを進めた位置で一時停止して戻ります（レベルが繰り上がり、全レベルを終えた区画は終了として戻ります）。\n'
+            + 'どちらもスペースキー / 一時停止ボタンで再開できます。',
+          buttons: ['そこから再開（時計は進めない）', '経過を反映して復元（時計を進める）', '破棄して新規で始める', 'キャンセル'],
+          defaultId: 0,
+          cancelId: 3,
+          noLink: true
+        });
+        if (choice === 3) return { ok: false, reason: 'restore-cancelled' };
+        if (choice === 2) _deleteMultiSession();
+        else {
+          _restoreSession = data;
+          _restoreMode = (choice === 1) ? 'elapsed' : 'paused';
+        }
+      }
+    }
+  } catch (_) { /* 検出失敗時は新規開始 */ }
   _multiTransitioning = true;
   try {
     // グリッド表示モニターの選択（2 画面以上なら picker = 既存 chooseHallDisplayInteractive を呼ぶだけ。
@@ -2053,6 +2176,32 @@ async function enterMultiMode() {
     }
     _multiModeActive = true;
     _resetMultiPaneCache();
+    // Phase 2e/2f: 復元 prime。engine record はここで選択方式に応じて「書出し時点で一時停止」（paused）
+    //   or「経過を反映した位置で一時停止」（elapsed）へ変換してから配る
+    //   （grid / control とも最初から止まった時計を受け取る = 跳んだ時計を一瞬も見せない）。
+    //   変換ロジックは multi-engine.mjs の純粋関数を動的 import で共用（二重実装を作らない）。
+    if (_restoreSession) {
+      try {
+        const engineMod = await import(pathToFileURL(path.join(__dirname, 'renderer', 'multi', 'multi-engine.mjs')).href);
+        // Phase 2f: 「経過を反映」の基準時刻はループ前に 1 回だけ捕捉（全区画で同一値 = 区画間の一貫性）
+        const restoreNow = Date.now();
+        for (let i = 0; i < _multiPaneCache.length; i++) {
+          const p = _restoreSession.panes[i];
+          if (!p || typeof p !== 'object') continue;
+          const pane = { ...p };
+          if (pane.engine) {
+            pane.engine = (_restoreMode === 'elapsed')
+              ? engineMod.toPowerLossElapsedRecord(pane.engine, (pane.snapshot && Array.isArray(pane.snapshot.levels)) ? pane.snapshot.levels : [], restoreNow)
+              : engineMod.toPowerLossPausedRecord(pane.engine, _restoreSession.savedAtMs);
+          }
+          _multiPaneCache[i] = pane;
+        }
+        _multiUiCache = (_restoreSession.ui && typeof _restoreSession.ui === 'object') ? _restoreSession.ui : null;
+        try { rollingLog('multi:session-restored', { savedAtMs: _restoreSession.savedAtMs, mode: _restoreMode }); } catch (_) { /* ignore */ }
+      } catch (_) {
+        _resetMultiPaneCache(); // 復元失敗は新規開始（安全側）
+      }
+    }
     // 既存 hall は閉じる（dual broadcast は hallWindow null で自動 no-op = 既存 STEP 2 設計）
     if (hallWindow && !hallWindow.isDestroyed()) {
       try { hallWindow.close(); } catch (_) { /* ignore */ }
@@ -2081,6 +2230,7 @@ async function exitMultiMode() {
   _multiTransitioning = true;
   try {
     _multiModeActive = false; // 先に落とす = close 連鎖（closed ハンドラ）の再入を構造的に防ぐ
+    _deleteMultiSession();    // Phase 2e: 正常終了 = セッションファイル削除（恒久保存しない）
     const gw = multiGridWindow; multiGridWindow = null;
     const cw = multiControlWindow; multiControlWindow = null;
     if (gw && !gw.isDestroyed()) { try { gw.close(); } catch (_) { /* ignore */ } }
@@ -2116,13 +2266,21 @@ async function exitMultiMode() {
 function registerMultiIpcHandlers() {
   ipcMain.handle('multi:enter', () => enterMultiMode());
   ipcMain.handle('multi:exit', () => exitMultiMode());
-  // multi-control（真実源）→ main（キャッシュ）→ multi-grid の edge イベント中継
+  // multi-control（真実源）→ main（キャッシュ）→ multi-grid の edge イベント中継。
+  // Phase 2: kind='ui'（キーボード操作の選択区画ハイライト / ヘルプ / リセット確認）も同経路で受理
   ipcMain.on('multi:publish', (_event, payload) => {
     if (!_multiModeActive) return;
-    if (!payload || payload.kind !== 'pane' || !payload.value || typeof payload.value !== 'object') return;
-    const idx = Number(payload.value.index);
-    if (!Number.isInteger(idx) || idx < 0 || idx > 3) return;
-    _multiPaneCache[idx] = payload.value.pane || null;
+    if (!payload || !payload.value || typeof payload.value !== 'object') return;
+    if (payload.kind === 'pane') {
+      const idx = Number(payload.value.index);
+      if (!Number.isInteger(idx) || idx < 0 || idx > 3) return;
+      _multiPaneCache[idx] = payload.value.pane || null;
+    } else if (payload.kind === 'ui') {
+      _multiUiCache = payload.value;
+    } else {
+      return;
+    }
+    _scheduleMultiSessionSave(); // Phase 2e: edge イベント相乗りの debounce 書出し（停電復帰用）
     if (multiGridWindow && !multiGridWindow.isDestroyed()) {
       try { multiGridWindow.webContents.send('multi:state-sync', payload); } catch (_) { /* ignore */ }
     }
@@ -2130,11 +2288,43 @@ function registerMultiIpcHandlers() {
   // grid 起動時の全量 1 回同期（venueName / logo は store 読み取りのみ）
   ipcMain.handle('multi:state-sync-init', () => ({
     panes: _multiPaneCache.slice(),
+    ui: _multiUiCache,
     global: {
       venueName: store.get('venueName') || '',
       logo: store.get('logo') || null
     }
   }));
+  // Phase 2: 空き区画フィラー用の画像ファイル選択（読み取りのみ・store 書込なし・
+  // 選択パスは control 側のセッション内 state にのみ保持 = electron-store 非永続化）
+  ipcMain.handle('multi:pick-filler-image', async () => {
+    if (!_multiModeActive || !multiControlWindow || multiControlWindow.isDestroyed()) return { path: '' };
+    try {
+      const result = await dialog.showOpenDialog(multiControlWindow, {
+        title: 'フィラー画像を選択',
+        properties: ['openFile'],
+        filters: [{ name: '画像ファイル', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
+      });
+      if (result.canceled || !Array.isArray(result.filePaths) || !result.filePaths[0]) return { path: '' };
+      return { path: result.filePaths[0] };
+    } catch (_) {
+      return { path: '' };
+    }
+  });
+  // Phase 2: mirror（複製 = 1 台運用）の前面切替。grid は focusable:false のため moveTop しても
+  // focus は control に残り、キーボード操作（control の keydown）が継続できる（globalShortcut 不使用）
+  ipcMain.on('multi:grid-front', () => {
+    if (!_multiModeActive) return;
+    if (multiGridWindow && !multiGridWindow.isDestroyed()) {
+      try { multiGridWindow.moveTop(); } catch (_) { /* ignore */ }
+    }
+  });
+  ipcMain.on('multi:control-front', () => {
+    if (!_multiModeActive) return;
+    if (multiControlWindow && !multiControlWindow.isDestroyed()) {
+      try { multiControlWindow.moveTop(); } catch (_) { /* ignore */ }
+      try { multiControlWindow.focus(); } catch (_) { /* ignore */ }
+    }
+  });
 }
 registerMultiIpcHandlers();
 

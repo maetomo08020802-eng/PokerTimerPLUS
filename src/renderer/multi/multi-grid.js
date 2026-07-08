@@ -12,7 +12,7 @@
 //   - store への書込は一切しない（必要データは control が snapshot で送る）
 //   - 音 / スライドショー / テロップ / PIP / ミュートバッジは DOM ごと存在しない
 
-import { computePaneNow, computeNextBreakMsFor, computeTotalGameTimeMsFor, ENGINE_STATUS } from './multi-engine.mjs';
+import { computePaneNow, computeNextBreakMsFor, computeTotalGameTimeMsFor, formatPreStartClock, levelDurationMs, ENGINE_STATUS } from './multi-engine.mjs';
 
 const PANE_COUNT = 4;
 
@@ -67,7 +67,21 @@ const DANGER_MS = 10 * 1000;
 const VALID_BG = new Set(['black', 'navy', 'carbon', 'felt', 'burgundy', 'midnight', 'emerald', 'obsidian', 'image']);
 const VALID_FONT = new Set(['jetbrains', 'roboto', 'space']);
 // engine 状態 → 単一モードの data-status 値（CSS セレクタ互換のため大文字表記に揃える）
-const STATUS_ATTR = Object.freeze({ idle: 'IDLE', running: 'RUNNING', paused: 'PAUSED', finished: 'IDLE' });
+const STATUS_ATTR = Object.freeze({ idle: 'IDLE', prestart: 'PRE_START', running: 'RUNNING', paused: 'PAUSED', finished: 'IDLE' });
+const FILLER_KINDS = new Set(['blank', 'logo', 'image', 'text']);
+
+// filler の正規化: Phase 1 の文字列（'blank'|'logo'）と Phase 2 のオブジェクト
+// （{kind, imagePath, text}）の両形を受け付ける（起動順 race で古い payload が届いても安全）
+function normalizeFiller(f) {
+  if (f && typeof f === 'object') {
+    return {
+      kind: FILLER_KINDS.has(f.kind) ? f.kind : 'blank',
+      imagePath: typeof f.imagePath === 'string' ? f.imagePath : '',
+      text: typeof f.text === 'string' ? f.text : ''
+    };
+  }
+  return { kind: f === 'logo' ? 'logo' : 'blank', imagePath: '', text: '' };
+}
 
 // ===== 賞金計算（renderer.js computeCalculatedPool / computeTotalPool / computeAvgStack /
 //        computeRoundedAmounts の移植・snapshot 引数化版） =====
@@ -220,7 +234,11 @@ function buildPane(index) {
     </main>
     <div class="pane-filler" data-filler="blank">
       <img class="pane-filler__logo" src="../../assets/logo-plus2-default.png" alt="">
-    </div>`;
+      <img class="pane-filler__image" alt="">
+      <div class="pane-filler__text"></div>
+    </div>
+    <div class="pane-reset-arm">もう一度 R でリセット</div>
+    <div class="pane-active-badge js-active-badge"></div>`;
   gridRoot.appendChild(root);
   const q = (sel) => root.querySelector(sel);
   return {
@@ -239,10 +257,11 @@ function buildPane(index) {
       reentryRow: q('.js-reentry-row'), reentry: q('.js-reentry'),
       addonRow: q('.js-addon-row'), addon: q('.js-addon'),
       specialStackRow: q('.js-special-stack-row'), specialStack: q('.js-special-stack'),
-      filler: q('.pane-filler')
+      filler: q('.pane-filler'), fillerImage: q('.pane-filler__image'), fillerText: q('.pane-filler__text'),
+      resetArm: q('.pane-reset-arm'), activeBadge: q('.js-active-badge')
     },
-    data: { assigned: false, filler: 'blank', snapshot: null, engine: null },
-    last: { time: null, levelIndex: null, status: null, timerState: null, nextBreak: null }
+    data: { assigned: false, filler: normalizeFiller('blank'), snapshot: null, engine: null },
+    last: { time: null, levelIndex: null, status: null, timerState: null, nextBreak: null, prestartFormat: null }
   };
 }
 
@@ -321,7 +340,17 @@ function renderGameTypeLabel(pane, levelIndex) {
 function renderPaneStatic(pane, globalData) {
   const { els, data } = pane;
   pane.root.dataset.assigned = data.assigned ? 'true' : 'false';
-  els.filler.dataset.filler = data.filler === 'logo' ? 'logo' : 'blank';
+  // フィラー（Phase 2: 無地 / ロゴ / 任意画像 / テキスト）。画像未選択の image はまだ無地扱い
+  const filler = data.filler;
+  const fillerKind = (filler.kind === 'image' && !filler.imagePath) ? 'blank' : filler.kind;
+  els.filler.dataset.filler = fillerKind;
+  if (fillerKind === 'image') {
+    // ロゴ custom と同じ file:/// 参照（完全ローカル・外部ネットワーク送信なし）
+    els.fillerImage.src = `file:///${String(filler.imagePath).replace(/\\/g, '/')}`;
+  } else {
+    els.fillerImage.removeAttribute('src');
+  }
+  els.fillerText.textContent = fillerKind === 'text' ? filler.text : '';
   if (!data.assigned || !data.snapshot) return;
   const snap = data.snapshot;
 
@@ -387,7 +416,7 @@ function renderPaneStatic(pane, globalData) {
   pane.clock.classList.toggle('clock--finished', (rt.playersInitial || 0) > 0 && (rt.playersRemaining || 0) === 0);
 
   // タイマー系キャッシュを無効化して次フレームで必ず再描画
-  pane.last = { time: null, levelIndex: null, status: null, timerState: null, nextBreak: null };
+  pane.last = { time: null, levelIndex: null, status: null, timerState: null, nextBreak: null, prestartFormat: null };
 }
 
 // ===== タイマー描画（rAF 1 本・変化時のみ DOM 書込） =====
@@ -398,21 +427,49 @@ function renderPaneTick(pane, nowMs) {
   const now = computePaneNow(data.engine, levels, nowMs);
   const level = levels[now.levelIndex] || null;
   const isBreak = !!(level && level.isBreak);
+  const isPreStart = !!now.preStart; // 開始前カウントダウン由来（prestart 進行中 / その一時停止）
 
-  // 大タイマー（文字列が変わった時のみ）
-  const timeText = formatTime(now.remainingMs);
+  // 大タイマー（文字列が変わった時のみ）。PRE_START は単一モード formatPreStartTime と同フォーマット
+  //（60 分以上 HH:MM:SS / 未満 MM:SS）+ data-prestart-format で font-size 切替
+  let timeText;
+  let prestartFormat = null;
+  if (isPreStart) {
+    const f = formatPreStartClock(now.remainingMs);
+    timeText = f.text;
+    prestartFormat = f.format;
+  } else {
+    timeText = formatTime(now.remainingMs);
+  }
   if (timeText !== last.time) { els.time.textContent = timeText; last.time = timeText; }
+  if (prestartFormat !== last.prestartFormat) {
+    if (prestartFormat) pane.clock.dataset.prestartFormat = prestartFormat;
+    else delete pane.clock.dataset.prestartFormat;
+    last.prestartFormat = prestartFormat;
+  }
 
-  // 警告色（RUNNING 中のみ。BREAK は金色 = data-status 側で表現、renderer.js renderTime と同義）
-  const timerState = (now.status === ENGINE_STATUS.RUNNING && !isBreak) ?
-    (now.remainingMs <= DANGER_MS ? 'danger' : (now.remainingMs <= WARN_MS ? 'warn' : 'normal')) : 'normal';
+  // 警告色（RUNNING 中のみ。BREAK は金色 = data-status 側で表現、renderer.js renderTime と同義。
+  //   PRE_START は最後 10 秒のみ赤・一時停止中は normal = renderer.js:941-950 と同義）
+  const timerState = isPreStart
+    ? ((now.status === ENGINE_STATUS.PRESTART && now.remainingMs > 0 && now.remainingMs <= DANGER_MS) ? 'danger' : 'normal')
+    : ((now.status === ENGINE_STATUS.RUNNING && !isBreak) ?
+      (now.remainingMs <= DANGER_MS ? 'danger' : (now.remainingMs <= WARN_MS ? 'warn' : 'normal')) : 'normal');
   if (timerState !== last.timerState) { pane.clock.dataset.timerState = timerState; last.timerState = timerState; }
 
   // 区画状態: 単一モードと同一の data-status 値（BREAK は RUNNING + isBreak から導出）+
-  //           全レベル完走は clock--timer-finished クラス（単一モードの storage 'finished' 相当）
-  const statusKey = (now.status === ENGINE_STATUS.RUNNING && isBreak) ? 'break' : now.status;
+  //           全レベル完走は clock--timer-finished クラス（単一モードの storage 'finished' 相当）。
+  //           PRE_START 一時停止は hall と同じく data-status="PRE_START" 維持 + data-prestart-paused
+  const statusKey = isPreStart
+    ? (now.status === ENGINE_STATUS.PAUSED ? 'prestart-paused' : 'prestart')
+    : ((now.status === ENGINE_STATUS.RUNNING && isBreak) ? 'break' : now.status);
   if (statusKey !== last.status) {
-    pane.clock.dataset.status = statusKey === 'break' ? 'BREAK' : (STATUS_ATTR[now.status] || 'IDLE');
+    if (isPreStart) {
+      pane.clock.dataset.status = 'PRE_START';
+      if (statusKey === 'prestart-paused') pane.clock.dataset.prestartPaused = 'true';
+      else delete pane.clock.dataset.prestartPaused;
+    } else {
+      pane.clock.dataset.status = statusKey === 'break' ? 'BREAK' : (STATUS_ATTR[now.status] || 'IDLE');
+      delete pane.clock.dataset.prestartPaused;
+    }
     pane.clock.classList.toggle('clock--timer-finished', now.status === ENGINE_STATUS.FINISHED);
     last.status = statusKey;
   }
@@ -427,11 +484,16 @@ function renderPaneTick(pane, nowMs) {
     last.levelIndex = now.levelIndex;
   }
 
-  // NEXT BREAK IN / TOTAL GAME TIME（秒粒度の文字列比較で変化時のみ）
-  const breakMs = computeNextBreakMsFor(levels, now.levelIndex, now.remainingMs);
+  // NEXT BREAK IN / TOTAL GAME TIME（秒粒度の文字列比較で変化時のみ）。
+  // PRE_START 中は基準を Lv0 満了 duration に差し替え（renderer.js:997-1011 v2.6.1 fix ① と同義）、
+  // TOTAL GAME TIME はトーナメント未開始なので 0（status に prestart を渡す）
+  const breakMs = isPreStart
+    ? computeNextBreakMsFor(levels, 0, levelDurationMs(levels, 0))
+    : computeNextBreakMsFor(levels, now.levelIndex, now.remainingMs);
   let breakText;
   if (breakMs === null) {
-    breakText = 'T|' + formatHMS(computeTotalGameTimeMsFor(levels, now.levelIndex, now.remainingMs, now.status));
+    breakText = 'T|' + formatHMS(computeTotalGameTimeMsFor(levels, now.levelIndex, now.remainingMs,
+      isPreStart ? ENGINE_STATUS.PRESTART : now.status));
   } else {
     breakText = 'B|' + formatHMS(breakMs);
   }
@@ -451,6 +513,27 @@ function tickLoop() {
 
 // ===== 同期受信（multi:state-sync — edge イベント駆動・ポーリングなし） =====
 let globalData = null;
+let helpEl = null; // Phase 2: キー割当ヘルプオーバーレイ（H でトグル）
+let lastUi = null; // Phase 2b: 直近の ui payload（割当変更時にバッジを再評価するため保持）
+
+// Phase 2b: 選択区画のハイライト枠 + トーナメント名バッジ（操作対象の視認性）。
+// 選択変化（ui payload）と割当変化（pane payload）の両方から呼ばれ、旧選択区画の表示は
+// 全区画ループで必ず落とす（残留なし）
+function refreshActiveBadges() {
+  const active = (lastUi && Number.isInteger(lastUi.activePane) && lastUi.activePane >= 0 && lastUi.activePane < PANE_COUNT)
+    ? lastUi.activePane : null;
+  panes.forEach((pane, i) => {
+    const on = i === active;
+    if ((pane.root.dataset.active === 'true') !== on) pane.root.dataset.active = on ? 'true' : 'false';
+    let text = '';
+    if (on) {
+      const title = (pane.data.assigned && pane.data.snapshot) ? (pane.data.snapshot.title || 'ポーカートーナメント') : '';
+      text = title ? `操作中｜区画 ${i + 1}: 〔${title}〕` : `操作中｜区画 ${i + 1}（未割当）`;
+    }
+    if (pane.els.activeBadge.textContent !== text) pane.els.activeBadge.textContent = text;
+    pane.els.activeBadge.classList.toggle('is-visible', on);
+  });
+}
 
 function applyPanePayload(value) {
   if (!value || typeof value !== 'object') return;
@@ -459,20 +542,63 @@ function applyPanePayload(value) {
   const pane = panes[index];
   const p = value.pane || {};
   pane.data.assigned = !!p.assigned;
-  pane.data.filler = p.filler === 'logo' ? 'logo' : 'blank';
+  pane.data.filler = normalizeFiller(p.filler);
   pane.data.snapshot = p.snapshot || null;
   pane.data.engine = p.engine || null;
   renderPaneStatic(pane, globalData);
+  refreshActiveBadges(); // 選択中区画の割当が変わってもバッジのトーナメント名が追従
+}
+
+// Phase 2: キーボード操作の UI 状態（選択区画ハイライト / ヘルプ表示 / リセット確認バッジ）。
+// 真実源は multi-control 側の state（kind:'ui' の edge イベントで受けるだけ・ここは表示専用）
+function applyUiPayload(value) {
+  if (!value || typeof value !== 'object') return;
+  lastUi = value;
+  const armIndex = (value.resetArm && Number.isInteger(value.resetArm.index)) ? value.resetArm.index : null;
+  panes.forEach((pane, i) => {
+    pane.els.resetArm.classList.toggle('is-visible', i === armIndex);
+  });
+  if (helpEl) helpEl.classList.toggle('is-visible', !!value.helpVisible);
+  refreshActiveBadges();
+}
+
+function buildHelpOverlay() {
+  const aside = document.createElement('aside');
+  aside.className = 'mgrid-help';
+  aside.innerHTML = `
+    <div class="mgrid-help__title">キーボード操作（単一表示と同じ割当）</div>
+    <div class="mgrid-help__note">操作対象は選択中の区画だけ（他の区画は動きません）。<br>選択中の区画はオレンジの枠と左上の「操作中」バッジで確認できます。</div>
+    <div class="mgrid-help__section">区画・開始</div>
+    <div><kbd>1</kbd>〜<kbd>4</kbd> 操作する区画を選択</div>
+    <div><kbd>Space</kbd> スタート / 一時停止 / 再開（停止中は開始タイミング設定に従って開始）</div>
+    <div><kbd>C</kbd> スタートまでカウントダウン開始（開始タイミング設定）</div>
+    <div class="mgrid-help__section">時間・レベル</div>
+    <div><kbd>←</kbd><kbd>→</kbd> 30秒戻す / 30秒進める</div>
+    <div><kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> レベル戻し / 送り（1 レベルずつ）</div>
+    <div class="mgrid-help__section">人数・エントリー（このモード中のみ反映・保存はされません）</div>
+    <div><kbd>↑</kbd> 新規エントリー追加　<kbd>Shift</kbd>+<kbd>↑</kbd> 取消</div>
+    <div><kbd>↓</kbd> プレイヤー脱落　<kbd>Shift</kbd>+<kbd>↓</kbd> 復活</div>
+    <div><kbd>Ctrl</kbd>+<kbd>R</kbd> リエントリー +1（<kbd>Shift</kbd> 併用で −1）</div>
+    <div><kbd>Ctrl</kbd>+<kbd>A</kbd> アドオン +1（<kbd>Shift</kbd> 併用で −1）</div>
+    <div><kbd>Ctrl</kbd>+<kbd>E</kbd> 特殊スタック +1（<kbd>Shift</kbd> 併用で −1）</div>
+    <div class="mgrid-help__section">その他</div>
+    <div><kbd>R</kbd> リセット（3 秒以内にもう一度押して確定・人数等は割当時の値に戻ります）</div>
+    <div><kbd>H</kbd> このヘルプの表示 / 非表示</div>
+    <div><kbd>G</kbd> グリッドを前面へ　<kbd>Esc</kbd> 操作盤を前面へ</div>`;
+  document.body.appendChild(aside);
+  return aside;
 }
 
 async function init() {
   for (let i = 0; i < PANE_COUNT; i++) panes.push(buildPane(i));
+  helpEl = buildHelpOverlay();
 
   const api = window.api && window.api.multi;
   if (api && typeof api.subscribeStateSync === 'function') {
     api.subscribeStateSync((payload) => {
       if (!payload || typeof payload !== 'object') return;
       if (payload.kind === 'pane') applyPanePayload(payload.value);
+      else if (payload.kind === 'ui') applyUiPayload(payload.value);
     });
   }
   if (api && typeof api.fetchInitialState === 'function') {
@@ -483,6 +609,7 @@ async function init() {
       initPanes.forEach((p, i) => { if (p) applyPanePayload({ index: i, pane: p }); });
       // globalData 確定後に全区画を再描画（fetch 前に届いた pane イベントとの race を吸収）
       for (const pane of panes) renderPaneStatic(pane, globalData);
+      if (snapshot?.ui) applyUiPayload(snapshot.ui);
     } catch (_) { /* 初期同期失敗時も rAF は開始（後続の state-sync で復帰） */ }
   }
   rafId = requestAnimationFrame(tickLoop);
