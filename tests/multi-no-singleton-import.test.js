@@ -426,6 +426,40 @@ test('phase3a: 復元キャンセルの専用文言（reason 発行 → operator
   assert.ok(/'restore-cancelled': '復元をキャンセルしたため/.test(RENDERER), 'operator 側に専用文言がない');
 });
 
+// ============================================================
+// 14. Phase 3c: 正常終了の確認モーダル（進行中区画がある時のみ・削除挙動不変）
+// ============================================================
+test('phase3c: 終了確認の配線（進行中判定・両経路 gate・専用 suppress・default=キャンセル・削除不変）', () => {
+  // 進行中判定は pane.engine.status（record）を読む（Plan review ピン留め: トップレベル .status は存在しない）
+  const helper = MAIN.match(/function _hasActiveMultiPane[\s\S]*?\r?\n\}/);
+  assert.ok(helper, '_hasActiveMultiPane がない');
+  assert.ok(/p && p\.engine && p\.engine\.status/.test(helper[0]), 'engine.status パス参照になっていない');
+  assert.ok(/'running' \|\| st === 'prestart' \|\| st === 'paused'/.test(helper[0]),
+    '進行中判定が running/prestart/paused 限定になっていない（finished/idle は対象外）');
+  // 確認ダイアログ: default=キャンセル（誤爆防止）・進行中なしは確認なし true
+  const confirm = MAIN.match(/function _confirmMultiExit[\s\S]*?\r?\n\}/);
+  assert.ok(confirm, '_confirmMultiExit がない');
+  assert.ok(/if \(!_hasActiveMultiPane\(\)\) return true;/.test(confirm[0]), '進行中なしの摩擦ゼロ素通しがない');
+  assert.ok(/buttons: \['終了する', 'キャンセル'\],\s*\r?\n\s*defaultId: 1,\s*\r?\n\s*cancelId: 1/.test(confirm[0]),
+    'default=キャンセルになっていない');
+  assert.ok(confirm[0].includes('元に戻せません'), '復元不可の警告文言がない');
+  // 経路1: multi:exit IPC が確認を gate
+  assert.ok(/ipcMain\.handle\('multi:exit'[\s\S]{0,200}_confirmMultiExit\(multiControlWindow\)/.test(MAIN),
+    'multi:exit が確認を gate していない');
+  // 経路2: control close インターセプト（preventDefault + 専用 suppress フラグ）
+  assert.ok(/_suppressMultiExitConfirm \|\| !_multiModeActive\) return;/.test(MAIN), 'close インターセプトの suppress/モードガードがない');
+  assert.ok(/if \(!_hasActiveMultiPane\(\)\) return;\s*\r?\n\s*event\.preventDefault\(\);/.test(MAIN),
+    '進行中なし素通し → preventDefault の順になっていない');
+  // 二重ダイアログ防止: exitMultiMode が close 前に suppress
+  assert.ok(/cw\._suppressMultiExitConfirm = true; cw\.close\(\)/.test(MAIN), 'exitMultiMode の suppress 1 行がない');
+  // 単一モードの suppress フラグと共有していない（multi ブロックにプロパティ参照 ._suppressCloseConfirm 非混入。
+  // コメント内の言及は許容 = ドット付きアクセスのみ検査）
+  const mb = MAIN.match(/\/\/ ===== multi-tournament-4up Phase 1[\s\S]*?registerMultiIpcHandlers\(\);/)[0];
+  assert.ok(!mb.includes('._suppressCloseConfirm'), '単一モードの suppress フラグを共有している');
+  // 削除挙動不変: exitMultiMode 内のセッション削除は従来どおり
+  assert.ok(/_multiModeActive = false;[\s\S]{0,200}_deleteMultiSession\(\)/.test(mb), 'exitMultiMode のセッション削除が消えた');
+});
+
 test('phase2f追補2: モード開始時の確認モーダル（データ非保存の明示・復元検出より前・キャンセルで開始中止）', () => {
   const b = MAIN.match(/\/\/ ===== multi-tournament-4up Phase 1[\s\S]*?registerMultiIpcHandlers\(\);/)[0];
   // 「登録トーナメントへ保存・上書きしない」の明示文言 + 開始 / キャンセルの 2 択

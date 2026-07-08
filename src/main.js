@@ -2029,6 +2029,39 @@ function _readMultiSession() {
 //     終了しても復元機会が消えない（unconditional な will-quit 削除はこれを壊すため置かない。
 //     will-quit は v2.0.3 P4 で 1 ハンドラに統合済＝単一モード経路のため触れない）。
 
+// ----- Phase 3c: 正常終了の確認（前原実機 FB 第 6 弾） -----
+//   停電等の異常終了は multi-session.json 残存で復元できるが、× / 終了ボタンの正常終了は
+//   exitMultiMode がセッションファイルを削除する = 復元不可。この非対称を「消える前に警告」で緩和する。
+//   削除挙動そのものは不変（確認で gate するだけ）。
+
+// 進行中区画（running / prestart / paused）があるか。finished / idle は「失う進行」がないため対象外。
+// ※ _multiPaneCache の各要素は publish payload の pane（engine は getRecord() の record）
+//    = 参照は pane.engine.status（Plan 軽量 review ピン留め: トップレベル .status は存在しない）
+function _hasActiveMultiPane() {
+  return _multiPaneCache.some((p) => {
+    const st = p && p.engine && p.engine.status;
+    return st === 'running' || st === 'prestart' || st === 'paused';
+  });
+}
+
+// 終了確認。進行中区画がなければ確認なしで true（摩擦ゼロ）。default はキャンセル（誤爆防止・
+// 単一モード × 確認の defaultId:1 と整合）。
+function _confirmMultiExit(parentWin) {
+  if (!_hasActiveMultiPane()) return true;
+  const choice = dialog.showMessageBoxSync(parentWin && !parentWin.isDestroyed() ? parentWin : undefined, {
+    type: 'question',
+    title: 'マルチ表示モードの終了',
+    message: 'マルチ表示モードを終了しますか？',
+    detail: '終了すると各区画の進行状況（タイマー・エントリー数など）は保存されず、元に戻せません。\n'
+      + '（停電などの異常終了と違い、正常な終了では復元できません）',
+    buttons: ['終了する', 'キャンセル'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true
+  });
+  return choice === 0;
+}
+
 // 会場側 2×2 グリッドウィンドウ（createHallWindow の配置パターンを踏襲した新関数）
 function createMultiGridWindow(targetDisplay) {
   if (multiGridWindow && !multiGridWindow.isDestroyed()) {
@@ -2099,6 +2132,19 @@ function createMultiControlWindow(targetDisplay) {
   win.setTitle(WINDOW_TITLE + ' (Multi Control)');
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.loadFile(path.join(__dirname, 'renderer', 'multi', 'multi-control.html'));
+  // Phase 3c: × / Alt+F4 の正常終了に確認を挟む（単一モード L1545 パターン準拠・専用 suppress フラグ =
+  // 単一モードの _suppressCloseConfirm とは共有しない）。exitMultiMode 経由の close は suppress 済で素通し。
+  // 進行中区画がなければ preventDefault せず素通し（既存 closed → exitMultiMode 連鎖で摩擦ゼロ終了）。
+  win._suppressMultiExitConfirm = false;
+  win.on('close', (event) => {
+    if (win._suppressMultiExitConfirm || !_multiModeActive) return;
+    if (!_hasActiveMultiPane()) return;
+    event.preventDefault();
+    if (_confirmMultiExit(win)) {
+      win._suppressMultiExitConfirm = true;
+      exitMultiMode(); // _multiModeActive=false 先行 + suppress 済のため再確認・closed 再入なし
+    }
+  });
   win.on('closed', () => {
     if (multiControlWindow === win) multiControlWindow = null;
     // × で操作盤を閉じた場合も通常モードへ復帰（grid 孤児化 = 操作不能状態を防ぐ。
@@ -2254,7 +2300,7 @@ async function exitMultiMode() {
     const gw = multiGridWindow; multiGridWindow = null;
     const cw = multiControlWindow; multiControlWindow = null;
     if (gw && !gw.isDestroyed()) { try { gw.close(); } catch (_) { /* ignore */ } }
-    if (cw && !cw.isDestroyed()) { try { cw.close(); } catch (_) { /* ignore */ } }
+    if (cw && !cw.isDestroyed()) { try { cw._suppressMultiExitConfirm = true; cw.close(); } catch (_) { /* ignore */ } } // Phase 3c: 二重ダイアログ防止
     _resetMultiPaneCache();
     if (mainWindow && !mainWindow.isDestroyed()) {
       try { app.focus({ steal: true }); } catch (_) { /* ignore */ }
@@ -2285,7 +2331,12 @@ async function exitMultiMode() {
 // multi:* IPC 登録（モジュールロード時に即登録。registerIpcHandlers 本体には触れない）
 function registerMultiIpcHandlers() {
   ipcMain.handle('multi:enter', () => enterMultiMode());
-  ipcMain.handle('multi:exit', () => exitMultiMode());
+  // Phase 3c: 終了ボタン経由も確認を gate（キャンセルは picker と同じ reason = operator/control 側は無言）
+  ipcMain.handle('multi:exit', () => {
+    if (!_multiModeActive) return { ok: false, reason: 'not-active' };
+    if (!_confirmMultiExit(multiControlWindow)) return { ok: false, reason: 'cancelled' };
+    return exitMultiMode();
+  });
   // multi-control（真実源）→ main（キャッシュ）→ multi-grid の edge イベント中継。
   // Phase 2: kind='ui'（キーボード操作の選択区画ハイライト / ヘルプ / リセット確認）も同経路で受理
   ipcMain.on('multi:publish', (_event, payload) => {
