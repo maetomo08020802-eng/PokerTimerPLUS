@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-08** — multi-tournament-4up **Phase 3b(v2.7.0 配信準備=bump/文書/.exeビルド)完了・前原の配信 GO 待ち**。配信中は **v2.6.6(Latest)**のまま(v2.7.0 は .exe ローカル生成済・tag/Release 未実施=前原専権)・テスト**1518件**全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-08** — multi-tournament-4up **Phase 3c(終了確認モーダル・実機FB第6弾)実装完了・前原実機確認待ち**(3b 配信準備と合わせて v2.7.0 同梱・配信 GO は一括判断)。配信中は **v2.6.6(Latest)**のまま・テスト**1519件**全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,8 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| multi-tournament-4up Phase 3b(v2.7.0 配信準備) | 📦 配信準備完了・前原の配信 GO 待ち(インストーラ実機確認→GO→push+tag+Release) | report `.cc-reports/2026-07-08_multi-tournament-4up_phase3b-release-prep.md` / .exe=`dist/pokertimerplus-setup-2.7.0.exe` / Release 文案=`docs/release-notes-v2.7.0.md` |
+| multi-tournament-4up Phase 3b(v2.7.0 配信準備) | 📦 配信準備完了(配信 GO は 3c 完了後に一括判断) | report `.cc-reports/2026-07-08_multi-tournament-4up_phase3b-release-prep.md` / Release 文案=`docs/release-notes-v2.7.0.md` |
+| multi-tournament-4up Phase 3c(終了確認モーダル・実機FB第6弾) | 🟡 実装完了・前原実機確認待ち(v2.7.0 同梱・bump なし) | report `.cc-reports/2026-07-08_multi-tournament-4up_phase3c-exit-confirm.md` / branch `feature/multi-exit-confirm`(実装+文書 2 commit) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -52,16 +53,16 @@
 | 配信済リリース | 15件(v1.0.0〜v2.6.6)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件(安定運用フェーズ)|
-| 最新テスト件数 | 1518件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +2・3a +3) |
+| 最新テスト件数 | 1519件 全PASS(multi Phase1 +23・1b +2・Phase2 +19・2b +3・2c +10・2d +8・2e +7・2f +8・追補 +2・3a +3・3c +1) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = 3a push 済(`a41c331`)+ **3b の 2 commit(bump+tests74 / 配信文書)はローカル・push/tag/Release は前原の配信 GO 後(前原専権)**。配信は tag `v2.6.6`(Latest)のまま。
-- **直前作業(2026-07-08)**: 3a 実機確認OK+GO→push。続けて **Phase 3b=v2.7.0 配信準備**: bump 2.7.0(テスト assert 74ファイル更新・grep で 2.6.6 残存0)・CHANGELOG v2.7.0 章・specs マルチ仕様章・README 1行・Release 文案 `docs/release-notes-v2.7.0.md`・`npm run build:win -- --publish never` 自走成功(.exe 83.7MB=v2.6.6比+49KB・latest.yml version 2.7.0・blockmap・ログ致命0・publish 未実行)。テスト1518件全PASS・致命5件非接触(src 非変更)。
-- **次のアクション**: cc-review2 完了review→前原 6-B(インストーラ実機・単画面互換・マルチ実機総合)→**配信 GO で push+tag v2.7.0+GitHub Release**(文案準備済)→CHANGELOG 配信日確定→リリース履歴1行追加→案件クローズ。
+- **git**: `main`(ローカル `afa41e1`=3b まで・push 済は `a41c331`=3a まで)+ **branch `feature/multi-exit-confirm`=3c 実装+文書 2 commit**(完了review承認後に main-local へ merge)。push/tag/Release は前原の配信 GO 後(前原専権)。配信は tag `v2.6.6`(Latest)のまま。
+- **直前作業(2026-07-08)**: 前原FB第6弾→**Phase 3c=正常終了の確認モーダル**。進行中区画(running/prestart/paused)がある時のみ「元に戻せません」確認(default=キャンセル)を ×/終了ボタン両経路に。専用 suppress フラグで二重ダイアログ防止・セッション削除挙動/schema=1 無改変・単一モード close 確認非接触。v2.7.0 同梱(bump なし)・CHANGELOG/Release文案/specs 各1行追記・.exe 再ビルド済(publish 未実行)。テスト1519件(+1)全PASS・致命5件非接触。
+- **次のアクション**: cc-review2 完了review→承認後 main-local merge→前原 6-B(3c: ×終了確認/摩擦ゼロ/文言 + 3b: インストーラ・単画面互換・マルチ総合)→**配信 GO で push+tag v2.7.0+GitHub Release**→CHANGELOG 配信日確定→リリース履歴1行→案件クローズ。
 
 ---
 
