@@ -2128,6 +2128,25 @@ async function enterMultiMode() {
   if (_dualStateCache.preStartState && _dualStateCache.preStartState.isActive) {
     return { ok: false, reason: 'pre-start-active' };
   }
+  // Phase 2f 追補2: モード開始時の確認モーダル（前原指示 2026-07-08）。
+  //   「登録トーナメントは読み込むだけで、このモードでの進行・操作は保存・上書きされない
+  //   （store 書込ゼロ）。停電復帰だけは一時ファイルで対応」をユーザーに開始前に明示する。
+  //   キャンセルは reason 'cancelled'（picker キャンセルと同じ = operator 側は無言で戻る既存経路）。
+  {
+    const startChoice = dialog.showMessageBoxSync(mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined, {
+      type: 'question',
+      title: 'マルチ表示モード（4分割）',
+      message: 'マルチ表示モード（4分割）を開始しますか？',
+      detail: '・各区画には、登録済みトーナメントの内容（ブラインド構造など）をそのまま読み込んで使います。\n'
+        + '・このモードでの進行や操作（タイマー・エントリー数など）は、登録トーナメントのデータには保存・上書きされません（モード終了とともに消えます）。\n'
+        + '・停電などで不意に終了した場合のみ、次回開始時に直前の状態から復元できます。',
+      buttons: ['開始する', 'キャンセル'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true
+    });
+    if (startChoice !== 0) return { ok: false, reason: 'cancelled' };
+  }
   // Phase 2e: 異常終了セッションの検出と復元確認（picker 前）。
   //   破損 / 版数不一致は確認を出さず破棄して新規開始（安全側）。
   //   キャンセル = マルチ開始自体を中止しファイルは温存（誤操作で復元機会を失わない）。
