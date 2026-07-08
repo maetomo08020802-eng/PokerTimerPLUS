@@ -59,9 +59,9 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = merge `e9943f3`(Phase 2〜2f+追補・前原GO・push済) + **追補2 commit(ローカル・push は完了review承認後)**。feature branch は役目終了(温存中・削除可)。配信は tag `v2.6.6`(Latest・自動更新有効)のまま=**マルチは main 入りだが未配信**(tag/.exe/Release は Phase 3 の配信判断で)。
-- **直前作業(2026-07-08)**: ①Phase 2〜2f+追補(経過時間表示)を前原GOで main merge+push ②前原指示で**追補2=モード開始時の確認モーダル**(「登録トーナメントは読み込むだけ・進行/操作は保存・上書きされない・停電復帰のみ対応」を開始前に明示。キャンセル=既存 'cancelled' 経路・renderer 無改変)。テスト1515件全PASS・致命5件非接触・store書込ゼロ維持。report `.cc-reports/2026-07-08_multi-tournament-4up_phase2f-start-confirm-modal.md`。
-- **次のアクション**: 追補2の完了review承認→main push→Phase 3(仕上げ・堅牢化・配信/roadmap §5)の brief 起案(前原の着手指示で開始)。
+- **git**: `main` = Phase 2〜2f+追補(merge `e9943f3`)+追補2(開始確認モーダル)まで**全 push 済(前原GO 2026-07-08 ×2)**。feature branch は役目終了(温存中・削除可)。配信は tag `v2.6.6`(Latest・自動更新有効)のまま=**マルチは main 入りだが未配信**(tag/.exe/Release は Phase 3 の配信判断で)。
+- **直前作業(2026-07-08)**: ①Phase 2〜2f+追補(復元方式選択+経過時間表示)を main merge+push ②**追補2=モード開始時の確認モーダル**(「登録トーナメントは読み込むだけ・進行/操作は保存・上書きされない・停電復帰のみ対応」を開始前に明示)を完了review承認+前原GO(文言確認)で push。テスト1515件全PASS・致命5件非接触・store書込ゼロ維持。report `.cc-reports/2026-07-08_multi-tournament-4up_phase2f-start-confirm-modal.md`。
+- **次のアクション**: Phase 3(仕上げ・堅牢化・配信/roadmap §5)の brief 起案(前原の着手指示で開始)。
 
 ---
 
