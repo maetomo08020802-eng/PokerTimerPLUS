@@ -21,6 +21,9 @@ const remoteDiscover = require('./remote/discover');
 // 1b-qr: 接続 URL の QR を main（node）側で生成し行列を IPC で renderer へ渡す（本体 renderer に
 //   新規 script を読ませない＝CSP `script-src 'self'` を一切触らない）。vendored 自作・依存ゼロ。
 const remoteQr = require('./remote/vendor/qrcode');
+// 外部DB連携 STEP2a: Supabase 接続基盤 + 管理者ログイン（main 集約＝renderer CSP 無改変）。
+//   既定 OFF（連携先未設定なら inert・外部接続ゼロ）。CLAUDE.md「完全ローカル動作」例外②の範囲。
+const dbLink = require('./link/db-link');
 
 // STEP 6.21.4.2: Chromium AutoPlay Policy を無効化（起動直後から音再生を許可）
 // app.whenReady() より前に必ず設定（Electron 起動フラグのため）
@@ -819,7 +822,11 @@ const store = new Store({
     },
     // remote-control Phase 1a: スマホ遠隔操作（実験的機能）。既定 OFF ＝ サーバを一切起動しない
     //   ＝現行と完全同一（後方互換）。ON にした時だけ main が LAN サーバを起動する。
-    remoteControl: { enabled: false }
+    remoteControl: { enabled: false },
+    // 外部DB連携 STEP2a: 連携先(Supabase)設定。既定=未設定（url/anonKey 空）＝外部接続を一切しない。
+    //   links = PC 側トーナメント id → 連携フラグ（STEP2a では保存のみ・送信などの挙動ゼロ）。
+    //   ※ tournaments 配列の要素には持たせない（normalizeTournament が未知キーを落とすため隔離保存）。
+    dbLink: { url: '', anonKey: '', links: {} }
   }
 });
 
@@ -2531,6 +2538,21 @@ function registerRemoteIpcHandlers() {
   });
 }
 registerRemoteIpcHandlers();
+
+// 外部DB連携 STEP2a: dblink:* IPC 登録（registerRemoteIpcHandlers と同型・registerIpcHandlers 本体には触れない）。
+//   通信はすべて src/link/db-link.js（main 側）に集約＝renderer CSP 無改変。未設定時は inert。
+function registerDbLinkIpcHandlers() {
+  dbLink.init(store, (event) => { try { rollingLog(event, null); } catch (_) { /* ignore */ } });
+  ipcMain.handle('dblink:getStatus', () => dbLink.getStatus());
+  ipcMain.handle('dblink:setConfig', (_event, cfg) => dbLink.setConfig(cfg || {}));
+  ipcMain.handle('dblink:login', (_event, cred) => dbLink.login(cred || {}));
+  ipcMain.handle('dblink:logout', () => dbLink.logout());
+  ipcMain.handle('dblink:listTodayTournaments', () => dbLink.listTodayTournaments());
+  ipcMain.handle('dblink:setTournamentLink', (_event, p) => dbLink.setTournamentLink(p || {}));
+}
+registerDbLinkIpcHandlers();
+// 公式ガイダンス（非ブラウザ環境）: 終了時に自動トークン更新を明示停止
+app.on('before-quit', () => { try { dbLink.stop(); } catch (_) { /* ignore */ } });
 
 // ----- Phase 3a: マルチ表示中の HDMI 抜き差し追従 -----
 //   既存 setupDisplayChangeListeners は無改変（マルチ中は display-removed が hallWindow ガード、

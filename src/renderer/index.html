@@ -459,6 +459,7 @@
           <button type="button" class="settings-tab-btn"           data-tab="logo"       role="tab">ロゴ</button>
           <button type="button" class="settings-tab-btn"           data-tab="audio"      role="tab">音</button>
           <button type="button" class="settings-tab-btn"           data-tab="remote"     role="tab">スマホ操作</button>
+          <button type="button" class="settings-tab-btn"           data-tab="dblink"     role="tab">外部連携</button>
           <button type="button" class="settings-tab-btn"           data-tab="about"      role="tab">ハウス情報</button>
         </div>
       </div>
@@ -1173,6 +1174,61 @@
           </p>
           <p class="settings-hint" id="js-remote-status" hidden></p>
         </div>
+      </section>
+
+      <!-- 外部DB連携 STEP2a（案件229・アプリ全体共通・既定=未設定）: 連携先(Supabase)の設定と管理者ログイン。
+           通信はすべて main プロセス（src/link/db-link.js）＝この HTML の CSP は無改変。
+           未設定の間は外部接続を一切しない（完全ローカル動作の例外②の範囲・CLAUDE.md 2026-07-17 前原承認）。
+           STEP2a では時計状態の送信はまだ行わない（接続基盤+ログイン+接続テスト+連携チェック枠のみ）。 -->
+      <section class="settings-tab" data-tab="dblink" role="tabpanel">
+        <p class="settings-hint">
+          お店の顧客アプリ（外部データベース）と連携するための設定です（店舗運営者向け）。<br>
+          <strong>未設定のときは何も接続しません（通常動作と完全に同じ）。</strong>
+        </p>
+
+        <div class="form-row">
+          <span class="form-row__label">連携先 URL</span>
+          <input type="text" id="js-dblink-url" placeholder="https://xxxx.supabase.co" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-row">
+          <span class="form-row__label">anon キー</span>
+          <input type="text" id="js-dblink-key" placeholder="連携先の anon(公開)キー" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-row form-row--actions">
+          <button type="button" class="btn" id="js-dblink-save-config">連携先を保存</button>
+        </div>
+
+        <hr class="form-divider">
+
+        <div class="form-row">
+          <span class="form-row__label">メールアドレス</span>
+          <input type="email" id="js-dblink-email" placeholder="管理者アカウントのメール" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-row">
+          <span class="form-row__label">パスワード</span>
+          <!-- ★PW はこの欄から main の signInWithPassword へ渡すだけ（保存・ログ出力しない） -->
+          <input type="password" id="js-dblink-password" placeholder="パスワード（保存されません）" autocomplete="off">
+        </div>
+        <div class="form-row form-row--actions">
+          <button type="button" class="btn btn--primary" id="js-dblink-login">ログイン</button>
+          <button type="button" class="btn" id="js-dblink-logout">ログアウト</button>
+        </div>
+        <p class="settings-hint"><strong>状態: </strong><span id="js-dblink-status">未設定</span></p>
+
+        <hr class="form-divider">
+
+        <div class="form-row form-row--checkbox">
+          <label><input type="checkbox" id="js-dblink-link-enabled"> <span>現在のトーナメント「<span id="js-dblink-link-name">—</span>」を外部連携する</span></label>
+        </div>
+        <p class="settings-hint">
+          ※ この設定は次の更新（大会の紐づけ・時計の送信）で使われる準備項目です。現時点では
+          チェックを入れても<strong>まだ何も送信されません</strong>。4分割（マルチ画面）モードは連携の対象外です。
+        </p>
+
+        <div class="form-row form-row--actions">
+          <button type="button" class="btn" id="js-dblink-test">接続テスト（今日の大会一覧を取得）</button>
+        </div>
+        <p class="settings-hint" id="js-dblink-test-result" hidden></p>
       </section>
 
       <section class="settings-tab" data-tab="about" role="tabpanel">

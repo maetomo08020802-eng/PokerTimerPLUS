@@ -3968,6 +3968,10 @@ function activateSettingsTab(tabName) {
   if (tabName === 'remote') {
     syncRemoteTabFromStatus();
   }
+  // 外部DB連携 STEP2a: 外部連携タブを開いた時は main から現行 status を取得して反映
+  if (tabName === 'dblink') {
+    syncDbLinkTabFromStatus();
+  }
 }
 
 // ===== remote-control Phase 1a/1b: スマホ遠隔操作タブの表示同期 + 状態送信 =====
@@ -4060,6 +4064,126 @@ async function syncRemoteTabFromStatus() {
     const status = await window.api?.remote?.getStatus?.();
     applyRemoteStatus(status);
   } catch (_) { /* ignore — remote ブリッジ未提供環境では何もしない */ }
+}
+
+// ===== 外部DB連携 STEP2a: 「外部連携」タブの表示同期 =====
+// 通信・資格情報の扱いはすべて main（src/link/db-link.js）。renderer は表示と入力の受け渡しのみ。
+// PW は login 呼出の引数として渡すだけ（変数に保持し続けない・保存/ログ出力しない）。
+
+// main の status（{ configured, loggedIn, email, isAdmin, links }）を DOM に反映する（表示専用）。
+function applyDbLinkStatus(status) {
+  const s = status || {};
+  const statusEl = document.getElementById('js-dblink-status');
+  const linkToggle = document.getElementById('js-dblink-link-enabled');
+  const linkName = document.getElementById('js-dblink-link-name');
+  if (statusEl) {
+    if (!s.configured) statusEl.textContent = '未設定（連携先 URL と anon キーを保存してください）';
+    else if (!s.loggedIn) statusEl.textContent = '未ログイン';
+    else if (s.isAdmin === true) statusEl.textContent = `管理者として接続中: ${s.email || ''}`;
+    else if (s.isAdmin === false) statusEl.textContent = `接続中（管理者ではありません）: ${s.email || ''}`;
+    else statusEl.textContent = `接続中（権限確認に失敗）: ${s.email || ''}`;
+  }
+  // 連携チェック枠: 現在のトーナメント名 + links の保存値を反映。未ログイン時は disabled。
+  const curId = tournamentState && tournamentState.id ? tournamentState.id : '';
+  if (linkName) linkName.textContent = (tournamentState && (tournamentState.name || tournamentState.title)) || '—';
+  if (linkToggle) {
+    linkToggle.disabled = !(s.configured && s.loggedIn && curId);
+    linkToggle.checked = !!(curId && s.links && s.links[curId]);
+  }
+}
+
+// main から現行 status を取得して反映（タブ表示時・操作後に呼ぶ）。
+async function syncDbLinkTabFromStatus() {
+  try {
+    // URL / anon キーの保存値は status に含めない設計のため、入力欄は「保存済みなら placeholder を変える」
+    // のではなく空のまま（再入力で上書き保存）。状態バッジで configured を示す。
+    const status = await window.api?.dblink?.getStatus?.();
+    applyDbLinkStatus(status);
+  } catch (_) { /* ignore — dblink ブリッジ未提供環境では何もしない */ }
+}
+
+// 「外部連携」タブの操作ハンドラ登録（設定ダイアログ初期化時に 1 回だけ呼ぶ）。
+function bindDbLinkTabHandlers() {
+  const saveBtn = document.getElementById('js-dblink-save-config');
+  const loginBtn = document.getElementById('js-dblink-login');
+  const logoutBtn = document.getElementById('js-dblink-logout');
+  const testBtn = document.getElementById('js-dblink-test');
+  const linkToggle = document.getElementById('js-dblink-link-enabled');
+  const testResult = document.getElementById('js-dblink-test-result');
+  const showTest = (text) => {
+    if (!testResult) return;
+    testResult.hidden = !text;
+    testResult.textContent = text || '';
+  };
+  if (saveBtn && !saveBtn._dblinkBound) {
+    saveBtn._dblinkBound = true;
+    saveBtn.addEventListener('click', async () => {
+      try {
+        const url = (document.getElementById('js-dblink-url')?.value || '').trim();
+        const anonKey = (document.getElementById('js-dblink-key')?.value || '').trim();
+        const res = await window.api?.dblink?.setConfig?.({ url, anonKey });
+        if (res && res.ok === false) { showTest(res.error || '保存に失敗しました'); return; }
+        showTest('連携先を保存しました');
+        applyDbLinkStatus(res && res.status);
+      } catch (_) { showTest('保存に失敗しました'); }
+    });
+  }
+  if (loginBtn && !loginBtn._dblinkBound) {
+    loginBtn._dblinkBound = true;
+    loginBtn.addEventListener('click', async () => {
+      const pwEl = document.getElementById('js-dblink-password');
+      try {
+        const email = (document.getElementById('js-dblink-email')?.value || '').trim();
+        const password = pwEl ? pwEl.value : '';
+        const res = await window.api?.dblink?.login?.({ email, password });
+        if (res && res.ok === false) { showTest(res.error || 'ログインに失敗しました'); return; }
+        showTest(res && res.warning ? res.warning : 'ログインしました');
+        applyDbLinkStatus(res && res.status);
+      } catch (_) {
+        showTest('ログインに失敗しました');
+      } finally {
+        // ★PW を画面・メモリに残さない（成功/失敗にかかわらず欄をクリア）
+        if (pwEl) pwEl.value = '';
+      }
+    });
+  }
+  if (logoutBtn && !logoutBtn._dblinkBound) {
+    logoutBtn._dblinkBound = true;
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        const res = await window.api?.dblink?.logout?.();
+        showTest('ログアウトしました');
+        applyDbLinkStatus(res && res.status);
+      } catch (_) { showTest('ログアウトに失敗しました'); }
+    });
+  }
+  if (testBtn && !testBtn._dblinkBound) {
+    testBtn._dblinkBound = true;
+    testBtn.addEventListener('click', async () => {
+      showTest('取得中...');
+      try {
+        const res = await window.api?.dblink?.listTodayTournaments?.();
+        if (!res || res.ok === false) { showTest((res && res.error) || '取得に失敗しました'); return; }
+        const names = (res.tournaments || []).map((t) => t.part_label ? `${t.name}（${t.part_label}）` : t.name);
+        showTest(names.length === 0
+          ? `本日（営業日 ${res.businessDate}）の開催中大会はありません`
+          : `本日（営業日 ${res.businessDate}）の開催中大会 ${names.length} 件: ${names.join(' / ')}`);
+      } catch (_) { showTest('取得に失敗しました'); }
+    });
+  }
+  if (linkToggle && !linkToggle._dblinkBound) {
+    linkToggle._dblinkBound = true;
+    linkToggle.addEventListener('change', async () => {
+      const curId = tournamentState && tournamentState.id ? tournamentState.id : '';
+      if (!curId) { syncDbLinkTabFromStatus(); return; }
+      try {
+        await window.api?.dblink?.setTournamentLink?.({ tournamentId: curId, enabled: linkToggle.checked });
+      } catch (_) {
+        // 失敗時は保存値を取り直して UI を実態へ戻す
+        syncDbLinkTabFromStatus();
+      }
+    });
+  }
 }
 
 // ===== STEP 9-B: 左上ロゴ管理 =====
@@ -8327,6 +8451,9 @@ async function initialize() {
   // 1b: 起動時に remote 稼働状態を 1 回同期（_remoteEnabled を確定＝publishRemoteState のゲート初期化）。
   //   OFF（既定）なら _remoteEnabled=false のまま＝状態送信は一切走らない（後方互換）。
   try { syncRemoteTabFromStatus(); } catch (_) { /* ignore */ }
+  // 外部DB連携 STEP2a: 外部連携タブのハンドラ登録（1 回だけ・タブ表示時の同期は activateSettingsTab）。
+  //   未設定（既定）なら main 側が inert ＝ここでの登録だけでは外部接続は一切発生しない。
+  try { bindDbLinkTabHandlers(); } catch (_) { /* ignore */ }
   // perf-heaviness: rAF Hz 計測 flush 起動（window.__PERF_METRICS true 時のみ。本番は no-op）。
   _startPerfRafFlush();
   renderStaticInfo();
