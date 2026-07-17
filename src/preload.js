@@ -221,14 +221,23 @@ contextBridge.exposeInMainWorld('api', {
       catch (_) { /* never throw */ }
     }
   },
-  // 外部DB連携 STEP2-K1: 設定タブ「外部連携」のブリッジ。通信は main（src/link/db-link.js・plain fetch）に
-  //   集約（renderer CSP 無改変）。公開は以下 4 チャネルのみ（tests/db-link.test.js が whitelist 検査）。
-  //   店舗キー方式: login/logout は撤去済（PC はログインしない）。店舗キーは setConfig の引数として
-  //   main へ渡すだけ（renderer/preload では保持・ログ出力しない）。
+  // 外部DB連携 STEP2-K1/K2: 設定タブ「外部連携」+ 状態送信のブリッジ。通信は main
+  //   （src/link/db-link.js・plain fetch）に集約（renderer CSP 無改変）。公開は以下 7 チャネルのみ
+  //   （tests/db-link.test.js が whitelist 検査）。店舗キー方式: login/logout は撤去済。
+  //   publish 系は fire-and-forget（ipcRenderer.send・remote:state と同型・応答不要）。
   dblink: {
     getStatus: () => _measuredInvoke('dblink:getStatus'),
     setConfig: (cfg) => _measuredInvoke('dblink:setConfig', cfg || {}),
     listTodayTournaments: () => _measuredInvoke('dblink:listTodayTournaments'),
-    setTournamentLink: (p) => _measuredInvoke('dblink:setTournamentLink', p || {})
+    setTournamentLink: (p) => _measuredInvoke('dblink:setTournamentLink', p || {}),
+    linkAndInit: (p) => _measuredInvoke('dblink:linkAndInit', p || {}),
+    publishRecord: (p) => {
+      try { ipcRenderer.send('dblink:publishRecord', p || null); }
+      catch (_) { /* never throw */ }
+    },
+    publishRuntime: (p) => {
+      try { ipcRenderer.send('dblink:publishRuntime', p || null); }
+      catch (_) { /* never throw */ }
+    }
   }
 });

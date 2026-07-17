@@ -85,20 +85,32 @@ ok(!/console\.(log|error|warn|info)/.test(dbLinkSrc),
 ok(rendererSrc.includes("if (keyEl) keyEl.value = '';"),
   'renderer は店舗キー保存後に入力欄をクリア（画面に残さない）');
 
-// ---- ⑤ preload whitelist（dblink は 4 チャネルのみ・login/logout 撤去） ----
+// ---- ⑤ preload whitelist（dblink は invoke 5 + send 2 の 7 チャネルのみ・login/logout 撤去） ----
 const dblinkBlock = preloadSrc.slice(preloadSrc.indexOf('dblink: {'));
 const invoked = [...dblinkBlock.matchAll(/_measuredInvoke\('(dblink:[a-zA-Z]+)'/g)].map((m) => m[1]);
 const WHITELIST = [
   'dblink:getStatus',
   'dblink:setConfig',
   'dblink:listTodayTournaments',
-  'dblink:setTournamentLink'
+  'dblink:setTournamentLink',
+  'dblink:linkAndInit'
 ];
 ok(invoked.length === WHITELIST.length && WHITELIST.every((c) => invoked.includes(c)),
-  `preload の dblink 公開が whitelist 4 チャネルと一致（実際: ${invoked.join(',')}）`);
+  `preload の dblink invoke 公開が whitelist 5 チャネルと一致（実際: ${invoked.join(',')}）`);
 for (const ch of WHITELIST) {
   ok(mainSrc.includes(`ipcMain.handle('${ch}'`), `main に ${ch} の handler がある`);
 }
+// K2: 状態送信は fire-and-forget（ipcRenderer.send）の 2 チャネルのみ
+const sent = [...dblinkBlock.matchAll(/ipcRenderer\.send\('(dblink:[a-zA-Z]+)'/g)].map((m) => m[1]);
+const SEND_WHITELIST = ['dblink:publishRecord', 'dblink:publishRuntime'];
+ok(sent.length === SEND_WHITELIST.length && SEND_WHITELIST.every((c) => sent.includes(c)),
+  `preload の dblink send 公開が whitelist 2 チャネルと一致（実際: ${sent.join(',')}）`);
+for (const ch of SEND_WHITELIST) {
+  ok(mainSrc.includes(`ipcMain.on('${ch}'`), `main に ${ch} の on ハンドラがある`);
+}
+// K2: record 送信トリガは「状態遷移（status/level 変化）のみ」＝毎 tick 送信しない（レート設計の核）
+ok(rendererSrc.includes('state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex'),
+  'renderer の record 購読は status/levelIndex 変化時のみ（remainingMs=毎 tick を送信条件にしない）');
 for (const gone of ['dblink:login', 'dblink:logout']) {
   ok(!mainSrc.includes(gone) && !preloadSrc.includes(gone) && !rendererSrc.includes(gone),
     `${gone} チャネルが全レイヤから撤去済（PC はログインしない）`);
@@ -223,6 +235,153 @@ function makeStore(initial) {
     'ON = 非機微3値のみの対応表1行を保存');
   res = dbLink.setTournamentLink({ tournamentId: 'pc-t1', enabled: false });
   ok(res.ok === true && !('pc-t1' in store3._data.dbLink.links), 'OFF = 対応表の行を削除');
+
+  // ==== K2: setConfig 空キー維持（K1 完了 review 懐疑役指摘の手当て） ====
+  const store4 = makeStore({ url: 'https://s.example.com', storeKey: 'keep-me', links: {} });
+  dbLink.init(store4, null, {});
+  res = dbLink.setConfig({ url: 'https://new-url.example.com', storeKey: '' });
+  ok(res.ok === true && store4._data.dbLink.storeKey === 'keep-me' &&
+     store4._data.dbLink.url === 'https://new-url.example.com',
+    'URL のみ再保存では保存済み店舗キーを維持（空文字上書きしない）');
+  res = dbLink.setConfig({ url: '', storeKey: '' });
+  ok(res.ok === true && store4._data.dbLink.storeKey === '' && store4._data.dbLink.url === '',
+    'URL も空にして保存 = 未設定へ戻す（キーも消える）');
+
+  // ==== K2: 送信系（coalescer / 楽観ロック echo-back / 409 再送 / 429 バックオフ） ====
+
+  // 仮想時計 + 手動スケジューラ（delayFn/nowFn 注入で決定的に駆動）
+  let vnow = 0;
+  let timers = [];
+  const nowFn = () => vnow;
+  const delayFn = (fn, ms) => { const t = { fn, at: vnow + ms }; timers.push(t); return t; };
+  const drain = () => new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
+  async function advance(ms) {
+    vnow += ms;
+    // 期限が来たタイマーを順に実行（実行中に新規登録されたものも同ループで処理）
+    for (;;) {
+      const due = timers.filter((t) => t.at <= vnow).sort((a, b) => a.at - b.at)[0];
+      if (!due) break;
+      timers = timers.filter((t) => t !== due);
+      due.fn();
+      await drain(); // _flushSend の async 完了を待つ
+    }
+  }
+  // シナリオ駆動 fake fetch（呼出記録 + 応答キュー）
+  let calls = [];
+  let responses = [];
+  const scenarioFetch = async (url, opts) => {
+    calls.push({ url, opts, body: opts.body ? JSON.parse(opts.body) : null });
+    const next = responses.shift();
+    if (!next) throw new Error('scenario exhausted');
+    if (next.throw) throw new TypeError('fetch failed');
+    return { ok: next.status >= 200 && next.status < 300, status: next.status, json: async () => next.json };
+  };
+  const DB_ID = '11111111-2222-3333-4444-555555555555';
+  const LINKED = { url: 'https://s.example.com', storeKey: 'k', links: { pc1: { id: DB_ID, name: 'A', part_label: '' } } };
+
+  // -- coalescer: 最新 payload 勝ち + 初回 expected_updated_at=null + 成功でキャッシュ --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, clock: { updated_at: 'T1' } } },
+    { status: 200, json: { ok: true, clock: { updated_at: 'T2' } } }
+  ];
+  const storeK2 = makeStore(JSON.parse(JSON.stringify(LINKED)));
+  dbLink.init(storeK2, null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  dbLink.publishRecord('pc1', { status: 'running', current_level_index: 0, end_at_ms: 111, paused_remaining_ms: null, pre_start_total_ms: null });
+  dbLink.publishRecord('pc1', { status: 'paused', current_level_index: 0, end_at_ms: null, paused_remaining_ms: 999, pre_start_total_ms: null });
+  ok(calls.length === 0, 'トレーリング coalesce 中は未送信（連打は収束待ち）');
+  await advance(300);
+  ok(calls.length === 1 && calls[0].url.endsWith('/api/pc-timer/clock/record'),
+    '300ms 後に record を 1 回だけ送信（2 連打が 1 送信に収束）');
+  ok(calls[0].body.status === 'paused' && calls[0].body.paused_remaining_ms === 999,
+    'coalesce は最新 payload 勝ち');
+  ok(calls[0].body.expected_updated_at === null, '初回書込は expected_updated_at=null');
+  ok(calls[0].body.tournament_id === DB_ID, 'tournament_id は対応表の db 大会id');
+  // -- 最小送信間隔 2 秒 + echo-back --
+  dbLink.publishRecord('pc1', { status: 'running', current_level_index: 1, end_at_ms: 222, paused_remaining_ms: null, pre_start_total_ms: null });
+  await advance(300);
+  ok(calls.length === 1, '直前送信から 2 秒未満は待機（レート 60回/分の構造的担保）');
+  await advance(1700);
+  ok(calls.length === 2 && calls[1].body.expected_updated_at === 'T1',
+    '2 秒経過で送信 + 直前成功応答の updated_at をそのまま echo back');
+
+  // -- 409 clock_conflict → GET /clock → 1 回だけ再送（fresh echo-back） --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 409, json: { ok: false, code: 'clock_conflict', error: '他の端末が更新しました' } },
+    { status: 200, json: { ok: true, clock: { updated_at: 'T9' } } },
+    { status: 200, json: { ok: true, clock: { updated_at: 'T10' } } }
+  ];
+  dbLink.init(makeStore(JSON.parse(JSON.stringify(LINKED))), null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  dbLink.publishRuntime('pc1', { players_initial: 10, players_remaining: 9, reentry_count: 0, addon_count: 0, special_count: 0, special_enabled: false });
+  await advance(300);
+  ok(calls.length === 3, '409 → GET /clock → 再送の 3 呼出');
+  ok(calls[0].url.endsWith('/clock/runtime') && calls[1].url.includes(`/clock?t=${DB_ID}`) && calls[2].url.endsWith('/clock/runtime'),
+    '呼出順 = POST(409) → GET 再取得 → POST 再送');
+  ok(calls[2].body.expected_updated_at === 'T9', '再送は GET で取り直した updated_at を echo back');
+
+  // -- 429 → 60 秒バックオフ後に保持 payload を送る --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 429, json: { ok: false, code: 'rate_limited', error: '送信が多すぎます' } },
+    { status: 200, json: { ok: true, clock: { updated_at: 'T20' } } }
+  ];
+  dbLink.init(makeStore(JSON.parse(JSON.stringify(LINKED))), null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  dbLink.publishRecord('pc1', { status: 'running', current_level_index: 2, end_at_ms: 333, paused_remaining_ms: null, pre_start_total_ms: null });
+  await advance(300);
+  ok(calls.length === 1, '429 直後は再送しない（バックオフ）');
+  await advance(59_000);
+  ok(calls.length === 1, 'バックオフ中は送らない');
+  await advance(2_000);
+  ok(calls.length === 2 && calls[1].body.current_level_index === 2, 'バックオフ後に保持 payload を送る');
+
+  // -- 未紐づけ / 未設定は fetch ゼロ --
+  vnow = 100_000; timers = []; calls = []; responses = [];
+  dbLink.init(makeStore({ url: 'https://s.example.com', storeKey: 'k', links: {} }), null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  dbLink.publishRecord('unlinked-pc', { status: 'running', current_level_index: 0, end_at_ms: 1, paused_remaining_ms: null, pre_start_total_ms: null });
+  await advance(1000);
+  ok(calls.length === 0 && timers.length === 0, '未紐づけ pcId の publish は fetch もタイマーもゼロ');
+
+  // ==== K2: linkAndInit（fresh / clock_running 接続 / upload 失敗） ====
+
+  // -- fresh: structures → init → 対応表保存 --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, structure_id: 'sid-1' } },
+    { status: 200, json: { ok: true, clock: { updated_at: 'T0' } } }
+  ];
+  const storeLink = makeStore({ url: 'https://s.example.com', storeKey: 'k', links: {} });
+  dbLink.init(storeLink, null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  const structure = { name: '大会A', structure_type: 'BLIND', levels: [{ level: 1, sb: 100, bb: 200, durationMinutes: 20, isBreak: false }] };
+  res = await dbLink.linkAndInit({ tournamentId: 'pc1', db: { id: DB_ID, name: 'A', part_label: '' }, structure });
+  ok(res.ok === true && res.mode === 'fresh', 'linkAndInit 正常系は mode=fresh');
+  ok(calls[0].url.endsWith('/structures') && calls[0].body.levels.length === 1,
+    '構成 upload が先行（levels 透過）');
+  ok(calls[1].url.endsWith('/clock/init') && calls[1].body.structure_id === 'sid-1' && calls[1].body.tournament_id === DB_ID,
+    'init は upload が返した structure_id を使う');
+  ok(storeLink._data.dbLink.links.pc1 && storeLink._data.dbLink.links.pc1.id === DB_ID,
+    '成功時のみ対応表を保存');
+
+  // -- clock_running: 構成差し替えせず既存時計へ接続（mode=connected + warning） --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, structure_id: 'sid-2' } },
+    { status: 409, json: { ok: false, code: 'clock_running', error: '進行中は差し替えできません' } },
+    { status: 200, json: { ok: true, clock: { updated_at: 'T5' } } }
+  ];
+  const storeConn = makeStore({ url: 'https://s.example.com', storeKey: 'k', links: {} });
+  dbLink.init(storeConn, null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  res = await dbLink.linkAndInit({ tournamentId: 'pc1', db: { id: DB_ID, name: 'A', part_label: '' }, structure });
+  ok(res.ok === true && res.mode === 'connected' && typeof res.warning === 'string',
+    'init 409 clock_running は既存時計へ接続（mode=connected + warning）');
+  ok(calls[2].url.includes(`/clock?t=${DB_ID}`), '接続時は GET /clock でキャッシュ取得');
+  ok(storeConn._data.dbLink.links.pc1 && storeConn._data.dbLink.links.pc1.id === DB_ID,
+    '接続時も対応表は保存（送信は renderer 側が抑止 = plan review 条件①）');
+
+  // -- upload 失敗: 対応表を保存しない --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 404, json: null }
+  ];
+  const storeFail = makeStore({ url: 'https://s.example.com', storeKey: 'wrong', links: {} });
+  dbLink.init(storeFail, null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  res = await dbLink.linkAndInit({ tournamentId: 'pc1', db: { id: DB_ID, name: 'A', part_label: '' }, structure });
+  ok(res.ok === false && res.code === 'auth', 'upload 失敗（認可 404）はエラー透過');
+  ok(!('pc1' in storeFail._data.dbLink.links), '失敗時は対応表を保存しない');
 
   console.log(`db-link.test.js: ${count} assertions passed`);
 })().catch((err) => {

@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 外部DB連携 STEP2(案件229) | 🟡 K1 main反映済・前原6-B待ち | 店舗キー方式 K1(接続基盤+紐づけ)main merge `fd6ad98`=supabase-js撤去・plain fetch・URL+店舗キーUI・当日大会紐づけ。完了review✅+push前review✅。テスト1663全PASS(+20)。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。次=K2(状態送信・楽観ロック+キー空上書き手当) |
+| 外部DB連携 STEP2(案件229) | 🔵 K2 レビュー待ち(K1はmain反映済) | K2(状態送信)実装済 `feature/anken229-step2-k2`(`8885b76`)=楽観ロックecho-back・409→GET→1回再送・coalescer(300ms/2秒/429バックオフ)・linkAndInit(fresh/connected)・逐語マップ純関数・キー空上書き手当。テスト1734全PASS(+71)。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K2.md`。次=完了review→push前review→main→K3 |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
