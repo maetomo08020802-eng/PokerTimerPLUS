@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 外部DB連携 STEP2(案件229) | 🤔 2a Plan review中 | PC版を「DBに書く側」へ(2a=接続基盤+ログイン/2b=紐づけ+送信/2c=切断+OFF停止)。2a plan=`.cc-plans/2026-07-17_外部DB連携_STEP2a_plan.md`(通信はmain集約=CSP無改変・remote-control前例踏襲・既定OFF)。brief=`.cc-briefs/2026-07-17_外部DB連携_STEP2_brief.md` |
+| 外部DB連携 STEP2(案件229) | 🔵 2a 完了review待ち | 2a(接続基盤+管理者ログイン)実装済`280287f`(feature/db-link-step2a・未push): main集約=CSP無改変・既定OFF inert・supabase-js 2.110.7(唯一の追加)・PW非保存/非ログ・新規54assertions+全テストPASS(v254タブ数ガードは9枚へ意図的更新)。report=`.cc-reports/2026-07-17_外部DB連携_STEP2a.md`。残=完了review→push前review→main→前原6-B(①〜⑦・③接続テストが0169要否の確定点) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---

@@ -51,9 +51,10 @@ function navBlock() {
 }
 
 // remote-control Phase 1a: アプリ全体共通グループに「スマホ操作」(data-tab="remote") を追加（7→8タブ）。
-const ALL_TABS = ['tournament', 'blinds', 'display', 'marquee', 'logo', 'audio', 'remote', 'about'];
+// 外部DB連携 STEP2a: アプリ全体共通グループに「外部連携」(data-tab="dblink") を追加（8→9タブ・意図的な期待値更新）。
+const ALL_TABS = ['tournament', 'blinds', 'display', 'marquee', 'logo', 'audio', 'remote', 'dblink', 'about'];
 const GROUP_TOURNAMENT = ['tournament', 'blinds', 'display', 'marquee'];
-const GROUP_APP = ['logo', 'audio', 'remote', 'about'];
+const GROUP_APP = ['logo', 'audio', 'remote', 'dblink', 'about'];
 
 // ============================================================
 // T1: data-tab 識別子は全8タブで不変（並び替え・グループ化しても値を変えない）
