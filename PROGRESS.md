@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 外部DB連携 STEP2(案件229) | 🔵 K1 レビュー待ち | 店舗キー方式。K1(接続基盤+紐づけ)実装済 `feature/anken229-step2-k1`(`7997d84`)=supabase-js撤去・plain fetch・URL+店舗キーUI・当日大会紐づけ。テスト1663全PASS(+20)・誤キー404実観測済。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。次=完了review→push前review→main→K2(送信) |
+| 外部DB連携 STEP2(案件229) | 🟡 K1 main反映済・前原6-B待ち | 店舗キー方式 K1(接続基盤+紐づけ)main merge `fd6ad98`=supabase-js撤去・plain fetch・URL+店舗キーUI・当日大会紐づけ。完了review✅+push前review✅。テスト1663全PASS(+20)。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。次=K2(状態送信・楽観ロック+キー空上書き手当) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -61,8 +61,8 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.8.0 配信済+STEP2a inert(`f4339ca`)。オープンブランチ = `feature/anken229-step2-k1`(`7997d84`・K1 実装済・main 未 merge)。
-- **現在地(2026-07-18)**: 外部DB連携 STEP2(案件229・店舗キー方式)進行中。**K1(接続基盤の店舗キー化+大会紐づけ)実装済**=supabase-js 撤去(追加ライブラリゼロ復帰)・db-link.js plain fetch 化(Bearer・404日本語写像・timeout)・設定UI=URL+店舗キー2入力・当日大会一覧からの紐づけ(PC ローカル対応表1行・送信なし)。テスト 1663 件全PASS(1643→+20)・致命5件影響なし・誤キー404を本番APIで実観測。plan review✅(追加指示5点消化)。次 = K1 完了review→push前review→main merge→K2(状態送信・楽観ロック)→K3(切断表示/OFF停止/DB追従アダプタ)。リリースは STEP2 全体完了+前原GO後のみ。
+- **git**: `main` = **K1 merge 済 `fd6ad98`・push 済**(feature/anken229-step2-k1 は役目終了・削除可)。
+- **現在地(2026-07-18)**: 外部DB連携 STEP2(案件229・店舗キー方式)進行中。**K1(接続基盤の店舗キー化+大会紐づけ)main 反映済**=supabase-js 撤去(追加ライブラリゼロ復帰)・db-link.js plain fetch 化(Bearer・404日本語写像・timeout・旧セッションファイル削除)・設定UI=URL+店舗キー2入力・当日大会一覧からの紐づけ(PC ローカル対応表1行・送信なし)。テスト 1663 件全PASS(+20)・致命5件影響なし・誤キー404を本番APIで実観測。plan review✅・完了review✅(懐疑役懸念1件=URL のみ再保存でキー空文字上書き→K2 手当て合意)・push前review✅。次 = **K2(状態送信・楽観ロック・キー空上書き手当)**→K3(切断表示/OFF停止/DB追従アダプタ)。リリースは STEP2 全体完了+前原GO後のみ。前原6-B=①正キー疎通②誤キー表示③紐づけ④オフライン非退行。
 - 参照: brief=`.cc-briefs/2026-07-18_案件229_タイマー案C_PC店舗キー連携_STEP2_brief.md` / K1 report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
