@@ -221,14 +221,13 @@ contextBridge.exposeInMainWorld('api', {
       catch (_) { /* never throw */ }
     }
   },
-  // 外部DB連携 STEP2a: 設定タブ「外部連携」のブリッジ。通信は main（src/link/db-link.js）に集約
-  //   （renderer CSP 無改変）。公開は以下 6 チャネルのみ（tests/db-link.test.js が whitelist 検査）。
-  //   PW は login() の引数として main へ渡すだけ（renderer/preload では保存・保持・ログ出力しない）。
+  // 外部DB連携 STEP2-K1: 設定タブ「外部連携」のブリッジ。通信は main（src/link/db-link.js・plain fetch）に
+  //   集約（renderer CSP 無改変）。公開は以下 4 チャネルのみ（tests/db-link.test.js が whitelist 検査）。
+  //   店舗キー方式: login/logout は撤去済（PC はログインしない）。店舗キーは setConfig の引数として
+  //   main へ渡すだけ（renderer/preload では保持・ログ出力しない）。
   dblink: {
     getStatus: () => _measuredInvoke('dblink:getStatus'),
     setConfig: (cfg) => _measuredInvoke('dblink:setConfig', cfg || {}),
-    login: (cred) => _measuredInvoke('dblink:login', cred || {}),
-    logout: () => _measuredInvoke('dblink:logout'),
     listTodayTournaments: () => _measuredInvoke('dblink:listTodayTournaments'),
     setTournamentLink: (p) => _measuredInvoke('dblink:setTournamentLink', p || {})
   }

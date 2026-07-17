@@ -1,304 +1,191 @@
 'use strict';
 
 /**
- * 外部DB連携 STEP2a: Supabase 接続基盤 + 管理者ログイン（main プロセス専用モジュール）。
+ * 外部DB連携 STEP2-K1: 「店舗キー」方式の接続基盤（main プロセス専用モジュール・plain fetch 版）。
  *
- * ★アーキテクチャ（plan §2 / plan review 裏取り済）:
- *   - **Supabase 通信は main プロセスに集約**する。renderer の CSP は `connect-src 'self' file:` で
- *     外部 fetch を遮断しており、renderer から呼ぶ設計は CSP 改変を要する。main(Node) で通信し
- *     preload の contextBridge + IPC で公開すれば **CSP・webPreferences は無改変**で済む
- *     （remote-control(src/remote/server.js) と同じ「main 側ネットワーク機能」の型）。
- *   - **未設定 / 未ログインなら inert**: URL・キーが空の間はクライアントを作らず、外部への接続を
- *     一切行わない（既定 OFF・後方互換 = CLAUDE.md「完全ローカル動作」例外②の範囲内でのみ通信）。
+ * ★方式（2026-07-17 前原確定・壁打ち記録 §7 = 旧 STEP2a のメール+PW ログイン方式を置換）:
+ *   - PC はログインしない。設定は「①自店アプリの URL ②店舗キー」の2つだけ（アカウント管理ゼロ）。
+ *   - 通信は customer-app の受け口 API（`<URL>/api/pc-timer/*`）への plain fetch のみ。
+ *     supabase-js は撤去（追加ライブラリゼロへ復帰）。
+ *   - 全リクエストに `Authorization: Bearer <店舗キー>` を付す。誤キー/未設定はサーバーが
+ *     404 プレーン（URL の存在ごと隠蔽）を返す＝PC 側は「連携先 URL / 店舗キーの設定不備」として
+ *     日本語表示する（生の HTTP 値を UI に出さない）。
  *
- * ★認証（brief 必須確認1・3 / 前原確定6）:
- *   - 管理者の email+PW ログイン（`signInWithPassword`）。得たユーザー JWT(role=authenticated) が
- *     連携先の `is_admin()` ガードを通る。**新トークン方式は発明しない**。
- *   - **anon キーはクライアント初期化にのみ使い、データ取得を anon のまま行わない**
- *     （ログイン済みセッションが無ければ listTodayTournaments 等は実行前に拒否する）。
+ * ★アーキテクチャ（STEP2a から不変）:
+ *   - 通信は main プロセスに集約（renderer CSP `connect-src 'self' file:` 無改変）。
+ *     preload の contextBridge + IPC で公開する。
+ *   - **未設定なら inert**: URL・店舗キーが空の間は外部への接続を一切行わない
+ *     （既定 OFF・後方互換 = CLAUDE.md「完全ローカル動作」例外②の範囲内でのみ通信）。
  *
- * ★資格情報の扱い（brief 必須確認2 / plan §2-C）:
- *   - **PW は保存しない・ログに書かない**。IPC で受けて signInWithPassword に渡すだけ。
- *   - セッション（トークン）は electron-store 別ファイル `db-link-session.json` に永続化
- *     （config.json を汚さない = tournament-images.json と同じ分離の流儀）。
- *     店舗共有 PC の userData に平文保存となる点は plan §2-C に明示済み（前原確定4「保存する」・
- *     緩和 = ログアウトで明示失効 + PW 変更時の失効を 6-B で実確認）。
- *   - ログ(rollingLog/electron-log)へはイベント名と結果種別のみ。**token / password / セッション内容を
- *     ログ出力しない**（tests/db-link.test.js が静的検査）。
+ * ★資格情報の扱い:
+ *   - 店舗キーは main の設定ストア（userData/config.json）に平文保存（前原了承済・壁打ち記録 §7）。
+ *     失効手当 = 前原が Vercel env を差し替えると旧キーは即 404（実質失効）→ 新キーを再入力。
+ *   - ログ（rollingLog）へはイベント名リテラルのみ。**店舗キーをログ・console に出さない**
+ *     （tests/db-link.test.js が静的検査）。
  *
- * ★自動トークン更新（公式ドキュメント確認済・2026-07-17）:
- *   非ブラウザ環境では自動更新が「継続的に」バックグラウンド動作する（公式: "On non-browser platforms
- *   the refresh process works continuously in the background"）。常時起動の店舗 PC ではこれが望みの
- *   挙動そのもの。念のため作成直後に `startAutoRefresh()` を明示し、アプリ終了時に `stop()` で
- *   `stopAutoRefresh()` を呼ぶ（公式の非ブラウザ環境ガイダンスどおり）。
+ * ★K1 のスコープ: GET `/tournaments`（当日大会一覧・非機微5列）と紐づけ（PC ローカル対応表1行）のみ。
+ *   POST 系（structures/init/record/runtime/stop）のラッパは K2 で追加する＝「まだ送信しない」を
+ *   構造で担保。営業日判定はサーバー側（旧 business-date.js は撤去）。
  */
 
-const Store = require('electron-store');
-const { currentBusinessDate } = require('./business-date');
+const fs = require('fs');
+const path = require('path');
 
-// セッション専用ストア（userData/db-link-session.json）。設定(config.json)とは分離。
-const sessionStore = new Store({ name: 'db-link-session', defaults: {} });
+let _mainStore = null;      // main の設定ストア（init で受け取る・dbLink キーのみ読み書き）
+let _log = null;            // rollingLog 相当（イベント名リテラルのみ渡す・秘匿値は渡さない）
+let _fetchImpl = null;      // fetch 実装（テスト注入用・既定はグローバル fetch）
 
-let _mainStore = null;      // main の設定ストア（init で受け取る・dbLink キーのみ読む）
-let _log = null;            // rollingLog 相当（イベント名のみ渡す・秘匿値は渡さない）
-let _client = null;         // SupabaseClient（設定済み時のみ生成）
-let _clientKey = '';        // client を作った時の url+anonKey（変更検知して作り直す）
-let _adminCache = null;     // { userId, isAdmin } ログイン/復元時に profiles を読んだ結果
+// 通信タイムアウト（ms）。切断検知の土台（K3 で「連携切断中」表示に接続する）。
+const REQUEST_TIMEOUT_MS = 10_000;
 
-function init(store, log) {
+function init(store, log, opts) {
   _mainStore = store;
   _log = typeof log === 'function' ? log : () => {};
+  _fetchImpl = opts && typeof opts.fetchImpl === 'function' ? opts.fetchImpl : null;
+  // 旧 STEP2a（ログイン方式）のセッションファイルが残っていれば削除する（旧トークンを残置しない）。
+  // userData パスは electron-store の設定ファイルと同じディレクトリ。失敗は無視（存在しない等）。
+  try {
+    if (store && typeof store.path === 'string') {
+      const sessionPath = path.join(path.dirname(store.path), 'db-link-session.json');
+      if (fs.existsSync(sessionPath)) fs.unlinkSync(sessionPath);
+    }
+  } catch (_) { /* ignore */ }
 }
 
 function _config() {
   const cfg = (_mainStore && _mainStore.get('dbLink')) || {};
   return {
     url: typeof cfg.url === 'string' ? cfg.url.trim() : '',
-    anonKey: typeof cfg.anonKey === 'string' ? cfg.anonKey.trim() : '',
+    storeKey: typeof cfg.storeKey === 'string' ? cfg.storeKey.trim() : '',
     links: cfg.links && typeof cfg.links === 'object' ? cfg.links : {}
   };
 }
 
 function _configured() {
-  const { url, anonKey } = _config();
-  return url.startsWith('https://') && anonKey.length > 0;
+  const { url, storeKey } = _config();
+  return url.startsWith('https://') && storeKey.length > 0;
+}
+
+/** ベース URL の正規化（末尾スラッシュを落とす）。 */
+function _baseUrl() {
+  return _config().url.replace(/\/+$/, '');
 }
 
 /**
- * supabase-js の auth.storage アダプタ（electron-store 直結）。
- * GoTrue は getItem/setItem/removeItem を await するため同期返しでよい。
+ * 受け口 API への共通リクエスト。エラーを日本語の `{ ok:false, code, error }` へ写像する。
+ *
+ * ★404 の両義性（brief 要注意2）: `/api/pc-timer/*` の 404 は「認可NG（誤キー/env 未設定）」または
+ *   「大会/時計 not_found」であり route 不在ではない。認可NG はプレーン 404（本文が JSON でない）、
+ *   not_found 系は `{ok:false, code, error}` の JSON 本文を持つ＝本文の有無で判別する。
+ *   API のエラー本文 `error` は日本語完成文なのでそのまま UI 表示してよい（契約）。
  */
-const _storageAdapter = {
-  getItem: (key) => {
-    const v = sessionStore.get(key);
-    return typeof v === 'string' ? v : null;
-  },
-  setItem: (key, value) => { sessionStore.set(key, value); },
-  removeItem: (key) => { sessionStore.delete(key); }
-};
-
-/** 設定済みならクライアントを返す（未設定は null）。設定変更時は作り直す。 */
-function _getClient() {
-  if (!_configured()) return null;
-  const { url, anonKey } = _config();
-  const key = `${url}\n${anonKey}`;
-  if (_client && _clientKey === key) return _client;
-  // 設定が変わった場合は旧クライアントの自動更新を止めてから作り直す
-  if (_client) {
-    try { _client.auth.stopAutoRefresh(); } catch (_) { /* ignore */ }
-    _client = null;
-    _adminCache = null;
+async function _request(method, apiPath, body) {
+  if (!_configured()) {
+    return { ok: false, code: 'not_configured', error: '連携先が未設定です（連携先 URL と店舗キーを保存してください）' };
   }
-  // 遅延 require: 未設定運用（=大多数の配布ユーザー）では supabase-js をロードすらしない
-  const { createClient } = require('@supabase/supabase-js');
-  _client = createClient(url, anonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
-      storage: _storageAdapter
-    }
-  });
-  // 非ブラウザ環境の明示開始（公式ガイダンス・ヘッダコメント参照）
-  try { _client.auth.startAutoRefresh(); } catch (_) { /* ignore */ }
-  _clientKey = key;
-  return _client;
-}
-
-/** ログイン中セッション（無ければ null）。 */
-async function _getSession() {
-  const client = _getClient();
-  if (!client) return null;
+  const { storeKey } = _config();
+  const url = `${_baseUrl()}/api/pc-timer${apiPath}`;
+  const headers = { Authorization: `Bearer ${storeKey}` };
+  const opts = { method, headers };
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  opts.signal = controller.signal;
+  const doFetch = _fetchImpl || fetch;
+  let res;
   try {
-    const { data } = await client.auth.getSession();
-    return data && data.session ? data.session : null;
+    res = await doFetch(url, opts);
   } catch (_) {
-    return null;
+    // ネットワーク断 / DNS 失敗 / タイムアウト abort — 生のエラー文言は UI に出さない
+    return { ok: false, code: 'network', error: '連携先に接続できません（ネットワークを確認してください）' };
+  } finally {
+    clearTimeout(timer);
   }
-}
-
-/** profiles.is_admin を読んで管理者判定（自分の行のみ・失敗は null=不明）。 */
-async function _fetchIsAdmin(client, userId) {
-  try {
-    const { data, error } = await client
-      .from('profiles')
-      .select('is_admin')
-      .eq('id', userId)
-      .maybeSingle();
-    if (error || !data) return null;
-    return data.is_admin === true;
-  } catch (_) {
-    return null;
+  let json = null;
+  try { json = await res.json(); } catch (_) { /* 本文が JSON でない（プレーン 404 等） */ }
+  if (res.ok && json && json.ok === true) return json;
+  if (json && json.ok === false && typeof json.error === 'string' && json.error) {
+    // API の日本語エラー本文はそのまま透過（400/404 not_found/409/413/429）
+    return { ok: false, code: json.code || 'api_error', error: json.error };
   }
-}
-
-async function _isAdmin(client, userId) {
-  if (_adminCache && _adminCache.userId === userId) return _adminCache.isAdmin;
-  const isAdmin = await _fetchIsAdmin(client, userId);
-  if (isAdmin !== null) _adminCache = { userId, isAdmin };
-  return isAdmin;
+  if (res.status === 404) {
+    // プレーン 404 = 認可NG（誤キー / サーバー側キー未設定）。生の HTTP 値は出さない。
+    return { ok: false, code: 'auth', error: '連携先 URL または店舗キーを確認してください' };
+  }
+  return { ok: false, code: 'bad_response', error: '連携先から正しい応答がありません（時間をおいて再試行してください）' };
 }
 
 /**
- * 現在状態（設定/ログイン/管理者/大会別リンクフラグ）。renderer の表示専用。
- * 返すのは email と真偽値のみ（トークン等の秘匿値は返さない）。
+ * 現在状態（設定済みか + 大会別の紐づけ対応表）。renderer の表示専用。
+ * 店舗キーの値そのものは返さない（表示は「設定済み」の2値で足りる）。
  */
-async function getStatus() {
-  const configured = _configured();
+function getStatus() {
   const { links } = _config();
-  if (!configured) {
-    return { configured: false, loggedIn: false, email: null, isAdmin: null, links };
-  }
-  const session = await _getSession();
-  if (!session) {
-    return { configured: true, loggedIn: false, email: null, isAdmin: null, links };
-  }
-  const isAdmin = await _isAdmin(_getClient(), session.user.id);
-  return {
-    configured: true,
-    loggedIn: true,
-    email: session.user.email || null,
-    isAdmin, // true / false / null(確認失敗=不明)
-    links
-  };
+  return { configured: _configured(), links };
 }
 
-/** 連携先 URL / anon キーの保存。変更時は既存セッションを破棄（別プロジェクトのトークン混在防止）。 */
-async function setConfig(cfg) {
+/** 連携先 URL / 店舗キーの保存。旧方式の anonKey キーはここで自然に消える（書き戻さない）。 */
+function setConfig(cfg) {
   const url = typeof cfg.url === 'string' ? cfg.url.trim() : '';
-  const anonKey = typeof cfg.anonKey === 'string' ? cfg.anonKey.trim() : '';
+  const storeKey = typeof cfg.storeKey === 'string' ? cfg.storeKey.trim() : '';
   if (url !== '' && !url.startsWith('https://')) {
     return { ok: false, error: '連携先 URL は https:// で始まる必要があります' };
   }
-  const prev = _config();
-  const changed = prev.url !== url || prev.anonKey !== anonKey;
-  _mainStore.set('dbLink', { ...(_mainStore.get('dbLink') || {}), url, anonKey });
-  if (changed) {
-    if (_client) {
-      try { await _client.auth.signOut(); } catch (_) { /* ignore */ }
-      try { _client.auth.stopAutoRefresh(); } catch (_) { /* ignore */ }
-    }
-    _client = null;
-    _clientKey = '';
-    _adminCache = null;
-    sessionStore.clear();
-  }
+  const { links } = _config();
+  _mainStore.set('dbLink', { url, storeKey, links });
   _log('dblink:config-saved');
-  return { ok: true, status: await getStatus() };
-}
-
-/** 管理者ログイン。PW は保存もログ出力もしない（受けて渡すだけ）。 */
-async function login(cred) {
-  const email = typeof cred.email === 'string' ? cred.email.trim() : '';
-  const password = typeof cred.password === 'string' ? cred.password : '';
-  if (!_configured()) {
-    return { ok: false, error: '先に連携先 URL と anon キーを保存してください' };
-  }
-  if (!email || !password) {
-    return { ok: false, error: 'メールアドレスとパスワードを入力してください' };
-  }
-  const client = _getClient();
-  try {
-    const { data, error } = await client.auth.signInWithPassword({ email, password });
-    if (error) {
-      _log('dblink:login-failed');
-      // Supabase の英語メッセージを日本語の具体的な文言へ変換
-      const msg = /invalid login credentials/i.test(error.message || '')
-        ? 'メールアドレスまたはパスワードが違います'
-        : `ログインに失敗しました: ${error.message}`;
-      return { ok: false, error: msg };
-    }
-    _adminCache = null;
-    const isAdmin = await _isAdmin(client, data.user.id);
-    _log('dblink:login-ok');
-    if (isAdmin === false) {
-      // ログイン自体は成立するが管理者ではない=連携操作は連携先 RPC が拒否する。UI で明示する。
-      return { ok: true, warning: 'このアカウントは管理者ではありません（連携操作は拒否されます）', status: await getStatus() };
-    }
-    return { ok: true, status: await getStatus() };
-  } catch (err) {
-    _log('dblink:login-error');
-    return { ok: false, error: `連携先に接続できません: ${err && err.message ? err.message : '不明なエラー'}` };
-  }
-}
-
-/** ログアウト（セッション明示失効 + ローカル保存も消す）。 */
-async function logout() {
-  const client = _getClient();
-  if (client) {
-    try { await client.auth.signOut(); } catch (_) { /* signOut 失敗でもローカルは消す */ }
-  }
-  sessionStore.clear();
-  _adminCache = null;
-  _log('dblink:logout');
-  return { ok: true, status: await getStatus() };
+  return { ok: true, status: getStatus() };
 }
 
 /**
- * 接続テスト: 当営業日（朝8:00境界）の開催中大会一覧を read。
- * ★brief §随伴の実確認: admin JWT で tournaments 直 SELECT が通るかをここで実証する。
- * ★SELECT は 5 列のみ（金額列・PII を選ばない = 送信内容の最小化と対）。
+ * 当営業日の開催中大会一覧（GET /tournaments）。営業日判定はサーバー側（受け口 API）。
+ * 返るのは非機微5列（id/name/part_label/business_date/status）のみ（金額・PII なし）。
  */
 async function listTodayTournaments() {
-  if (!_configured()) {
-    return { ok: false, error: '連携先が未設定です' };
-  }
-  const session = await _getSession();
-  if (!session) {
-    // ★anon のままデータ取得を行わない（brief 必須確認3）
-    return { ok: false, error: 'ログインしていません（管理者アカウントでログインしてください）' };
-  }
-  const client = _getClient();
-  const businessDate = currentBusinessDate();
-  try {
-    const { data, error } = await client
-      .from('tournaments')
-      .select('id, name, part_label, business_date, status')
-      .eq('business_date', businessDate)
-      .eq('status', 'open');
-    if (error) {
-      _log('dblink:list-failed');
-      return { ok: false, error: `大会一覧を取得できません: ${error.message}（管理者権限が無い可能性があります）` };
-    }
-    _log('dblink:list-ok');
-    return { ok: true, businessDate, tournaments: data || [] };
-  } catch (err) {
-    _log('dblink:list-error');
-    return { ok: false, error: `連携先に接続できません: ${err && err.message ? err.message : '不明なエラー'}` };
-  }
+  const res = await _request('GET', '/tournaments');
+  _log(res.ok ? 'dblink:list-ok' : 'dblink:list-failed');
+  if (!res.ok) return res;
+  return { ok: true, tournaments: Array.isArray(res.tournaments) ? res.tournaments : [] };
 }
 
 /**
- * 大会（PC 側 id）ごとの連携フラグの保存（STEP2a では保存のみ・送信などの挙動ゼロ）。
- * ★plan §2-E からの安全側変更: tournaments 配列の要素に持たせると `normalizeTournament` が
- *   未知キーを落とす（tournaments:save 経路で消える）ため、**dbLink.links に隔離保存**する
- *   （既存の大会保存経路・検証関数に一切触れない）。
+ * 大会紐づけ（PC ローカルの対応表1行のみ・仕様3）。
+ * ON = links[PC 側大会id] に選択した API 側大会（非機微3値）を保存 / OFF = 行削除。
+ * タイマーアプリ側の大会データ（名前・ブラインド・設定）にも台帳側にも一切書き込まない。
+ * ★tournaments 配列の要素に持たせない（normalizeTournament が未知キーを落とすため隔離保存）。
  */
 function setTournamentLink(p) {
   const tournamentId = typeof p.tournamentId === 'string' ? p.tournamentId : '';
   if (!tournamentId) return { ok: false, error: '対象のトーナメントがありません' };
   const cur = _mainStore.get('dbLink') || {};
   const links = { ...(cur.links || {}) };
-  if (p.enabled) links[tournamentId] = true;
-  else delete links[tournamentId];
-  _mainStore.set('dbLink', { ...cur, links });
-  return { ok: true, links };
-}
-
-/** アプリ終了時の後始末（公式ガイダンス: 非ブラウザは stopAutoRefresh を明示）。 */
-function stop() {
-  if (_client) {
-    try { _client.auth.stopAutoRefresh(); } catch (_) { /* ignore */ }
+  if (p.enabled) {
+    const db = p.db && typeof p.db === 'object' ? p.db : null;
+    if (!db || typeof db.id !== 'string' || !db.id) {
+      return { ok: false, error: '紐づけ先の大会が選択されていません' };
+    }
+    links[tournamentId] = {
+      id: db.id,
+      name: typeof db.name === 'string' ? db.name : '',
+      part_label: typeof db.part_label === 'string' ? db.part_label : ''
+    };
+  } else {
+    delete links[tournamentId];
   }
+  _mainStore.set('dbLink', { ...cur, links });
+  _log('dblink:link-updated');
+  return { ok: true, links };
 }
 
 module.exports = {
   init,
   getStatus,
   setConfig,
-  login,
-  logout,
   listTodayTournaments,
   setTournamentLink,
-  stop
+  // テスト専用: fetch ラッパを直接駆動する（実ネットワーク不要の純ロジック検証用）
+  _request
 };

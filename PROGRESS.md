@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 外部DB連携 STEP2(案件229) | 🔄 認証方式転換(前原確定) | **メール+PWログイン方式→「店舗キー」方式へ転換**(2026-07-17前原・is_adminメールPWアカ不存在+全国展開の運用重荷が理由)。PC=URL+店舗キーの2設定のみ・書込はcustomer-appサーバーAPI経由(TVトークン定石の書込版)・supabase-js依存は撤去見込み。2a main反映済`4ec5d64`は既定OFF inert=害なし・ログイン部は後続で置換(タブの器/営業日計算/テストは流用)。次=customer-app側受け口APIのbrief→その後PC側差し替え。決定記録=customer-app側 壁打ち記録§7 |
+| 外部DB連携 STEP2(案件229) | 🔵 K1 レビュー待ち | 店舗キー方式。K1(接続基盤+紐づけ)実装済 `feature/anken229-step2-k1`(`7997d84`)=supabase-js撤去・plain fetch・URL+店舗キーUI・当日大会紐づけ。テスト1663全PASS(+20)・誤キー404実観測済。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。次=完了review→push前review→main→K2(送信) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -61,9 +61,9 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = **v2.8.0 配信済**(merge `c8eb931`・tag v2.8.0・**GitHub Release Latest・自動更新有効**・push 済)。feature/remote-control-phase1 は役目終了(削除可)。オープンブランチなし。
-- **現在地(2026-07-08)**: remote-control **v2.8.0 配信完了・案件クローズ**。機能=単一モードのクロックを同一LAN内スマホから遠隔操作(既定OFF=現行完全同一)。認証=PIN+セッショントークン(256bit・Authorizationヘッダ・失効=OFF/PIN再生成/idle・失効時SSE即close)+Origin+Host厳格アンカー+Content-Type必須+レート制限。状態SSE=fetch streaming+Authorization(トークンをURLに出さない・読み取り専用でstore書込ゼロ)で人数/RE/AO/特殊/卓名push。危険操作はスマホ側confirm。QR=依存ゼロ自作(main生成+IPC・CSP無改変・ISO/IEC 18004規格照合済)。完全ローカル文言はLAN例外込みに改訂済(CLAUDE.md/specs.md)。**リモコンは1タップ操作の補助**(モーダルが出る操作はPC操作も必要)を3箇所に明記。1a〜1c 全て cc-review2 承認・懐疑役 懸念ゼロ。テスト1589件全PASS・致命5件維持・追加ライブラリゼロ。前原6-B実機OK。
-- **次のアクション=なし(安定運用フェーズ)**。次案件は前原指示待ち。remote-control 将来拡張(スコープ外・roadmap §8)=マルチ4分割の遠隔操作/複数スマホ権限管理/HTTPS/mDNS。温存候補=v2.3.0 PRE_START永続化(前原判断)。詳細report=`.cc-reports/2026-07-08_remote-control_phase1{a-core,b-core,b-qr,c-release-prep}.md`。
+- **git**: `main` = v2.8.0 配信済+STEP2a inert(`f4339ca`)。オープンブランチ = `feature/anken229-step2-k1`(`7997d84`・K1 実装済・main 未 merge)。
+- **現在地(2026-07-18)**: 外部DB連携 STEP2(案件229・店舗キー方式)進行中。**K1(接続基盤の店舗キー化+大会紐づけ)実装済**=supabase-js 撤去(追加ライブラリゼロ復帰)・db-link.js plain fetch 化(Bearer・404日本語写像・timeout)・設定UI=URL+店舗キー2入力・当日大会一覧からの紐づけ(PC ローカル対応表1行・送信なし)。テスト 1663 件全PASS(1643→+20)・致命5件影響なし・誤キー404を本番APIで実観測。plan review✅(追加指示5点消化)。次 = K1 完了review→push前review→main merge→K2(状態送信・楽観ロック)→K3(切断表示/OFF停止/DB追従アダプタ)。リリースは STEP2 全体完了+前原GO後のみ。
+- 参照: brief=`.cc-briefs/2026-07-18_案件229_タイマー案C_PC店舗キー連携_STEP2_brief.md` / K1 report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
 
