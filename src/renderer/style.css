@@ -4404,6 +4404,23 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
 }
 /* operator role (AC) には表示しない、運用情報「音」で代替 */
 [data-role="operator"] .mute-indicator { display: none !important; }
+
+/* 外部DB連携 K3: 連携切断中バッジ（mute-indicator と同型・フロー外=レイアウトシフトなし。
+   表示は JS の hidden トグルのみ。右上配置でミュートバッジ(右下)と干渉しない） */
+.dblink-indicator {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: rgba(200, 120, 20, 0.9);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.1em;
+  padding: 8px 14px;
+  border-radius: 8px;
+  z-index: 95;
+  pointer-events: none;
+  font-family: 'Noto Sans JP', sans-serif;
+}
 /* hall / operator-solo / 未指定 role では HTML 側 hidden 属性が外れた時に通常表示。
    前原さん指示「便利機能はどっちのモードにも適用」により operator-solo にも適用 (v1.3.0 互換例外) */
 

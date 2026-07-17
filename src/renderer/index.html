@@ -118,6 +118,10 @@
        （手元 PC は operator-pane の「音」項目で代替表示）。hall / operator-solo は通常通り右下に表示。
        前原さん判断「便利機能はどっちのモードにも適用」に従い、operator-solo（v1.3.0 互換）にも適用する例外。 -->
   <div class="mute-indicator" id="js-mute-indicator" hidden>🔇 ミュート中</div>
+  <!-- 外部DB連携 K3: 連携切断中バッジ（mute-indicator と同型・hidden トグル・fixed=フロー外で
+       レイアウトシフトなし）。表示条件は「連携 ON の大会が現在選択中 かつ 切断中」のみ
+       = hall / OFF / 未設定 / 未紐づけ / 4分割では出ない（店舗TV に出さない）。 -->
+  <div class="dblink-indicator" id="js-dblink-indicator" hidden>⚠ 連携切断中（復帰待ち）</div>
   <!-- STEP 10 フェーズC.1.4: 休憩中スライドショー全画面ステージ（data-slideshow="active" 時のみ表示） -->
   <!-- STEP 10 フェーズC.1.4-fix2 Fix 2: hidden 属性を外して CSS opacity フェードインを効かせる。
        非アクティブ時は opacity: 0 + pointer-events: none で完全に操作素通し。 -->

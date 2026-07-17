@@ -27,7 +27,8 @@ function eq(a, b, msg) {
 
 (async () => {
   const mod = await import(pathToFileURL(path.join(__dirname, '..', 'src', 'link', 'clock-payload.mjs')).href);
-  const { mapStatus, buildRecordPayload, buildRuntimePayload, buildStructurePayload } = mod;
+  const { mapStatus, buildRecordPayload, buildRuntimePayload, buildStructurePayload,
+          planClockApply, planRuntimeApply } = mod;
 
   const NOW = 1_800_000_000_000; // 固定 epoch ms（テスト決定性）
 
@@ -113,6 +114,72 @@ function eq(a, b, msg) {
   eq(buildStructurePayload({ levels }, 'あ'.repeat(120)).name.length, 100, 'name は 100 文字切詰');
   ok(buildStructurePayload({ levels: [] }, 'x') === null, 'levels 0 件は null');
   ok(buildStructurePayload({ levels: new Array(301).fill(levels[0]) }, 'x') === null, 'levels 301 件は null');
+
+  // ==== K3: planClockApply（DB→engine 適用プラン・仕様2「DB が正」） ====
+
+  const L = (status, idx, rem, pre) => ({ status, currentLevelIndex: idx, remainingMs: rem, isPreStart: !!pre });
+
+  // 許容差内 = 適用不要
+  ok(planClockApply(L('RUNNING', 3, 60_000), { status: 'running', current_level_index: 3, end_at_ms: NOW + 61_000 }, NOW) === null,
+    'running 同 level・差 <2 秒は null（不要な適用ゼロ）');
+  ok(planClockApply(L('BREAK', 4, 30_000), { status: 'running', current_level_index: 4, end_at_ms: NOW + 30_500 }, NOW) === null,
+    'BREAK も localRunning として扱う（running 同 level 許容差内 = null）');
+  // running: 同 level 大差 / 別 level
+  eq(planClockApply(L('RUNNING', 3, 60_000), { status: 'running', current_level_index: 3, end_at_ms: NOW + 10_000 }, NOW),
+    { kind: 'level', levelIndex: 3, remainingTargetMs: 10_000, paused: false },
+    'running 同 level でも差が大きければ合わせる');
+  eq(planClockApply(L('RUNNING', 3, 60_000), { status: 'running', current_level_index: 5, end_at_ms: NOW + 90_000 }, NOW),
+    { kind: 'level', levelIndex: 5, remainingTargetMs: 90_000, paused: false },
+    'running 別 level は startAtLevel 系プラン');
+  // end_at 過去 = 負 remaining（断中にレベル境界を跨いだ）→ advanceTimeBy の繰越に委譲
+  eq(planClockApply(L('RUNNING', 2, 60_000), { status: 'running', current_level_index: 2, end_at_ms: NOW - 45_000 }, NOW),
+    { kind: 'level', levelIndex: 2, remainingTargetMs: -45_000, paused: false },
+    'end_at 過去は負 remainingTarget をそのまま返す（レベル繰越は engine 既存経路に委譲）');
+  // paused（レベル由来）
+  eq(planClockApply(L('RUNNING', 2, 60_000), { status: 'paused', current_level_index: 2, paused_remaining_ms: 45_000 }, NOW),
+    { kind: 'level', levelIndex: 2, remainingTargetMs: 45_000, paused: true },
+    'DB paused は paused プラン（web 側で一時停止された）');
+  ok(planClockApply(L('PAUSED', 2, 45_500), { status: 'paused', current_level_index: 2, paused_remaining_ms: 45_000 }, NOW) === null,
+    'paused 同 level 許容差内は null');
+  // prestart
+  eq(planClockApply(L('IDLE', 0, 0), { status: 'prestart', current_level_index: 0, end_at_ms: NOW + 300_000, pre_start_total_ms: 600_000 }, NOW),
+    { kind: 'prestart', remainingMs: 300_000, totalMs: 600_000, paused: false },
+    'DB prestart は restorePreStart 系プラン');
+  ok(planClockApply(L('PRE_START', 0, 299_000, true), { status: 'prestart', current_level_index: 0, end_at_ms: NOW + 300_000, pre_start_total_ms: 600_000 }, NOW) === null,
+    'PRE_START 同士で許容差内は null');
+  eq(planClockApply(L('RUNNING', 1, 60_000), { status: 'paused', current_level_index: 0, paused_remaining_ms: 120_000, pre_start_total_ms: 600_000 }, NOW),
+    { kind: 'prestart', remainingMs: 120_000, totalMs: 600_000, paused: true },
+    'PRE_START 由来 paused は prestart(paused) プラン');
+  ok(planClockApply(L('IDLE', 0, 0), { status: 'prestart', current_level_index: 0, end_at_ms: NOW + 1000, pre_start_total_ms: 0 }, NOW) === null,
+    'total=0 の不整合 prestart 行は適用しない');
+  // idle / finished
+  eq(planClockApply(L('RUNNING', 3, 60_000), { status: 'idle' }, NOW), { kind: 'idle' }, 'DB idle は reset プラン');
+  ok(planClockApply(L('IDLE', 0, 0), { status: 'idle' }, NOW) === null, '両方 idle は null');
+  eq(planClockApply(L('PAUSED', 2, 10_000), { status: 'finished' }, NOW), { kind: 'finished' }, 'DB finished は reset プラン');
+  ok(planClockApply(L('IDLE', 5, 0), { status: 'unknown' }, NOW) === null, '未知 DB status は適用しない');
+
+  // ==== K3: planRuntimeApply（範囲外拒否・special_enabled 非採用） ====
+
+  const LOCAL_RT = { playersInitial: 10, playersRemaining: 8, reentryCount: 1, addOnCount: 0 };
+  eq(planRuntimeApply(
+    { players_initial: 12, players_remaining: 7, reentry_count: 2, addon_count: 1, special_count: 3, special_enabled: false },
+    LOCAL_RT, true, 0),
+    { playersInitial: 12, playersRemaining: 7, reentryCount: 2, addOnCount: 1, specialCount: 3 },
+    'DB runtime を採用（special はローカル enabled 時のみ・DB の special_enabled は見ない=設定非書込）');
+  eq(planRuntimeApply(
+    { players_initial: 12, players_remaining: 7, reentry_count: 2, addon_count: 1, special_count: 3, special_enabled: true },
+    LOCAL_RT, false, 0).specialCount,
+    null, 'ローカル special 無効なら specialCount は非採用（null=非接触）');
+  ok(planRuntimeApply(
+    { players_initial: 10, players_remaining: 8, reentry_count: 1, addon_count: 0, special_count: 0 },
+    LOCAL_RT, false, 0) === null,
+    '差分なしは null（不要な書込ゼロ）');
+  ok(planRuntimeApply(
+    { players_initial: 1000, players_remaining: 7, reentry_count: 2, addon_count: 1 }, LOCAL_RT, false, 0) === null,
+    '999 超の DB 値は採用拒否（engine を汚さない）');
+  ok(planRuntimeApply(
+    { players_initial: 5, players_remaining: 7, reentry_count: 2, addon_count: 1 }, LOCAL_RT, false, 0) === null,
+    'remaining > initial の DB 値は採用拒否');
 
   console.log(`db-link-payload.test.js: ${count} assertions passed`);
 })().catch((err) => {

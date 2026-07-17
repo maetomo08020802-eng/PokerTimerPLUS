@@ -231,6 +231,16 @@ contextBridge.exposeInMainWorld('api', {
     listTodayTournaments: () => _measuredInvoke('dblink:listTodayTournaments'),
     setTournamentLink: (p) => _measuredInvoke('dblink:setTournamentLink', p || {}),
     linkAndInit: (p) => _measuredInvoke('dblink:linkAndInit', p || {}),
+    probe: (p) => _measuredInvoke('dblink:probe', p || {}),
+    stopLink: (p) => _measuredInvoke('dblink:stopLink', p || {}),
+    // K3: main からの push（health / apply-db）。listener は 'dblink:event' の1チャネルのみ
+    onEvent: (cb) => {
+      try {
+        ipcRenderer.on('dblink:event', (_event, payload) => {
+          try { if (typeof cb === 'function') cb(payload); } catch (_) { /* never throw */ }
+        });
+      } catch (_) { /* never throw */ }
+    },
     publishRecord: (p) => {
       try { ipcRenderer.send('dblink:publishRecord', p || null); }
       catch (_) { /* never throw */ }
