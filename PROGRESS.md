@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 外部DB連携 STEP2(案件229) | 🔵 K2 レビュー待ち(K1はmain反映済) | K2(状態送信)実装済 `feature/anken229-step2-k2`(`8885b76`)=楽観ロックecho-back・409→GET→1回再送・coalescer(300ms/2秒/429バックオフ)・linkAndInit(fresh/connected)・逐語マップ純関数・キー空上書き手当。テスト1734全PASS(+71)。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K2.md`。次=完了review→push前review→main→K3 |
+| 外部DB連携 STEP2(案件229) | 🟡 K1+K2 main反映済・前原6-B待ち | K2(状態送信)main merge `7f3164b`=楽観ロックecho-back・409→GET→1回再送・coalescer・linkAndInit(fresh/connected)・逐語マップ・キー空上書き手当。完了review✅+push前review✅。テスト1734全PASS(+71)。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K2.md`。次=K3(切断表示・OFF stop・DB→engine反映アダプタ=リスク本体) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -61,8 +61,8 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = **K1 merge 済 `fd6ad98`・push 済**(feature/anken229-step2-k1 は役目終了・削除可)。
-- **現在地(2026-07-18)**: 外部DB連携 STEP2(案件229・店舗キー方式)進行中。**K1(接続基盤の店舗キー化+大会紐づけ)main 反映済**=supabase-js 撤去(追加ライブラリゼロ復帰)・db-link.js plain fetch 化(Bearer・404日本語写像・timeout・旧セッションファイル削除)・設定UI=URL+店舗キー2入力・当日大会一覧からの紐づけ(PC ローカル対応表1行・送信なし)。テスト 1663 件全PASS(+20)・致命5件影響なし・誤キー404を本番APIで実観測。plan review✅・完了review✅(懐疑役懸念1件=URL のみ再保存でキー空文字上書き→K2 手当て合意)・push前review✅。次 = **K2(状態送信・楽観ロック・キー空上書き手当)**→K3(切断表示/OFF停止/DB追従アダプタ)。リリースは STEP2 全体完了+前原GO後のみ。前原6-B=①正キー疎通②誤キー表示③紐づけ④オフライン非退行。
+- **git**: `main` = **K2 merge 済 `7f3164b`・push 済**(feature ブランチ K1/K2 は役目終了・削除可)。
+- **現在地(2026-07-18)**: 外部DB連携 STEP2(案件229・店舗キー方式)進行中。**K1(接続基盤+紐づけ)+K2(状態送信)main 反映済**。K2=紐づけ確定で構成upload→clock/init(進行中は既存時計へ接続=connected+warning・初期送信抑止)・運用中は状態遷移駆動で record/runtime 送信(楽観ロック echo-back 無加工・409→GET→1回再送・coalescer 300ms/2秒/429バックオフ=60回/分構造担保・tick毎送信なし)・逐語マップ純関数 clock-payload.mjs・キー空上書き手当。テスト **1734 件全PASS**(+71)・致命5件影響なし(runtime は読取のみ)・Electron 実起動スモーク済・誤キー404(GET/POST)を本番APIで実観測。K1/K2 とも plan review✅・完了review✅・push前review✅。次 = **K3(切断表示・OFF→/clock/stop・復帰/conflict の DB→engine 反映アダプタ=致命保護5件リスク本体・plan review 必須)**。リリースは STEP2 全体完了+前原GO後のみ。前原6-B=K1①〜④+K2⑤〜⑨(正キー疎通・全端末一致・409競合・進行中再紐づけ・キー空維持)。
 - 参照: brief=`.cc-briefs/2026-07-18_案件229_タイマー案C_PC店舗キー連携_STEP2_brief.md` / K1 report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
