@@ -4249,7 +4249,9 @@ function bindDbLinkTabHandlers() {
         publishDbLinkClock();
         publishDbLinkRuntime(true);
       }
-      syncDbLinkTabFromStatus();
+      // K2 完了 review 懐疑役指摘: sync（applyDbLinkStatus）が同じ表示要素へ「紐づけ済み: …」を書くため、
+      // await で完了させてから warning を後置表示する（非 await だと warning が数 ms で上書き消去される）
+      await syncDbLinkTabFromStatus();
       if (res.warning) showLinkStatus(res.warning);
     });
   }
