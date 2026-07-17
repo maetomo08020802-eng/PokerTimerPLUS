@@ -2548,6 +2548,15 @@ function registerDbLinkIpcHandlers() {
   ipcMain.handle('dblink:setConfig', (_event, cfg) => dbLink.setConfig(cfg || {}));
   ipcMain.handle('dblink:listTodayTournaments', () => dbLink.listTodayTournaments());
   ipcMain.handle('dblink:setTournamentLink', (_event, p) => dbLink.setTournamentLink(p || {}));
+  // K2: 紐づけ確定（構成 upload → clock/init → 対応表保存）
+  ipcMain.handle('dblink:linkAndInit', (_event, p) => dbLink.linkAndInit(p || {}));
+  // K2: 状態送信（fire-and-forget・renderer は応答を待たない。coalescer/楽観ロックは db-link.js 側）
+  ipcMain.on('dblink:publishRecord', (_event, p) => {
+    try { dbLink.publishRecord(p && p.tournamentId, p && p.record); } catch (_) { /* never throw */ }
+  });
+  ipcMain.on('dblink:publishRuntime', (_event, p) => {
+    try { dbLink.publishRuntime(p && p.tournamentId, p && p.runtime); } catch (_) { /* never throw */ }
+  });
 }
 registerDbLinkIpcHandlers();
 

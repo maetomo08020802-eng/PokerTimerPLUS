@@ -61,6 +61,8 @@ import {
 // v2.0.0 STEP 2: hall 側のみで起動する状態同期レイヤ。operator / operator-solo では no-op。
 // v2.0.1 #A1: registerDualDiffHandler で受信した差分を実 DOM 更新に反映する経路を追加。
 import { initDualSyncForHall, registerDualDiffHandler } from './dual-sync.js';
+// 外部DB連携 STEP2-K2: engine 状態 → API payload の逐語マップ（純関数・engine の出力を読むだけ）
+import { buildRecordPayload, buildRuntimePayload, buildStructurePayload } from '../link/clock-payload.mjs';
 
 console.log('PokerTimerPLUS+ 起動');
 
@@ -1213,6 +1215,8 @@ function renderStaticInfo() {
   updateFinishedOverlay();
   // 1b: 現在状態をスマホへ読み取り送信（_remoteEnabled=false の間は完全 no-op＝OFF で無コスト）。
   publishRemoteState();
+  // K2: 人数系を DB へ読み取り送信（inactive は先頭 return・同値は JSON dedupe で IPC ゼロ）。
+  publishDbLinkRuntime();
 }
 
 // STEP 6.11: カウント行の表示制御（0 時は visibility: hidden、0→1 で reveal アニメーション）
@@ -1455,6 +1459,8 @@ function applyTournament(t) {
   //   applyTournament は active 切替 / 新規 / 複製 / 起動復元 / dual-sync 受信すべての合流点のため、
   //   ここ 1 点で「トーナメント切替で即更新」を満たす（タブ閉時はヘルパが no-op）。
   updateSettingsCurrentTournamentLabel();
+  // K2: トーナメント切替で送信ゲートを取り直す（切替先が未紐づけなら即 inactive・fire-and-forget）
+  try { refreshDbLinkSendState(); } catch (_) { /* ignore */ }
 }
 
 // STEP 6.8: 賞金端数 <select> の option ラベルを現在の通貨記号で再構築
@@ -2542,6 +2548,8 @@ setHandlers({
     const isPaused = (typeof isPreStartActive === 'function' && isPreStartActive())
       && curState.status === States.PAUSED;
     publishPreStartIfOperator({ isActive: true, isPaused, remainingMs: Math.max(0, Math.floor(remainingMs)) });
+    // K2: PRE_START ±1分は status/level 非変化の不連続調整＝明示送信
+    publishDbLinkClock();
   },
   // v2.1.18 ②: 最終レベル完走時にオレンジオーバーレイ「トーナメント終了 / TOURNAMENT COMPLETE」を表示。
   //   operator 側ではローカルで el.clock.classList.add('clock--timer-finished') を実行。
@@ -2549,6 +2557,9 @@ setHandlers({
   //   （新規 IPC 不要、既存 normalizeTimerState の VALID_TIMER_STATUS に 'finished' は既に含まれる）。
   onTournamentComplete: () => {
     el.clock?.classList.add('clock--timer-finished');
+    // K2: 完走は API の `finished` として送る（PC は IDLE に戻るため明示フック。
+    //   直前の IDLE 遷移送信は coalescer(300ms トレーリング・最新勝ち)で finished に収束する）
+    publishDbLinkClock({ finished: true });
   }
 });
 
@@ -4104,6 +4115,8 @@ function applyDbLinkStatus(status) {
       : '';
   }
   if (linked || !curId) setDbLinkPickVisible(false);
+  // K2: 表示同期のたびに送信ゲートも同期（同じ status を使う＝追加 IPC なし）
+  applyDbLinkSendGate(s);
 }
 
 // main から現行 status を取得して反映（タブ表示時・操作後に呼ぶ）。
@@ -4178,6 +4191,7 @@ function bindDbLinkTabHandlers() {
         try {
           await window.api?.dblink?.setTournamentLink?.({ tournamentId: curId, enabled: false });
         } catch (_) { /* 下の再同期で実態へ戻す */ }
+        await refreshDbLinkSendState(); // K2: 送信ゲートを即時 OFF（stop 送出は K3）
         syncDbLinkTabFromStatus();
         return;
       }
@@ -4209,6 +4223,9 @@ function bindDbLinkTabHandlers() {
       showLinkStatus('連携先の大会を選んで「この大会に紐づける」を押してください');
     });
   }
+  // K2: 紐づけ確定 = 構成 upload → clock/init → 対応表保存（main の linkAndInit に一括委譲）。
+  //   mode:'fresh'（新規 init）の時だけ初期状態を1回送信する。mode:'connected'（進行中の既存時計へ
+  //   接続）では送信しない＝稼働中の DB 時計を PC の idle で上書きしない（plan review 条件①）。
   if (confirmBtn && !confirmBtn._dblinkBound) {
     confirmBtn._dblinkBound = true;
     confirmBtn.addEventListener('click', async () => {
@@ -4216,19 +4233,100 @@ function bindDbLinkTabHandlers() {
       const dbId = selectEl ? selectEl.value : '';
       const db = pickList.find((t) => t.id === dbId) || null;
       if (!curId || !db) { showLinkStatus('紐づけ先の大会が選択されていません'); return; }
+      showLinkStatus('紐づけ中...');
+      let res = null;
       try {
-        const res = await window.api?.dblink?.setTournamentLink?.({
+        res = await window.api?.dblink?.linkAndInit?.({
           tournamentId: curId,
-          enabled: true,
-          db: { id: db.id, name: db.name || '', part_label: db.part_label || '' }
+          db: { id: db.id, name: db.name || '', part_label: db.part_label || '' },
+          structure: buildStructurePayload(getStructure(), tournamentState.name || tournamentState.title || '')
         });
-        if (!res || res.ok === false) { showLinkStatus((res && res.error) || '紐づけに失敗しました'); return; }
-      } catch (_) { showLinkStatus('紐づけに失敗しました'); return; }
+      } catch (_) { res = null; }
+      if (!res || res.ok === false) { showLinkStatus((res && res.error) || '紐づけに失敗しました'); return; }
       setDbLinkPickVisible(false);
+      await refreshDbLinkSendState();
+      if (res.mode === 'fresh') {
+        publishDbLinkClock();
+        publishDbLinkRuntime(true);
+      }
       syncDbLinkTabFromStatus();
+      if (res.warning) showLinkStatus(res.warning);
     });
   }
 }
+
+// ===== 外部DB連携 STEP2-K2: 時計状態の送信（engine の出力を読むだけ・書込ゼロ） =====
+// 送信は「状態遷移駆動」のみ（毎 tick 送信しない）。coalescer / 楽観ロック / レート制御は
+// main（src/link/db-link.js）側。ここは payload を組んで fire-and-forget の IPC を出すだけ。
+// OFF / 未設定 / 未紐づけ / hall ロールでは先頭 early return（既定 OFF で新コストゼロ）。
+
+// 現在のトーナメントが送信対象か（remote-control の _remoteEnabled と同型のキャッシュ）
+let _dbLinkSend = { active: false, pcId: '' };
+// runtime の直前送信スナップショット（同値なら IPC すら出さない dedupe）
+let _dbLinkLastRuntimeJson = '';
+
+// main の status を取り直して送信ゲートを更新する（起動時 / 紐づけ変更 / トーナメント切替）。
+async function refreshDbLinkSendState() {
+  try {
+    const status = await window.api?.dblink?.getStatus?.();
+    applyDbLinkSendGate(status);
+  } catch (_) { /* dblink ブリッジ未提供環境では inactive のまま */ }
+}
+
+// status（{ configured, links }）から送信ゲートを同期更新する（applyDbLinkStatus からも呼ぶ）。
+function applyDbLinkSendGate(status) {
+  const s = status || {};
+  const curId = tournamentState && tournamentState.id ? tournamentState.id : '';
+  const linked = !!(s.configured && curId && s.links && s.links[curId] && typeof s.links[curId] === 'object');
+  const active = linked && window.appRole !== 'hall';
+  const wasActive = _dbLinkSend.active;
+  _dbLinkSend = { active, pcId: active ? curId : '' };
+  if (active && !wasActive) _dbLinkLastRuntimeJson = ''; // 再開時は次の runtime を必ず送る
+}
+
+// 時計状態（record）の送信。呼び出し時点の engine スナップショットから payload を組む。
+// opts.finished は onTournamentComplete フック専用（PC は完走後 IDLE に戻るため）。
+function publishDbLinkClock(opts) {
+  if (!_dbLinkSend.active) return;
+  try {
+    const st = getState();
+    const payload = buildRecordPayload({
+      status: st.status,
+      currentLevelIndex: st.currentLevelIndex,
+      remainingMs: st.remainingMs,
+      isPreStart: isPreStartActive(),
+      preStartTotalMs: getPreStartTotalMs(),
+      nowMs: Date.now(),
+      finished: !!(opts && opts.finished)
+    });
+    if (!payload) return;
+    window.api?.dblink?.publishRecord?.({ tournamentId: _dbLinkSend.pcId, record: payload });
+  } catch (_) { /* never throw */ }
+}
+
+// 人数系（runtime）の送信。表示更新の集約点から呼ばれるため JSON 比較で dedupe する。
+// force=true は紐づけ直後の初期送信用（dedupe を通さず必ず送る）。
+function publishDbLinkRuntime(force) {
+  if (!_dbLinkSend.active) return;
+  try {
+    const ss = (tournamentState && tournamentState.specialStack) || null;
+    const payload = buildRuntimePayload(tournamentRuntime, ss);
+    if (!payload) return;
+    const json = JSON.stringify(payload);
+    if (!force && json === _dbLinkLastRuntimeJson) return;
+    _dbLinkLastRuntimeJson = json;
+    window.api?.dblink?.publishRuntime?.({ tournamentId: _dbLinkSend.pcId, runtime: payload });
+  } catch (_) { /* never throw */ }
+}
+
+// record 送信トリガ①: 状態遷移（status / レベル変化）のみ購読。remainingMs だけの変化＝毎 tick は
+// 無視する（レート設計の核。±30秒等の不連続調整はトリガ②の明示フックで補完）。
+subscribe((state, prev) => {
+  if (!_dbLinkSend.active) return;
+  if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex) {
+    publishDbLinkClock();
+  }
+});
 
 // ===== STEP 9-B: 左上ロゴ管理 =====
 
@@ -7849,11 +7947,14 @@ function dispatchClockShortcut(event) {
       // STEP 6.21.3: → : 30秒進める（残り時間 -30秒、ゲーム時間が早送り）
       event.preventDefault();
       advance30Seconds();
+      // K2: 同一レベル内の不連続調整は購読（status/level 変化）で拾えないため明示送信
+      publishDbLinkClock();
       break;
     case 'ArrowLeft':
       // STEP 6.21.3: ← : 30秒戻す（残り時間 +30秒、ゲーム時間が巻き戻し）
       event.preventDefault();
       rewind30Seconds();
+      publishDbLinkClock();
       break;
     case 'KeyR':
       // STEP 6.9: Ctrl+Shift+R リエントリー -1 / Ctrl+R リエントリー +1 / 単独 R リセット
@@ -8498,6 +8599,8 @@ async function initialize() {
   // 外部DB連携 STEP2a: 外部連携タブのハンドラ登録（1 回だけ・タブ表示時の同期は activateSettingsTab）。
   //   未設定（既定）なら main 側が inert ＝ここでの登録だけでは外部接続は一切発生しない。
   try { bindDbLinkTabHandlers(); } catch (_) { /* ignore */ }
+  // K2: 起動時に送信ゲートを初期化（紐づけ済み大会が現在選択中なら送信を再開できる状態に）
+  try { refreshDbLinkSendState(); } catch (_) { /* ignore */ }
   // perf-heaviness: rAF Hz 計測 flush 起動（window.__PERF_METRICS true 時のみ。本番は no-op）。
   _startPerfRafFlush();
   renderStaticInfo();
