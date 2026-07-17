@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 外部DB連携 STEP2(案件229) | 🔵 2a 完了review待ち | 2a(接続基盤+管理者ログイン)実装済`280287f`(feature/db-link-step2a・未push): main集約=CSP無改変・既定OFF inert・supabase-js 2.110.7(唯一の追加)・PW非保存/非ログ・新規54assertions+全テストPASS(v254タブ数ガードは9枚へ意図的更新)。report=`.cc-reports/2026-07-17_外部DB連携_STEP2a.md`。残=完了review→push前review→main→前原6-B(①〜⑦・③接続テストが0169要否の確定点) |
+| 外部DB連携 STEP2(案件229) | 🟡 2a 前原実機待ち | 2a(接続基盤+管理者ログイン)=完了review✅+push前diff review✅・**main反映済`4ec5d64`**(リリースなし)。残=前原6-B①〜⑦(**③接続テスト=customer-app側0169要否の確定点**・⑥PW変更失効の実確認)。次=6-B OK→STEP2b(紐づけ+状態送信)brief。report=`.cc-reports/2026-07-17_外部DB連携_STEP2a.md` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
