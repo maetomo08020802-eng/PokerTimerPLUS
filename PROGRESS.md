@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | — | remote-control Phase 1 は v2.8.0 で配信完了・クローズ。次案件は前原指示待ち |
+| 外部DB連携 STEP2(案件229) | 🤔 2a Plan review中 | PC版を「DBに書く側」へ(2a=接続基盤+ログイン/2b=紐づけ+送信/2c=切断+OFF停止)。2a plan=`.cc-plans/2026-07-17_外部DB連携_STEP2a_plan.md`(通信はmain集約=CSP無改変・remote-control前例踏襲・既定OFF)。brief=`.cc-briefs/2026-07-17_外部DB連携_STEP2_brief.md` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
