@@ -1176,43 +1176,31 @@
         </div>
       </section>
 
-      <!-- 外部DB連携 STEP2a（案件229・アプリ全体共通・既定=未設定）: 連携先(Supabase)の設定と管理者ログイン。
-           通信はすべて main プロセス（src/link/db-link.js）＝この HTML の CSP は無改変。
+      <!-- 外部DB連携 STEP2-K1（案件229・店舗キー方式・既定=未設定）: 連携先(店舗アプリのサーバー)の設定と大会紐づけ。
+           通信はすべて main プロセス（src/link/db-link.js・plain fetch）＝この HTML の CSP は無改変。
            未設定の間は外部接続を一切しない（完全ローカル動作の例外②の範囲・CLAUDE.md 2026-07-17 前原承認）。
-           STEP2a では時計状態の送信はまだ行わない（接続基盤+ログイン+接続テスト+連携チェック枠のみ）。 -->
+           K1 では時計状態の送信はまだ行わない（接続基盤+大会一覧取得+紐づけの対応表保持のみ・送信は K2）。 -->
       <section class="settings-tab" data-tab="dblink" role="tabpanel">
         <p class="settings-hint">
-          お店の顧客アプリ（外部データベース）と連携するための設定です（店舗運営者向け）。<br>
+          お店のアプリ（外部データベース）と連携するための設定です（店舗運営者向け）。<br>
           <strong>未設定のときは何も接続しません（通常動作と完全に同じ）。</strong>
         </p>
 
         <div class="form-row">
           <span class="form-row__label">連携先 URL</span>
-          <input type="text" id="js-dblink-url" placeholder="https://xxxx.supabase.co" autocomplete="off" spellcheck="false">
+          <input type="text" id="js-dblink-url" placeholder="https://（お店のアプリの URL）" autocomplete="off" spellcheck="false">
         </div>
         <div class="form-row">
-          <span class="form-row__label">anon キー</span>
-          <input type="text" id="js-dblink-key" placeholder="連携先の anon(公開)キー" autocomplete="off" spellcheck="false">
+          <span class="form-row__label">店舗キー</span>
+          <input type="text" id="js-dblink-key" placeholder="お店の管理者から受け取った店舗キー" autocomplete="off" spellcheck="false">
         </div>
         <div class="form-row form-row--actions">
           <button type="button" class="btn" id="js-dblink-save-config">連携先を保存</button>
         </div>
-
-        <hr class="form-divider">
-
-        <div class="form-row">
-          <span class="form-row__label">メールアドレス</span>
-          <input type="email" id="js-dblink-email" placeholder="管理者アカウントのメール" autocomplete="off" spellcheck="false">
-        </div>
-        <div class="form-row">
-          <span class="form-row__label">パスワード</span>
-          <!-- ★PW はこの欄から main の signInWithPassword へ渡すだけ（保存・ログ出力しない） -->
-          <input type="password" id="js-dblink-password" placeholder="パスワード（保存されません）" autocomplete="off">
-        </div>
-        <div class="form-row form-row--actions">
-          <button type="button" class="btn btn--primary" id="js-dblink-login">ログイン</button>
-          <button type="button" class="btn" id="js-dblink-logout">ログアウト</button>
-        </div>
+        <p class="settings-hint">
+          ※ 店舗キーはこの PC 内に保存されます。キーを変更（差し替え）すると古いキーは使えなくなるため、
+          その場合は新しいキーを入力し直してください。
+        </p>
         <p class="settings-hint"><strong>状態: </strong><span id="js-dblink-status">未設定</span></p>
 
         <hr class="form-divider">
@@ -1220,9 +1208,18 @@
         <div class="form-row form-row--checkbox">
           <label><input type="checkbox" id="js-dblink-link-enabled"> <span>現在のトーナメント「<span id="js-dblink-link-name">—</span>」を外部連携する</span></label>
         </div>
+        <!-- 紐づけ選択（チェック ON で当日大会一覧を取得して表示。選択して確定するまで紐づけは保存されない） -->
+        <div class="form-row" id="js-dblink-pick-row" hidden>
+          <span class="form-row__label">連携先の大会</span>
+          <select id="js-dblink-tournament-select"></select>
+        </div>
+        <div class="form-row form-row--actions" id="js-dblink-pick-actions" hidden>
+          <button type="button" class="btn btn--primary" id="js-dblink-link-confirm">この大会に紐づける</button>
+        </div>
+        <p class="settings-hint" id="js-dblink-link-status"></p>
         <p class="settings-hint">
-          ※ この設定は次の更新（大会の紐づけ・時計の送信）で使われる準備項目です。現時点では
-          チェックを入れても<strong>まだ何も送信されません</strong>。4分割（マルチ画面）モードは連携の対象外です。
+          ※ 紐づけはこの PC 内の対応表に1行保存されるだけで、お店のアプリ側の大会名・設定には何も書き込みません。
+          時計の送信は次の更新（K2）で有効になります。4分割（マルチ画面）モードは連携の対象外です。
         </p>
 
         <div class="form-row form-row--actions">

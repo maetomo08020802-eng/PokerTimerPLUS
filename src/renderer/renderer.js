@@ -4066,30 +4066,44 @@ async function syncRemoteTabFromStatus() {
   } catch (_) { /* ignore — remote ブリッジ未提供環境では何もしない */ }
 }
 
-// ===== 外部DB連携 STEP2a: 「外部連携」タブの表示同期 =====
-// 通信・資格情報の扱いはすべて main（src/link/db-link.js）。renderer は表示と入力の受け渡しのみ。
-// PW は login 呼出の引数として渡すだけ（変数に保持し続けない・保存/ログ出力しない）。
+// ===== 外部DB連携 STEP2-K1: 「外部連携」タブの表示同期（店舗キー方式） =====
+// 通信・店舗キーの扱いはすべて main（src/link/db-link.js・plain fetch）。renderer は表示と入力の受け渡しのみ。
+// 店舗キーは setConfig 呼出の引数として渡すだけ（変数に保持し続けない・保存/ログ出力しない）。
 
-// main の status（{ configured, loggedIn, email, isAdmin, links }）を DOM に反映する（表示専用）。
+// 紐づけ選択 UI の表示切替（チェック ON で一覧取得中〜選択中のみ表示）。
+function setDbLinkPickVisible(visible) {
+  const pickRow = document.getElementById('js-dblink-pick-row');
+  const pickActions = document.getElementById('js-dblink-pick-actions');
+  if (pickRow) pickRow.hidden = !visible;
+  if (pickActions) pickActions.hidden = !visible;
+}
+
+// main の status（{ configured, links }）を DOM に反映する（表示専用）。
 function applyDbLinkStatus(status) {
   const s = status || {};
   const statusEl = document.getElementById('js-dblink-status');
   const linkToggle = document.getElementById('js-dblink-link-enabled');
   const linkName = document.getElementById('js-dblink-link-name');
+  const linkStatus = document.getElementById('js-dblink-link-status');
   if (statusEl) {
-    if (!s.configured) statusEl.textContent = '未設定（連携先 URL と anon キーを保存してください）';
-    else if (!s.loggedIn) statusEl.textContent = '未ログイン';
-    else if (s.isAdmin === true) statusEl.textContent = `管理者として接続中: ${s.email || ''}`;
-    else if (s.isAdmin === false) statusEl.textContent = `接続中（管理者ではありません）: ${s.email || ''}`;
-    else statusEl.textContent = `接続中（権限確認に失敗）: ${s.email || ''}`;
+    statusEl.textContent = s.configured
+      ? '設定済み（接続テストで疎通を確認できます）'
+      : '未設定（連携先 URL と店舗キーを保存してください）';
   }
-  // 連携チェック枠: 現在のトーナメント名 + links の保存値を反映。未ログイン時は disabled。
+  // 連携チェック枠: 現在のトーナメント名 + 紐づけ対応表（links[PC大会id] = {id,name,part_label}）を反映。
   const curId = tournamentState && tournamentState.id ? tournamentState.id : '';
   if (linkName) linkName.textContent = (tournamentState && (tournamentState.name || tournamentState.title)) || '—';
+  const linked = curId && s.links && s.links[curId] && typeof s.links[curId] === 'object' ? s.links[curId] : null;
   if (linkToggle) {
-    linkToggle.disabled = !(s.configured && s.loggedIn && curId);
-    linkToggle.checked = !!(curId && s.links && s.links[curId]);
+    linkToggle.disabled = !(s.configured && curId);
+    linkToggle.checked = !!linked;
   }
+  if (linkStatus) {
+    linkStatus.textContent = linked
+      ? `紐づけ済み: ${linked.part_label ? `${linked.name}（${linked.part_label}）` : linked.name}`
+      : '';
+  }
+  if (linked || !curId) setDbLinkPickVisible(false);
 }
 
 // main から現行 status を取得して反映（タブ表示時・操作後に呼ぶ）。
@@ -4105,56 +4119,36 @@ async function syncDbLinkTabFromStatus() {
 // 「外部連携」タブの操作ハンドラ登録（設定ダイアログ初期化時に 1 回だけ呼ぶ）。
 function bindDbLinkTabHandlers() {
   const saveBtn = document.getElementById('js-dblink-save-config');
-  const loginBtn = document.getElementById('js-dblink-login');
-  const logoutBtn = document.getElementById('js-dblink-logout');
   const testBtn = document.getElementById('js-dblink-test');
   const linkToggle = document.getElementById('js-dblink-link-enabled');
+  const confirmBtn = document.getElementById('js-dblink-link-confirm');
+  const selectEl = document.getElementById('js-dblink-tournament-select');
+  const linkStatus = document.getElementById('js-dblink-link-status');
   const testResult = document.getElementById('js-dblink-test-result');
   const showTest = (text) => {
     if (!testResult) return;
     testResult.hidden = !text;
     testResult.textContent = text || '';
   };
+  const showLinkStatus = (text) => { if (linkStatus) linkStatus.textContent = text || ''; };
+  // 直近に取得した当日大会一覧（選択確定時に非機微3値を対応表へ渡すための一時キャッシュ）
+  let pickList = [];
   if (saveBtn && !saveBtn._dblinkBound) {
     saveBtn._dblinkBound = true;
     saveBtn.addEventListener('click', async () => {
+      const keyEl = document.getElementById('js-dblink-key');
       try {
         const url = (document.getElementById('js-dblink-url')?.value || '').trim();
-        const anonKey = (document.getElementById('js-dblink-key')?.value || '').trim();
-        const res = await window.api?.dblink?.setConfig?.({ url, anonKey });
+        const storeKey = (keyEl?.value || '').trim();
+        const res = await window.api?.dblink?.setConfig?.({ url, storeKey });
         if (res && res.ok === false) { showTest(res.error || '保存に失敗しました'); return; }
         showTest('連携先を保存しました');
         applyDbLinkStatus(res && res.status);
       } catch (_) { showTest('保存に失敗しました'); }
-    });
-  }
-  if (loginBtn && !loginBtn._dblinkBound) {
-    loginBtn._dblinkBound = true;
-    loginBtn.addEventListener('click', async () => {
-      const pwEl = document.getElementById('js-dblink-password');
-      try {
-        const email = (document.getElementById('js-dblink-email')?.value || '').trim();
-        const password = pwEl ? pwEl.value : '';
-        const res = await window.api?.dblink?.login?.({ email, password });
-        if (res && res.ok === false) { showTest(res.error || 'ログインに失敗しました'); return; }
-        showTest(res && res.warning ? res.warning : 'ログインしました');
-        applyDbLinkStatus(res && res.status);
-      } catch (_) {
-        showTest('ログインに失敗しました');
-      } finally {
-        // ★PW を画面・メモリに残さない（成功/失敗にかかわらず欄をクリア）
-        if (pwEl) pwEl.value = '';
+      finally {
+        // ★店舗キーを画面に残さない（保存後は欄をクリア。保存値は main の store が持つ）
+        if (keyEl) keyEl.value = '';
       }
-    });
-  }
-  if (logoutBtn && !logoutBtn._dblinkBound) {
-    logoutBtn._dblinkBound = true;
-    logoutBtn.addEventListener('click', async () => {
-      try {
-        const res = await window.api?.dblink?.logout?.();
-        showTest('ログアウトしました');
-        applyDbLinkStatus(res && res.status);
-      } catch (_) { showTest('ログアウトに失敗しました'); }
     });
   }
   if (testBtn && !testBtn._dblinkBound) {
@@ -4166,22 +4160,72 @@ function bindDbLinkTabHandlers() {
         if (!res || res.ok === false) { showTest((res && res.error) || '取得に失敗しました'); return; }
         const names = (res.tournaments || []).map((t) => t.part_label ? `${t.name}（${t.part_label}）` : t.name);
         showTest(names.length === 0
-          ? `本日（営業日 ${res.businessDate}）の開催中大会はありません`
-          : `本日（営業日 ${res.businessDate}）の開催中大会 ${names.length} 件: ${names.join(' / ')}`);
+          ? '本日の開催中大会はありません'
+          : `本日の開催中大会 ${names.length} 件: ${names.join(' / ')}`);
       } catch (_) { showTest('取得に失敗しました'); }
     });
   }
+  // 連携チェック ON → 当日大会一覧を取得して選択 UI を出す（確定までは対応表に保存しない）。
+  // OFF → 対応表の行を削除（K1 では送信なし。配信停止=stop 送出は K3 で追加）。
   if (linkToggle && !linkToggle._dblinkBound) {
     linkToggle._dblinkBound = true;
     linkToggle.addEventListener('change', async () => {
       const curId = tournamentState && tournamentState.id ? tournamentState.id : '';
       if (!curId) { syncDbLinkTabFromStatus(); return; }
-      try {
-        await window.api?.dblink?.setTournamentLink?.({ tournamentId: curId, enabled: linkToggle.checked });
-      } catch (_) {
-        // 失敗時は保存値を取り直して UI を実態へ戻す
+      if (!linkToggle.checked) {
+        setDbLinkPickVisible(false);
+        showLinkStatus('');
+        try {
+          await window.api?.dblink?.setTournamentLink?.({ tournamentId: curId, enabled: false });
+        } catch (_) { /* 下の再同期で実態へ戻す */ }
         syncDbLinkTabFromStatus();
+        return;
       }
+      // ON: 一覧を取得して選択肢を並べる（0件/失敗ならチェックを実態=OFF へ戻す）
+      showLinkStatus('今日の大会一覧を取得中...');
+      let res = null;
+      try { res = await window.api?.dblink?.listTodayTournaments?.(); } catch (_) { res = null; }
+      if (!res || res.ok === false) {
+        linkToggle.checked = false;
+        showLinkStatus((res && res.error) || '大会一覧を取得できません');
+        return;
+      }
+      pickList = res.tournaments || [];
+      if (pickList.length === 0) {
+        linkToggle.checked = false;
+        showLinkStatus('本日の開催中大会がありません（先にお店のアプリ側で大会を作成してください）');
+        return;
+      }
+      if (selectEl) {
+        selectEl.innerHTML = '';
+        for (const t of pickList) {
+          const opt = document.createElement('option');
+          opt.value = t.id;
+          opt.textContent = t.part_label ? `${t.name}（${t.part_label}）` : t.name;
+          selectEl.appendChild(opt);
+        }
+      }
+      setDbLinkPickVisible(true);
+      showLinkStatus('連携先の大会を選んで「この大会に紐づける」を押してください');
+    });
+  }
+  if (confirmBtn && !confirmBtn._dblinkBound) {
+    confirmBtn._dblinkBound = true;
+    confirmBtn.addEventListener('click', async () => {
+      const curId = tournamentState && tournamentState.id ? tournamentState.id : '';
+      const dbId = selectEl ? selectEl.value : '';
+      const db = pickList.find((t) => t.id === dbId) || null;
+      if (!curId || !db) { showLinkStatus('紐づけ先の大会が選択されていません'); return; }
+      try {
+        const res = await window.api?.dblink?.setTournamentLink?.({
+          tournamentId: curId,
+          enabled: true,
+          db: { id: db.id, name: db.name || '', part_label: db.part_label || '' }
+        });
+        if (!res || res.ok === false) { showLinkStatus((res && res.error) || '紐づけに失敗しました'); return; }
+      } catch (_) { showLinkStatus('紐づけに失敗しました'); return; }
+      setDbLinkPickVisible(false);
+      syncDbLinkTabFromStatus();
     });
   }
 }

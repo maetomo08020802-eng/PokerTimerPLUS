@@ -823,10 +823,10 @@ const store = new Store({
     // remote-control Phase 1a: スマホ遠隔操作（実験的機能）。既定 OFF ＝ サーバを一切起動しない
     //   ＝現行と完全同一（後方互換）。ON にした時だけ main が LAN サーバを起動する。
     remoteControl: { enabled: false },
-    // 外部DB連携 STEP2a: 連携先(Supabase)設定。既定=未設定（url/anonKey 空）＝外部接続を一切しない。
-    //   links = PC 側トーナメント id → 連携フラグ（STEP2a では保存のみ・送信などの挙動ゼロ）。
+    // 外部DB連携 STEP2-K1: 連携先(店舗アプリのサーバー)設定。既定=未設定（url/storeKey 空）
+    //   ＝外部接続を一切しない。links = PC 側トーナメント id → 紐づけ対応表1行（K1 では保持のみ・送信なし）。
     //   ※ tournaments 配列の要素には持たせない（normalizeTournament が未知キーを落とすため隔離保存）。
-    dbLink: { url: '', anonKey: '', links: {} }
+    dbLink: { url: '', storeKey: '', links: {} }
   }
 });
 
@@ -2539,20 +2539,17 @@ function registerRemoteIpcHandlers() {
 }
 registerRemoteIpcHandlers();
 
-// 外部DB連携 STEP2a: dblink:* IPC 登録（registerRemoteIpcHandlers と同型・registerIpcHandlers 本体には触れない）。
-//   通信はすべて src/link/db-link.js（main 側）に集約＝renderer CSP 無改変。未設定時は inert。
+// 外部DB連携 STEP2-K1: dblink:* IPC 登録（registerRemoteIpcHandlers と同型・registerIpcHandlers 本体には触れない）。
+//   通信はすべて src/link/db-link.js（main 側・plain fetch）に集約＝renderer CSP 無改変。未設定時は inert。
+//   店舗キー方式（壁打ち記録 §7）: login/logout チャネルは撤去済（PC はログインしない）。
 function registerDbLinkIpcHandlers() {
   dbLink.init(store, (event) => { try { rollingLog(event, null); } catch (_) { /* ignore */ } });
   ipcMain.handle('dblink:getStatus', () => dbLink.getStatus());
   ipcMain.handle('dblink:setConfig', (_event, cfg) => dbLink.setConfig(cfg || {}));
-  ipcMain.handle('dblink:login', (_event, cred) => dbLink.login(cred || {}));
-  ipcMain.handle('dblink:logout', () => dbLink.logout());
   ipcMain.handle('dblink:listTodayTournaments', () => dbLink.listTodayTournaments());
   ipcMain.handle('dblink:setTournamentLink', (_event, p) => dbLink.setTournamentLink(p || {}));
 }
 registerDbLinkIpcHandlers();
-// 公式ガイダンス（非ブラウザ環境）: 終了時に自動トークン更新を明示停止
-app.on('before-quit', () => { try { dbLink.stop(); } catch (_) { /* ignore */ } });
 
 // ----- Phase 3a: マルチ表示中の HDMI 抜き差し追従 -----
 //   既存 setupDisplayChangeListeners は無改変（マルチ中は display-removed が hallWindow ガード、
