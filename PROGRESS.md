@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 外部DB連携 STEP2(案件229) | 🟡 K1+K2 main反映済・前原6-B待ち | K2(状態送信)main merge `7f3164b`=楽観ロックecho-back・409→GET→1回再送・coalescer・linkAndInit(fresh/connected)・逐語マップ・キー空上書き手当。完了review✅+push前review✅。テスト1734全PASS(+71)。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K2.md`。次=K3(切断表示・OFF stop・DB→engine反映アダプタ=リスク本体) |
+| 外部DB連携 STEP2(案件229) | 🔵 K3 レビュー待ち(K1+K2はmain反映済) | K3(最終)実装済 `feature/anken229-step2-k3`(`ebee1b5`)=切断バッジ+15秒復帰probe・OFF=/clock/stop即消し・DB→engine反映アダプタ(純関数プラン+timer公開APIのみ・永続化フック9箇所目・conflict=DB追従へ契約準拠化)。テスト1774全PASS(+40)。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K3.md`。次=完了review→push前review→main→前原6-B/GO |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
