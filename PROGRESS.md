@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 外部DB連携 STEP2(案件229) | 🔵 K3 レビュー待ち(K1+K2はmain反映済) | K3(最終)実装済 `feature/anken229-step2-k3`(`ebee1b5`)=切断バッジ+15秒復帰probe・OFF=/clock/stop即消し・DB→engine反映アダプタ(純関数プラン+timer公開APIのみ・永続化フック9箇所目・conflict=DB追従へ契約準拠化)。テスト1774全PASS(+40)。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K3.md`。次=完了review→push前review→main→前原6-B/GO |
+| 外部DB連携 STEP2(案件229) | 🟡 K1〜K3 全main反映済・前原6-B/GO待ち | K3 main merge `b439746`=切断バッジ+15秒復帰probe・OFF=/clock/stop即消し・DB→engine反映アダプタ(conflict=DB追従へ契約準拠化・懐疑役指摘2件反映済)。**STEP2 実装完結**。テスト1776全PASS。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K{1,2,3}.md`。残=前原6-B(①〜⑭)→GO→リリース判断(tag/.exeは前原GO後のみ) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -61,8 +61,8 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = **K2 merge 済 `7f3164b`・push 済**(feature ブランチ K1/K2 は役目終了・削除可)。
-- **現在地(2026-07-18)**: 外部DB連携 STEP2(案件229・店舗キー方式)進行中。**K1(接続基盤+紐づけ)+K2(状態送信)main 反映済**。K2=紐づけ確定で構成upload→clock/init(進行中は既存時計へ接続=connected+warning・初期送信抑止)・運用中は状態遷移駆動で record/runtime 送信(楽観ロック echo-back 無加工・409→GET→1回再送・coalescer 300ms/2秒/429バックオフ=60回/分構造担保・tick毎送信なし)・逐語マップ純関数 clock-payload.mjs・キー空上書き手当。テスト **1734 件全PASS**(+71)・致命5件影響なし(runtime は読取のみ)・Electron 実起動スモーク済・誤キー404(GET/POST)を本番APIで実観測。K1/K2 とも plan review✅・完了review✅・push前review✅。次 = **K3(切断表示・OFF→/clock/stop・復帰/conflict の DB→engine 反映アダプタ=致命保護5件リスク本体・plan review 必須)**。リリースは STEP2 全体完了+前原GO後のみ。前原6-B=K1①〜④+K2⑤〜⑨(正キー疎通・全端末一致・409競合・進行中再紐づけ・キー空維持)。
+- **git**: `main` = **K3 merge 済 `b439746`・push 済**(feature ブランチ K1〜K3 は役目終了・削除可)。
+- **現在地(2026-07-18)**: 外部DB連携 STEP2(案件229・店舗キー方式)**実装完結(K1 接続基盤+紐づけ / K2 状態送信 / K3 切断表示・OFF停止・DB追従)・全スライス main 反映済**。K3=「連携切断中」バッジ(operator のみ・店舗TV 非表示・時計は走り続ける)+15秒復帰 probe・OFF=POST /clock/stop で顧客/tv 即消し・復帰/conflict/接続時は DB→engine 反映アダプタ(判断=純関数 planClockApply/planRuntimeApply・実行=timer.js 公開 API のみ・_dbLinkApplying 往復遮断・schedulePersistRuntime 9箇所目・conflict=409→GET→再送なしの DB 追従=契約準拠化)。完了 review 懐疑役指摘2件(conflict 時 pending 破棄・level index クランプ)反映済。テスト **1776 件全PASS**・致命5件無傷(静的テスト恒常ガード)。全スライス plan review✅・完了review✅・push前review✅。**残 = 前原 6-B 実機確認(①〜⑭・正キー保持者=前原のみ)→ 前原 GO → リリース判断(tag/.exe/Release は GO 後のみ)**。将来候補(提案のみ)=店舗キーの QR ペア設定 UX。
 - 参照: brief=`.cc-briefs/2026-07-18_案件229_タイマー案C_PC店舗キー連携_STEP2_brief.md` / K1 report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
