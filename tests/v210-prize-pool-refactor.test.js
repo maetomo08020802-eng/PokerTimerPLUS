@@ -266,7 +266,7 @@ test('T12 (保護): 致命バグ保護 5 件すべて完全維持', () => {
 // T13: scripts.test 登録 + version 2.4.0
 // ============================================================
 test('T13: scripts.test 登録 + package.json version = 2.4.0', () => {
-  assert.equal(PKG.version, '2.9.0',
+  assert.equal(PKG.version, '2.10.0',
     `package.json version が ${PKG.version}（期待 2.4.0）`);
   assert.ok(PKG.scripts && typeof PKG.scripts.test === 'string', 'scripts.test がない');
   assert.ok(PKG.scripts.test.includes('v210-prize-pool-refactor.test.js'),

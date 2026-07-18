@@ -165,7 +165,7 @@ test('E3: .form-dialog.form-dialog--tabs（<dialog>）に display:flex が無い
 // ============================================================
 test('version: package.json は 2.5.1 据え置き（STEP4 で bump しない）', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.9.0', `version が ${pkg.version}（STEP4 は 2.5.1 据え置き）`);
+  assert.equal(pkg.version, '2.10.0', `version が ${pkg.version}（STEP4 は 2.5.1 据え置き）`);
 });
 
 test('version: scripts.test に v257-tournament-picker-collapse.test.js が含まれる', () => {

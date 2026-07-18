@@ -49,7 +49,7 @@ function extractFnBody(src, sigRe) {
 // T1: package.json version === '2.2.1'
 // ============================================================
 test('T1: package.json.version === 2.2.1', () => {
-  assert.equal(PKG.version, '2.9.0', `期待 2.2.1, 実際 ${PKG.version}`);
+  assert.equal(PKG.version, '2.10.0', `期待 2.2.1, 実際 ${PKG.version}`);
 });
 
 // ============================================================

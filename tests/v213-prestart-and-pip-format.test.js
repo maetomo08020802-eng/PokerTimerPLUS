@@ -90,7 +90,7 @@ test('T5: formatTime 関数の hours > 0 ? HH:MM:SS : MM:SS ロジック維持',
 // T6: package.json version が 2.0.13
 // ============================================================
 test('T6: package.json version が 2.0.13', () => {
-  assert.equal(PKG.version, '2.9.0',
+  assert.equal(PKG.version, '2.10.0',
     `package.json version が ${PKG.version}（期待 2.0.13）`);
 });
 
