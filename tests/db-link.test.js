@@ -130,6 +130,8 @@ ok(/schedulePersistRuntime\s*\(\s*\)/.test(applyFnBody),
   'applyDbToEngine は runtime 採用時に schedulePersistRuntime を呼ぶ（c18 パターン=永続化フック）');
 ok(!/handleReset|resetBlindProgressOnly/.test(applyFnBody),
   'applyDbToEngine は handleReset / resetBlindProgressOnly を呼ばない（timer.js 公開 API のみ）');
+ok(/getLevelCount\(\)/.test(applyFnBody) && /Math\.min\(plan\.levelIndex/.test(applyFnBody),
+  'applyDbToEngine は DB の level index を PC 構成のレベル数へクランプ（範囲外=不定ジャンプ防止・懐疑役指摘）');
 // K3: 切断中バッジは既定 hidden（表示は JS トグルのみ・multi 系 HTML には無い）
 const badgeLine = indexHtml.split('\n').find((l) => l.includes('js-dblink-indicator')) || '';
 ok(badgeLine.includes('hidden'), '連携切断中バッジは既定 hidden');
@@ -343,6 +345,27 @@ function makeStore(initial) {
   const applyEvents = events.filter((e) => e.type === 'apply-db');
   ok(applyEvents.length === 1 && applyEvents[0].clock && applyEvents[0].clock.updated_at === 'T9',
     'conflict 時は apply-db イベントで DB 状態を renderer へ渡す（反映アダプタ行き）');
+
+  // -- K3(懐疑役指摘の手当て): conflict は in-flight 中に積まれた pending も破棄する --
+  //    破棄しないと apply-db 後に「適用前の PC 状態」が新 updated_at で送信成功し DB を上書きしてしまう
+  vnow = 100_000; timers = []; calls = []; events = [];
+  responses = [
+    { status: 409, json: { ok: false, code: 'clock_conflict', error: '他の端末が更新しました' } },
+    { status: 200, json: { ok: true, clock: { status: 'paused', updated_at: 'T11' } } }
+  ];
+  const inflightFetch = async (url, opts) => {
+    if (calls.length === 0) {
+      // 最初の POST の in-flight 中に古い PC 状態が pending へ積まれる状況を再現
+      dbLink.publishRecord('pc1', { status: 'running', current_level_index: 9, end_at_ms: 999, paused_remaining_ms: null, pre_start_total_ms: null });
+    }
+    return scenarioFetch(url, opts);
+  };
+  dbLink.init(makeStore(JSON.parse(JSON.stringify(LINKED))), null, { fetchImpl: inflightFetch, nowFn, delayFn, notify });
+  dbLink.publishRecord('pc1', { status: 'running', current_level_index: 8, end_at_ms: 888, paused_remaining_ms: null, pre_start_total_ms: null });
+  await advance(300);   // POST(409・この間に pending 積み) → GET
+  await advance(10_000); // pending が残っていればここで再送されてしまう
+  ok(calls.filter((c) => c.url.endsWith('/clock/record')).length === 1,
+    'conflict 後は in-flight 中に積まれた pending を破棄（適用前の PC 状態で DB を上書きしない）');
 
   // -- K3: health 遷移（down/up は変化時のみ notify・auth/network が down・API エラーは down にしない） --
   vnow = 100_000; timers = []; calls = []; events = []; responses = [

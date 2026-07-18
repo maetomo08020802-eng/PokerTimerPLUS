@@ -4386,9 +4386,15 @@ function applyDbToEngine(clock) {
           timerRestorePreStart({ remainingMs: plan.remainingMs, totalMs: plan.totalMs, isPaused: plan.paused });
         }
       } else if (plan.kind === 'level') {
+        // ★完了 review 懐疑役指摘: DB の level index が PC 構成のレベル数以上だと startAtLevel が
+        //   no-op になり直後の advanceTimeBy が不定ジャンプになるため、最終レベルへクランプする
+        //   （構成は PC がアップロードした同一物のため通常一致。範囲外=別構成の時計へ接続した稀ケース）。
+        const levelCount = getLevelCount();
+        if (levelCount <= 0) return;
+        const idx = Math.min(plan.levelIndex, levelCount - 1);
         // PRE_START からレベルへ移る場合は先に解除（startAtLevel は isPreStart を消さないため）
         if (isPreStartActive()) timerCancelPreStart();
-        timerStartAtLevel(plan.levelIndex);
+        timerStartAtLevel(idx);
         if (plan.paused) timerPause();
         // 負の remainingTarget は advanceTimeBy の既存レベル繰越が正しく着地させる
         timerAdvanceBy(plan.remainingTargetMs - getState().remainingMs);

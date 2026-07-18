@@ -386,6 +386,12 @@ async function _flushSend(type) {
     // K3（仕様2 準拠・K2 の一時逸脱を解消）: 楽観ロック衝突 = 他端末が更新した ⇒ **再送しない**。
     // GET で DB 状態を取り直し、renderer の反映アダプタへ渡して PC が DB に従う。
     _log('dblink:send-conflict');
+    // ★完了 review 懐疑役指摘: 送信 in-flight 中に積まれた pending（適用前の PC 状態）を両種別とも破棄。
+    //   破棄しないと apply-db 直後に古い状態が新しい updated_at で送信成功し DB を上書きしてしまう
+    //   （「PC ローカルで DB を上書きしない」の穴）。適用後の新しい操作は改めて publish される。
+    for (const other of Object.values(_coalescers)) {
+      if (other.pending && other.pending.dbId === dbId) other.pending = null;
+    }
     const clock = await getClock(dbId);
     if (clock.ok && clock.clock && _notify) {
       try { _notify({ type: 'apply-db', clock: clock.clock }); } catch (_) { /* ignore */ }
