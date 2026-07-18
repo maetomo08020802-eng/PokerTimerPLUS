@@ -188,7 +188,7 @@ test('rc19 (c) 並存方針: tournamentBasics の structure 同梱 dead code は
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.8.0',
+  assert.equal(pkg.version, '2.9.0',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 

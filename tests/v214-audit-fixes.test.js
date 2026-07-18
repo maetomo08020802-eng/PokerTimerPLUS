@@ -182,7 +182,7 @@ test('T10b (Fix 8): .pip-timer__digits の transition に font-size 含む', () 
 // T11: package.json version 2.1.0 + scripts.test に v214 登録
 // ============================================================
 test('T11: package.json version 2.1.2 + scripts.test に v214 登録', () => {
-  assert.equal(PKG.version, '2.8.0', `version が ${PKG.version}（期待 2.1.18）`);
+  assert.equal(PKG.version, '2.9.0', `version が ${PKG.version}（期待 2.1.18）`);
   assert.ok(PKG.scripts.test.includes('v214-audit-fixes.test.js'),
     'scripts.test に v214-audit-fixes.test.js が含まれない');
 });

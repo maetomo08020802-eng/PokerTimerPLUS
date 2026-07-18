@@ -141,7 +141,7 @@ test('T11: package.json version === 2.0.0', () => {
   // v2.0.0 STEP 7 (2026-05-01): version bump 1.3.0 → 2.0.0 に追従。
   // 本テストは「リリース版を表すバージョン文字列が期待値である」ことを担保するもの。
   // 今後の minor / patch リリース時はここを追従更新する（テスト skip / 無効化ではない）。
-  assert.equal(PKG.version, '2.8.0', `version が ${PKG.version}（期待 2.1.18）`);
+  assert.equal(PKG.version, '2.9.0', `version が ${PKG.version}（期待 2.1.18）`);
 });
 
 // ============================================================
