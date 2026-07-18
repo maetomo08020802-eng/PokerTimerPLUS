@@ -61,8 +61,14 @@ import {
 // v2.0.0 STEP 2: hall 側のみで起動する状態同期レイヤ。operator / operator-solo では no-op。
 // v2.0.1 #A1: registerDualDiffHandler で受信した差分を実 DOM 更新に反映する経路を追加。
 import { initDualSyncForHall, registerDualDiffHandler } from './dual-sync.js';
-// 外部DB連携 STEP2-K2: engine 状態 → API payload の逐語マップ（純関数・engine の出力を読むだけ）
-import { buildRecordPayload, buildRuntimePayload, buildStructurePayload } from '../link/clock-payload.mjs';
+// 外部DB連携 STEP2-K2/K3: engine 状態 → API payload の逐語マップ + DB→engine 適用プラン（純関数）
+import {
+  buildRecordPayload,
+  buildRuntimePayload,
+  buildStructurePayload,
+  planClockApply,
+  planRuntimeApply
+} from '../link/clock-payload.mjs';
 
 console.log('PokerTimerPLUS+ 起動');
 
@@ -4186,13 +4192,19 @@ function bindDbLinkTabHandlers() {
       const curId = tournamentState && tournamentState.id ? tournamentState.id : '';
       if (!curId) { syncDbLinkTabFromStatus(); return; }
       if (!linkToggle.checked) {
+        // K3: チェック OFF = 配信即終了（仕様4）。POST /clock/stop で idle 化 → 顧客/tv から即消える。
+        //   通信失敗でも紐づけ行は削除され、warning で「配信が残っている可能性」を明示する。
         setDbLinkPickVisible(false);
-        showLinkStatus('');
+        showLinkStatus('停止中...');
+        let stopRes = null;
         try {
-          await window.api?.dblink?.setTournamentLink?.({ tournamentId: curId, enabled: false });
-        } catch (_) { /* 下の再同期で実態へ戻す */ }
-        await refreshDbLinkSendState(); // K2: 送信ゲートを即時 OFF（stop 送出は K3）
-        syncDbLinkTabFromStatus();
+          stopRes = await window.api?.dblink?.stopLink?.({ tournamentId: curId });
+        } catch (_) { stopRes = null; }
+        await refreshDbLinkSendState(); // 送信ゲートを即時 OFF
+        await syncDbLinkTabFromStatus(); // 表示同期を先に済ませてから結果を後置表示（K2 の教訓）
+        showLinkStatus(stopRes && stopRes.warning
+          ? stopRes.warning
+          : '配信を停止しました（再びチェックすると再開できます）');
         return;
       }
       // ON: 一覧を取得して選択肢を並べる（0件/失敗ならチェックを実態=OFF へ戻す）
@@ -4248,6 +4260,9 @@ function bindDbLinkTabHandlers() {
       if (res.mode === 'fresh') {
         publishDbLinkClock();
         publishDbLinkRuntime(true);
+      } else if (res.mode === 'connected' && res.clock) {
+        // K3: 進行中の既存時計へ接続した場合は DB 状態に PC が従う（仕様2・6-B ⑧ の完成）
+        applyDbToEngine(res.clock);
       }
       // K2 完了 review 懐疑役指摘: sync（applyDbLinkStatus）が同じ表示要素へ「紐づけ済み: …」を書くため、
       // await で完了させてから warning を後置表示する（非 await だと warning が数 ms で上書き消去される）
@@ -4266,6 +4281,14 @@ function bindDbLinkTabHandlers() {
 let _dbLinkSend = { active: false, pcId: '' };
 // runtime の直前送信スナップショット（同値なら IPC すら出さない dedupe）
 let _dbLinkLastRuntimeJson = '';
+// K3: DB→engine 適用中フラグ。適用が引き起こす状態遷移を publish しない（往復ループ遮断=
+//   「PC ローカルで DB を上書きしない」の構造的担保）。hall への dual-sync は抑止しない
+//   （店舗TV は engine に追従し続ける）。
+let _dbLinkApplying = false;
+// K3: 連携の健全性（main からの health イベントで更新。down かつ active の間だけバッジ表示+probe）
+let _dbLinkDown = false;
+let _dbLinkProbeTimer = null;
+const DBLINK_PROBE_INTERVAL_MS = 15_000;
 
 // main の status を取り直して送信ゲートを更新する（起動時 / 紐づけ変更 / トーナメント切替）。
 async function refreshDbLinkSendState() {
@@ -4284,12 +4307,124 @@ function applyDbLinkSendGate(status) {
   const wasActive = _dbLinkSend.active;
   _dbLinkSend = { active, pcId: active ? curId : '' };
   if (active && !wasActive) _dbLinkLastRuntimeJson = ''; // 再開時は次の runtime を必ず送る
+  // K3: バッジ/probe をゲートに追随させる + active になった直後は初回 probe で DB 状態へ従う
+  //   （起動・大会切替・紐づけ直後。仕様2「ON の大会は DB が正」の帰結。読取のみ）
+  updateDbLinkIndicator();
+  syncDbLinkProbe();
+  if (active && !wasActive) {
+    setTimeout(() => { runDbLinkProbe(true); }, 0);
+  }
+}
+
+// ===== K3: 「連携切断中」バッジ + 復帰 probe + DB→engine 反映アダプタ =====
+
+// バッジ表示（mute-indicator と同型: hidden トグル・fixed=フロー外でレイアウトシフトなし。
+//   active ゲート内のみ表示 = hall/OFF/未設定/未紐づけでは構造的に出ない）
+function updateDbLinkIndicator() {
+  const badge = document.getElementById('js-dblink-indicator');
+  if (badge) badge.hidden = !(_dbLinkSend.active && _dbLinkDown);
+}
+
+// down かつ active の間だけ 15 秒間隔の復帰 probe を回す（読取のみ・書込レートに無関係）
+function syncDbLinkProbe() {
+  const want = _dbLinkSend.active && _dbLinkDown;
+  if (want && _dbLinkProbeTimer === null) {
+    _dbLinkProbeTimer = setInterval(() => { runDbLinkProbe(false); }, DBLINK_PROBE_INTERVAL_MS);
+  } else if (!want && _dbLinkProbeTimer !== null) {
+    clearInterval(_dbLinkProbeTimer);
+    _dbLinkProbeTimer = null;
+  }
+}
+
+// probe 実行: GET /clock（main 経由）→ 成功なら DB 状態を engine へ適用（復帰時は DB が正）。
+//   initial=true は activation 直後の初回同期（down でなくても実行）。
+async function runDbLinkProbe(initial) {
+  if (!_dbLinkSend.active) return;
+  if (!initial && !_dbLinkDown) return;
+  try {
+    const res = await window.api?.dblink?.probe?.({ tournamentId: _dbLinkSend.pcId });
+    if (res && res.ok && res.clock) applyDbToEngine(res.clock);
+  } catch (_) { /* never throw */ }
+}
+
+/**
+ * DB clock 行を PC engine へ適用する実行器（K3 の中核・brief 要注意1）。
+ * - 判断は純関数 planClockApply / planRuntimeApply（tests/db-link-payload.test.js が検査）。
+ * - 実行は timer.js の公開 API のみ（engine 本体は無改変）。idle/finished は timer.js の
+ *   reset({force:true}) = ブラインド進行のみのリセット（runtime 非接触・handleReset 不使用・
+ *   resetBlindProgressOnly 非経由 = 致命バグ保護維持）。
+ * - _dbLinkApplying で publish を suppress（適用→送信の往復ループ遮断）。hall への dual-sync は
+ *   既存の setState 購読経路で自然に追従する（抑止しない）。
+ * - runtime 採用は c18 パターン遵守（schedulePersistRuntime = 永続化フック 9 箇所目）。
+ *   special_enabled（大会設定）は採用しない（仕様3「PC 側設定に非書込」）。
+ */
+function applyDbToEngine(clock) {
+  if (!_dbLinkSend.active || !clock || typeof clock !== 'object') return;
+  if (_dbLinkApplying) return;
+  _dbLinkApplying = true;
+  try {
+    const st = getState();
+    const plan = planClockApply({
+      status: st.status,
+      currentLevelIndex: st.currentLevelIndex,
+      remainingMs: st.remainingMs,
+      isPreStart: isPreStartActive()
+    }, clock, Date.now());
+    if (plan) {
+      if (plan.kind === 'idle' || plan.kind === 'finished') {
+        // reset({force:true}) は PRE_START 中でも内部で解除+onPreStartCancel を発火（hall 整合）
+        timerReset({ force: true });
+      } else if (plan.kind === 'prestart') {
+        if (isPreStartActive()) {
+          // PRE_START（または PRE_START 由来 PAUSED）中: 残りを合わせ、pause 状態を整合
+          timerAdvanceBy(plan.remainingMs - getState().remainingMs);
+          const nowPaused = getState().status === States.PAUSED;
+          if (plan.paused && !nowPaused) timerPause();
+          else if (!plan.paused && nowPaused) timerResume();
+        } else {
+          timerReset({ force: true });
+          timerRestorePreStart({ remainingMs: plan.remainingMs, totalMs: plan.totalMs, isPaused: plan.paused });
+        }
+      } else if (plan.kind === 'level') {
+        // ★完了 review 懐疑役指摘: DB の level index が PC 構成のレベル数以上だと startAtLevel が
+        //   no-op になり直後の advanceTimeBy が不定ジャンプになるため、最終レベルへクランプする
+        //   （構成は PC がアップロードした同一物のため通常一致。範囲外=別構成の時計へ接続した稀ケース）。
+        const levelCount = getLevelCount();
+        if (levelCount <= 0) return;
+        const idx = Math.min(plan.levelIndex, levelCount - 1);
+        // PRE_START からレベルへ移る場合は先に解除（startAtLevel は isPreStart を消さないため）
+        if (isPreStartActive()) timerCancelPreStart();
+        timerStartAtLevel(idx);
+        if (plan.paused) timerPause();
+        // 負の remainingTarget は advanceTimeBy の既存レベル繰越が正しく着地させる
+        timerAdvanceBy(plan.remainingTargetMs - getState().remainingMs);
+      }
+    }
+    const ss = (tournamentState && tournamentState.specialStack) || null;
+    const rplan = planRuntimeApply(clock, tournamentRuntime, !!(ss && ss.enabled), ss ? ss.appliedCount : 0);
+    if (rplan) {
+      tournamentRuntime.playersInitial = rplan.playersInitial;
+      tournamentRuntime.playersRemaining = rplan.playersRemaining;
+      tournamentRuntime.reentryCount = rplan.reentryCount;
+      tournamentRuntime.addOnCount = rplan.addOnCount;
+      if (rplan.specialCount !== null && ss) ss.appliedCount = rplan.specialCount;
+      schedulePersistRuntime();
+      renderStaticInfo();
+      // 採用値で dedupe スナップショットを更新（跳ね返り送信を止める）
+      const p = buildRuntimePayload(tournamentRuntime, ss);
+      if (p) _dbLinkLastRuntimeJson = JSON.stringify(p);
+    }
+  } catch (_) { /* never throw */ }
+  finally {
+    _dbLinkApplying = false;
+  }
 }
 
 // 時計状態（record）の送信。呼び出し時点の engine スナップショットから payload を組む。
 // opts.finished は onTournamentComplete フック専用（PC は完走後 IDLE に戻るため）。
 function publishDbLinkClock(opts) {
   if (!_dbLinkSend.active) return;
+  if (_dbLinkApplying) return; // K3: DB→engine 適用中は送信しない（往復ループ遮断）
   try {
     const st = getState();
     const payload = buildRecordPayload({
@@ -4310,6 +4445,7 @@ function publishDbLinkClock(opts) {
 // force=true は紐づけ直後の初期送信用（dedupe を通さず必ず送る）。
 function publishDbLinkRuntime(force) {
   if (!_dbLinkSend.active) return;
+  if (_dbLinkApplying) return; // K3: DB→engine 適用中は送信しない（往復ループ遮断）
   try {
     const ss = (tournamentState && tournamentState.specialStack) || null;
     const payload = buildRuntimePayload(tournamentRuntime, ss);
@@ -4327,6 +4463,20 @@ subscribe((state, prev) => {
   if (!_dbLinkSend.active) return;
   if (state.status !== prev.status || state.currentLevelIndex !== prev.currentLevelIndex) {
     publishDbLinkClock();
+  }
+});
+
+// K3: main からの push（切断/復帰 health・conflict 時の apply-db）を受ける。
+//   inactive の間もイベント自体は届くが、ゲート（updateDbLinkIndicator / applyDbToEngine 冒頭）で無害。
+window.api?.dblink?.onEvent?.((payload) => {
+  if (!payload || typeof payload !== 'object') return;
+  if (payload.type === 'health') {
+    _dbLinkDown = !!payload.down;
+    updateDbLinkIndicator();
+    syncDbLinkProbe();
+  } else if (payload.type === 'apply-db' && payload.clock) {
+    // conflict = 他端末が更新した ⇒ DB に従う（仕様2・K2 の一時逸脱を解消）
+    applyDbToEngine(payload.clock);
   }
 });
 

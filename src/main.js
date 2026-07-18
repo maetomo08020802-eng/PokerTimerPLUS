@@ -2543,13 +2543,26 @@ registerRemoteIpcHandlers();
 //   通信はすべて src/link/db-link.js（main 側・plain fetch）に集約＝renderer CSP 無改変。未設定時は inert。
 //   店舗キー方式（壁打ち記録 §7）: login/logout チャネルは撤去済（PC はログインしない）。
 function registerDbLinkIpcHandlers() {
-  dbLink.init(store, (event) => { try { rollingLog(event, null); } catch (_) { /* ignore */ } });
+  dbLink.init(store, (event) => { try { rollingLog(event, null); } catch (_) { /* ignore */ } }, {
+    // K3: 切断/復帰・conflict 時の DB 状態を renderer へ push（全 window へ broadcast。
+    //   hall/multi 側は listener を持たない or ゲートで無視するため実質 index の operator のみが反応）
+    notify: (payload) => {
+      try {
+        for (const w of BrowserWindow.getAllWindows()) {
+          try { w.webContents.send('dblink:event', payload); } catch (_) { /* ignore */ }
+        }
+      } catch (_) { /* ignore */ }
+    }
+  });
   ipcMain.handle('dblink:getStatus', () => dbLink.getStatus());
   ipcMain.handle('dblink:setConfig', (_event, cfg) => dbLink.setConfig(cfg || {}));
   ipcMain.handle('dblink:listTodayTournaments', () => dbLink.listTodayTournaments());
   ipcMain.handle('dblink:setTournamentLink', (_event, p) => dbLink.setTournamentLink(p || {}));
   // K2: 紐づけ確定（構成 upload → clock/init → 対応表保存）
   ipcMain.handle('dblink:linkAndInit', (_event, p) => dbLink.linkAndInit(p || {}));
+  // K3: 復帰 probe（GET /clock 読取のみ）と チェック OFF=配信停止（POST /clock/stop + 行削除）
+  ipcMain.handle('dblink:probe', (_event, p) => dbLink.probe(p && p.tournamentId));
+  ipcMain.handle('dblink:stopLink', (_event, p) => dbLink.stopLink(p || {}));
   // K2: 状態送信（fire-and-forget・renderer は応答を待たない。coalescer/楽観ロックは db-link.js 側）
   ipcMain.on('dblink:publishRecord', (_event, p) => {
     try { dbLink.publishRecord(p && p.tournamentId, p && p.record); } catch (_) { /* never throw */ }
