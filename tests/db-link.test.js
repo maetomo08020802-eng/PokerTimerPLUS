@@ -86,7 +86,8 @@ ok(!/console\.(log|error|warn|info)/.test(dbLinkSrc),
 ok(rendererSrc.includes("if (keyEl) keyEl.value = '';"),
   'renderer は店舗キー保存後に入力欄をクリア（画面に残さない）');
 
-// ---- ⑤ preload whitelist（dblink は invoke 5 + send 2 の 7 チャネルのみ・login/logout 撤去） ----
+// ---- ⑤ preload whitelist（dblink は invoke 8 + send 3 の 11 チャネルのみ・login/logout 撤去） ----
+//      K4: publishLogo（invoke=変換スキップ通知の返却）と publishDisplay（send）を追加
 const dblinkBlock = preloadSrc.slice(preloadSrc.indexOf('dblink: {'));
 const invoked = [...dblinkBlock.matchAll(/_measuredInvoke\('(dblink:[a-zA-Z]+)'/g)].map((m) => m[1]);
 const WHITELIST = [
@@ -96,18 +97,19 @@ const WHITELIST = [
   'dblink:setTournamentLink',
   'dblink:linkAndInit',
   'dblink:probe',
-  'dblink:stopLink'
+  'dblink:stopLink',
+  'dblink:publishLogo'
 ];
 ok(invoked.length === WHITELIST.length && WHITELIST.every((c) => invoked.includes(c)),
-  `preload の dblink invoke 公開が whitelist 7 チャネルと一致（実際: ${invoked.join(',')}）`);
+  `preload の dblink invoke 公開が whitelist 8 チャネルと一致（実際: ${invoked.join(',')}）`);
 for (const ch of WHITELIST) {
   ok(mainSrc.includes(`ipcMain.handle('${ch}'`), `main に ${ch} の handler がある`);
 }
-// K2: 状態送信は fire-and-forget（ipcRenderer.send）の 2 チャネルのみ
+// K2/K4: 状態・表示メタ送信は fire-and-forget（ipcRenderer.send）の 3 チャネルのみ
 const sent = [...dblinkBlock.matchAll(/ipcRenderer\.send\('(dblink:[a-zA-Z]+)'/g)].map((m) => m[1]);
-const SEND_WHITELIST = ['dblink:publishRecord', 'dblink:publishRuntime'];
+const SEND_WHITELIST = ['dblink:publishRecord', 'dblink:publishRuntime', 'dblink:publishDisplay'];
 ok(sent.length === SEND_WHITELIST.length && SEND_WHITELIST.every((c) => sent.includes(c)),
-  `preload の dblink send 公開が whitelist 2 チャネルと一致（実際: ${sent.join(',')}）`);
+  `preload の dblink send 公開が whitelist 3 チャネルと一致（実際: ${sent.join(',')}）`);
 for (const ch of SEND_WHITELIST) {
   ok(mainSrc.includes(`ipcMain.on('${ch}'`), `main に ${ch} の on ハンドラがある`);
 }
@@ -489,6 +491,218 @@ function makeStore(initial) {
   res = await dbLink.linkAndInit({ tournamentId: 'pc1', db: { id: DB_ID, name: 'A', part_label: '' }, structure });
   ok(res.ok === false && res.code === 'auth', 'upload 失敗（認可 404）はエラー透過');
   ok(!('pc1' in storeFail._data.dbLink.links), '失敗時は対応表を保存しない');
+
+  // ==== K4（案件230）: display / logo 送信（楽観ロックなし・global gap・conflict 非破棄・変換） ====
+
+  const os = require('node:os');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'k4-logo-'));
+  const smallPng = path.join(tmpDir, 'small.png');
+  const bigPng = path.join(tmpDir, 'big.png');
+  const logoSvg = path.join(tmpDir, 'logo.svg');
+  fs.writeFileSync(smallPng, Buffer.alloc(100, 1));
+  fs.writeFileSync(bigPng, Buffer.alloc(400 * 1024, 1));
+  fs.writeFileSync(logoSvg, '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  const makeStoreK4 = (dbLinkInitial, logoState) => {
+    const data = { dbLink: dbLinkInitial, logo: logoState };
+    return { get: (k) => data[k], set: (k, v) => { data[k] = v; }, _data: data };
+  };
+  const DISPLAY_PAYLOAD = {
+    event_name: '大会A', event_subtitle: null, game_type_text: 'NLH', prize_category_text: null,
+    prize_pool: 10000, prize_pool_note: null, payouts: [{ place: 1, amount: 10000 }],
+    avg_stack: 5000, telop_text: null, telop_visible: false, bg_theme_key: 'navy'
+  };
+
+  // -- display: 楽観ロックなし（expected_updated_at を送らない）+ /display へ POST --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, tournament_id: DB_ID } }
+  ];
+  dbLink.init(makeStoreK4(JSON.parse(JSON.stringify(LINKED)), null), null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  dbLink.publishDisplay('pc1', DISPLAY_PAYLOAD);
+  await advance(300);
+  ok(calls.length === 1 && calls[0].url.endsWith('/api/pc-timer/display'),
+    'publishDisplay は POST /display へ送る');
+  ok(!('expected_updated_at' in calls[0].body),
+    'display は楽観ロックなし（expected_updated_at を送らない=last-write-wins 契約）');
+  ok(calls[0].body.tournament_id === DB_ID && calls[0].body.event_name === '大会A' &&
+     calls[0].body.bg_theme_key === 'navy',
+    'display body は tournament_id + payload の透過');
+
+  // -- 未紐づけ / 未設定は fetch ゼロ --
+  vnow = 100_000; timers = []; calls = []; responses = [];
+  dbLink.init(makeStoreK4({ url: 'https://s.example.com', storeKey: 'k', links: {} }, null), null,
+    { fetchImpl: scenarioFetch, nowFn, delayFn });
+  dbLink.publishDisplay('unlinked-pc', DISPLAY_PAYLOAD);
+  res = dbLink.publishLogo('unlinked-pc');
+  await advance(2000);
+  ok(calls.length === 0 && timers.length === 0, '未紐づけの publishDisplay/publishLogo は fetch もタイマーもゼロ');
+  ok(res.ok === true && res.skipped === true, '未紐づけの publishLogo は skipped=true（エラー表示させない）');
+
+  // -- global gap: 種別を跨いだ送信も GLOBAL_MIN_GAP_MS(1.1秒) を空ける（60回/分の構造保証） --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, clock: { updated_at: 'G1' } } },
+    { status: 200, json: { ok: true, tournament_id: DB_ID } }
+  ];
+  dbLink.init(makeStoreK4(JSON.parse(JSON.stringify(LINKED)), null), null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  dbLink.publishRecord('pc1', { status: 'running', current_level_index: 0, end_at_ms: 111, paused_remaining_ms: null, pre_start_total_ms: null });
+  dbLink.publishDisplay('pc1', DISPLAY_PAYLOAD);
+  await advance(300);
+  ok(calls.length === 1, '同時 publish の 2 種別目は global gap 待ち（同時に 2 連発しない）');
+  await advance(1_100);
+  ok(calls.length === 2 && calls[1].url.endsWith('/display'),
+    'global gap(1.1秒) 経過後に 2 種別目が送信される');
+
+  // -- conflict の pending 破棄は lock 種別のみ（display の最新表示は失わない） --
+  vnow = 100_000; timers = []; calls = []; events = [];
+  responses = [
+    { status: 409, json: { ok: false, code: 'clock_conflict', error: '他の端末が更新しました' } },
+    { status: 200, json: { ok: true, clock: { status: 'paused', updated_at: 'C1' } } },
+    { status: 200, json: { ok: true, tournament_id: DB_ID } }
+  ];
+  const conflictFetch = async (url, opts) => {
+    if (calls.length === 0) {
+      // 最初の POST(409) の in-flight 中に record（lock=破棄対象）と display（非破棄）が積まれる
+      dbLink.publishRecord('pc1', { status: 'running', current_level_index: 9, end_at_ms: 999, paused_remaining_ms: null, pre_start_total_ms: null });
+      dbLink.publishDisplay('pc1', DISPLAY_PAYLOAD);
+    }
+    return scenarioFetch(url, opts);
+  };
+  dbLink.init(makeStoreK4(JSON.parse(JSON.stringify(LINKED)), null), null,
+    { fetchImpl: conflictFetch, nowFn, delayFn, notify });
+  dbLink.publishRuntime('pc1', { players_initial: 10, players_remaining: 9, reentry_count: 0, addon_count: 0, special_count: 0, special_enabled: false });
+  await advance(300);
+  await advance(10_000);
+  ok(calls.filter((c) => c.url.endsWith('/clock/record')).length === 0,
+    'conflict 後、lock 種別（record）の pending は破棄（DB を上書きしない）');
+  ok(calls.filter((c) => c.url.endsWith('/display')).length === 1,
+    'conflict でも display の pending は破棄しない（PC が正の表示メタは届く）');
+
+  // -- logo: 小さい PNG はそのまま data URL 化 + 同一ロゴの再送スキップ（署名 dedupe） --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, logo_version: 1 } }
+  ];
+  dbLink.init(makeStoreK4(JSON.parse(JSON.stringify(LINKED)), { kind: 'custom', customPath: smallPng }), null,
+    { fetchImpl: scenarioFetch, nowFn, delayFn });
+  res = dbLink.publishLogo('pc1');
+  ok(res.ok === true && !res.skipped, 'publishLogo 正常系は送信キューへ');
+  await advance(300);
+  ok(calls.length === 1 && calls[0].url.endsWith('/api/pc-timer/logo'), 'POST /logo へ送る');
+  ok(typeof calls[0].body.logo === 'string' && calls[0].body.logo.startsWith('data:image/png;base64,'),
+    'custom PNG は data URL 化して送る');
+  ok(!('expected_updated_at' in calls[0].body), 'logo も楽観ロックなし');
+  res = dbLink.publishLogo('pc1');
+  await advance(3_000);
+  ok(res.ok === true && res.skipped === true && calls.length === 1,
+    '送信成功済みと同一ロゴ（kind+path+mtime+size 署名）は再送しない');
+
+  // -- logo: placeholder は null 送信（ロゴ消去）--
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, logo_version: 2 } }
+  ];
+  dbLink.init(makeStoreK4(JSON.parse(JSON.stringify(LINKED)), { kind: 'placeholder', customPath: null }), null,
+    { fetchImpl: scenarioFetch, nowFn, delayFn });
+  res = dbLink.publishLogo('pc1');
+  await advance(300);
+  ok(res.ok === true && calls.length === 1 && calls[0].body.logo === null,
+    'placeholder（ロゴなし）は logo:null を送る（API 契約: null=消去）');
+
+  // -- logo: SVG はスキップ + 日本語通知（fetch ゼロ・PC 画面表示は無関係に維持） --
+  vnow = 100_000; timers = []; calls = []; responses = [];
+  dbLink.init(makeStoreK4(JSON.parse(JSON.stringify(LINKED)), { kind: 'custom', customPath: logoSvg }), null,
+    { fetchImpl: scenarioFetch, nowFn, delayFn });
+  res = dbLink.publishLogo('pc1');
+  await advance(2_000);
+  ok(res.ok === false && res.error.includes('SVG') && res.error.includes('PNG') && calls.length === 0,
+    'SVG ロゴは送信スキップ + 日本語案内（生の英文/HTTP 値を出さない）');
+
+  // -- logo: 300KB 超 PNG は nativeImage（注入 stub）で段階縮小し PNG 優先で送る --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, logo_version: 3 } }
+  ];
+  const nativeImageStub = {
+    createFromBuffer: () => ({
+      isEmpty: () => false,
+      resize: ({ width }) => ({
+        toPNG: () => Buffer.alloc(width === 256 ? 10_000 : 400_000, 2),
+        toJPEG: () => Buffer.alloc(500_000, 3)
+      })
+    })
+  };
+  dbLink.init(makeStoreK4(JSON.parse(JSON.stringify(LINKED)), { kind: 'custom', customPath: bigPng }), null,
+    { fetchImpl: scenarioFetch, nowFn, delayFn, nativeImageImpl: nativeImageStub });
+  res = dbLink.publishLogo('pc1');
+  ok(res.ok === true, '300KB 超 PNG は縮小して送信キューへ');
+  await advance(300);
+  ok(calls.length === 1 && calls[0].body.logo.startsWith('data:image/png;base64,'),
+    '縮小は PNG 優先（透過維持）で ≤300KB に収まった候補を送る');
+  const b64body = calls[0].body.logo.slice(calls[0].body.logo.indexOf(',') + 1);
+  ok(Math.floor((b64body.length * 3) / 4) <= 300 * 1024, '送信 data URL の実体は 300KB 以下');
+
+  // -- logo: 縮小しても収まらない場合は日本語案内でスキップ --
+  vnow = 100_000; timers = []; calls = []; responses = [];
+  const hugeStub = {
+    createFromBuffer: () => ({
+      isEmpty: () => false,
+      resize: () => ({ toPNG: () => Buffer.alloc(400_000, 2), toJPEG: () => Buffer.alloc(400_000, 3) })
+    })
+  };
+  dbLink.init(makeStoreK4(JSON.parse(JSON.stringify(LINKED)), { kind: 'custom', customPath: bigPng }), null,
+    { fetchImpl: scenarioFetch, nowFn, delayFn, nativeImageImpl: hugeStub });
+  res = dbLink.publishLogo('pc1');
+  ok(res.ok === false && res.error.includes('300KB') && calls.length === 0,
+    '縮小不能な巨大ロゴは日本語案内でスキップ（fetch ゼロ）');
+
+  // -- plus2 ロゴ: init で渡された同梱パスを送信ソースに使う --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, logo_version: 4 } }
+  ];
+  dbLink.init(makeStoreK4(JSON.parse(JSON.stringify(LINKED)), { kind: 'plus2', customPath: null }), null,
+    { fetchImpl: scenarioFetch, nowFn, delayFn, plus2LogoPath: smallPng });
+  res = dbLink.publishLogo('pc1');
+  await advance(300);
+  ok(res.ok === true && calls.length === 1 && calls[0].body.logo.startsWith('data:image/png;base64,'),
+    'plus2 ロゴは init の plus2LogoPath から data URL 化して送る');
+
+  // -- stopLink は待機中の display/logo pending も破棄（OFF=配信即終了・仕様4） --
+  vnow = 100_000; timers = []; calls = []; responses = [
+    { status: 200, json: { ok: true, clock: { status: 'idle', updated_at: 'S9' } } }
+  ];
+  const storeStopK4 = makeStoreK4(JSON.parse(JSON.stringify(LINKED)), null);
+  dbLink.init(storeStopK4, null, { fetchImpl: scenarioFetch, nowFn, delayFn });
+  dbLink.publishDisplay('pc1', DISPLAY_PAYLOAD);
+  res = await dbLink.stopLink({ tournamentId: 'pc1' });
+  await advance(5_000);
+  ok(res.ok === true && calls.length === 1 && calls[0].url.endsWith('/clock/stop'),
+    'OFF 後は待機中の display pending が飛ばない（stop の 1 送信のみ）');
+
+  // -- main.js 静的検査: plus2LogoPath を init へ渡す + K4 IPC 登録 --
+  ok(/plus2LogoPath:\s*path\.join\(__dirname,\s*'assets',\s*'logo-plus2-default\.png'\)/.test(mainSrc),
+    'main は同梱 PLUS2 ロゴの絶対パスを db-link init へ渡す');
+
+  // -- renderer 静的検査: K4 表示メタ/ロゴ送信のフック --
+  const dispFnStart = rendererSrc.indexOf('function publishDbLinkDisplay');
+  ok(dispFnStart >= 0, 'publishDbLinkDisplay が存在する');
+  const dispFnBody = rendererSrc.slice(dispFnStart, rendererSrc.indexOf('\nasync function publishDbLinkLogo', dispFnStart));
+  ok(dispFnBody.includes('if (!_dbLinkSend.active) return;'),
+    'publishDbLinkDisplay は inactive で先頭 return（既定 OFF で新コストゼロ）');
+  ok(dispFnBody.includes('tournamentState.id !== _dbLinkSend.pcId'),
+    'publishDbLinkDisplay は大会切替中のゲート未更新時に別大会の表示を送らない（pcId 一致ガード）');
+  ok(dispFnBody.includes('buildDisplayPayload(') && dispFnBody.includes('_dbLinkLastDisplayJson'),
+    'publishDbLinkDisplay は純関数 buildDisplayPayload + JSON dedupe を使う');
+  ok(!/tournamentRuntime\.\w+\s*=[^=]/.test(dispFnBody) && !/tournamentState\.\w+\s*=[^=]/.test(dispFnBody),
+    'publishDbLinkDisplay は読取専用（tournamentState / tournamentRuntime への代入が無い）');
+  // 呼出点: renderStaticInfo（集約点）・applyBackground・テロップ確定 3 経路・紐づけ確定・activation
+  const displayCallCount = (rendererSrc.match(/publishDbLinkDisplay\(/g) || []).length;
+  ok(displayCallCount >= 8, `publishDbLinkDisplay の定義+呼出が 8 箇所以上（実際: ${displayCallCount}）`);
+  const staticInfoStart = rendererSrc.indexOf('function renderStaticInfo');
+  const staticInfoBody = rendererSrc.slice(staticInfoStart, rendererSrc.indexOf('\nfunction ', staticInfoStart + 1));
+  ok(staticInfoBody.includes('publishDbLinkDisplay()'),
+    'renderStaticInfo（表示値の集約点）から display を送信（プール/配当/アベスタック変化を包括）');
+  const logoCallCount = (rendererSrc.match(/publishDbLinkLogo\(\)/g) || []).length;
+  ok(logoCallCount >= 4, `publishDbLinkLogo の呼出が 4 箇所以上（ロゴ変更2+紐づけ+activation。実際: ${logoCallCount}）`);
+  ok(rendererSrc.includes('setLogoHint(res.error'),
+    'ロゴ変換スキップの日本語案内を設定画面ヒントへ表示');
+
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
 
   console.log(`db-link.test.js: ${count} assertions passed`);
 })().catch((err) => {

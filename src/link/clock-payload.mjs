@@ -190,6 +190,101 @@ export function planRuntimeApply(db, localRuntime, localSpecialEnabled, localSpe
   return { ...vals, specialCount };
 }
 
+// ===== K4（案件230）: 表示メタ送信の純関数（POST /display） =====
+// PC の表示要素 → 受け口 API payload の写像（依存ゼロ・node --test 可）。
+// 検証仕様の正 = customer-app pc-validate.ts validateDisplayUpload（上限・null 許容を 1:1 で合わせる）。
+
+/** API が受ける背景テーマ 6 値（これ以外は 400 で弾かれる契約）。 */
+export const BG_THEME_6 = Object.freeze(['black', 'navy', 'carbon', 'felt', 'burgundy', 'midnight']);
+
+/** PC の背景キー（9値）→ API 6 値へ丸める。emerald / obsidian / image / 未知 → navy（契約）。 */
+export function roundBgTheme(key) {
+  return BG_THEME_6.includes(key) ? key : 'navy';
+}
+
+// テロップ色記法の許可色キー（renderer marquee.js MARQUEE_COLORS と同一 whitelist・依存ゼロで再宣言。
+// tests/db-link-payload.test.js が marquee.js との一致を静的検査する）。
+const TELOP_COLOR_KEYS = Object.freeze(['red', 'gold', 'yellow', 'orange', 'green', 'cyan', 'blue', 'pink', 'white']);
+
+/**
+ * テロップ本文の平文化: 色記法 [color]…[/color]（whitelist 色名 or #RRGGBB のみ）をタグだけ除去し、
+ * 改行は半角スペース3つで連結（PC 表示の marquee.js cleanText と同一整形）。
+ * web /tv はプレーンテキスト描画のため、タグを送ると「[red]」等が文字として映る（K4 の契約）。
+ * 未知ブラケットは marquee.js と同判定で地の文字として温存。
+ */
+export function stripTelopMarkup(text) {
+  if (typeof text !== 'string') return '';
+  const stripped = text.replace(/\[(\/?)([a-z]+|#[0-9a-f]{6})\]/gi, (full, _slash, name) => {
+    const key = String(name).toLowerCase();
+    if (TELOP_COLOR_KEYS.includes(key)) return '';
+    if (/^#[0-9a-f]{6}$/i.test(name)) return '';
+    return full;
+  });
+  return stripped
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join('   ');
+}
+
+// pc-validate.ts の金額上限（prize_pool / avg_stack = 0〜10億の整数）・payouts 上限 30 件
+const MAX_DISPLAY_AMOUNT = 1_000_000_000;
+const MAX_DISPLAY_PAYOUTS = 30;
+
+function _textOrNull(v, maxLen) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s ? s.slice(0, maxLen) : null;
+}
+
+function _intOrNull(v) {
+  return (Number.isSafeInteger(v) && v >= 0 && v <= MAX_DISPLAY_AMOUNT) ? v : null;
+}
+
+/**
+ * display payload（POST /display の body・tournament_id を除く）を組む。
+ * 全項目 nullable = PC に対応値が無い項目は null（でっち上げない）。楽観ロックなし（last-write-wins・
+ * expected_updated_at は付けない）。送るのは表示メタのみ = PII / 他大会データは入力に存在しない。
+ *
+ * @param {object} p
+ * @param {string}  p.title / p.subtitle          tournamentState.title / .subtitle
+ * @param {string}  p.gameTypeText                 表示ラベル解決済（'other' は customGameName）
+ * @param {string}  p.prizeCategory                tournamentState.prizeCategory
+ * @param {number}  p.prizePool                    computeTotalPool()
+ * @param {boolean} p.gtdActive                    isGuaranteeActive()（true なら注記 'GTD'）
+ * @param {Array}   p.payoutRanks / p.payoutAmounts payouts[i].rank / computeRoundedAmounts()（同順）
+ * @param {number}  p.avgStack                     computeAvgStack()
+ * @param {string}  p.telopText                    marqueeSettings.text（色記法込み可 → 平文化）
+ * @param {boolean} p.telopEnabled                 marqueeSettings.enabled
+ * @param {string}  p.bgKey                        PC 背景キー（9値 → 6値へ丸め）
+ */
+export function buildDisplayPayload(p) {
+  const src = p || {};
+  const ranks = Array.isArray(src.payoutRanks) ? src.payoutRanks : [];
+  const amounts = Array.isArray(src.payoutAmounts) ? src.payoutAmounts : [];
+  const payouts = [];
+  for (let i = 0; i < ranks.length && payouts.length < MAX_DISPLAY_PAYOUTS; i++) {
+    const place = Number(ranks[i]);
+    const amount = Math.floor(Number(amounts[i]));
+    if (!Number.isSafeInteger(place) || place < 1) continue;
+    if (!Number.isSafeInteger(amount) || amount < 0) continue;
+    payouts.push({ place, amount });
+  }
+  const telop = stripTelopMarkup(src.telopText).slice(0, 1000);
+  return {
+    event_name: _textOrNull(src.title, 200),
+    event_subtitle: _textOrNull(src.subtitle, 200),
+    game_type_text: _textOrNull(src.gameTypeText, 100),
+    prize_category_text: _textOrNull(src.prizeCategory, 200),
+    prize_pool: _intOrNull(src.prizePool),
+    prize_pool_note: src.gtdActive ? 'GTD' : null,
+    payouts: payouts.length > 0 ? payouts : null,
+    avg_stack: _intOrNull(src.avgStack),
+    telop_text: telop || null,
+    telop_visible: !!src.telopEnabled,
+    bg_theme_key: roundBgTheme(src.bgKey)
+  };
+}
+
 /**
  * structures payload（POST /structures の body）を組む。
  * levels は PC の構成配列を**そのまま**渡す（preset 由来の {level, sb, bb, bbAnte, durationMinutes,

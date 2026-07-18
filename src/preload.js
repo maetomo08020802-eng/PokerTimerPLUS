@@ -222,9 +222,10 @@ contextBridge.exposeInMainWorld('api', {
     }
   },
   // 外部DB連携 STEP2-K1/K2: 設定タブ「外部連携」+ 状態送信のブリッジ。通信は main
-  //   （src/link/db-link.js・plain fetch）に集約（renderer CSP 無改変）。公開は以下 7 チャネルのみ
-  //   （tests/db-link.test.js が whitelist 検査）。店舗キー方式: login/logout は撤去済。
+  //   （src/link/db-link.js・plain fetch）に集約（renderer CSP 無改変）。公開は invoke 8 + send 3
+  //   チャネルのみ（tests/db-link.test.js が whitelist 検査）。店舗キー方式: login/logout は撤去済。
   //   publish 系は fire-and-forget（ipcRenderer.send・remote:state と同型・応答不要）。
+  //   K4: publishLogo のみ invoke（変換スキップの日本語通知を renderer に返すため）。
   dblink: {
     getStatus: () => _measuredInvoke('dblink:getStatus'),
     setConfig: (cfg) => _measuredInvoke('dblink:setConfig', cfg || {}),
@@ -248,6 +249,12 @@ contextBridge.exposeInMainWorld('api', {
     publishRuntime: (p) => {
       try { ipcRenderer.send('dblink:publishRuntime', p || null); }
       catch (_) { /* never throw */ }
-    }
+    },
+    // K4（案件230）: 表示メタ / ロゴの送信
+    publishDisplay: (p) => {
+      try { ipcRenderer.send('dblink:publishDisplay', p || null); }
+      catch (_) { /* never throw */ }
+    },
+    publishLogo: (p) => _measuredInvoke('dblink:publishLogo', p || {})
   }
 });

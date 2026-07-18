@@ -62,10 +62,12 @@ import {
 // v2.0.1 #A1: registerDualDiffHandler で受信した差分を実 DOM 更新に反映する経路を追加。
 import { initDualSyncForHall, registerDualDiffHandler } from './dual-sync.js';
 // 外部DB連携 STEP2-K2/K3: engine 状態 → API payload の逐語マップ + DB→engine 適用プラン（純関数）
+// K4（案件230）: 表示メタ payload（buildDisplayPayload・テーマ 6 値丸め・テロップ平文化込み）
 import {
   buildRecordPayload,
   buildRuntimePayload,
   buildStructurePayload,
+  buildDisplayPayload,
   planClockApply,
   planRuntimeApply
 } from '../link/clock-payload.mjs';
@@ -1223,6 +1225,9 @@ function renderStaticInfo() {
   publishRemoteState();
   // K2: 人数系を DB へ読み取り送信（inactive は先頭 return・同値は JSON dedupe で IPC ゼロ）。
   publishDbLinkRuntime();
+  // K4: 表示メタも同集約点から送信（タイトル/プール/配当/アベスタック等の表示値変化を包括。
+  //   同値は JSON dedupe で IPC ゼロ・レートは main 側 coalescer + global gap が構造保証）。
+  publishDbLinkDisplay();
 }
 
 // STEP 6.11: カウント行の表示制御（0 時は visibility: hidden、0→1 で reveal アニメーション）
@@ -3088,6 +3093,9 @@ function applyBackground(value) {
   if (el.bgImagePanel) {
     el.bgImagePanel.hidden = (bg !== 'image');
   }
+  // K4: 背景テーマ変更を連携先へ送信（emerald/obsidian/image → navy 丸めは buildDisplayPayload 側。
+  //   inactive / 同値は publishDbLinkDisplay 内のゲート・dedupe で無コスト）
+  try { publishDbLinkDisplay(); } catch (_) { /* 起動初期の未定義時系は無視 */ }
 }
 
 // STEP 10 フェーズC.1.3: カスタム画像 state を更新して applyBackground を再描画
@@ -4264,6 +4272,10 @@ function bindDbLinkTabHandlers() {
         // K3: 進行中の既存時計へ接続した場合は DB 状態に PC が従う（仕様2・6-B ⑧ の完成）
         applyDbToEngine(res.clock);
       }
+      // K4: 紐づけ確定時に現在の表示メタ/ロゴを初回押し出し（display は時計と独立の PC 正
+      //   =connected でも送る。※applyDbLinkSendGate の activation 経路とは force/dedupe で重複無害）
+      publishDbLinkDisplay(true);
+      publishDbLinkLogo();
       // K2 完了 review 懐疑役指摘: sync（applyDbLinkStatus）が同じ表示要素へ「紐づけ済み: …」を書くため、
       // await で完了させてから warning を後置表示する（非 await だと warning が数 ms で上書き消去される）
       await syncDbLinkTabFromStatus();
@@ -4281,6 +4293,8 @@ function bindDbLinkTabHandlers() {
 let _dbLinkSend = { active: false, pcId: '' };
 // runtime の直前送信スナップショット（同値なら IPC すら出さない dedupe）
 let _dbLinkLastRuntimeJson = '';
+// K4: 表示メタの直前送信スナップショット（runtime と同型の dedupe）
+let _dbLinkLastDisplayJson = '';
 // K3: DB→engine 適用中フラグ。適用が引き起こす状態遷移を publish しない（往復ループ遮断=
 //   「PC ローカルで DB を上書きしない」の構造的担保）。hall への dual-sync は抑止しない
 //   （店舗TV は engine に追従し続ける）。
@@ -4306,13 +4320,22 @@ function applyDbLinkSendGate(status) {
   const active = linked && window.appRole !== 'hall';
   const wasActive = _dbLinkSend.active;
   _dbLinkSend = { active, pcId: active ? curId : '' };
-  if (active && !wasActive) _dbLinkLastRuntimeJson = ''; // 再開時は次の runtime を必ず送る
+  if (active && !wasActive) {
+    _dbLinkLastRuntimeJson = ''; // 再開時は次の runtime を必ず送る
+    _dbLinkLastDisplayJson = ''; // K4: 表示メタも同様（次の display を必ず送る）
+  }
   // K3: バッジ/probe をゲートに追随させる + active になった直後は初回 probe で DB 状態へ従う
   //   （起動・大会切替・紐づけ直後。仕様2「ON の大会は DB が正」の帰結。読取のみ）
   updateDbLinkIndicator();
   syncDbLinkProbe();
   if (active && !wasActive) {
-    setTimeout(() => { runDbLinkProbe(true); }, 0);
+    setTimeout(() => {
+      runDbLinkProbe(true);
+      // K4: activation 時に現在の表示メタ/ロゴを押し出す（起動・大会切替・紐づけ直後。
+      //   display は PC が正=last-write-wins・ロゴは署名 dedupe で同一なら main 側スキップ）
+      publishDbLinkDisplay(true);
+      publishDbLinkLogo();
+    }, 0);
   }
 }
 
@@ -4457,6 +4480,55 @@ function publishDbLinkRuntime(force) {
   } catch (_) { /* never throw */ }
 }
 
+// ===== K4（案件230）: 表示メタ / ロゴの送信（PC が正・last-write-wins・楽観ロックなし） =====
+
+// 表示メタの送信。表示値の集約点（renderStaticInfo）と表示設定の確定操作から呼ばれるため
+// JSON 比較で dedupe する（同値なら IPC すら出さない）。force=true は紐づけ/activation 初回用。
+// - _dbLinkApplying 中も抑止しない: DB 追従で人数が変わった時の avg_stack/配当更新は正当な表示更新
+//   （display は時計と違い DB→PC の逆流経路が無く、往復ループは構造上起きない）。
+// - 大会切替中のゲート未更新（refreshDbLinkSendState は async）で別大会の表示を送らないよう
+//   pcId と現在の tournamentState.id の一致を確認する。
+function publishDbLinkDisplay(force) {
+  if (!_dbLinkSend.active) return;
+  if (!tournamentState || tournamentState.id !== _dbLinkSend.pcId) return;
+  try {
+    let gameTypeText = '';
+    if (tournamentState.gameType === 'other') {
+      gameTypeText = (tournamentState.customGameName || '').trim() || 'その他';
+    } else {
+      gameTypeText = GAME_TYPE_LABEL[tournamentState.gameType] || '';
+    }
+    const payload = buildDisplayPayload({
+      title: tournamentState.title,
+      subtitle: tournamentState.subtitle,
+      gameTypeText,
+      prizeCategory: tournamentState.prizeCategory,
+      prizePool: computeTotalPool(),
+      gtdActive: isGuaranteeActive(),
+      payoutRanks: (tournamentState.payouts || []).map((p) => p.rank),
+      payoutAmounts: computeRoundedAmounts(),
+      avgStack: computeAvgStack(),
+      telopText: lastMarqueeSettings.text,
+      telopEnabled: lastMarqueeSettings.enabled,
+      bgKey: _userBgChoice
+    });
+    const json = JSON.stringify(payload);
+    if (!force && json === _dbLinkLastDisplayJson) return;
+    _dbLinkLastDisplayJson = json;
+    window.api?.dblink?.publishDisplay?.({ tournamentId: _dbLinkSend.pcId, display: payload });
+  } catch (_) { /* never throw */ }
+}
+
+// ロゴの送信（変更時 + 紐づけ/activation 初回）。data URL 変換・300KB 縮小・署名 dedupe は main 側。
+// 変換スキップ（SVG / 縮小不能）の日本語案内は設定画面ロゴタブのヒントへ表示する。
+async function publishDbLinkLogo() {
+  if (!_dbLinkSend.active) return;
+  try {
+    const res = await window.api?.dblink?.publishLogo?.({ tournamentId: _dbLinkSend.pcId });
+    if (res && res.ok === false && res.error) setLogoHint(res.error, 'error');
+  } catch (_) { /* never throw */ }
+}
+
 // record 送信トリガ①: 状態遷移（status / レベル変化）のみ購読。remainingMs だけの変化＝毎 tick は
 // 無視する（レート設計の核。±30秒等の不連続調整はトリガ②の明示フックで補完）。
 subscribe((state, prev) => {
@@ -4551,6 +4623,7 @@ async function handleLogoModeChange(value) {
     applyLogo({ kind: 'custom', customPath: result.customPath });
     syncLogoModeRadioFromState();
     setLogoHint('カスタムロゴを設定しました', 'success');
+    publishDbLinkLogo();   // K4: ロゴ変更を連携先へ（inactive はゲートで無コスト・失敗はヒント表示）
   } else {
     const result = await window.api.logo.setMode(value);
     if (!result?.ok) {
@@ -4561,6 +4634,7 @@ async function handleLogoModeChange(value) {
     applyLogo({ kind: value, customPath: null });
     syncLogoModeRadioFromState();
     setLogoHint('変更しました', 'success');
+    publishDbLinkLogo();   // K4: ロゴ変更（plus2/placeholder=消去含む）を連携先へ
   }
 }
 
@@ -7817,6 +7891,7 @@ async function handleMarqueeTabSave() {
       setMarqueeTabHint('保存に失敗しました', 'error');
     }
   }
+  publishDbLinkDisplay();   // K4: テロップ確定を連携先へ（inactive はゲートで無コスト）
   setTimeout(() => setMarqueeTabHint(''), 2500);
 }
 
@@ -8037,6 +8112,7 @@ async function handleMarqueeSave() {
       console.warn('マーキー設定の保存に失敗:', err);
     }
   }
+  publishDbLinkDisplay();   // K4: テロップ確定を連携先へ（inactive はゲートで無コスト）
   closeMarqueeDialog();
 }
 
@@ -8055,6 +8131,7 @@ function toggleMarquee() {
       console.warn('テロップ表示トグルの保存に失敗:', err);
     });
   }
+  publishDbLinkDisplay();   // K4: 表示/非表示トグルを連携先へ（inactive はゲートで無コスト）
 }
 
 el.marqueePreview?.addEventListener('click', handleMarqueePreview);

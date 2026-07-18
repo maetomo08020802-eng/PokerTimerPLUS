@@ -2552,7 +2552,9 @@ function registerDbLinkIpcHandlers() {
           try { w.webContents.send('dblink:event', payload); } catch (_) { /* ignore */ }
         }
       } catch (_) { /* ignore */ }
-    }
+    },
+    // K4: 同梱 PLUS2 ロゴ（logo.kind='plus2' 時の送信ソース。renderer 表示と同一アセット）
+    plus2LogoPath: path.join(__dirname, 'assets', 'logo-plus2-default.png')
   });
   ipcMain.handle('dblink:getStatus', () => dbLink.getStatus());
   ipcMain.handle('dblink:setConfig', (_event, cfg) => dbLink.setConfig(cfg || {}));
@@ -2570,6 +2572,11 @@ function registerDbLinkIpcHandlers() {
   ipcMain.on('dblink:publishRuntime', (_event, p) => {
     try { dbLink.publishRuntime(p && p.tournamentId, p && p.runtime); } catch (_) { /* never throw */ }
   });
+  // K4（案件230）: 表示メタ（fire-and-forget）とロゴ（invoke=変換スキップの日本語通知を返す）
+  ipcMain.on('dblink:publishDisplay', (_event, p) => {
+    try { dbLink.publishDisplay(p && p.tournamentId, p && p.display); } catch (_) { /* never throw */ }
+  });
+  ipcMain.handle('dblink:publishLogo', (_event, p) => dbLink.publishLogo(p && p.tournamentId));
 }
 registerDbLinkIpcHandlers();
 

@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | — | 安定運用フェーズ(v2.9.0 配信済・案件229 クローズ) |
+| 案件230 K4: PC表示データ・ロゴ送信 | 🔵 レビュー待ち(実装済・完了review→push前review) | feature=`feature/anken230-k4-display-publish`(4 commit) / report=`.cc-reports/2026-07-18_案件230_K4_PC表示データ送信.md`。INVARIANT例外②改定反映済(前原チャット承認・金銭表示情報OK) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -64,8 +64,8 @@
 
 - **git**: `main` = **v2.9.0 配信済**(tag v2.9.0=`8527944`・**GitHub Release Latest・自動更新有効**・push 済)。feature ブランチ K1〜K3 は役目終了(削除可)。オープンブランチなし(温存2本を除く)。
 - **現在地(2026-07-18)**: 外部DB連携(案件229 STEP2・店舗キー方式)**v2.9.0 配信完了・案件クローズ(前原 GO 2026-07-18)**。機能=連携 ON の大会に限り customer-app 受け口 API(`/api/pc-timer/*`)へ plain fetch+Bearer 店舗キーで時計状態+ブラインド構成を自動送信(K1 接続基盤+紐づけ / K2 状態遷移駆動送信・楽観ロック echo-back・coalescer / K3 切断バッジ+15秒復帰 probe・OFF=/clock/stop 即消し・DB→engine 反映アダプタ=conflict/復帰は DB 追従)。既定 OFF=完全ローカル不変・supabase-js 撤去で追加ライブラリゼロ復帰・CSP 無改変・致命5件無傷(runtime 永続化はフック9箇所目で維持)。全スライス plan review✅・完了review✅(cc-review2・懐疑役指摘は全て反映済)・push前review✅。テスト 1776 件全PASS(リリース定例の version assertion 74ファイル一括更新込み)。将来候補(提案のみ)=店舗キーの QR ペア設定 UX・切断中送信キューの永続化。
-- **次のアクション=なし(安定運用フェーズ)**。次案件は前原指示待ち。温存候補=v2.3.0 PRE_START永続化(前原判断)。詳細report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K{1,2,3}.md`。
-- 参照: brief=`.cc-briefs/2026-07-18_案件229_タイマー案C_PC店舗キー連携_STEP2_brief.md` / K1 report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
+- **進行中(2026-07-18)**: 案件230 K4=PC 表示メタ(イベント名/賞金/配当/テロップ/テーマ/アベスタック)+ロゴを `/api/pc-timer/display`・`/logo` へ送信。feature=`feature/anken230-k4-display-publish` 実装済(4 commit・テスト全PASS 1776→**1864**・純関数+coalescer 4種別化+global gap)。INVARIANT 例外② 改定反映済(前原チャット承認=金銭表示情報OK)。**次=完了report→完了review→push前review→前原GO後 main**。実配信確認は customer-app 0169 apply 後(6-B)。
+- 参照: brief=`.cc-briefs/2026-07-18_案件230_K4_PC表示データ送信_brief.md` / plan+plan review 承認済。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
 

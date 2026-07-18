@@ -181,6 +181,100 @@ function eq(a, b, msg) {
     { players_initial: 5, players_remaining: 7, reentry_count: 2, addon_count: 1 }, LOCAL_RT, false, 0) === null,
     'remaining > initial の DB 値は採用拒否');
 
+  // ==== K4（案件230）: buildDisplayPayload / roundBgTheme / stripTelopMarkup ====
+
+  const { buildDisplayPayload, roundBgTheme, stripTelopMarkup, BG_THEME_6 } = mod;
+
+  // -- roundBgTheme: PC 9値 → API 6値の全網羅（emerald/obsidian/image → navy が契約） --
+  for (const k of ['black', 'navy', 'carbon', 'felt', 'burgundy', 'midnight']) {
+    eq(roundBgTheme(k), k, `6値 ${k} はそのまま通す`);
+  }
+  for (const k of ['emerald', 'obsidian', 'image', 'unknown', '', undefined]) {
+    eq(roundBgTheme(k), 'navy', `${String(k)} は navy へ丸める（API は未知値を 400 で弾くため）`);
+  }
+  eq(BG_THEME_6.length, 6, 'BG_THEME_6 は 6 値');
+
+  // -- stripTelopMarkup: 色記法のタグのみ除去・未知ブラケット温存・改行整形 --
+  eq(stripTelopMarkup('[red]優勝賞金[/red]あり'), '優勝賞金あり', 'whitelist 色名タグを除去し中身を残す');
+  eq(stripTelopMarkup('[#12abEF]色[/#12abEF]'), '色', '#RRGGBB タグも除去');
+  eq(stripTelopMarkup('[RED]大[/RED]'), '大', '色名は大文字小文字を問わず除去（marquee.js と同判定）');
+  eq(stripTelopMarkup('[boss]未知[/boss]'), '[boss]未知[/boss]', '未知ブラケットは地の文字として温存');
+  eq(stripTelopMarkup('1行目\n\n  2行目  '), '1行目   2行目', '改行は空白3連結・空行除去（PC 表示と同一整形）');
+  eq(stripTelopMarkup(null), '', '非文字列は空文字');
+  eq(stripTelopMarkup('[red]A[/red][gold]B[/gold]'), 'AB', '複数タグ・連続タグも全除去');
+
+  // -- buildDisplayPayload: 正常系（全項目が写像される） --
+  const DISPLAY_IN = {
+    title: 'サンデートーナメント',
+    subtitle: 'Deep Stack',
+    gameTypeText: 'NLH',
+    prizeCategory: '大会Pt',
+    prizePool: 100000,
+    gtdActive: true,
+    payoutRanks: [1, 2, 3],
+    payoutAmounts: [50000, 30000, 20000],
+    avgStack: 25000,
+    telopText: '[red]本日22時終了[/red]',
+    telopEnabled: true,
+    bgKey: 'felt'
+  };
+  eq(buildDisplayPayload(DISPLAY_IN), {
+    event_name: 'サンデートーナメント',
+    event_subtitle: 'Deep Stack',
+    game_type_text: 'NLH',
+    prize_category_text: '大会Pt',
+    prize_pool: 100000,
+    prize_pool_note: 'GTD',
+    payouts: [{ place: 1, amount: 50000 }, { place: 2, amount: 30000 }, { place: 3, amount: 20000 }],
+    avg_stack: 25000,
+    telop_text: '本日22時終了',
+    telop_visible: true,
+    bg_theme_key: 'felt'
+  }, 'display payload の全項目写像（pc-validate.ts の受理形と 1:1）');
+
+  // -- null 正規化（空・未設定はでっち上げず null） --
+  const empty = buildDisplayPayload({});
+  eq(empty, {
+    event_name: null, event_subtitle: null, game_type_text: null, prize_category_text: null,
+    prize_pool: null, prize_pool_note: null, payouts: null, avg_stack: null,
+    telop_text: null, telop_visible: false, bg_theme_key: 'navy'
+  }, '入力なし = 全項目 null / telop_visible=false / テーマは navy フォールバック');
+  ok(!('tournament_id' in empty) && !('expected_updated_at' in empty),
+    'tournament_id（main が付与）と expected_updated_at（楽観ロックなし）は含めない');
+
+  // -- 上限・範囲外の扱い --
+  eq(buildDisplayPayload({ title: `  ${'あ'.repeat(300)}  ` }).event_name, 'あ'.repeat(200),
+    'event_name は trim + 200 文字切詰');
+  eq(buildDisplayPayload({ telopText: 'x'.repeat(1500) }).telop_text, 'x'.repeat(1000),
+    'telop_text は 1000 文字切詰');
+  eq(buildDisplayPayload({ prizePool: 1_000_000_001 }).prize_pool, null,
+    '10億超の prize_pool は null（クランプせずスキップ=でっち上げない）');
+  eq(buildDisplayPayload({ prizePool: 12.5 }).prize_pool, null, '非整数の prize_pool は null');
+  eq(buildDisplayPayload({ avgStack: -1 }).avg_stack, null, '負の avg_stack は null');
+  const manyPayouts = buildDisplayPayload({
+    payoutRanks: Array.from({ length: 40 }, (_, i) => i + 1),
+    payoutAmounts: Array.from({ length: 40 }, () => 100)
+  });
+  eq(manyPayouts.payouts.length, 30, 'payouts は 30 件へ切詰（API 上限）');
+  eq(buildDisplayPayload({ payoutRanks: [1, 2], payoutAmounts: [1000, NaN] }).payouts,
+    [{ place: 1, amount: 1000 }], '非有限 amount の行はスキップ（行単位）');
+  eq(buildDisplayPayload({ payoutRanks: [1], payoutAmounts: [] }).payouts, null,
+    '有効行ゼロの payouts は null');
+  eq(buildDisplayPayload({ gtdActive: false, prizePool: 500 }).prize_pool_note, null,
+    'GTD 非適用時は注記 null');
+  eq(buildDisplayPayload({ telopText: '[red][/red]', telopEnabled: true }).telop_text, null,
+    'タグのみのテロップは平文化後 null（enabled でも本文なし）');
+  eq(buildDisplayPayload({ bgKey: 'emerald' }).bg_theme_key, 'navy', 'payload 経由でも emerald は navy');
+
+  // -- marquee.js との whitelist 一致（renderer 表示とタグ判定がズレない静的検査） --
+  const marqueeSrc = require('node:fs').readFileSync(
+    path.join(__dirname, '..', 'src', 'renderer', 'marquee.js'), 'utf8');
+  for (const key of ['red', 'gold', 'yellow', 'orange', 'green', 'cyan', 'blue', 'pink', 'white']) {
+    ok(new RegExp(`${key}:\\s*'#`).test(marqueeSrc),
+      `色キー ${key} が marquee.js MARQUEE_COLORS に存在（whitelist 一致）`);
+    eq(stripTelopMarkup(`[${key}]x[/${key}]`), 'x', `色キー ${key} のタグを除去`);
+  }
+
   console.log(`db-link-payload.test.js: ${count} assertions passed`);
 })().catch((err) => {
   console.error(err);

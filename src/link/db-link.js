@@ -49,6 +49,19 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const COALESCE_DELAY_MS = 300;
 const MIN_SEND_INTERVAL_MS = 2_000;
 const RATE_BACKOFF_MS = 60_000;
+// K4: 全種別共有の最小送信間隔。種別が 4 つ（record/runtime/display/logo）に増えたため、
+// 種別別 2 秒だけでは理論上限が 60回/分を超える（4×30回）。全種別で 1.1 秒の間隔を共有する
+// ことで書込合計 ≤ 約54回/分を構造的に保証する（429 バックオフは保険として不変）。
+const GLOBAL_MIN_GAP_MS = 1_100;
+let _globalLastSentAt = 0;
+
+// K4: ロゴ送信の上限・許容 MIME（受け口 API 契約 = pc-validate.ts と同値）
+const MAX_LOGO_BYTES = 300 * 1024;
+const LOGO_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
+let _plus2LogoPath = '';    // 同梱 PLUS2 ロゴの絶対パス（main.js が init で渡す）
+let _nativeImageImpl;       // Electron nativeImage（テスト注入用・既定は遅延 require）
+// K4: 直近に送信成功したロゴの署名（dbId → sig）。紐づけ/起動のたびに同一ロゴを再送しない
+const _logoSentSig = new Map();
 
 // 楽観ロック: db 大会id → 直前成功応答の clock.updated_at（ISO 文字列そのまま・加工しない）
 const _updatedAtCache = new Map();
@@ -60,8 +73,12 @@ function init(store, log, opts) {
   _nowFn = opts && typeof opts.nowFn === 'function' ? opts.nowFn : null;
   _delayFn = opts && typeof opts.delayFn === 'function' ? opts.delayFn : null;
   _notify = opts && typeof opts.notify === 'function' ? opts.notify : null;
+  _plus2LogoPath = opts && typeof opts.plus2LogoPath === 'string' ? opts.plus2LogoPath : '';
+  _nativeImageImpl = opts && opts.nativeImageImpl !== undefined ? opts.nativeImageImpl : undefined;
   _healthOk = true;
   _updatedAtCache.clear();
+  _logoSentSig.clear();
+  _globalLastSentAt = 0;
   for (const st of Object.values(_coalescers)) {
     if (st.timer) { try { clearTimeout(st.timer); } catch (_) {} }
     st.timer = null; st.pending = null; st.lastSentAt = 0; st.backoffUntil = 0;
@@ -278,6 +295,11 @@ async function stopLink(p) {
   const res = await _request('POST', '/clock/stop', { tournament_id: dbId });
   _trackHealth(res);
   _updatedAtCache.delete(dbId);
+  // K4: OFF 後に待機中の送信（時計/表示/ロゴ）が飛んで配信が残らないよう当該大会の pending を破棄（仕様4）
+  for (const st of Object.values(_coalescers)) {
+    if (st.pending && st.pending.dbId === dbId) st.pending = null;
+  }
+  _logoSentSig.delete(dbId);
   const saved = removeRow();
   if (res.ok || res.code === 'clock_not_found') {
     _log('dblink:stop-ok');
@@ -342,9 +364,13 @@ async function linkAndInit(p) {
 }
 
 // 種別ごとの coalescer 状態（PC 1台=1大会のため種別単位で足りる。dbId は pending に持つ）
+// K4: lock=true の種別のみ楽観ロック（expected_updated_at echo-back）対象。display/logo は
+// last-write-wins（契約）のため lock=false = expected_updated_at を付けない・conflict 破棄の対象外。
 const _coalescers = {
-  record: { timer: null, pending: null, lastSentAt: 0, backoffUntil: 0, path: '/clock/record' },
-  runtime: { timer: null, pending: null, lastSentAt: 0, backoffUntil: 0, path: '/clock/runtime' }
+  record: { timer: null, pending: null, lastSentAt: 0, backoffUntil: 0, path: '/clock/record', lock: true },
+  runtime: { timer: null, pending: null, lastSentAt: 0, backoffUntil: 0, path: '/clock/runtime', lock: true },
+  display: { timer: null, pending: null, lastSentAt: 0, backoffUntil: 0, path: '/display', lock: false },
+  logo: { timer: null, pending: null, lastSentAt: 0, backoffUntil: 0, path: '/logo', lock: false }
 };
 
 function _now() { return _nowFn ? _nowFn() : Date.now(); }
@@ -360,37 +386,55 @@ function _linkedDbId(pcTournamentId) {
 /**
  * 種別ごとのトレーリング coalescer（最新 payload 勝ち）:
  * - 送信は常に COALESCE_DELAY_MS 後（連打・連続遷移は最後の状態に収束）
- * - 直近送信から MIN_SEND_INTERVAL_MS 未満なら間隔が空くまで待つ（2種別合計でも 60回/分以内）
+ * - 直近送信から MIN_SEND_INTERVAL_MS 未満なら間隔が空くまで待つ + 全種別共有の
+ *   GLOBAL_MIN_GAP_MS（K4）で 4 種別合計でも 60回/分以内を構造的に保証
  * - 429 を受けたら RATE_BACKOFF_MS のバックオフ（1段のみ・payload は保持して後送）
+ * @param {object} [meta] K4: 種別固有の付帯情報（logo の送信済み署名など・body には載せない）
  */
-function _scheduleSend(type, dbId, payload) {
+function _scheduleSend(type, dbId, payload, meta) {
   const st = _coalescers[type];
-  st.pending = { dbId, payload };
+  st.pending = { dbId, payload, meta: meta || null };
   if (st.timer) return; // 既にスケジュール済み → pending の上書きだけで良い（最新勝ち）
   const now = _now();
-  const wait = Math.max(COALESCE_DELAY_MS, st.lastSentAt + MIN_SEND_INTERVAL_MS - now, st.backoffUntil - now);
+  const wait = Math.max(COALESCE_DELAY_MS, st.lastSentAt + MIN_SEND_INTERVAL_MS - now,
+    _globalLastSentAt + GLOBAL_MIN_GAP_MS - now, st.backoffUntil - now);
   st.timer = _delay(() => { st.timer = null; _flushSend(type); }, wait);
 }
 
 async function _flushSend(type) {
   const st = _coalescers[type];
   if (!st.pending) return;
-  const { dbId, payload } = st.pending;
+  // K4: タイマー待機中に他種別が送信した場合は全種別共有の間隔を空け直す（60回/分の構造保証）
+  const gapWait = _globalLastSentAt + GLOBAL_MIN_GAP_MS - _now();
+  if (gapWait > 0) {
+    if (!st.timer) st.timer = _delay(() => { st.timer = null; _flushSend(type); }, gapWait);
+    return;
+  }
+  const { dbId, payload, meta } = st.pending;
   st.pending = null;
   st.lastSentAt = _now();
-  const body = { tournament_id: dbId, ...payload, expected_updated_at: _updatedAtCache.get(dbId) || null };
+  _globalLastSentAt = st.lastSentAt;
+  // K4: 楽観ロックは lock 種別（record/runtime）のみ。display/logo は last-write-wins（契約）
+  const body = { tournament_id: dbId, ...payload };
+  if (st.lock) body.expected_updated_at = _updatedAtCache.get(dbId) || null;
   let res = await _request('POST', st.path, body);
   _trackHealth(res);
-  if (res.ok) { _cacheUpdatedAt(dbId, res); _log('dblink:send-ok'); }
+  if (res.ok) {
+    _cacheUpdatedAt(dbId, res);
+    if (type === 'logo' && meta && typeof meta.sig === 'string') _logoSentSig.set(dbId, meta.sig);
+    _log('dblink:send-ok');
+  }
   else if (res.code === 'clock_conflict') {
     // K3（仕様2 準拠・K2 の一時逸脱を解消）: 楽観ロック衝突 = 他端末が更新した ⇒ **再送しない**。
     // GET で DB 状態を取り直し、renderer の反映アダプタへ渡して PC が DB に従う。
     _log('dblink:send-conflict');
-    // ★完了 review 懐疑役指摘: 送信 in-flight 中に積まれた pending（適用前の PC 状態）を両種別とも破棄。
+    // ★完了 review 懐疑役指摘: 送信 in-flight 中に積まれた pending（適用前の PC 状態）を破棄。
     //   破棄しないと apply-db 直後に古い状態が新しい updated_at で送信成功し DB を上書きしてしまう
     //   （「PC ローカルで DB を上書きしない」の穴）。適用後の新しい操作は改めて publish される。
+    //   K4: 破棄は lock 種別（時計状態）のみ。display/logo は PC が正（last-write-wins）で
+    //   時計の conflict と無関係なため、積まれた最新表示を失わせない。
     for (const other of Object.values(_coalescers)) {
-      if (other.pending && other.pending.dbId === dbId) other.pending = null;
+      if (other.lock && other.pending && other.pending.dbId === dbId) other.pending = null;
     }
     const clock = await getClock(dbId);
     if (clock.ok && clock.clock && _notify) {
@@ -410,7 +454,8 @@ async function _flushSend(type) {
   // 送信中に新しい pending が積まれていたら次をスケジュール
   if (st.pending && !st.timer) {
     const now = _now();
-    const wait = Math.max(COALESCE_DELAY_MS, st.lastSentAt + MIN_SEND_INTERVAL_MS - now, st.backoffUntil - now);
+    const wait = Math.max(COALESCE_DELAY_MS, st.lastSentAt + MIN_SEND_INTERVAL_MS - now,
+      _globalLastSentAt + GLOBAL_MIN_GAP_MS - now, st.backoffUntil - now);
     st.timer = _delay(() => { st.timer = null; _flushSend(type); }, wait);
   }
 }
@@ -431,6 +476,101 @@ function publishRuntime(pcTournamentId, runtime) {
   _scheduleSend('runtime', dbId, runtime);
 }
 
+// ===== K4（案件230）: 表示メタ / ロゴの送信（POST /display・/logo。楽観ロックなし=last-write-wins） =====
+
+/** 表示メタ（display）の送信。payload は renderer の buildDisplayPayload 済。未紐づけは fetch ゼロ。 */
+function publishDisplay(pcTournamentId, display) {
+  if (!display || typeof display !== 'object') return;
+  const dbId = _linkedDbId(pcTournamentId);
+  if (!dbId || !_configured()) return;
+  _scheduleSend('display', dbId, display);
+}
+
+/** base64 実体バイト数（サーバー pc-validate と同式: len*3/4 - padding。デコードしない）。 */
+function _dataUrlBytes(dataUrl) {
+  const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  const padding = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
+  return Math.floor((b64.length * 3) / 4) - padding;
+}
+
+function _getNativeImage() {
+  if (_nativeImageImpl !== undefined) return _nativeImageImpl;
+  try { _nativeImageImpl = require('electron').nativeImage; }
+  catch (_) { _nativeImageImpl = null; }
+  return _nativeImageImpl;
+}
+
+/**
+ * PC のロゴ状態（store 'logo'）→ 送信用 data URL（実体 ≤300KB）。
+ * - placeholder（ロゴなし）→ { ok:true, dataUrl:null }（API 契約: null = ロゴ消去）
+ * - plus2 → 同梱 PNG / custom → customPath（png/jpg/jpeg/svg）
+ * - 300KB 超の png/jpeg は nativeImage で段階縮小（PNG 優先=透過維持 → JPEG q80。幅 1024→512→256）
+ * - SVG は API 契約外（png/jpeg/webp/gif のみ）→ 日本語 error でスキップ（PC 画面のロゴ表示は無関係に維持）
+ */
+function _logoToDataUrl(logoState) {
+  const kind = logoState && typeof logoState === 'object' ? logoState.kind : 'placeholder';
+  if (kind !== 'plus2' && kind !== 'custom') return { ok: true, dataUrl: null };
+  const filePath = kind === 'plus2' ? _plus2LogoPath
+    : (typeof logoState.customPath === 'string' ? logoState.customPath : '');
+  if (!filePath) return { ok: false, error: 'ロゴ画像が見つかりません' };
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  if (ext === 'svg') {
+    return { ok: false, error: 'SVG ロゴは連携先に送信できません（PNG / JPEG のロゴを選ぶと送信されます）' };
+  }
+  const mime = LOGO_MIME[ext];
+  if (!mime) return { ok: false, error: 'このロゴ画像の形式は連携先に送信できません（PNG / JPEG のロゴを選んでください）' };
+  let buf;
+  try { buf = fs.readFileSync(filePath); }
+  catch (_) { return { ok: false, error: 'ロゴ画像を読み込めませんでした' }; }
+  let dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+  if (_dataUrlBytes(dataUrl) <= MAX_LOGO_BYTES) return { ok: true, dataUrl };
+  const tooLarge = { ok: false, error: 'ロゴ画像が大きすぎるため送信できません（300KB 以下の画像にすると送信されます）' };
+  // 縮小は nativeImage が扱える png/jpeg のみ（webp/gif の縮小はスキップ）
+  if (mime !== 'image/png' && mime !== 'image/jpeg') return tooLarge;
+  const nativeImage = _getNativeImage();
+  if (!nativeImage) return tooLarge;
+  try {
+    const img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) return { ok: false, error: 'ロゴ画像を読み込めませんでした' };
+    // PNG（透過維持）を優先して全幅で試し、収まらなければ JPEG（透過なし）で再試行
+    for (const encode of [
+      (resized) => `data:image/png;base64,${resized.toPNG().toString('base64')}`,
+      (resized) => `data:image/jpeg;base64,${resized.toJPEG(80).toString('base64')}`
+    ]) {
+      for (const width of [1024, 512, 256]) {
+        const candidate = encode(img.resize({ width }));
+        if (_dataUrlBytes(candidate) <= MAX_LOGO_BYTES) return { ok: true, dataUrl: candidate };
+      }
+    }
+  } catch (_) { /* fallthrough */ }
+  return tooLarge;
+}
+
+/**
+ * ロゴの送信（変更時+紐づけ初回に renderer から呼ばれる）。store 'logo' を main 側で読み data URL 化。
+ * - 未紐づけ / 未設定は fetch ゼロ（skipped=true・エラー表示させない）
+ * - 直近送信成功と同一ロゴ（kind+path+mtime+size 署名）は再送しない
+ * - 変換不能（SVG / 300KB 超縮小不能）は日本語 error を返す（renderer がヒント表示）
+ */
+function publishLogo(pcTournamentId) {
+  const dbId = _linkedDbId(pcTournamentId);
+  if (!dbId || !_configured()) return { ok: true, skipped: true };
+  const logoState = (_mainStore && _mainStore.get('logo')) || null;
+  let sig = 'none';
+  if (logoState && typeof logoState === 'object' && (logoState.kind === 'plus2' || logoState.kind === 'custom')) {
+    const filePath = logoState.kind === 'plus2' ? _plus2LogoPath : (logoState.customPath || '');
+    let stamp = '';
+    try { const st = fs.statSync(filePath); stamp = `${st.mtimeMs}:${st.size}`; } catch (_) { /* ignore */ }
+    sig = `${logoState.kind}:${filePath}:${stamp}`;
+  }
+  if (_logoSentSig.get(dbId) === sig) return { ok: true, skipped: true };
+  const conv = _logoToDataUrl(logoState);
+  if (!conv.ok) { _log('dblink:logo-skip'); return conv; }
+  _scheduleSend('logo', dbId, { logo: conv.dataUrl }, { sig });
+  _log('dblink:logo-queued');
+  return { ok: true };
+}
+
 module.exports = {
   init,
   getStatus,
@@ -441,6 +581,8 @@ module.exports = {
   linkAndInit,
   publishRecord,
   publishRuntime,
+  publishDisplay,
+  publishLogo,
   probe,
   stopLink,
   // テスト専用: fetch ラッパを直接駆動する（実ネットワーク不要の純ロジック検証用）
