@@ -678,6 +678,30 @@ function makeStore(initial) {
   ok(/plus2LogoPath:\s*path\.join\(__dirname,\s*'assets',\s*'logo-plus2-default\.png'\)/.test(mainSrc),
     'main は同梱 PLUS2 ロゴの絶対パスを db-link init へ渡す');
 
+  // -- renderer 静的検査: K4 表示メタ/ロゴ送信のフック --
+  const dispFnStart = rendererSrc.indexOf('function publishDbLinkDisplay');
+  ok(dispFnStart >= 0, 'publishDbLinkDisplay が存在する');
+  const dispFnBody = rendererSrc.slice(dispFnStart, rendererSrc.indexOf('\nasync function publishDbLinkLogo', dispFnStart));
+  ok(dispFnBody.includes('if (!_dbLinkSend.active) return;'),
+    'publishDbLinkDisplay は inactive で先頭 return（既定 OFF で新コストゼロ）');
+  ok(dispFnBody.includes('tournamentState.id !== _dbLinkSend.pcId'),
+    'publishDbLinkDisplay は大会切替中のゲート未更新時に別大会の表示を送らない（pcId 一致ガード）');
+  ok(dispFnBody.includes('buildDisplayPayload(') && dispFnBody.includes('_dbLinkLastDisplayJson'),
+    'publishDbLinkDisplay は純関数 buildDisplayPayload + JSON dedupe を使う');
+  ok(!/tournamentRuntime\.\w+\s*=[^=]/.test(dispFnBody) && !/tournamentState\.\w+\s*=[^=]/.test(dispFnBody),
+    'publishDbLinkDisplay は読取専用（tournamentState / tournamentRuntime への代入が無い）');
+  // 呼出点: renderStaticInfo（集約点）・applyBackground・テロップ確定 3 経路・紐づけ確定・activation
+  const displayCallCount = (rendererSrc.match(/publishDbLinkDisplay\(/g) || []).length;
+  ok(displayCallCount >= 8, `publishDbLinkDisplay の定義+呼出が 8 箇所以上（実際: ${displayCallCount}）`);
+  const staticInfoStart = rendererSrc.indexOf('function renderStaticInfo');
+  const staticInfoBody = rendererSrc.slice(staticInfoStart, rendererSrc.indexOf('\nfunction ', staticInfoStart + 1));
+  ok(staticInfoBody.includes('publishDbLinkDisplay()'),
+    'renderStaticInfo（表示値の集約点）から display を送信（プール/配当/アベスタック変化を包括）');
+  const logoCallCount = (rendererSrc.match(/publishDbLinkLogo\(\)/g) || []).length;
+  ok(logoCallCount >= 4, `publishDbLinkLogo の呼出が 4 箇所以上（ロゴ変更2+紐づけ+activation。実際: ${logoCallCount}）`);
+  ok(rendererSrc.includes('setLogoHint(res.error'),
+    'ロゴ変換スキップの日本語案内を設定画面ヒントへ表示');
+
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
 
   console.log(`db-link.test.js: ${count} assertions passed`);
