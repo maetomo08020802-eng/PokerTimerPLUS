@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-08** — **v2.8.0 配信完了(スマホ遠隔操作・remote-control 案件クローズ)**。GitHub Release v2.8.0 Latest・自動更新マニフェスト込み。main merge `c8eb931`/tag v2.8.0/spike除去済。テスト1589件全PASS・致命5件維持・追加ライブラリゼロ・CSP無改変・既定OFFで後方互換。オープン作業0件・安定運用フェーズ。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-07-18** — **v2.9.0 配信完了(外部DB連携=店舗キー方式・案件229 STEP2 クローズ)**。GitHub Release v2.9.0 Latest・自動更新マニフェスト込み。tag v2.9.0=`8527944`。テスト1776件全PASS・致命5件維持・追加ライブラリゼロ復帰・CSP無改変・既定OFFで後方互換。オープン作業0件・安定運用フェーズ。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 外部DB連携 STEP2(案件229) | 🟡 K1〜K3 全main反映済・前原6-B/GO待ち | K3 main merge `b439746`=切断バッジ+15秒復帰probe・OFF=/clock/stop即消し・DB→engine反映アダプタ(conflict=DB追従へ契約準拠化・懐疑役指摘2件反映済)。**STEP2 実装完結**。テスト1776全PASS。report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K{1,2,3}.md`。残=前原6-B(①〜⑭)→GO→リリース判断(tag/.exeは前原GO後のみ) |
+| (なし) | — | 安定運用フェーズ(v2.9.0 配信済・案件229 クローズ) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -21,6 +21,7 @@
 
 | 配信日 | バージョン | 主要変更(1行) | report |
 |--------|-----------|---------|--------|
+| 2026-07-18 | **v2.9.0** | **外部DB連携(店舗キー方式・案件229 STEP2=K1接続基盤+紐づけ/K2状態送信・楽観ロック/K3切断表示・OFF停止・DB追従アダプタ)**。設定=URL+店舗キーの2入力・既定OFF=完全ローカル不変・supabase-js不使用(plain fetch)・送信は時計状態+ブラインド構成のみ。tag v2.9.0(Latest・自動更新) | `.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K{1,2,3}.md` |
 | 2026-07-08 | **v2.8.0** | **スマホ遠隔操作(実験的機能・単一モードのみ)**。同一LAN内スマホから全操作(PIN+セッショントークン+Origin+Host厳格アンカー+レート制限・状態SSE=fetch streaming・危険操作confirm・卓名・QR=依存ゼロ自作)。既定OFFで現行完全同一・完全ローカル文言をLAN例外込みに改訂・追加ライブラリゼロ・CSP無改変。merge `c8eb931`/tag v2.8.0(Latest・自動更新) | `.cc-reports/2026-07-08_remote-control_phase1{a-core,b-core,b-qr,c-release-prep}.md` |
 | 2026-07-08 | **v2.7.0** | **マルチトーナメント4分割表示モード**(2×2独立時計・操作盤+キーボード・フィラー・停電復帰=復元方式選択+経過時間表示・開始/終了確認モーダル・HDMI追従・走行中差し替えガード)。単一モード完全非接触・store書込ゼロ。tag v2.7.0(Latest・自動更新) | `.cc-reports/2026-07-08_multi-tournament-4up_phase3b-release-prep.md`(+3c report) |
 | 2026-06-24 | v2.6.6 | テロップ色プレビュー枠に「プレビュー(表示見本・編集不可)」ラベル明示(v2.6.5 で枠を編集領域と誤認した件の fix)。UI/文言のみ・2箇所整合・致命5件非接触。merge直push `df919b9`/tag v2.6.6(Latest・自動更新)。軽量トラック | `.cc-briefs/2026-06-24_telop-preview-label_lightweight_review.md` |
@@ -51,18 +52,19 @@
 
 | 指標 | 値 |
 |------|----|
-| 配信済リリース | 17件(v1.0.0〜v2.8.0)|
+| 配信済リリース | 18件(v1.0.0〜v2.9.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 0件(remote-control v2.8.0 クローズ・安定運用フェーズ)|
-| 最新テスト件数 | 1589件 全PASS(remote-control: 1a +35 / 1b +24 / 1b-qr +11) |
+| オープン作業 | 0件(外部DB連携 v2.9.0 クローズ・安定運用フェーズ)|
+| 最新テスト件数 | 1776件 全PASS(db-link 137 / db-link-payload 50 含む) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = **K3 merge 済 `b439746`・push 済**(feature ブランチ K1〜K3 は役目終了・削除可)。
-- **現在地(2026-07-18)**: 外部DB連携 STEP2(案件229・店舗キー方式)**実装完結(K1 接続基盤+紐づけ / K2 状態送信 / K3 切断表示・OFF停止・DB追従)・全スライス main 反映済**。K3=「連携切断中」バッジ(operator のみ・店舗TV 非表示・時計は走り続ける)+15秒復帰 probe・OFF=POST /clock/stop で顧客/tv 即消し・復帰/conflict/接続時は DB→engine 反映アダプタ(判断=純関数 planClockApply/planRuntimeApply・実行=timer.js 公開 API のみ・_dbLinkApplying 往復遮断・schedulePersistRuntime 9箇所目・conflict=409→GET→再送なしの DB 追従=契約準拠化)。完了 review 懐疑役指摘2件(conflict 時 pending 破棄・level index クランプ)反映済。テスト **1776 件全PASS**・致命5件無傷(静的テスト恒常ガード)。全スライス plan review✅・完了review✅・push前review✅。**残 = 前原 6-B 実機確認(①〜⑭・正キー保持者=前原のみ)→ 前原 GO → リリース判断(tag/.exe/Release は GO 後のみ)**。将来候補(提案のみ)=店舗キーの QR ペア設定 UX。
+- **git**: `main` = **v2.9.0 配信済**(tag v2.9.0=`8527944`・**GitHub Release Latest・自動更新有効**・push 済)。feature ブランチ K1〜K3 は役目終了(削除可)。オープンブランチなし(温存2本を除く)。
+- **現在地(2026-07-18)**: 外部DB連携(案件229 STEP2・店舗キー方式)**v2.9.0 配信完了・案件クローズ(前原 GO 2026-07-18)**。機能=連携 ON の大会に限り customer-app 受け口 API(`/api/pc-timer/*`)へ plain fetch+Bearer 店舗キーで時計状態+ブラインド構成を自動送信(K1 接続基盤+紐づけ / K2 状態遷移駆動送信・楽観ロック echo-back・coalescer / K3 切断バッジ+15秒復帰 probe・OFF=/clock/stop 即消し・DB→engine 反映アダプタ=conflict/復帰は DB 追従)。既定 OFF=完全ローカル不変・supabase-js 撤去で追加ライブラリゼロ復帰・CSP 無改変・致命5件無傷(runtime 永続化はフック9箇所目で維持)。全スライス plan review✅・完了review✅(cc-review2・懐疑役指摘は全て反映済)・push前review✅。テスト 1776 件全PASS(リリース定例の version assertion 74ファイル一括更新込み)。将来候補(提案のみ)=店舗キーの QR ペア設定 UX・切断中送信キューの永続化。
+- **次のアクション=なし(安定運用フェーズ)**。次案件は前原指示待ち。温存候補=v2.3.0 PRE_START永続化(前原判断)。詳細report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K{1,2,3}.md`。
 - 参照: brief=`.cc-briefs/2026-07-18_案件229_タイマー案C_PC店舗キー連携_STEP2_brief.md` / K1 report=`.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K1.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
