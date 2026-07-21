@@ -63,6 +63,7 @@
 
 ## 直近の状態(次セッション起点)
 
+- 2026-07-21 記録掃除: `.cc-briefs/` の日付付き85件(クローズ済案件のbrief/review)を `.cc-archive/bulk-2026-07/briefs/` へ移動(README・テンプレは残置)。
 - **git**: `main` = **v2.10.0 配信済**(tag v2.10.0・GitHub Release Latest・latest.yml 自動更新有効・push 済 `a0e5d2d`+release-prep)。案件230 K4 merge `5518a89`。feature ブランチ K1〜K4 は役目終了(削除可)。
 - **現在地(2026-07-18)**: 案件230 K4=PC 表示メタ+ロゴ送信を **v2.10.0 として配信完了・実機確認OK(顧客アプリ連動含め全 6-B PASS・前原確認)=案件クローズ**。⚠️発覚した根因=K4 は main には入っていたが v2.9.0 リリース(tag が K4 merge より前)に含まれず、実機は自動更新で v2.9.0 実行=送信コード不在で「本番 tournament_clock_display に1件も届かない」症状(時計同期は v2.9.0 機能なので届いていた)→ v2.10.0 リリースで解消。完了review✅・push前diff review✅・テスト1864件全PASS・INVARIANT例外②改定済(金銭表示情報OK・前原承認)。**次のアクション=なし(安定運用フェーズ)**。次案件は前原指示待ち。残提案(実装しない・提案のみ)=runtime 送信の pcId ガード・切断中ロゴ再送(report §8)。
 - **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く。機能を実機に届けるには **tag+Release 公開が必須**。merge 後リリース前の「実機で動かない」報告は、まず **Release Latest の tag に当該 commit が含まれるか**(`git merge-base --is-ancestor <commit> <tag>`)を最初に疑う。
