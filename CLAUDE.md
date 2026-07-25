@@ -9,7 +9,7 @@
 
 ## ハイブリッド自動化(現行運用の要点)
 
-- **現在 Phase 1(2026-06-11〜)**: Stop hook は通知(トースト)のみ・自動トリガーなし。主経路は CC が plan / report 書出直後に構築士2 を能動呼出。新案件・大方針相談は Cowork 版構築士2。写真可否・用語注釈の正典: `plus2-homepage/SKILL.md` §6/§9(旧 Skills は 2026-07-20 廃止)。詳細・トラブル対応: `~/.claude/HYBRID_AUTOMATION_README.md`。導入経緯・全文規約は docs/CLAUDE-archive.md 参照。
+- **現在 Phase 1(2026-06-11〜)**: Stop hook は通知(トースト)のみ・自動トリガーなし。主経路は CC が plan / report 書出直後に構築士2 を能動呼出。新案件・大方針相談は Desktop アドバイザーセッション(旧 Cowork 役・2026-07-25 移管)。写真可否・用語注釈の正典: `plus2-homepage/SKILL.md` §6/§9(旧 Skills は 2026-07-20 廃止)。詳細・トラブル対応: `~/.claude/HYBRID_AUTOMATION_README.md`。導入経緯・全文規約は docs/CLAUDE-archive.md 参照。
 - **完了レビュー起動(2026-07-07 本採用・共通版 cc-review2 を scriptPath 優先)**: 完了 report 書出後、Workflow ツールで `{ scriptPath: "C:\\Users\\user\\.claude\\workflows\\cc-review2.js", args: { reportPath: "<report絶対パス>" } }` を実行(トラック体系に従う。通常= mode:"single"・重要= dual)(※ name 指定 `cc-review2` は解決されない=必ず scriptPath で。懐疑役の観点は当プロジェクトの `.claude/cc-review-verify.md` を実行時に読む。reportPath 省略時は最新 `.cc-reports/*.md` を自動探索)。失敗時のみプロジェクト版 `{ name: "cc-review" }`(または `.claude/workflows/cc-review.js`)→ それも不可なら従来の `cc-kouchikushi2` 単発呼出にフォールバックし、どれで動いたかをレビュー後のチャット報告に1行明記。
 - **完了後の処理**: completion_review.md を Read → 「チャット丸展開ルール」(後述)を実行し、ワークフロー戻り値の二次チェック結果(懸念/escalate)を1行添える。Plan 軽量 review・brief 起案の `cc-kouchikushi2` 単発呼出は従来どおり。Stop hook 通知・INVARIANTS・DoD・6-A/6-B・並列 sub-agent 最大 3 体・push 前 review 等も不変。
 
