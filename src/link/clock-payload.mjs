@@ -113,6 +113,10 @@ function _clampIdx(v) {
  * @param {number} nowMs Date.now()（注入可能）
  * @returns null（適用不要）|
  *   {kind:'idle'} | {kind:'finished'}                       → timerReset({force:true})
+ *     ※ 案件231: idle/finished 分岐からは返らなくなった（下記 republish に置換）。
+ *       実行器側の処理は防御として残置（この2 kind は現状この関数からは到達不能）。
+ *   {kind:'republish', reason:'stale-idle'|'stale-finished'} → 追従しない。PC の現在状態を
+ *     DB へ再送させる（stale 行への追従でローカル進行中タイマーが巻き戻る実店舗バグの根治）
  *   {kind:'prestart', remainingMs, totalMs, paused}          → restorePreStart 系
  *   {kind:'level', levelIndex, remainingTargetMs, paused}    → startAtLevel→(pause)→advanceTimeBy
  *   ※ remainingTargetMs は負も可 = advanceTimeBy の既存レベル繰越に委譲
@@ -121,10 +125,13 @@ function _clampIdx(v) {
 export function planClockApply(local, db, nowMs) {
   if (!db || typeof db !== 'object' || !local || typeof local !== 'object') return null;
   switch (db.status) {
+    // 案件231: DB の idle/finished は「送信失敗の取り逃しで残った stale 行」の可能性がある。
+    // ローカルが進行中（IDLE 以外 or PRE_START）の時は追従せず republish（PC が正）。
+    // ローカルも IDLE なら従来どおり null（適用不要・挙動不変）。
     case 'idle':
-      return (local.status === 'IDLE' && !local.isPreStart) ? null : { kind: 'idle' };
+      return (local.status === 'IDLE' && !local.isPreStart) ? null : { kind: 'republish', reason: 'stale-idle' };
     case 'finished':
-      return (local.status === 'IDLE' && !local.isPreStart) ? null : { kind: 'finished' };
+      return (local.status === 'IDLE' && !local.isPreStart) ? null : { kind: 'republish', reason: 'stale-finished' };
     case 'prestart': {
       const total = Math.floor(Number(db.pre_start_total_ms) || 0);
       if (total <= 0) return null; // 不整合な DB 行は適用しない

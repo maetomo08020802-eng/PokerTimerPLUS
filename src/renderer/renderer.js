@@ -4385,6 +4385,10 @@ function applyDbToEngine(clock) {
   if (!_dbLinkSend.active || !clock || typeof clock !== 'object') return;
   if (_dbLinkApplying) return;
   _dbLinkApplying = true;
+  // 案件231: stale idle/finished ガード発火時に「適用せず PC 状態を再送する」フラグ。
+  //   送信は finally で _dbLinkApplying を解除した後に行う（publishDbLinkClock 冒頭の
+  //   往復ループ遮断 `if (_dbLinkApplying) return;` に握り潰されないため）。1適用判断につき1回。
+  let wantRepublish = false;
   try {
     const st = getState();
     const plan = planClockApply({
@@ -4394,7 +4398,29 @@ function applyDbToEngine(clock) {
       isPreStart: isPreStartActive()
     }, clock, Date.now());
     if (plan) {
-      if (plan.kind === 'idle' || plan.kind === 'finished') {
+      if (plan.kind === 'republish') {
+        // 案件231: DB の stale idle/finished にローカル進行中タイマーを追従させない（巻き戻り根治）。
+        //   timer.js には一切触らず、PC の現在状態を DB へ再送して stale を上書き整合させる。
+        try {
+          window.api?.log?.write?.('dblink:stale-skip', {
+            reason: plan.reason,
+            status: st.status,
+            isPreStart: isPreStartActive(),
+            role: window.appRole
+          });
+        } catch (_) {}
+        wantRepublish = true;
+      } else if (plan.kind === 'idle' || plan.kind === 'finished') {
+        // 案件231 時点で planClockApply からこの2 kind は返らない（republish に置換・防御として残置）。
+        //   万一到達した場合に priority-events.log で追えるよう caller log を追加（既存4箇所と同型）。
+        try {
+          window.api?.log?.write?.('timer:reset:caller', {
+            ctx: 'applyDbToEngine:' + plan.kind,
+            status: st.status,
+            isPreStart: isPreStartActive(),
+            role: window.appRole
+          });
+        } catch (_) {}
         // reset({force:true}) は PRE_START 中でも内部で解除+onPreStartCancel を発火（hall 整合）
         timerReset({ force: true });
       } else if (plan.kind === 'prestart') {
@@ -4441,6 +4467,10 @@ function applyDbToEngine(clock) {
   finally {
     _dbLinkApplying = false;
   }
+  // 案件231: ガード発火時のみ、往復遮断解除後に PC 現在状態を再送（stale 行を上書き整合）。
+  //   位置制約: この呼出は上の finally（_dbLinkApplying = false）より後に置くこと
+  //   （tests/db-link-payload.test.js が静的検査。前に動かすと publish 冒頭ガードで黙って無効化される）。
+  if (wantRepublish) publishDbLinkClock();
 }
 
 // 時計状態（record）の送信。呼び出し時点の engine スナップショットから payload を組む。

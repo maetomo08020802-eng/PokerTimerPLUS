@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-07-18** — **v2.10.0 配信完了(案件230 K4=PC表示メタ・ロゴ送信)**。GitHub Release v2.10.0 Latest・自動更新マニフェスト(latest.yml)込み。tag v2.10.0。⚠️**発覚事象**: K4 は main merge 済だが v2.9.0 リリース(tag は K4 より前)に含まれず、実機は自動更新で v2.9.0 を実行=表示送信コード不在で「1件も届かない」症状→ v2.10.0 リリースで解消。テスト1864件全PASS・致命5件維持・追加ライブラリゼロ・CSP無改変・既定OFF後方互換。実配信の実機確認(6-B)は次セッション。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-08-09** — **案件231 dblink-stale-idle-guard 実装完了(レビュー待ち)**。実店舗で発生した「進行中タイマーが勝手に未スタート状態へ巻き戻る」バグ(原因=DB連携のstale idle/finished追従)を根治: 追従せずPC状態をrepublish。テスト1880件全PASS(+16)・致命5件維持・既定OFF不変。feature ブランチのみ・main push/リリースは前原GO待ち。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | — | 安定運用フェーズ(v2.10.0 配信済・案件230 K4 実機確認OK=クローズ) |
+| 案件231 dblink-stale-idle-guard | 🔵 レビュー待ち | 連携ON大会の進行中タイマーがDBのstale idle/finished行に追従して巻き戻るバグの根治(追従せずrepublish)。feature/dblink-stale-idle-guard・report=`.cc-reports/2026-08-09_案件231_dblink-stale-idle-guard.md` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -55,19 +55,18 @@
 |------|----|
 | 配信済リリース | 19件(v1.0.0〜v2.10.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 0件(案件230 K4=v2.10.0 実機確認OK クローズ・安定運用フェーズ)|
-| 最新テスト件数 | 1864件 全PASS(db-link 173 / db-link-payload 102 含む) |
+| オープン作業 | 1件(案件231 dblink-stale-idle-guard=レビュー待ち)|
+| 最新テスト件数 | 1880件 全PASS(db-link 173 / db-link-payload 118 含む) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- 2026-07-21 記録掃除: `.cc-briefs/` の日付付き85件(クローズ済案件のbrief/review)を `.cc-archive/bulk-2026-07/briefs/` へ移動(README・テンプレは残置)。
-- **git**: `main` = **v2.10.0 配信済**(tag v2.10.0・GitHub Release Latest・latest.yml 自動更新有効・push 済 `a0e5d2d`+release-prep)。案件230 K4 merge `5518a89`。feature ブランチ K1〜K4 は役目終了(削除可)。
-- **現在地(2026-07-18)**: 案件230 K4=PC 表示メタ+ロゴ送信を **v2.10.0 として配信完了・実機確認OK(顧客アプリ連動含め全 6-B PASS・前原確認)=案件クローズ**。⚠️発覚した根因=K4 は main には入っていたが v2.9.0 リリース(tag が K4 merge より前)に含まれず、実機は自動更新で v2.9.0 実行=送信コード不在で「本番 tournament_clock_display に1件も届かない」症状(時計同期は v2.9.0 機能なので届いていた)→ v2.10.0 リリースで解消。完了review✅・push前diff review✅・テスト1864件全PASS・INVARIANT例外②改定済(金銭表示情報OK・前原承認)。**次のアクション=なし(安定運用フェーズ)**。次案件は前原指示待ち。残提案(実装しない・提案のみ)=runtime 送信の pcId ガード・切断中ロゴ再送(report §8)。
-- **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く。機能を実機に届けるには **tag+Release 公開が必須**。merge 後リリース前の「実機で動かない」報告は、まず **Release Latest の tag に当該 commit が含まれるか**(`git merge-base --is-ancestor <commit> <tag>`)を最初に疑う。
-- 参照: report=`.cc-reports/2026-07-18_案件230_K4_PC表示データ送信.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
+- **git**: `main` = v2.10.0 配信済(tag v2.10.0・Latest・自動更新有効)。作業中 = **`feature/dblink-stale-idle-guard`(案件231・main 未push)**。
+- **現在地(2026-08-09)**: 実店舗報告「進行中タイマーが勝手に未スタート状態へ巻き戻る」を調査→原因特定(連携ON大会でDBのstale idle/finished行へ追従=前原「連携ONでした」で確定)→**案件231 として修正実装完了**(planClockApply が republish を返しPC状態を再送・観測ログ2種追加)。テスト1880件全PASS(+16)・完了レビュー(cc-review2 dual)実行中/待ち。**次のアクション=完了レビュー→前原実機確認(6-B)→GO後に main merge+リリース案件(version assertion 74ファイル bump 含む)**。②通貨「P$」はコード外=大会毎設定(前原PCは「+2 LUCKY HUNT」1件のみ・設定画面で変更)。
+- **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く。機能を実機に届けるには **tag+Release 公開が必須**(`git merge-base --is-ancestor <commit> <tag>` で確認)。
+- 参照: 調査=`.cc-reports/2026-08-09_調査_カウントダウン巻き戻り+通貨単位.md` / 実装report=`.cc-reports/2026-08-09_案件231_dblink-stale-idle-guard.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
 

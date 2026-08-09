@@ -152,10 +152,24 @@ function eq(a, b, msg) {
     'PRE_START 由来 paused は prestart(paused) プラン');
   ok(planClockApply(L('IDLE', 0, 0), { status: 'prestart', current_level_index: 0, end_at_ms: NOW + 1000, pre_start_total_ms: 0 }, NOW) === null,
     'total=0 の不整合 prestart 行は適用しない');
-  // idle / finished
-  eq(planClockApply(L('RUNNING', 3, 60_000), { status: 'idle' }, NOW), { kind: 'idle' }, 'DB idle は reset プラン');
-  ok(planClockApply(L('IDLE', 0, 0), { status: 'idle' }, NOW) === null, '両方 idle は null');
-  eq(planClockApply(L('PAUSED', 2, 10_000), { status: 'finished' }, NOW), { kind: 'finished' }, 'DB finished は reset プラン');
+  // idle / finished（案件231: stale ガード。ローカル進行中は reset せず republish を要求する）
+  eq(planClockApply(L('RUNNING', 3, 60_000), { status: 'idle' }, NOW),
+    { kind: 'republish', reason: 'stale-idle' }, 'RUNNING × DB idle は追従せず republish（巻き戻り根治）');
+  eq(planClockApply(L('BREAK', 4, 30_000), { status: 'idle' }, NOW),
+    { kind: 'republish', reason: 'stale-idle' }, 'BREAK × DB idle も republish');
+  eq(planClockApply(L('PAUSED', 2, 10_000), { status: 'idle' }, NOW),
+    { kind: 'republish', reason: 'stale-idle' }, 'PAUSED × DB idle も republish（ローカル状態を保護）');
+  eq(planClockApply(L('PRE_START', 0, 300_000, true), { status: 'idle' }, NOW),
+    { kind: 'republish', reason: 'stale-idle' }, 'PRE_START × DB idle も republish（カウントダウン保護）');
+  eq(planClockApply(L('PAUSED', 0, 120_000, true), { status: 'idle' }, NOW),
+    { kind: 'republish', reason: 'stale-idle' }, 'PRE_START 由来 PAUSED（isPreStart=true）× DB idle も republish');
+  ok(planClockApply(L('IDLE', 0, 0), { status: 'idle' }, NOW) === null, '両方 idle は null（挙動不変）');
+  eq(planClockApply(L('RUNNING', 3, 60_000), { status: 'finished' }, NOW),
+    { kind: 'republish', reason: 'stale-finished' }, 'RUNNING × DB finished も republish');
+  eq(planClockApply(L('PAUSED', 2, 10_000), { status: 'finished' }, NOW),
+    { kind: 'republish', reason: 'stale-finished' }, 'PAUSED × DB finished も republish');
+  ok(planClockApply(L('IDLE', 0, 0), { status: 'finished' }, NOW) === null,
+    'IDLE × DB finished は null（完走後 PC は IDLE に戻る通常系・挙動不変）');
   ok(planClockApply(L('IDLE', 5, 0), { status: 'unknown' }, NOW) === null, '未知 DB status は適用しない');
 
   // ==== K3: planRuntimeApply（範囲外拒否・special_enabled 非採用） ====
@@ -274,6 +288,40 @@ function eq(a, b, msg) {
       `色キー ${key} が marquee.js MARQUEE_COLORS に存在（whitelist 一致）`);
     eq(stripTelopMarkup(`[${key}]x[/${key}]`), 'x', `色キー ${key} のタグを除去`);
   }
+
+  // ==== 案件231: applyDbToEngine の republish 実装静的検査（renderer.js） ====
+  // 恒真化回避（Plan review 指示1）: renderer.js 全文ではなく applyDbToEngine 関数本体だけを
+  // 切り出して検査する。モジュール先頭の宣言 `let _dbLinkApplying = false;` は関数外のため
+  // ヒットせず、「finally 内の解除より後に republish」を一意に位置比較できる。
+  const rendererSrc = require('node:fs').readFileSync(
+    path.join(__dirname, '..', 'src', 'renderer', 'renderer.js'), 'utf8');
+  const fnStart = rendererSrc.indexOf('function applyDbToEngine(');
+  const fnEnd = rendererSrc.indexOf('function publishDbLinkClock(');
+  ok(fnStart > -1 && fnEnd > fnStart, 'applyDbToEngine → publishDbLinkClock の定義順で切り出せる');
+  const fnSrc = rendererSrc.slice(fnStart, fnEnd);
+
+  // ① republish 分岐は timer.js に触らない（timerReset を呼ばない）
+  const repIdx = fnSrc.indexOf("plan.kind === 'republish'");
+  const idleIdx = fnSrc.indexOf("plan.kind === 'idle'");
+  ok(repIdx > -1 && idleIdx > repIdx, 'republish 分岐が idle/finished 分岐より先に存在');
+  const repBranch = fnSrc.slice(repIdx, idleIdx);
+  ok(!repBranch.includes('timerReset'), 'republish 分岐に timerReset 呼出がない（追従しない）');
+  ok(repBranch.includes('wantRepublish = true'), 'republish 分岐は wantRepublish を立てるだけ');
+
+  // ② republish 送信は finally の _dbLinkApplying 解除より後（publish 冒頭ガードに握り潰されない）
+  const finallyIdx = fnSrc.indexOf('finally');
+  ok(finallyIdx > -1, 'applyDbToEngine に finally が存在');
+  const releaseIdx = fnSrc.indexOf('_dbLinkApplying = false', finallyIdx);
+  ok(releaseIdx > -1, 'finally 内で _dbLinkApplying を解除');
+  const publishIdx = fnSrc.indexOf('if (wantRepublish) publishDbLinkClock()');
+  ok(publishIdx > releaseIdx, 'republish は _dbLinkApplying 解除より後に発火（到達性の構造保証）');
+
+  // ③ 観測ログ: ガード発火ログ + 防御用 caller log + priority allowlist 追記
+  ok(fnSrc.includes("'dblink:stale-skip'"), 'ガード発火ログ dblink:stale-skip が存在');
+  ok(fnSrc.includes("'applyDbToEngine:' + plan.kind"), '防御残置の idle/finished 経路に caller log が存在');
+  const mainSrc = require('node:fs').readFileSync(
+    path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+  ok(mainSrc.includes("'dblink:stale-skip'"), 'dblink:stale-skip が PRIORITY_LOG_LABELS に収載');
 
   console.log(`db-link-payload.test.js: ${count} assertions passed`);
 })().catch((err) => {
