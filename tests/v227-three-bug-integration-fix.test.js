@@ -221,7 +221,7 @@ test('T13 (Fix 6): 計測モードバッジ要素 (measurement-mode-badge) — �
 // T14 (Fix 7): package.json version が 2.1.18（rc1 サフィックスなし）
 // ============================================================
 test('T14 (Fix 7): package.json version が 2.1.15', () => {
-  assert.equal(PKG.version, '2.10.0', `package.json version が 2.1.15 ではない（実際: ${PKG.version}）`);
+  assert.equal(PKG.version, '2.10.1', `package.json version が 2.1.15 ではない（実際: ${PKG.version}）`);
 });
 
 // ============================================================

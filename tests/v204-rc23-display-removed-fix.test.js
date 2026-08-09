@@ -315,7 +315,7 @@ test('rc22 ⑩-D: _initRollingLog 内に fs.readFileSync 経路が維持され�
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.10.0',
+  assert.equal(pkg.version, '2.10.1',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 

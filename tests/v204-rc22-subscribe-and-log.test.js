@@ -282,7 +282,7 @@ test('計測ラベル: preload:onRoleChanged: 系 2 件が preload.js から削�
 
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.10.0',
+  assert.equal(pkg.version, '2.10.1',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 

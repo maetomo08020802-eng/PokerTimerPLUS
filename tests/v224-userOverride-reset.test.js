@@ -126,7 +126,7 @@ test('T5 (Fix 2 補強): el オブジェクトに clockTime プロパティが�
 // T6: package.json version 2.1.12 + scripts.test に v224 登録
 // ============================================================
 test('T6: package.json version は 2.1.12 + scripts.test に v224 登録', () => {
-  assert.equal(PKG.version, '2.10.0',
+  assert.equal(PKG.version, '2.10.1',
     `package.json version が ${PKG.version}（期待 2.1.18）`);
   assert.match(PKG.scripts.test, /v224-userOverride-reset\.test\.js/,
     'scripts.test に v224-userOverride-reset.test.js が登録されていない');

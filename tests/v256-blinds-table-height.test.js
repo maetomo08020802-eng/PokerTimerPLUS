@@ -134,7 +134,7 @@ test('T9: 本 STEP の追加 CSS に position:fixed / transform:scale を持ち�
 // ============================================================
 test('version: package.json は 2.5.1 据え置き（STEP3 で bump しない）', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.10.0', `version が ${pkg.version}（STEP3 は 2.5.1 据え置き）`);
+  assert.equal(pkg.version, '2.10.1', `version が ${pkg.version}（STEP3 は 2.5.1 据え置き）`);
 });
 
 test('version: scripts.test に v256-blinds-table-height.test.js が含まれる', () => {

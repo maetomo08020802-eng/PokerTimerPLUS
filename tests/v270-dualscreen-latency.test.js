@@ -316,7 +316,7 @@ test('T17c: dual-sync.js / timer.js / main.js の timerState 送受信経路は�
 // ============================================================
 test('T18: package.json.version 一致 + scripts.test に v270 登録', () => {
   // 配信時 version bump 同期確認（v252 等と同じく現行リリース版にピン）
-  assert.equal(PKG.version, '2.10.0', `package.json.version が ${PKG.version}（このテストの想定リリース版と不一致＝bump 漏れ）`);
+  assert.equal(PKG.version, '2.10.1', `package.json.version が ${PKG.version}（このテストの想定リリース版と不一致＝bump 漏れ）`);
   assert.match(PKG.scripts.test, /v270-dualscreen-latency\.test\.js/, 'scripts.test に v270-dualscreen-latency.test.js が未登録');
 });
 

@@ -109,7 +109,7 @@ test('S1 (保護): 致命バグ保護 5 件維持（fee-lock は STEP4/E-1 で�
 });
 
 test('S2: version 2.6.0（配信 bump 済）+ v263 登録', () => {
-  assert.equal(PKG.version, '2.10.0', `version が ${PKG.version}`);
+  assert.equal(PKG.version, '2.10.1', `version が ${PKG.version}`);
   assert.ok(PKG.scripts.test.includes('v263-fee-pot-yen-step3.test.js'), 'v263 未登録');
 });
 

@@ -171,7 +171,9 @@ const PRIORITY_LOG_LABELS = new Set([
   //   prestart:fallback:fired が 1 件でも本番ログで発火 = 仮説 F が現実に発生した決定的証拠
   'prestart:fallback:scheduled',
   'prestart:fallback:cleared',
-  'prestart:fallback:fired'
+  'prestart:fallback:fired',
+  // 案件231(2026-08-09): DB連携 stale idle/finished 追従ガードの発火証拠（巻き戻り根治の決定的観測）
+  'dblink:stale-skip'
 ]);
 let _priorityLogBuffer = [];
 let _priorityLogFilePath = null;

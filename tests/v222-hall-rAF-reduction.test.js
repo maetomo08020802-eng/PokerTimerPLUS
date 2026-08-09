@@ -185,7 +185,7 @@ test('T6 (Fix 3): 計測機構の _isHall ガード + 主要記録ラベルの�
 // T7: package.json version 2.1.12 + scripts.test に v222 登録
 // ============================================================
 test('T7: package.json version は 2.1.12 + scripts.test に v222 登録', () => {
-  assert.equal(PKG.version, '2.10.0',
+  assert.equal(PKG.version, '2.10.1',
     `package.json version が ${PKG.version}（期待 2.1.18）`);
   assert.match(PKG.scripts.test, /v222-hall-rAF-reduction\.test\.js/,
     'scripts.test に v222-hall-rAF-reduction.test.js が登録されていない');

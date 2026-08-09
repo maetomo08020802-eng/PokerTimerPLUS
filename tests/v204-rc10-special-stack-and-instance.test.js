@@ -259,7 +259,7 @@ test('operator-solo 互換: switchOperatorToSolo は show + focus（rc9 動作�
 // ============================================================
 test('version: package.json は 2.0.11', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.10.0',
+  assert.equal(pkg.version, '2.10.1',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 
