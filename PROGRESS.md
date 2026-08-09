@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 案件231 dblink-stale-idle-guard | 🔵 レビュー待ち | 連携ON大会の進行中タイマーがDBのstale idle/finished行に追従して巻き戻るバグの根治(追従せずrepublish)。feature/dblink-stale-idle-guard・report=`.cc-reports/2026-08-09_案件231_dblink-stale-idle-guard.md` |
+| 案件231 dblink-stale-idle-guard | 🟡 実機確認待ち | 巻き戻り根治(stale idle/finished に追従せずrepublish)。完了review承認(dual・懐疑役OK)・feature/dblink-stale-idle-guard `ec5d9f7`・6-B 4件GO後に main push→リリース案件。report=`.cc-reports/2026-08-09_案件231_dblink-stale-idle-guard.md` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
