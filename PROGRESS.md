@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 案件231 dblink-stale-idle-guard | 🟡 実機確認待ち | 巻き戻り根治(stale idle/finished に追従せずrepublish)。完了review承認(dual・懐疑役OK)・feature/dblink-stale-idle-guard `ec5d9f7`・6-B 4件GO後に main push→リリース案件。report=`.cc-reports/2026-08-09_案件231_dblink-stale-idle-guard.md` |
+| 案件231 dblink-stale-idle-guard | 📦 配信準備完了・実機確認OK待ち | 巻き戻り根治(republish 方式)・完了review承認(dual)。**v2.10.1 準備済**(bump74+CHANGELOG+installer/latest.yml ビルド済 `cfec11f`)。前原「確認OK」で main push+tag+Release 公開を実行。report=`.cc-reports/2026-08-09_案件231_{dblink-stale-idle-guard,v2101-release-prep}.md` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
