@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-08-09** — **案件231 dblink-stale-idle-guard 実装完了(レビュー待ち)**。実店舗で発生した「進行中タイマーが勝手に未スタート状態へ巻き戻る」バグ(原因=DB連携のstale idle/finished追従)を根治: 追従せずPC状態をrepublish。テスト1880件全PASS(+16)・致命5件維持・既定OFF不変。feature ブランチのみ・main push/リリースは前原GO待ち。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-08-09** — **v2.10.1 配信完了(案件231=進行中タイマー巻き戻り根治)クローズ**。連携ON大会でDBのstale idle/finished行に追従して巻き戻るバグを「追従せずrepublish」方式で修正。実機確認OK(前原)→ main merge `08b9df0`・tag v2.10.1・GitHub Release Latest(自動更新有効)。テスト1880件全PASS。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| 案件231 dblink-stale-idle-guard | 📦 配信準備完了・実機確認OK待ち | 巻き戻り根治(republish 方式)・完了review承認(dual)。**v2.10.1 準備済**(bump74+CHANGELOG+installer/latest.yml ビルド済 `cfec11f`)。前原「確認OK」で main push+tag+Release 公開を実行。report=`.cc-reports/2026-08-09_案件231_{dblink-stale-idle-guard,v2101-release-prep}.md` |
+| (なし) | — | 安定運用フェーズ(v2.10.1 配信済・案件231 クローズ) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -21,6 +21,7 @@
 
 | 配信日 | バージョン | 主要変更(1行) | report |
 |--------|-----------|---------|--------|
+| 2026-08-09 | **v2.10.1** | **案件231=連携ON大会の進行中タイマー巻き戻り根治**(DBのstale idle/finished行に追従せず `{kind:'republish'}` でPC状態を再送・観測ログ `dblink:stale-skip`+`timer:reset:caller` 追加)。実店舗発生バグ・完了review dual承認・実機確認OK。tag v2.10.1(Latest・自動更新) | `.cc-reports/2026-08-09_案件231_{dblink-stale-idle-guard,v2101-release-prep}.md` |
 | 2026-07-18 | **v2.10.0** | **案件230 K4=PC表示メタ・ロゴ送信**(連携ON大会のみ イベント名/賞金/配当/テロップ/テーマ/アベスタック+ロゴを `/api/pc-timer/display`・`/logo` へ)。coalescer 4種別化+global gap 1.1s(≤54回/分)・6値テーマ丸め・テロップ平文化・ロゴ≤300KB(nativeImage縮小/SVGスキップ)。INVARIANT例外②改定=金銭表示情報の送信を前原承認で明示許容。既定OFF不変。tag v2.10.0(Latest・自動更新) | `.cc-reports/2026-07-18_案件230_K4_PC表示データ送信.md` |
 | 2026-07-18 | **v2.9.0** | **外部DB連携(店舗キー方式・案件229 STEP2=K1接続基盤+紐づけ/K2状態送信・楽観ロック/K3切断表示・OFF停止・DB追従アダプタ)**。設定=URL+店舗キーの2入力・既定OFF=完全ローカル不変・supabase-js不使用(plain fetch)・送信は時計状態+ブラインド構成のみ。tag v2.9.0(自動更新) | `.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K{1,2,3}.md` |
 | 2026-07-08 | **v2.8.0** | **スマホ遠隔操作(実験的機能・単一モードのみ)**。同一LAN内スマホから全操作(PIN+セッショントークン+Origin+Host厳格アンカー+レート制限・状態SSE=fetch streaming・危険操作confirm・卓名・QR=依存ゼロ自作)。既定OFFで現行完全同一・完全ローカル文言をLAN例外込みに改訂・追加ライブラリゼロ・CSP無改変。merge `c8eb931`/tag v2.8.0(Latest・自動更新) | `.cc-reports/2026-07-08_remote-control_phase1{a-core,b-core,b-qr,c-release-prep}.md` |
@@ -53,9 +54,9 @@
 
 | 指標 | 値 |
 |------|----|
-| 配信済リリース | 19件(v1.0.0〜v2.10.0)|
+| 配信済リリース | 20件(v1.0.0〜v2.10.1)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 1件(案件231 dblink-stale-idle-guard=レビュー待ち)|
+| オープン作業 | 0件(案件231=v2.10.1 配信済クローズ・安定運用フェーズ)|
 | 最新テスト件数 | 1880件 全PASS(db-link 173 / db-link-payload 118 含む) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
@@ -63,10 +64,10 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.10.0 配信済(tag v2.10.0・Latest・自動更新有効)。作業中 = **`feature/dblink-stale-idle-guard`(案件231・main 未push)**。
-- **現在地(2026-08-09)**: 実店舗報告「進行中タイマーが勝手に未スタート状態へ巻き戻る」を調査→原因特定(連携ON大会でDBのstale idle/finished行へ追従=前原「連携ONでした」で確定)→**案件231 として修正実装完了**(planClockApply が republish を返しPC状態を再送・観測ログ2種追加)。テスト1880件全PASS(+16)・完了レビュー(cc-review2 dual)実行中/待ち。**次のアクション=完了レビュー→前原実機確認(6-B)→GO後に main merge+リリース案件(version assertion 74ファイル bump 含む)**。②通貨「P$」はコード外=大会毎設定(前原PCは「+2 LUCKY HUNT」1件のみ・設定画面で変更)。
+- **git**: `main` = **v2.10.1 配信済**(merge `08b9df0`・tag v2.10.1・GitHub Release Latest・latest.yml 自動更新有効・ancestry 確認済)。feature/dblink-stale-idle-guard は役目終了(削除可)。
+- **現在地(2026-08-09)**: 案件231(進行中タイマー巻き戻り根治)を調査→brief→実装→dual review承認→前原実機確認OK→**v2.10.1 として配信完了=クローズ**。**次のアクション=なし(安定運用フェーズ)**。次案件は前原指示待ち。軽微メモ: package-lock.json root version が 2.8.0 のまま(既存ドリフト・ビルドは package.json 参照で実害なし・次回リリース定例で是正)。②通貨「P$」はコード外=大会毎設定(前原PCは「+2 LUCKY HUNT」1件のみ・設定画面で変更)。残提案(report §7)=DB paused/prestart 行の stale 同種ガード・stale 行の runtime 巻き戻り・送信失敗 payload 破棄設計の再送検討。
 - **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く。機能を実機に届けるには **tag+Release 公開が必須**(`git merge-base --is-ancestor <commit> <tag>` で確認)。
-- 参照: 調査=`.cc-reports/2026-08-09_調査_カウントダウン巻き戻り+通貨単位.md` / 実装report=`.cc-reports/2026-08-09_案件231_dblink-stale-idle-guard.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
+- 参照: 調査=`.cc-reports/2026-08-09_調査_カウントダウン巻き戻り+通貨単位.md` / 実装=`.cc-reports/2026-08-09_案件231_dblink-stale-idle-guard.md` / release-prep=`.cc-reports/2026-08-09_案件231_v2101-release-prep.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
 
