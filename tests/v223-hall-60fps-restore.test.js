@@ -257,7 +257,7 @@ test('T11: hallPreStartState（PRE_START）と hallTickState（RUNNING/BREAK）�
 // T12: package.json version 2.1.12 + scripts.test に v223 登録
 // ============================================================
 test('T12: package.json version は 2.1.12 + scripts.test に v223 登録', () => {
-  assert.equal(PKG.version, '2.10.0',
+  assert.equal(PKG.version, '2.10.1',
     `package.json version が ${PKG.version}（期待 2.1.18）`);
   assert.match(PKG.scripts.test, /v223-hall-60fps-restore\.test\.js/,
     'scripts.test に v223-hall-60fps-restore.test.js が登録されていない');

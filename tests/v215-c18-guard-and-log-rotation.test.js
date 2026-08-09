@@ -199,7 +199,7 @@ test('T7-2 (致命バグ保護): v2.1.0 setActive Fix が破壊されていな�
 // T8: package.json version 2.1.0
 // ============================================================
 test('T8: package.json version が 2.1.0', () => {
-  assert.equal(PKG.version, '2.10.0', `version が ${PKG.version}（期待 2.1.0）`);
+  assert.equal(PKG.version, '2.10.1', `version が ${PKG.version}（期待 2.1.0）`);
 });
 
 // ============================================================

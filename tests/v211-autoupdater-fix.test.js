@@ -55,7 +55,7 @@ test('T3: build.win.publisherName が存在しない（undefined、未署名の�
 // ============================================================
 
 test('T4: package.json version が 2.0.11', () => {
-  assert.equal(PKG.version, '2.10.0',
+  assert.equal(PKG.version, '2.10.1',
     `package.json version が ${PKG.version}（期待 2.0.11）`);
 });
 

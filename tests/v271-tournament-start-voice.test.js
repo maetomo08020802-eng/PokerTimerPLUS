@@ -245,7 +245,7 @@ test('T13: 致命5件 cross-check — _play の resume 防御 / playSound hall �
 // version
 // ============================================================
 test('T14: package.json.version 一致', () => {
-  assert.equal(PKG.version, '2.10.0', `package.json.version が ${PKG.version}（配信時 2.6.4 へ bump 予定）`);
+  assert.equal(PKG.version, '2.10.1', `package.json.version が ${PKG.version}（配信時 2.6.4 へ bump 予定）`);
   assert.match(PKG.scripts.test, /v271-tournament-start-voice\.test\.js/, 'scripts.test に v271 が未登録');
 });
 

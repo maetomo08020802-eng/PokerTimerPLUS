@@ -231,7 +231,7 @@ test('rc7 動作維持: AC operator-pane に op-pane-special-stack 項目が残�
 // ============================================================
 test('version: package.json は 2.0.11（rc21 第 2 弾 ⑨ 表示更新漏れ補完 + ⑩ 計測ビルド 追従）', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '2.10.0',
+  assert.equal(pkg.version, '2.10.1',
     `package.json version が ${pkg.version}（期待 2.0.11）`);
 });
 
