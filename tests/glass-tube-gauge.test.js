@@ -98,7 +98,8 @@ test('D2: renderTimeGauge は DOM 書込のみ（setState / dual 送信 / publis
   assert.doesNotMatch(body, /setState|publish|dual|ipc|api\./i);
   assert.match(body, /ratio !== _gaugeCache\.ratio/);
   assert.match(body, /label !== _gaugeCache\.minutes/);
-  assert.match(body, /getLevel\(getState\(\)\.currentLevelIndex\)/);
+  // codex-fixes ①: 全体時間は state.totalMs 基準（期待値を仕様変更に合わせて更新）
+  assert.match(body, /resolveGaugeMinutes\(totalMs,/);
 });
 test('D3: applyGaugeMode は不正値を tube に倒し data-gauge-mode をセット', () => {
   const body = extractFunctionSource(RENDERER, 'applyGaugeMode');
@@ -137,7 +138,8 @@ test('C2: 一時停止中は水をくすませ気泡アニメを止める', () =
   assert.match(CSS_BLOCK, /animation-play-state: paused/);
 });
 test('C3: PRE_START（一時停止含む）は visibility: hidden で領域保持', () => {
-  assert.match(CSS_BLOCK, /\.clock\[data-status="PRE_START"\] \.time-gauge,\s*\.clock\[data-prestart-paused="true"\] \.time-gauge \{\s*visibility: hidden;/);
+  // codex-fixes ②④: 非表示条件に data-prestart-format / clock--timer-finished を追加（期待値を仕様変更に合わせて更新）
+  assert.match(CSS_BLOCK, /\.clock\[data-status="PRE_START"\] \.time-gauge,\s*\.clock\[data-prestart-paused="true"\] \.time-gauge,\s*\.clock\[data-prestart-format\] \.time-gauge,\s*\.clock--timer-finished \.time-gauge,\s*\.time-gauge\[data-ended\] \{\s*visibility: hidden;/);
 });
 test('C4: 排他 — tube でゲーム種行を高さごと消す / gameType で管を消す', () => {
   assert.match(CSS_BLOCK, /:root\[data-gauge-mode="tube"\] \.event-game-type \{ display: none; \}/);

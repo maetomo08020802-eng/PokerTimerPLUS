@@ -4561,11 +4561,17 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
   filter: drop-shadow(0 0 0.5vw var(--gauge-c1));
   transition: background 0.3s ease-out;
 }
-/* 気泡（background-position のみ動かす＝合成のみ・layout 非影響） */
+/* 気泡: 幅を 1 タイル分（18vw）広げた層を transform: translateX で流す。
+   codex-fixes ⑥: 旧 background-position アニメは毎フレーム再描画（スタイル再計算+ペイント）を伴ったため、
+   合成のみで済む translate に変更（scale は不使用・layout 非影響）。 */
 .time-gauge__liquid::before {
   content: '';
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(100% + 18vw);
+  will-change: transform;
   background:
     radial-gradient(circle at 12% 70%, rgba(255, 255, 255, 0.55) 0 0.16vw, transparent 0.2vw),
     radial-gradient(circle at 38% 40%, rgba(255, 255, 255, 0.45) 0 0.12vw, transparent 0.16vw),
@@ -4584,7 +4590,7 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), transparent);
 }
 @keyframes time-gauge-bubbles {
-  to { background-position: -18vw 0; }
+  to { transform: translateX(-18vw); }
 }
 
 /* 右端: そのレベル（ブレイク）の分数を丸囲み。管より大きい分は上下にはみ出す（layout 非影響） */
@@ -4613,9 +4619,15 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
 .clock[data-status="PAUSED"] .time-gauge__liquid { filter: grayscale(70%); }
 .clock[data-status="PAUSED"] .time-gauge__liquid::before { animation-play-state: paused; }
 
-/* 開始前カウントダウン中は隠す（領域は保持） */
+/* 開始前カウントダウン中・完走表示中は隠す（領域は保持）
+   codex-fixes ④: data-prestart-format は operator（renderTime）・hall（applyHallPreStartState）の両方が
+     開始前（一時停止中を含む）の間だけ付与し、本編開始・取消で削除する=両画面共通の判定。
+   codex-fixes ②: 完走表示（clock--timer-finished）中は復元経路により Lv1 満タン/残り0 が画面ごとに異なるため隠す。 */
 .clock[data-status="PRE_START"] .time-gauge,
-.clock[data-prestart-paused="true"] .time-gauge {
+.clock[data-prestart-paused="true"] .time-gauge,
+.clock[data-prestart-format] .time-gauge,
+.clock--timer-finished .time-gauge,
+.time-gauge[data-ended] {
   visibility: hidden;
 }
 

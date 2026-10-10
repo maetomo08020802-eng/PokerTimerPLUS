@@ -980,19 +980,38 @@ function computeGaugeRatio(remainingMs, durationMinutes) {
   return Math.min(1, Math.max(0, r));
 }
 
-// 右端の丸囲み数字: 分数のみ（ブラインドは分単位で作る運用）。不明時は空文字
+// 右端の丸囲み数字: 分数のみ（ブラインドは分単位で作る運用）。不明時は空文字。
+// codex-fixes ⑤: 構造は小数分も許容するため、整数はそのまま・小数は第1位まで表示（1.5 → "1.5"）
 function formatGaugeMinutes(durationMinutes) {
   if (typeof durationMinutes !== 'number' || !Number.isFinite(durationMinutes) || durationMinutes <= 0) return '';
-  return String(Math.round(durationMinutes));
+  const rounded = Math.round(durationMinutes * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+// codex-fixes ①: ゲージの全体時間は「時計が実際に使っている現レベルの全体時間」= state.totalMs を正とする。
+//   構造のみ適用（③ c: 現レベルは旧時間で継続）でも時計と水位・丸数字が一致する。
+//   totalMs 未設定（0 以下）の時だけ構造上のレベル時間にフォールバック。
+function resolveGaugeMinutes(stateTotalMs, levelDurationMinutes) {
+  if (typeof stateTotalMs === 'number' && Number.isFinite(stateTotalMs) && stateTotalMs > 0) return stateTotalMs / 60000;
+  return levelDurationMinutes;
 }
 
 // 毎フレーム呼ばれるため、値が変わった時だけ DOM に書く（前回値キャッシュ）。
 // remainingMs は renderTime が受けた算出済の値を読むだけ（dual-sync 送信・setState は追加しない）。
-const _gaugeCache = { ratio: null, minutes: null };
+const _gaugeCache = { ratio: null, minutes: null, ended: null };
 function renderTimeGauge(remainingMs) {
   if (!el.timeGauge) return;
-  const level = getLevel(getState().currentLevelIndex);
-  const minutes = level ? level.durationMinutes : undefined;
+  const { status, currentLevelIndex, totalMs } = getState();
+  // codex-fixes ②: 全レベル超過（IDLE + 残り0）は完走扱いで隠す（→キー超過時は完走オーバーレイが付かない経路があるため、
+  //   hall の finished 復元=IDLE+残り0 と同じ条件で両画面を揃える）。CSS: .time-gauge[data-ended]
+  const ended = status === States.IDLE && typeof remainingMs === 'number' && remainingMs <= 0;
+  if (ended !== _gaugeCache.ended) {
+    _gaugeCache.ended = ended;
+    if (ended) el.timeGauge.dataset.ended = 'true';
+    else delete el.timeGauge.dataset.ended;
+  }
+  const level = getLevel(currentLevelIndex);
+  const minutes = resolveGaugeMinutes(totalMs, level ? level.durationMinutes : undefined);
   const ratio = Math.round(computeGaugeRatio(remainingMs, minutes) * 1000) / 1000;
   if (ratio !== _gaugeCache.ratio) {
     _gaugeCache.ratio = ratio;
@@ -5731,6 +5750,8 @@ async function _handleTournamentDuplicateImpl() {
   //   が main.js の normalizeTournament でデフォルト値に reset されていた（複製機能の期待値違反）。
   //   readTournamentForm() の全フィールドを spread してから id / name / timerState / title だけ上書きする。
   const current = readTournamentForm();
+  // codex-fixes ③: 複製元の「時計の下の表示」を引き継ぐ（readTournamentForm は displaySettings を持たない）
+  const srcGaugeMode = await _resolveSavedGaugeMode(current.id);
   const cloned = {
     ...current,
     // STEP 10 フェーズC.1.1 Fix 7: ID 衝突防止
@@ -5750,6 +5771,16 @@ async function _handleTournamentDuplicateImpl() {
       setTournamentHint('複製に失敗しました', 'error');
     }
     return;
+  }
+  // codex-fixes ③: 他の表示設定は既存どおり（新規 ID の既定補完）のまま、gaugeMode だけ部分更新で複製元に揃える。
+  //   setActive より前に保存するため、setActive の hall 配信（displaySettings）にも反映される。
+  if (srcGaugeMode && result.tournament?.displaySettings?.gaugeMode !== srcGaugeMode) {
+    try {
+      const r2 = await window.api.tournaments.setDisplaySettings(cloned.id, { gaugeMode: srcGaugeMode });
+      if (r2?.ok && r2.displaySettings) result.tournament = { ...result.tournament, displaySettings: r2.displaySettings };
+    } catch (err) {
+      try { window.api?.log?.write?.('error:caught:duplicateGaugeMode', { message: err?.message }); } catch (_) {}
+    }
   }
   await window.api.tournaments.setActive(cloned.id);
   applyTournament(result.tournament);
@@ -5791,6 +5822,18 @@ async function _handleTournamentDuplicateImpl() {
         try { ensureEditorEditableState(); } catch (_) { /* ignore */ }
       }
     });
+  }
+}
+
+// codex-fixes ③: 保存済みトーナメントの gaugeMode を取得（取得不可・不正値は null=引継ぎなし）
+async function _resolveSavedGaugeMode(id) {
+  if (typeof id !== 'string' || !id) return null;
+  try {
+    const list = await _tournamentsListDedup() || [];
+    const mode = list.find((t) => t && t.id === id)?.displaySettings?.gaugeMode;
+    return VALID_GAUGE_MODES.includes(mode) ? mode : null;
+  } catch (_) {
+    return null;
   }
 }
 
