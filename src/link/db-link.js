@@ -438,13 +438,16 @@ async function _flushSend(type) {
     }
     const clock = await getClock(dbId);
     if (clock.ok && clock.clock && _notify) {
-      try { _notify({ type: 'apply-db', clock: clock.clock }); } catch (_) { /* ignore */ }
+      // codex C3: 競合した送信の DB 大会 id を添える（renderer が現在の連携先と照合してから適用）。
+      //   renderer への内部通知のみ＝外部送信の項目・頻度・チャネルは不変。
+      //   codex R2-3: 競合した送信を出した時点の origin（PC 大会・世代）も返す（renderer が世代まで照合）。
+      try { _notify({ type: 'apply-db', clock: clock.clock, dbId, origin: (meta && meta.origin) || null }); } catch (_) { /* ignore */ }
     }
   } else if (res.httpStatus === 429) {
     // レート超過: 1 段バックオフして payload を保持（後で最新状態を送る）
     _log('dblink:send-rate-limited');
     st.backoffUntil = _now() + RATE_BACKOFF_MS;
-    if (!st.pending) st.pending = { dbId, payload };
+    if (!st.pending) st.pending = { dbId, payload, meta: meta || null };
     if (!st.timer) {
       st.timer = _delay(() => { st.timer = null; _flushSend(type); }, RATE_BACKOFF_MS);
     }
@@ -461,19 +464,28 @@ async function _flushSend(type) {
 }
 
 /** 時計状態（record）の送信。未紐づけ pcId は黙って破棄（fetch ゼロ）。 */
-function publishRecord(pcTournamentId, record) {
+function publishRecord(pcTournamentId, record, origin) {
   if (!record || typeof record !== 'object') return;
   const dbId = _linkedDbId(pcTournamentId);
   if (!dbId || !_configured()) return;
-  _scheduleSend('record', dbId, record);
+  _scheduleSend('record', dbId, record, { origin: _sanitizeOrigin(origin) });
 }
 
 /** 人数系（runtime）の送信。未紐づけ pcId は黙って破棄（fetch ゼロ）。 */
-function publishRuntime(pcTournamentId, runtime) {
+function publishRuntime(pcTournamentId, runtime, origin) {
   if (!runtime || typeof runtime !== 'object') return;
   const dbId = _linkedDbId(pcTournamentId);
   if (!dbId || !_configured()) return;
-  _scheduleSend('runtime', dbId, runtime);
+  _scheduleSend('runtime', dbId, runtime, { origin: _sanitizeOrigin(origin) });
+}
+
+// codex R2-3: renderer が送信に添える送信元（PC 大会 id・世代）。body には載せず、競合時の取り直し通知で返すだけ。
+function _sanitizeOrigin(o) {
+  if (!o || typeof o !== 'object') return null;
+  return {
+    pcId: typeof o.pcId === 'string' ? o.pcId : '',
+    gen: Number.isSafeInteger(o.gen) ? o.gen : null
+  };
 }
 
 // ===== K4（案件230）: 表示メタ / ロゴの送信（POST /display・/logo。楽観ロックなし=last-write-wins） =====

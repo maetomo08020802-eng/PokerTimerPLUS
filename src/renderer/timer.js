@@ -112,7 +112,9 @@ export function getPreStartTotalMs() {
 }
 
 // 指定インデックスのレベルにジャンプし、即時開始
-export function startAtLevel(index) {
+// clock-sync-structure-only: opts.totalMsOverride（正の有限数）で現レベルの全体時間を明示できる
+//   （構造のみ適用で旧時間のまま続いている現レベルの復元用）。引数なしの既存呼出は挙動不変。
+export function startAtLevel(index, opts) {
   // v2.2.2 hotfix Phase 2 第 1 段階 §A.2: startAtLevel 入口を観測
   _hotfixLog('timer:startAtLevel:enter', { levelIndex: index, status: getState().status, isPreStart, isBreak: (index >= 0 && index < getLevelCount()) ? isBreakLevel(index) : null });
   if (index < 0 || index >= getLevelCount()) {
@@ -120,7 +122,9 @@ export function startAtLevel(index) {
     return;
   }
   const level = getLevel(index);
-  const totalMs = level.durationMinutes * 60 * 1000;
+  const override = opts && Number.isFinite(opts.totalMsOverride) && opts.totalMsOverride > 0
+    ? Math.floor(opts.totalMsOverride) : null;
+  const totalMs = override !== null ? override : level.durationMinutes * 60 * 1000;
   targetTime = performance.now() + totalMs;
   pausedRemainingMs = 0;
   setState({

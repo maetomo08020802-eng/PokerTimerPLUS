@@ -722,7 +722,14 @@ function normalizeTimerState(ts) {
     ? Math.floor(ts.elapsedSecondsInLevel) : 0;
   const startedAt = (typeof ts.startedAt === 'number' && ts.startedAt > 0) ? ts.startedAt : null;
   const pausedAt  = (typeof ts.pausedAt  === 'number' && ts.pausedAt  > 0) ? ts.pausedAt  : null;
-  return { status, currentLevel, elapsedSecondsInLevel, startedAt, pausedAt };
+  const out = { status, currentLevel, elapsedSecondsInLevel, startedAt, pausedAt };
+  // clock-sync-structure-only: 現レベルの実際の全体秒（構造のみ適用で構造時間と異なる時だけ存在）。
+  //   有効値（正の有限数・7日以下）の時だけキーを付ける＝既存データの出力形は不変。
+  const lts = ts.levelTotalSeconds;
+  if (typeof lts === 'number' && Number.isFinite(lts) && lts > 0 && lts <= 604800) {
+    out.levelTotalSeconds = Math.floor(lts);
+  }
+  return out;
 }
 
 // STEP 6.17: タイトル色 hex バリデーション（#RRGGBB 形式のみ許可、3桁短縮 #RGB は不可）
@@ -2585,10 +2592,10 @@ function registerDbLinkIpcHandlers() {
   ipcMain.handle('dblink:stopLink', (_event, p) => dbLink.stopLink(p || {}));
   // K2: 状態送信（fire-and-forget・renderer は応答を待たない。coalescer/楽観ロックは db-link.js 側）
   ipcMain.on('dblink:publishRecord', (_event, p) => {
-    try { dbLink.publishRecord(p && p.tournamentId, p && p.record); } catch (_) { /* never throw */ }
+    try { dbLink.publishRecord(p && p.tournamentId, p && p.record, p && p.origin); } catch (_) { /* never throw */ }
   });
   ipcMain.on('dblink:publishRuntime', (_event, p) => {
-    try { dbLink.publishRuntime(p && p.tournamentId, p && p.runtime); } catch (_) { /* never throw */ }
+    try { dbLink.publishRuntime(p && p.tournamentId, p && p.runtime, p && p.origin); } catch (_) { /* never throw */ }
   });
   // K4（案件230）: 表示メタ（fire-and-forget）とロゴ（invoke=変換スキップの日本語通知を返す）
   ipcMain.on('dblink:publishDisplay', (_event, p) => {
