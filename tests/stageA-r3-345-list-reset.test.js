@@ -30,8 +30,26 @@ let pass = 0, fail = 0;
 // 非同期テストが途中で止まったまま終了すると exit 0 で偽 PASS になるため、最後まで到達しなければ失敗にする
 let completed = false;
 process.on('exit', () => { if (!completed) { console.log('FAIL: テストが最後まで実行されなかった'); process.exitCode = 1; } });
+// codex 段階A r2 F2: 時計の復元（restoreActiveTimerStateFromStore）は例外を内部で握って console.warn するため、
+//   テストが PASS でも復元が失敗していることがあった。復元・適用系の警告を捕まえ、出たテストは FAIL にする。
+// 復元ラッパ（restoreActiveTimerStateFromStore）と構造切替の警告文だけを対象にする（無関係な警告で FAIL にしない）
+const RESTORE_WARN_RE = /timerState 復元失敗|構造切替失敗/;
+const _restoreWarnings = [];
+const _origWarn = console.warn;
+console.warn = (...args) => {
+  const msg = args.map((a) => (a && a.stack) ? a.stack : String(a)).join(' ');
+  if (RESTORE_WARN_RE.test(msg)) _restoreWarnings.push(msg);
+  _origWarn(...args);
+};
 async function test(name, fn) {
-  try { await fn(); console.log('PASS:', name); pass++; }
+  const warnBefore = _restoreWarnings.length;
+  try {
+    await fn();
+    if (_restoreWarnings.length > warnBefore) {
+      throw new Error(`復元・適用の警告が出た（復元が失敗している）: ${_restoreWarnings.slice(warnBefore).join(' | ').slice(0, 300)}`);
+    }
+    console.log('PASS:', name); pass++;
+  }
   catch (err) { console.log('FAIL:', name, '\n  ', err.message); fail++; }
 }
 
@@ -82,7 +100,9 @@ const NAMES = ['isEngineFinishedState', 'captureCurrentTimerState', 'mapStateToS
   // codex 段階A A-1/A-2（大会切替の実順序まで結線）
   '_dbLinkSendTargetOk', 'isTournamentSwitchBusy', 'applyTournament', 'renderStaticInfo', 'refreshDbLinkSendState',
   'applyDbLinkSendGate', 'runDbLinkActivation', 'runDbLinkProbe', 'finishDbLinkSwitch', 'handleTournamentSelectChange',
-  'restoreActiveTimerStateFromStore'];
+  'restoreActiveTimerStateFromStore',
+  // codex 段階A r2 F2: 実復元に必要な関数（未登録だと何もしない代用になり、復元が例外で終わっても気付けなかった）
+  'computeLiveTimerState', '_liveLevelTotalMs'];
 
 // env は外から書き換え可能
 function buildRenderer(mods, { role = 'operator-solo', extra = {} } = {}) {
@@ -98,7 +118,7 @@ function buildRenderer(mods, { role = 'operator-solo', extra = {} } = {}) {
     timerCancelPreStart: timer.cancelPreStart,
     hallTickState: { rafId: null }, blindPresetCache: new Map(),
     setTimeout: (fn, ms) => setTimeout(fn, ms),   // 送信ゲートの同期予約（applyDbLinkSendGate）を実際に走らせる
-    _tournamentSwitching: false, _tournamentDeleteInFlight: false, _listResetInFlight: false, _dbLinkSwitchHoldId: '', _dbLinkActivationScheduledFor: '',
+    _tournamentSwitching: false, _tournamentDeleteInFlight: false, _listResetInFlight: false, _dbLinkSwitchHoldId: '', _dbLinkActivationScheduledFor: '', _tournamentSelectInFlight: false,
     _dbLinkTournamentSeq: 0, _dbLinkSeqLastId: '', _dbLinkLastDisplayJson: '',
     ...extra
   };
@@ -111,7 +131,8 @@ function buildRenderer(mods, { role = 'operator-solo', extra = {} } = {}) {
     (RENDERER.match(/^const LIST_RESET_LINKED_MESSAGE = .*$/m) || [''])[0],
     (RENDERER.match(/^const LIST_RESET_SAVE_FAILED_MESSAGE = .*$/m) || [''])[0],
     (RENDERER.match(/^const LIST_RESET_BUSY_MESSAGE = .*$/m) || [''])[0],
-    (RENDERER.match(/^const LIST_RESET_IN_PROGRESS_MESSAGE = .*$/m) || [''])[0]
+    (RENDERER.match(/^const LIST_RESET_IN_PROGRESS_MESSAGE = .*$/m) || [''])[0],
+    (RENDERER.match(/^const TOURNAMENT_SWITCH_BUSY_MESSAGE = .*$/m) || [''])[0]
   ].join('\n');
   const body = `with (env) {\n${consts}\n${NAMES.map((n) => src(n)).join('\n')}\nreturn { ${NAMES.join(', ')} };\n}`;
   const fns = new Function('env', body)(proxy);
@@ -549,7 +570,7 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
   // ============================================================
   // codex 段階A A-1: 大会切替の実順序（applyTournament → renderStaticInfo → 送信）で宛先が値の持ち主と一致
   // ============================================================
-  function switchEnv(box, { linkedB, opsLog, lastSentZero = false }) {
+  function switchEnv(box, { linkedB, opsLog, lastSentZero = false, probeGate = null, presetGate = null }) {
     const store = {
       'T-A': { id: 'T-A', name: 'A', blindPresetId: 'P', runtime: { playersInitial: 10, playersRemaining: 8, reentryCount: 3, addOnCount: 2 },
         timerState: { status: 'paused', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: 1 } },
@@ -562,7 +583,7 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
       schedulePersistRuntime: () => {}, updateOperatorPane: () => {}, renderTournamentListWithDedup: async () => {},
       isUserTypingInInput: () => false, isPayoutsValid: () => true, confirmDiscardBlindsDirtyIfNeeded: async () => true,
       readTournamentForm: () => ({}), _tournamentsListDedup: async () => JSON.parse(JSON.stringify(Object.values(store))),
-      loadPresetById: async () => struct([20, 20]), blindPresetCache: new Map(),
+      loadPresetById: async (pid) => { if (presetGate) await presetGate(pid); return struct([20, 20]); }, blindPresetCache: new Map(),
       el: { ...classRec().el, tournamentSelect: { value: 'T-B' } },
       // A で最後に送った人数（codex の再現条件）。lastSentZero=true は「B と同じ値の控え」で初回送信落ちを見る用
       _dbLinkLastRuntimeJson: lastSentZero
@@ -579,7 +600,9 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
     env.window.api.dblink.getStatus = async () => ({ configured: true, links });
     env.window.api.dblink.probe = async ({ tournamentId }) => {
       opsLog.push(`probe:${tournamentId}`);
-      return { ok: true, clock: { status: 'paused', current_level_index: 1, paused_remaining_ms: 15 * MIN, end_at_ms: null,
+      if (probeGate) await probeGate;
+      // 保存値（B: Lv2・残り 15 分）と区別できるよう、DB 側は残り 12 分
+      return { ok: true, clock: { status: 'paused', current_level_index: 1, paused_remaining_ms: 12 * MIN, end_at_ms: null,
         players_initial: 30, players_remaining: 25, reentry_count: 4, addon_count: 1 } };
     };
     return env;
@@ -600,14 +623,25 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
     assert.deepEqual(sentRuntimeTo(box, 'T-A'), [], `A 宛ての人数送信なし: ${JSON.stringify(box.runtimes)}`);
     assert.deepEqual(box.records.filter((x) => x.tournamentId === 'T-A'), [], 'A 宛ての時計送信なし');
     assert.ok(!ops.some((o) => o.startsWith('probe')), '未連携 B では同期しない');
+    // codex r2 F2: 同期で隠せない条件で、時計が B の保存値（Lv2・残り 15 分・一時停止）へ実際に復元されている
+    const s = op.state.getState();
+    assert.equal(s.status, op.state.States.PAUSED);
+    assert.equal(s.currentLevelIndex, 1); near(s.remainingMs, 15 * MIN, 'B の保存値', 2000);
   });
   await test('A1-b（codex A-1）: 連携 A → 連携 B の切替で、切替中は送らず、時計の復元後に B を DB に同期し、以後の送信は B 宛て（初回送信が重複扱いで落ちない）', async () => {
     const op = await pausedAt20();
     const box = sends(); const ops = [];
-    const env = switchEnv(box, { linkedB: true, opsLog: ops, lastSentZero: true });
+    let releaseProbe; const probeGate = new Promise((res) => { releaseProbe = res; });
+    const env = switchEnv(box, { linkedB: true, opsLog: ops, lastSentZero: true, probeGate });
     const r = buildRenderer(op, { extra: env });
     env.__applyTournament = r.applyTournament;
     await r.handleTournamentSelectChange();
+    // codex r2 F2: DB の応答を適用する前に、B の保存値（Lv2・残り 15 分・一時停止）へ実際に復元済み
+    assert.deepEqual(ops.filter((o) => o.startsWith('probe')), ['probe:T-B'], '同期は開始済み（応答待ち）');
+    const restored = op.state.getState();
+    assert.equal(restored.status, op.state.States.PAUSED);
+    assert.equal(restored.currentLevelIndex, 1); near(restored.remainingMs, 15 * MIN, '復元済み（DB 適用前）', 2000);
+    releaseProbe();
     await new Promise((res) => setTimeout(res, 5));
     assert.deepEqual(sentRuntimeTo(box, 'T-A'), [], 'A 宛てに B の人数を送らない');
     assert.deepEqual(box.records.filter((x) => x.tournamentId === 'T-A'), [], 'A 宛てに時計を送らない');
@@ -616,9 +650,9 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
     // 同期（probe）は時計の復元（loadForm の後）より後に 1 回だけ
     assert.deepEqual(ops.filter((o) => o.startsWith('probe')), ['probe:T-B']);
     assert.ok(ops.indexOf('probe:T-B') > ops.indexOf('loadForm'));
-    // DB（B の行）に従う: Lv2・残り 15 分・一時停止、人数は DB の値
+    // DB（B の行）に従う: Lv2・残り 12 分（保存値 15 分から追従）・一時停止、人数は DB の値
     const s = op.state.getState();
-    assert.equal(s.currentLevelIndex, 1); near(s.remainingMs, 15 * MIN, '', 2000);
+    assert.equal(s.currentLevelIndex, 1); near(s.remainingMs, 12 * MIN, 'DB へ追従', 2000);
     assert.equal(r.env.tournamentRuntime.playersRemaining, 25);
     // 以後の人数変更は B 宛て。直前の A の送信控えと同じ値でも落ちない
     const before = box.runtimes.length;
@@ -628,6 +662,128 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
     const after = box.runtimes.slice(before);
     assert.equal(after.length, 1, '初回送信が重複扱いで落ちない');
     assert.equal(after[0].tournamentId, 'T-B');
+  });
+  await test('F1-a（codex r2）: A→B の切替の途中（B の復元待ち）で A を選び直しても、2 つ目の切替は始めず、B の切替が最後まで保護される', async () => {
+    const op = await pausedAt20();
+    const box = sends(); const ops = [];
+    let releasePreset; const presetBlock = new Promise((res) => { releasePreset = res; });
+    const env = switchEnv(box, { linkedB: true, opsLog: ops, presetGate: () => presetBlock });
+    const r = buildRenderer(op, { extra: env });
+    env.__applyTournament = r.applyTournament;
+    const alerts = []; r.env.window.alert = (m) => alerts.push(m);
+    const writes = [];
+    r.env.window.api.tournaments.setTimerState = async (id) => { writes.push(['setTimerState', id]); return { ok: true }; };
+    r.env.window.api.tournaments.save = async (t) => { writes.push(['save', t && t.id]); return { ok: true }; };
+    const s1 = r.handleTournamentSelectChange();               // A → B（B の復元のプリセット取得で止まる）
+    await new Promise((res) => setTimeout(res, 5));
+    assert.equal(r.env.tournamentState.id, 'T-B'); assert.equal(r.env._dbLinkSwitchHoldId, 'T-B');
+    r.env.el.tournamentSelect.value = 'T-A';
+    await r.handleTournamentSelectChange();                    // 途中で A を選び直す
+    assert.equal(ops.filter((o) => o === 'setActive').length, 1, '2 つ目の切替は始めない');
+    assert.match(alerts[0], /大会の切り替え中です/);
+    assert.equal(r.env.el.tournamentSelect.value, 'T-B', 'プルダウンは表示中の大会（B）へ戻す');
+    assert.equal(r.env._dbLinkSwitchHoldId, 'T-B', 'B の切替中の印は保たれる');
+    // 復元途中は一覧リセットも割り込まない
+    const before = { st: JSON.stringify(op.state.getState()) };
+    await r.handleTournamentListReset('T-B', '大会B');
+    assert.match(alerts[alerts.length - 1], /大会の切り替え中です/);
+    assert.equal(JSON.stringify(op.state.getState()), before.st);
+    releasePreset(); await s1;
+    await new Promise((res) => setTimeout(res, 5));
+    // B の切替が完了: 表示中 B・時計は DB(B) へ追従・送信は B 宛てのみ・印は解除・次の切替を受け付ける
+    assert.equal(r.env.tournamentState.id, 'T-B');
+    assert.equal(r.env._dbLinkSwitchHoldId, ''); assert.equal(r.env._tournamentSelectInFlight, false);
+    const s = op.state.getState();
+    assert.equal(s.currentLevelIndex, 1); near(s.remainingMs, 12 * MIN, '', 2000);
+    assert.ok([...box.records, ...box.runtimes].every((x) => x.tournamentId === 'T-B'), JSON.stringify([...box.records, ...box.runtimes]));
+    assert.deepEqual(ops.filter((o) => o.startsWith('probe')), ['probe:T-B']);
+    // 保存先: 切替前の A の時計・フォームの保存だけ（2 つ目の切替・一覧リセットは何も書かない）
+    assert.deepEqual(writes, [['setTimerState', 'T-A'], ['save', 'T-A']], JSON.stringify(writes));
+  });
+  await test('F1-b（codex r2）: 完了順が逆転しても古い復元は当てない — 遅れて終わった A の復元（スリープ復帰の再同期など）は、表示中が B なら構造・時計とも適用しない', async () => {
+    const op = await pausedAt20();
+    const box = sends(); const ops = [];
+    let releaseA; const blockA = new Promise((res) => { releaseA = res; });
+    const env = switchEnv(box, { linkedB: true, opsLog: ops });
+    const r = buildRenderer(op, { extra: env });
+    env.__applyTournament = r.applyTournament;
+    // A は 30 分構造（プリセット PA）、B は 20 分構造（P）。A のプリセット取得だけを待たせる
+    const list = [
+      { id: 'T-A', name: 'A', blindPresetId: 'PA', timerState: { status: 'paused', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: 1 } },
+      { id: 'T-B', name: 'B', blindPresetId: 'P', runtime: { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 },
+        timerState: { status: 'paused', currentLevel: 2, elapsedSecondsInLevel: 300, startedAt: null, pausedAt: 1 } }
+    ];
+    r.env._tournamentsListDedup = async () => JSON.parse(JSON.stringify(list));
+    r.env.loadPresetById = async (pid) => { if (pid === 'PA') { await blockA; return struct([30, 30]); } return struct([20, 20]); };
+    r.applyTournament({ id: 'T-A', name: 'A' });               // 表示中 A（連番を A に合わせる）
+    const logs = []; r.env.window.api.log.write = (k, v) => logs.push(k);
+    const restoreA = r.restoreActiveTimerStateFromStore('T-A', { silent: true });   // A の復元（プリセット取得で待つ）
+    await new Promise((res) => setTimeout(res, 5));
+    await r.handleTournamentSelectChange();                    // その間に B への切替が完了（B の復元が先に終わる）
+    await new Promise((res) => setTimeout(res, 5));
+    const afterB = JSON.stringify(op.state.getState());
+    releaseA(); await restoreA;                                  // A の復元が後から終わる
+    assert.equal(op.blinds.getLevel(0).durationMinutes, 20, '構造は B のまま（A の 30 分構造を当てない）');
+    assert.equal(JSON.stringify(op.state.getState()), afterB, '時計は B のまま（A の保存値を当てない）');
+    assert.ok(logs.includes('timer:restore:stale-skip'));
+    assert.equal(r.env.tournamentState.id, 'T-B');
+  });
+  await test('F1-b2（codex r2）: ブラインド構造の指定が無い大会でも、遅れて終わった古い復元は時計を当てない（時計適用直前の照合）', async () => {
+    const op = await pausedAt20();
+    const box = sends(); const ops = [];
+    let releaseA; const blockA = new Promise((res) => { releaseA = res; });
+    const env = switchEnv(box, { linkedB: true, opsLog: ops });
+    const r = buildRenderer(op, { extra: env });
+    env.__applyTournament = r.applyTournament;
+    const list = [
+      { id: 'T-A', name: 'A', timerState: { status: 'running', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: Date.now(), pausedAt: null } },
+      { id: 'T-B', name: 'B', blindPresetId: 'P', runtime: { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 },
+        timerState: { status: 'paused', currentLevel: 2, elapsedSecondsInLevel: 300, startedAt: null, pausedAt: 1 } }
+    ];
+    let blockNextList = true;
+    r.env._tournamentsListDedup = async () => { if (blockNextList) { blockNextList = false; await blockA; } return JSON.parse(JSON.stringify(list)); };
+    r.applyTournament({ id: 'T-A', name: 'A' });
+    const logs = []; r.env.window.api.log.write = (k, v) => logs.push(k);
+    const restoreA = r.restoreActiveTimerStateFromStore('T-A', { silent: true });   // A の復元（一覧の取得で待つ・構造指定なし）
+    await new Promise((res) => setTimeout(res, 5));
+    await r.handleTournamentSelectChange();
+    await new Promise((res) => setTimeout(res, 5));
+    const afterB = JSON.stringify(op.state.getState());
+    releaseA(); await restoreA;
+    assert.equal(JSON.stringify(op.state.getState()), afterB, '時計は B のまま（A の running を当てない）');
+    assert.ok(logs.includes('timer:restore:stale-skip'));
+  });
+  await test('F1-d（codex r2）: 切替の前段（未保存確認の待ち＝切替中の印を立てる前）でも、次の切替・一覧リセットは始めない', async () => {
+    const op = await pausedAt20();
+    const box = sends(); const ops = [];
+    const env = switchEnv(box, { linkedB: true, opsLog: ops });
+    let releaseConfirm; const confirmBlock = new Promise((res) => { releaseConfirm = res; });
+    env.confirmDiscardBlindsDirtyIfNeeded = async () => { ops.push('confirm'); await confirmBlock; return true; };
+    const r = buildRenderer(op, { extra: env });
+    env.__applyTournament = r.applyTournament;
+    const alerts = []; r.env.window.alert = (m) => alerts.push(m);
+    const s1 = r.handleTournamentSelectChange();               // A → B（未保存確認で待つ）
+    await new Promise((res) => setTimeout(res, 5));
+    assert.equal(r.env._dbLinkSwitchHoldId, '', 'まだ切替中の印は立っていない区間');
+    assert.equal(r.env.tournamentState.id, 'T-A', '表示中はまだ A');
+    r.env.el.tournamentSelect.value = 'T-C';                    // 別の大会を選ぶ（A の選び直しは「同じ大会」として何もしない）
+    await r.handleTournamentSelectChange();
+    assert.equal(ops.filter((o) => o === 'confirm').length, 1, '2 つ目の切替は確認にも進まない');
+    assert.match(alerts[0], /大会の切り替え中です/);
+    await r.handleTournamentListReset('T-A', '大会A');
+    assert.match(alerts[alerts.length - 1], /大会の切り替え中です/);
+    r.env.el.tournamentSelect.value = 'T-B';
+    releaseConfirm(); await s1;
+    await new Promise((res) => setTimeout(res, 5));
+    assert.equal(r.env.tournamentState.id, 'T-B');
+    assert.equal(ops.filter((o) => o === 'setActive').length, 1);
+    assert.equal(r.env._tournamentSelectInFlight, false);
+  });
+  await test('F1-c（codex r2）: 切替の実行中は新規・複製・削除を始めない（案内つき）', () => {
+    for (const n of ['handleTournamentNew', 'handleTournamentDuplicate', 'handleTournamentRowDelete']) {
+      assert.match(src(n), /if \(isTournamentSwitchBusy\(\)\) \{ window\.alert\(TOURNAMENT_SWITCH_BUSY_MESSAGE\); return; \}/, n);
+    }
+    assert.match(src('isTournamentSwitchBusy'), /_tournamentSelectInFlight \|\| _dbLinkSwitchHoldId/);
   });
   await test('A1-c（codex A-1）: 切替中（表示中は B・時計エンジンは A の状態）に A の時計がレベル変化しても、B 宛てにも A 宛てにも送らない', async () => {
     const op = await loadModules();

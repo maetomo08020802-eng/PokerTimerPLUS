@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-10-10** — **v2.11.0 は「全部直してから1回で配信」に方針変更(前原訂正・指揮役経由)**。中身=glass-tube-gauge+時計同期〜R3-1(Codex r5 合格)+テスト完走ガード+段階A(R3-3/4/5)+一覧リセット+段階B(R3-2)。feature ブランチ commit 済・未 push。前リリース v2.10.1。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-10-11** — **v2.11.0 は「全部直してから1回で配信」に方針変更(前原訂正・指揮役経由)**。中身=glass-tube-gauge+時計同期〜R3-1(Codex r5 合格)+テスト完走ガード+段階A(R3-3/4/5)+一覧リセット+段階B(R3-2)。feature ブランチ commit 済・未 push。前リリース v2.10.1。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| v2.11.0 一式(glass-tube-gauge+時計同期〜R3-1+テスト完走ガード+段階A+一覧リセット+段階B) | 🟢 段階A+一覧リセット=実装済・完了review r1 承認・commit 済(`8ddba8f`)→Codex 査定で A-1(致命:切替時に別大会の人数を旧大会へ送信)・A-2(中)→**修正済・dual review r1 承認・commit 済**(report=`.cc-reports/2026-10-10_stageA_codex-fixes.md`)→Codex 再査定待ち/段階B=customer-app 案件333(B-1)を顧客アプリ20で実装中・PC 側 B-2 は B-1 本番反映の連絡待ち | report=`.cc-reports/2026-10-10_stageA_r3-345_list-reset.md`・review=`.cc-briefs/2026-10-10_stageA_r3-345_list-reset_r1_completion_review.md`・引継ぎ=`.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`・branch `feature/glass-tube-gauge` |
+| v2.11.0 一式(glass-tube-gauge+時計同期+段階A/一覧リセット+段階B) | 🔵 段階A Codex r2 の F1(致命:切替の重複)・F2(中:復元テスト)=修正済・dual review 承認・commit 済→新Codexセッションで再査定。段階B=B-1 本番反映済(customer-app `58c836bb`)・B-2(PC)は stash に退避中 | report=`.cc-reports/2026-10-11_stageA_codex-fixes_r2.md`・依頼=`.cc-briefs/2026-10-11_stageA_codex-fixes_r2_brief.md`・Codex入口=`.cc-briefs/2026-10-11_stageA_codex-handoff.md` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -64,9 +64,8 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.10.1(`81220e8`)。`feature/glass-tube-gauge` = 時計同期〜R3-1(`f9ae8f3`・Codex r5 合格)+テスト完走ガード(`0748a39`)まで commit 済・**未 push**(push・配信は前原 GO 後)。
-- **現在地(2026-10-10)**: **v2.11.0 は全部直してから1回で配信**(前原訂正・旧「先に配信」判断は取消)。順番=①テスト完走ガード(**済**・陰性対照済)→②段階A(R3-3/4/5)+一覧リセット=**実装済・commit 済**(テスト全PASS・新規26件・陰性対照11全検出・report=`.cc-reports/2026-10-10_stageA_r3-345_list-reset.md`)→**dual review r1 承認(軽微是正済・新規28件)**→Codex 査定 A-1/A-2 修正済(review 承認・commit 済・テスト39件・陰性対照23全検出)→Codex 再査定。CLAUDE.md INVARIANT 追記=前原直接OK・同 commit 済→③段階B(R3-2・customer-app 側 B-1 の本番反映が前提・依頼書は指揮役へ。CLAUDE.md INVARIANT例外②の追記は B の PC 実装と同じ commit で)。各段階=実装→review→Codex(致命0で合格・3回まで)。**前原実機確認は最後に v2.11.0 全体で1回**→前原の直接GOで version・tag・Release を1回。区切りごとに指揮役へ一言報告。
-- **新セッション入口**: `.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`。R3 報告は `.cc-reports/2026-10-10_clock-sync-structure-only_codex-r3.md`(作成済)。
+- **git**: `feature/glass-tube-gauge`(未 push・push/配信は v2.11.0 全体の前原 GO 後)。`34f2d48`(A-1/A-2)の上に F1/F2 修正を commit 済。`stash@{0}` = 段階B の B-2(R3-2 PC 側・level_total_ms 送受信)作りかけ。
+- **現在地(2026-10-11)**: 段階A Codex r2 の F1(重複切替で保護解除・致命)/F2(復元失敗を PASS にするテスト・中)を修正(切替の直列化+復元前の照合・テストの実依存組込み+復元警告で FAIL)。テスト stageA 44件・陰性対照29通り全検出・npm test exit 0。**次**=新Codexセッションで再査定(入口 `.cc-briefs/2026-10-11_stageA_codex-handoff.md`・依頼 `..._r2_brief.md`・報告 `.cc-reports/2026-10-11_stageA_codex-fixes_r2.md`)→段階B の B-2 を stash から再開(B-1 は本番反映済=customer-app `58c836bb`・migration 0202。CLAUDE.md INVARIANT 例外②の追記は B-2 と同じ commit で・前原承認済)→v2.11.0 全体の前原実機確認→前原 GO で 1 回配信。区切りごとに指揮役(session id `local_93fe8768-657a-49fe-a8a3-bc32f26f4cd0`)へ報告。
 - **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須。package-lock root version ドリフトも配信時に是正。
 - 参照: report=`.cc-reports/2026-10-10_glass-tube-gauge{,_codex-fixes}.md`・モック=`docs/mockups/2026-10-10_glass-tube-gauge_mock.html`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 

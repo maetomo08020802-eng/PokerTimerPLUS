@@ -5671,12 +5671,15 @@ function hasListResetableCounts(t) {
 const LIST_RESET_LINKED_MESSAGE = '店舗連携中の大会は、先に一覧で「選択」してからリセットしてください。';
 const LIST_RESET_BUSY_MESSAGE = '大会の切り替え中です。少し待ってから、もう一度「リセット」を押してください。';
 const LIST_RESET_IN_PROGRESS_MESSAGE = '大会のリセットを保存中です。少し待ってから、もう一度お試しください。';
+// codex 段階A r2 F1: 大会の切替（プルダウン/一覧の選択）は 1 つずつ。実行中に次の切替・新規・複製・削除は受け付けない
+const TOURNAMENT_SWITCH_BUSY_MESSAGE = '大会の切り替え中です。切り替えが終わってから、もう一度お試しください。';
+let _tournamentSelectInFlight = false;
 // codex 段階A A-2: 一覧リセット（裏の大会の保存）中は大会の切替・新規・複製・削除を受け付けない
 let _listResetInFlight = false;
 const LIST_RESET_SAVE_FAILED_MESSAGE = '時計は待機に戻しましたが、人数などを 0 に戻す保存に失敗しました。少し待ってから、もう一度「リセット」を押してください。';
 // codex 段階A A-2: 大会切替（表示中の大会 id・時計の復元）が進行中か
 function isTournamentSwitchBusy() {
-  return !!(_dbLinkSwitchHoldId || _tournamentSwitching || _tournamentDeleteInFlight);
+  return !!(_tournamentSelectInFlight || _dbLinkSwitchHoldId || _tournamentSwitching || _tournamentDeleteInFlight);
 }
 async function handleTournamentListReset(id, name) {
   if (window.appRole === 'hall') return;  // v2.0.1 Fix B5: hall はリスト操作不可
@@ -5798,72 +5801,79 @@ async function handleTournamentSelectChange() {
   if (!newId || newId === tournamentState.id) return;
   // codex 段階A A-2: 一覧リセットの保存中は切り替えない（プルダウンは現在の大会に戻す）
   if (_listResetInFlight) { el.tournamentSelect.value = tournamentState.id; window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }
-
-  // settings-scope-clarity dirty-switch-guard: ブラインド未保存編集中なら破棄/やめる確認。
-  //   やめる時は dropdown 値を現 active に戻す（既存 payouts キャンセルと同パターン）。
-  if (!(await confirmDiscardBlindsDirtyIfNeeded())) {
-    el.tournamentSelect.value = tournamentState.id;
-    return;
-  }
-
-  // STEP 10 フェーズC.2 中 2: 切替前に賞金 % 合計が不正なら確認ダイアログ
-  //   現状の form の payouts が 100% でないまま silent save される問題（fix11 B-1）対策
-  if (!isPayoutsValid()) {
-    const ok = window.confirm(
-      '現在のトーナメントの賞金合計が 100% ではありません。\nこのまま切り替えると不正な値で保存されます。続行しますか？'
-    );
-    if (!ok) {
-      // キャンセル: dropdown 値を旧 active に戻す
+  // codex 段階A r2 F1: 切替の実行中（前段の確認・保存の待ちを含む）や新規・複製・削除の実行中は、次の切替を始めない。
+  //   重なると、先の切替の復元が後の切替の表示中の大会へ時計を戻し、後の切替の「切替中」印を外してしまうため。
+  if (isTournamentSwitchBusy()) { el.tournamentSelect.value = tournamentState.id; window.alert(TOURNAMENT_SWITCH_BUSY_MESSAGE); return; }
+  _tournamentSelectInFlight = true;
+  try {
+    // settings-scope-clarity dirty-switch-guard: ブラインド未保存編集中なら破棄/やめる確認。
+    //   やめる時は dropdown 値を現 active に戻す（既存 payouts キャンセルと同パターン）。
+    if (!(await confirmDiscardBlindsDirtyIfNeeded())) {
       el.tournamentSelect.value = tournamentState.id;
       return;
     }
-  }
 
-  // 1) 旧アクティブの timerState を rebase 保存（running なら startedAt=now で時刻計算の起点を更新）
-  //    ※ pause はしない（裏で running を継続させる）
-  const prevId = tournamentState.id;
-  try {
-    const prevTimerState = captureCurrentTimerState();
-    await window.api.tournaments.setTimerState(prevId, prevTimerState);
-  } catch (err) {
-    try { window.api?.log?.write?.('error:caught:switchActive.preserveTimerState', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
-    console.warn('切替前 timerState 保存失敗:', err);
-  }
-
-  // 2) 切替前のフォーム編集内容を保存（旧 active の id で）
-  try {
-    const current = readTournamentForm();
-    current.id = prevId;
-    await window.api.tournaments.save(current);
-  } catch (err) {
-    try { window.api?.log?.write?.('error:caught:switchActive.preserveForm', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
-    console.warn('切替前の自動保存に失敗:', err);
-  }
-
-  // codex 段階A A-2: 前段の待ち（未保存確認・切替前の保存）の間に一覧リセットが始まっていたら、ここで切り替えない
-  if (_listResetInFlight) { el.tournamentSelect.value = tournamentState.id; window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }
-  // 3) active 切替 + UI 反映
-  //   codex 段階A A-1: ここから時計の復元が終わるまでは「切替中」。店舗連携の時計・人数を送らない
-  //   （表示中の大会 id・人数は切替先、時計エンジンは切替前の状態、送信ゲートは更新待ち、が混在する区間）
-  _dbLinkSwitchHoldId = newId;
-  try {
-    try {
-      const result = await window.api.tournaments.setActive(newId);
-      if (result) applyTournament(result);
-    } catch (err) {
-      console.warn('active 切替失敗:', err);
+    // STEP 10 フェーズC.2 中 2: 切替前に賞金 % 合計が不正なら確認ダイアログ
+    //   現状の form の payouts が 100% でないまま silent save される問題（fix11 B-1）対策
+    if (!isPayoutsValid()) {
+      const ok = window.confirm(
+        '現在のトーナメントの賞金合計が 100% ではありません。\nこのまま切り替えると不正な値で保存されます。続行しますか？'
+      );
+      if (!ok) {
+        // キャンセル: dropdown 値を旧 active に戻す
+        el.tournamentSelect.value = tournamentState.id;
+        return;
+      }
     }
-    await loadTournamentIntoForm(newId);
 
-    // 4) 新アクティブの blind preset を適用してから timerState を復元（時刻計算で live 復元 + silent）
-    await restoreActiveTimerStateFromStore(newId, { silent: true });
+    // 1) 旧アクティブの timerState を rebase 保存（running なら startedAt=now で時刻計算の起点を更新）
+    //    ※ pause はしない（裏で running を継続させる）
+    const prevId = tournamentState.id;
+    try {
+      const prevTimerState = captureCurrentTimerState();
+      await window.api.tournaments.setTimerState(prevId, prevTimerState);
+    } catch (err) {
+      try { window.api?.log?.write?.('error:caught:switchActive.preserveTimerState', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
+      console.warn('切替前 timerState 保存失敗:', err);
+    }
+
+    // 2) 切替前のフォーム編集内容を保存（旧 active の id で）
+    try {
+      const current = readTournamentForm();
+      current.id = prevId;
+      await window.api.tournaments.save(current);
+    } catch (err) {
+      try { window.api?.log?.write?.('error:caught:switchActive.preserveForm', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
+      console.warn('切替前の自動保存に失敗:', err);
+    }
+
+    // codex 段階A A-2: 前段の待ち（未保存確認・切替前の保存）の間に一覧リセットが始まっていたら、ここで切り替えない
+    if (_listResetInFlight) { el.tournamentSelect.value = tournamentState.id; window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }
+    // 3) active 切替 + UI 反映
+    //   codex 段階A A-1: ここから時計の復元が終わるまでは「切替中」。店舗連携の時計・人数を送らない
+    //   （表示中の大会 id・人数は切替先、時計エンジンは切替前の状態、送信ゲートは更新待ち、が混在する区間）
+    _dbLinkSwitchHoldId = newId;
+    try {
+      try {
+        const result = await window.api.tournaments.setActive(newId);
+        if (result) applyTournament(result);
+      } catch (err) {
+        console.warn('active 切替失敗:', err);
+      }
+      await loadTournamentIntoForm(newId);
+
+      // 4) 新アクティブの blind preset を適用してから timerState を復元（時刻計算で live 復元 + silent）
+      await restoreActiveTimerStateFromStore(newId, { silent: true });
+    } finally {
+      if (_dbLinkSwitchHoldId === newId) _dbLinkSwitchHoldId = '';
+    }
+    // codex 段階A A-1: 復元が終わってから送信ゲートを確定し、切替先が連携 ON なら DB 状態へ同期する
+    //   （時計は DB が正・人数も DB 採用。PC の値は以後の操作で送る）
+    await finishDbLinkSwitch(newId);
+    await renderTournamentListWithDedup();
   } finally {
-    _dbLinkSwitchHoldId = '';
+    _tournamentSelectInFlight = false;
   }
-  // codex 段階A A-1: 復元が終わってから送信ゲートを確定し、切替先が連携 ON なら DB 状態へ同期する
-  //   （時計は DB が正・人数も DB 採用。PC の値は以後の操作で送る）
-  await finishDbLinkSwitch(newId);
-  await renderTournamentListWithDedup();
 }
 
 // codex 段階A A-1: 大会切替の完了後に、送信ゲートを取り直してから連携 ON なら同期する。
@@ -5881,6 +5891,10 @@ async function finishDbLinkSwitch(id) {
 // blindPresetId に応じて構造を再ロードしてから computeLiveTimerState 経由で applyTimerStateToTimer を呼ぶ。
 // opts.silent: true なら復元直後の音再生を抑止
 async function restoreActiveTimerStateFromStore(id, opts = {}) {
+  // codex 段階A r2 F1: 復元開始時の大会切替連番を控え、待ちの後で表示中の大会が変わっていたら構造・時計とも当てない
+  //   （スリープ復帰の再同期など、切替とは別経路の復元が切替と重なった場合も古い大会の時計を戻さない）
+  const seqAtStart = _dbLinkTournamentSeq;
+  const isStale = () => (seqAtStart !== _dbLinkTournamentSeq || !tournamentState || tournamentState.id !== id);
   try {
     const list = await _tournamentsListDedup() || [];
     const found = list.find((t) => t.id === id);
@@ -5889,11 +5903,19 @@ async function restoreActiveTimerStateFromStore(id, opts = {}) {
     let levels = null;
     if (found.blindPresetId) {
       const preset = await loadPresetById(found.blindPresetId);
+      if (isStale()) {
+        try { window.api?.log?.write?.('timer:restore:stale-skip', { id, cur: tournamentState && tournamentState.id }); } catch (_) {}
+        return;
+      }
       if (preset) {
         try { setStructure(preset); } catch (err) { console.warn('構造切替失敗:', err); }
         levels = preset.levels || null;
         if (levels) blindPresetCache.set(found.blindPresetId, levels);
       }
+    }
+    if (isStale()) {
+      try { window.api?.log?.write?.('timer:restore:stale-skip', { id, cur: tournamentState && tournamentState.id }); } catch (_) {}
+      return;
     }
     applyTimerStateToTimer(found.timerState, levels, { silent: !!opts.silent });
   } catch (err) {
@@ -5922,6 +5944,7 @@ async function handleTournamentNew() {
   // STEP 10 フェーズC.2 軽 11: 連打ガード（async 中の重複実行で複数の新規が作られないよう）
   if (handleTournamentNew._inFlight) return;
   if (_listResetInFlight) { window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }   // codex 段階A A-2: 一覧リセットの保存中は切り替えない
+  if (isTournamentSwitchBusy()) { window.alert(TOURNAMENT_SWITCH_BUSY_MESSAGE); return; }   // codex 段階A r2 F1: 切替の実行中は始めない
   handleTournamentNew._inFlight = true;
   // STEP 10 フェーズC.1.1 Fix 2: トーナメント切替中は periodic persist を skip させる
   _tournamentSwitching = true;
@@ -6019,6 +6042,7 @@ async function handleTournamentDuplicate() {
   //   handleTournamentNew と同じ _inFlight パターンを適用）
   if (handleTournamentDuplicate._inFlight) return;
   if (_listResetInFlight) { window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }   // codex 段階A A-2: 一覧リセットの保存中は切り替えない
+  if (isTournamentSwitchBusy()) { window.alert(TOURNAMENT_SWITCH_BUSY_MESSAGE); return; }   // codex 段階A r2 F1: 切替の実行中は始めない
   handleTournamentDuplicate._inFlight = true;
   // STEP 10 フェーズC.1.1 Fix 2: 複製も active 切替を伴うため periodic skip（finally で確実解除）
   _tournamentSwitching = true;
@@ -6164,6 +6188,7 @@ async function handleTournamentRowDelete(id, name) {
   if (!window.api?.tournaments) return;
   if (_tournamentDeleteInFlight) return;   // ダイアログまたは IPC 進行中
   if (_listResetInFlight) { window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }   // codex 段階A A-2: 一覧リセットの保存中は削除しない
+  if (isTournamentSwitchBusy()) { window.alert(TOURNAMENT_SWITCH_BUSY_MESSAGE); return; }   // codex 段階A r2 F1: 切替の実行中は始めない
   // settings-scope-clarity dirty-switch-guard: active 卓を削除すると別卓へ active が切り替わる経路。
   //   その時だけ未保存編集確認（非 active 卓削除や非 dirty では不要 prompt を出さない）。
   if (id === tournamentState.id && !(await confirmDiscardBlindsDirtyIfNeeded())) return;
