@@ -123,7 +123,7 @@ test('T7 (Fix 1): message に installer 処理時間の補足説明が含まれ�
 // T8: package.json version は 2.1.12
 // ============================================================
 test('T8: package.json version は 2.1.12', () => {
-  assert.equal(PKG.version, '2.10.1',
+  assert.equal(PKG.version, '2.11.0',
     `package.json version が ${PKG.version}（期待 2.1.18）`);
 });
 

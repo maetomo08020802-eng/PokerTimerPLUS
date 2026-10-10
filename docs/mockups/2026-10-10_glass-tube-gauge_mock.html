@@ -1,0 +1,222 @@
+<title>蛍光ガラス管ゲージ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=JetBrains+Mono:wght@700&family=Noto+Sans+JP:wght@400;700&display=swap">
+<style>
+/* Layout: 16:9 の会場モニター縮小版(実アプリの3カラム配置を再現)+下に操作パネルと調査メモ。単一ダークテーマ(実アプリに合わせる) */
+:root{
+  color-scheme: dark;
+  --bg-base:#050505; --bg-deep:#000;
+  --page:#0b0d10; --panel:#14171c; --line:#262a31;
+  --ink:#f2f0ea; --ink-dim:#9aa0a8; --gold:#d4af37;
+  --warn:#ffc107; --danger:#e53935;
+  --liquid:#39ffb0; --liquid-2:#00d9ff;
+  --font-timer:"JetBrains Mono", ui-monospace, Consolas, monospace;
+  --font-label:"Oswald", "Arial Narrow", sans-serif;
+  --font-body:"Noto Sans JP", "Yu Gothic UI", sans-serif;
+}
+:root[data-bg="navy"]{--bg-base:#0E2D5C;--bg-deep:#08183A}
+:root[data-bg="felt"]{--bg-base:#0E5538;--bg-deep:#082E1B}
+:root[data-bg="burgundy"]{--bg-base:#4A0815;--bg-deep:#2A0610}
+html,body{background:var(--page);color:var(--ink)}
+body{font-family:var(--font-body);padding:20px 16px 48px;margin:0}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--font-label);font-weight:500;letter-spacing:.08em;font-size:15px;color:var(--ink-dim);margin:0;text-transform:uppercase}
+h1 b{color:var(--ink);font-weight:700}
+
+/* ===== 会場モニター ===== */
+.screen{container-type:size;width:100%;aspect-ratio:16/9;border-radius:6px;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 40%,var(--bg-base),var(--bg-deep) 75%);
+  border:1px solid var(--line);position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.clock{position:absolute;inset:0;display:grid;grid-template-columns:18cqw 1fr 18cqw;padding:3cqh 2cqw;gap:1cqw}
+.col{display:flex;flex-direction:column;justify-content:space-between}
+.col--r{align-items:flex-end;text-align:right}
+.lbl{font-family:var(--font-label);font-size:1.5cqw;letter-spacing:.12em;color:var(--ink-dim)}
+.val{font-family:var(--font-label);font-size:2.6cqw;font-weight:700}
+.logo{width:13cqw;aspect-ratio:1.6;border:1px dashed rgba(255,255,255,.25);border-radius:.6cqw;display:grid;place-items:center;font-size:1.1cqw;color:var(--ink-dim)}
+.pay{font-family:var(--font-label);font-size:1.4cqw;line-height:1.5;color:var(--ink)}
+.pay span{color:var(--gold)}
+.center{display:flex;flex-direction:column;align-items:center;min-width:0}
+.title{font-family:var(--font-label);font-weight:700;font-size:2.6cqw;letter-spacing:.04em}
+.sub{font-size:1.3cqw;color:var(--ink-dim)}
+.level{font-family:var(--font-label);font-weight:700;font-size:4.4cqw;color:var(--gold);line-height:1.1}
+.timer{flex:1;display:grid;place-items:center;position:relative;min-height:0}
+.time{font-family:var(--font-timer);font-size:min(17cqw,30cqh);line-height:.95;letter-spacing:-.04em;
+  font-variant-numeric:tabular-nums;color:var(--ink);
+  text-shadow:0 0 1.5cqw rgba(212,175,55,.4),0 0 3cqw rgba(212,175,55,.25),0 0 6cqw rgba(212,175,55,.15);transition:color .3s}
+.screen[data-state="warn"] .time{color:var(--warn)}
+.screen[data-state="danger"] .time{color:var(--danger);animation:pulse .5s ease-in-out infinite alternate}
+.screen[data-state="break"] .time{color:var(--gold)}
+.screen[data-state="paused"] .time{filter:grayscale(40%)}
+@keyframes pulse{to{opacity:.8}}
+.pause{position:absolute;bottom:4%;left:50%;translate:-50% 0;font-family:var(--font-label);font-weight:700;font-size:2cqw;letter-spacing:.25em;
+  padding:.8cqh 1.6cqw;border:.25cqw solid var(--ink);border-radius:.5cqw;background:rgba(0,0,0,.6);display:none}
+.screen[data-state="paused"] .pause{display:block}
+.screen[data-state="paused"]::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.35);pointer-events:none}
+
+/* ===== ガラス管(本提案の主役) ===== */
+.gauge{--c1:var(--liquid);--c2:var(--liquid-2);--p:1;
+  width:54cqw;height:5.6cqh;flex:0 0 auto;display:flex;align-items:center;gap:1.2cqw;margin:.6cqh 0 1.2cqh}
+.gauge[data-side="left"]{flex-direction:row-reverse}
+.screen[data-state="warn"] .gauge{--c1:#ffe14a;--c2:#ff9f1a}
+.screen[data-state="danger"] .gauge{--c1:#ff5a4f;--c2:#ff1f6a}
+.screen[data-state="break"] .gauge{--c1:#ffe6a0;--c2:var(--gold)}
+.screen[data-state="prestart"] .gauge{--c1:#9ad8ff;--c2:#5d8bff}
+.tube{position:relative;flex:1;height:62%;border-radius:999px;
+  background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.02) 45%,rgba(0,0,0,.35));
+  box-shadow:inset 0 0 0 .12cqw rgba(255,255,255,.35),inset 0 -.4cqh .6cqh rgba(0,0,0,.45),0 0 0 .1cqw rgba(0,0,0,.6)}
+.liquid{position:absolute;inset:.35cqh .25cqw;border-radius:999px;overflow:hidden;
+  clip-path:inset(0 calc((1 - var(--p)) * 100%) 0 0 round 999px);
+  background:linear-gradient(90deg,var(--c2),var(--c1));
+  box-shadow:0 0 1.4cqw var(--c1);filter:drop-shadow(0 0 .6cqw var(--c1));transition:background .4s}
+.gauge[data-side="left"] .liquid{clip-path:inset(0 0 0 calc((1 - var(--p)) * 100%) round 999px);background:linear-gradient(270deg,var(--c2),var(--c1))}
+/* 液面の揺らぎ + 気泡 */
+.liquid::before{content:"";position:absolute;inset:0;background:
+  radial-gradient(circle at 12% 70%,rgba(255,255,255,.55) 0 .18cqw,transparent .22cqw),
+  radial-gradient(circle at 38% 40%,rgba(255,255,255,.45) 0 .14cqw,transparent .18cqw),
+  radial-gradient(circle at 63% 65%,rgba(255,255,255,.5) 0 .16cqw,transparent .2cqw),
+  radial-gradient(circle at 85% 35%,rgba(255,255,255,.4) 0 .12cqw,transparent .16cqw);
+  background-size:18cqw 100%;animation:bubbles 6s linear infinite}
+.liquid::after{content:"";position:absolute;left:0;right:0;top:0;height:40%;background:linear-gradient(180deg,rgba(255,255,255,.45),transparent)}
+@keyframes bubbles{to{background-position:-18cqw 0}}
+.screen[data-state="paused"] .liquid::before{animation-play-state:paused}
+.screen[data-state="paused"] .liquid{filter:grayscale(70%)}
+/* ガラスの光沢(液体の上に重ねる) */
+.tube::after{content:"";position:absolute;left:3%;right:3%;top:14%;height:22%;border-radius:999px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55) 20%,rgba(255,255,255,.2) 80%,transparent);pointer-events:none}
+.cap{flex:0 0 auto;width:4.6cqw;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--font-label);font-weight:700;font-size:2.3cqw;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums;
+  border:.22cqw solid var(--c1);box-shadow:0 0 .8cqw var(--c1),inset 0 0 .6cqw rgba(255,255,255,.12);background:rgba(0,0,0,.35);transition:border-color .4s,box-shadow .4s}
+.gtype{font-family:var(--font-label);font-size:1.5cqw;letter-spacing:.06em;color:var(--ink)}
+.screen[data-top="tube"] .gtype{display:none}
+.screen[data-top="game"] .gauge{display:none}
+
+.card{background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12);border-radius:.8cqw;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.card-b{width:54cqw;height:20cqh}
+.card-n{width:46cqw;height:12cqh;margin-top:1.2cqh}
+.card .lbl{font-size:1.2cqw}
+.bl{font-family:var(--font-label);font-weight:700;font-size:5cqw;line-height:1}
+.bl em{font-style:normal;font-size:2cqw;color:var(--ink-dim);margin-left:1cqw}
+.card-n .bl{font-size:2.6cqw;color:var(--ink-dim)}
+.badge{position:absolute;top:1.2cqh;left:50%;translate:-50% 0;font-size:1cqw;color:var(--ink-dim);background:rgba(0,0,0,.5);padding:.3cqh .8cqw;border-radius:99px;border:1px solid var(--line)}
+
+/* ===== 操作パネル ===== */
+.ctrl{display:flex;flex-wrap:wrap;gap:16px 28px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.grp{display:flex;flex-direction:column;gap:8px}
+.grp > span{font-size:12px;color:var(--ink-dim);letter-spacing:.04em}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{font:inherit;font-size:13px;color:var(--ink);background:#1c2027;border:1px solid var(--line);border-radius:4px;padding:6px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#111;border-color:var(--ink)}
+.seg button:focus-visible{outline:2px solid var(--liquid);outline-offset:2px}
+
+/* ===== 調査メモ ===== */
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.note{padding:16px 18px;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.note h2{font-size:14px;margin:0 0 10px;font-weight:700}
+.note ul{margin:0;padding-left:1.2em;font-size:13px;line-height:1.75;color:#d5d8dd;max-width:65ch}
+.note li b{color:var(--ink)}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;margin-right:6px;vertical-align:1px}
+.tag--ok{background:#123326;color:#6fe3ad}.tag--q{background:#3a2d0c;color:#ffd166}.tag--risk{background:#3a1414;color:#ff8a80}
+@media (prefers-reduced-motion:reduce){.liquid::before,.time{animation:none!important}}
+</style>
+
+<div class="wrap">
+  <h1><b>PokerTimerPLUS+</b> &nbsp;完成予想図 ・ 時計とブラインドの間に「蛍光ガラス管」</h1>
+
+  <div class="screen" id="screen" data-state="normal" data-top="tube">
+    <div class="clock">
+      <aside class="col">
+        <div class="logo">ロゴ</div>
+        <div><div class="lbl">PAYOUTS</div><div class="pay">1st <span>$50,000</span><br>2nd <span>$30,000</span><br>3rd <span>$20,000</span></div></div>
+        <div><div class="lbl">TOTAL POOL</div><div class="val" style="color:var(--gold)">$100,000</div></div>
+      </aside>
+      <section class="center">
+        <div class="title">ポーカートーナメント</div>
+        <div class="sub">デモ表示</div>
+        <div class="gtype">No Limit Hold'em</div>
+        <div class="level" id="lv">Level 5</div>
+        <div class="timer">
+          <div class="time" id="time">20:00</div>
+          <div class="pause">一時停止中</div>
+        </div>
+        <div class="gauge" id="gauge" data-side="right">
+          <div class="tube"><div class="liquid"></div></div>
+          <div class="cap" id="cap" aria-label="このレベルは20分">20</div>
+        </div>
+        <div class="card card-b"><div class="lbl">BLINDS</div><div class="bl" id="bl">400 / 800<em>ANTE 800</em></div></div>
+        <div class="card card-n"><div class="lbl">NEXT LEVEL</div><div class="bl">500 / 1,000 ・ 1,000</div></div>
+      </section>
+      <aside class="col col--r">
+        <div><div class="lbl">NEXT BREAK IN</div><div class="val">00:47:12</div></div>
+        <div><div class="lbl">AVG STACK</div><div class="val">42,500</div></div>
+        <div><div class="lbl">PLAYERS</div><div class="val">24 / 40</div><div class="lbl">REBUY 8 ・ ADD-ON 5</div></div>
+      </aside>
+    </div>
+    <div class="badge">デモは1秒=1分の早送り</div>
+  </div>
+
+  <div class="ctrl">
+    <div class="grp"><span>状態</span><div class="seg" data-k="state">
+      <button aria-pressed="true" data-v="normal">進行中</button>
+      <button data-v="warn">残り1分(黄)</button>
+      <button data-v="danger">残り10秒(赤)</button>
+      <button data-v="break">ブレイク</button>
+      <button data-v="paused">一時停止</button>
+      <button data-v="prestart">開始前</button>
+    </div></div>
+    <div class="grp"><span>設定:表示の切替(どちらか一方)</span><div class="seg" data-k="top">
+      <button aria-pressed="true" data-v="tube">ガラス管</button>
+      <button data-v="game">ゲーム種(NLH 等)</button>
+    </div></div>
+    <div class="grp"><span>背景</span><div class="seg" data-k="bg">
+      <button aria-pressed="true" data-v="black">黒</button>
+      <button data-v="navy">紺</button>
+      <button data-v="felt">フェルト緑</button>
+      <button data-v="burgundy">ワイン</button>
+    </div></div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><h2>衝突チェック(調査結果)</h2><ul>
+      <li><span class="tag tag--risk">要注意</span><b>縦の空き</b>: 中央列は「見出し+時計+BLINDS(20vh)+NEXT(14vh)」でほぼ満杯。管を入れる分(約4〜5vh)は<b>時計の文字を少し小さく</b>して捻出する。BLINDS/NEXTのカード幅・高さは固定ルールなので触らない。</li>
+      <li><span class="tag tag--risk">要注意</span><b>一時停止ラベル</b>は時計枠の下寄りに浮かせて表示している。管と重ならない位置か、実装時に画面で確認する。</li>
+      <li><span class="tag tag--ok">問題なし</span><b>レイアウトのズレ防止ルール</b>: 管は常に同じ大きさで置き、中身の水だけ「切り抜き」で減らす。禁止の transform: scale は使わない。</li>
+      <li><span class="tag tag--ok">問題なし</span><b>2画面(会場側)</b>: 会場モニターは残り時間を自分で毎フレーム計算済み。管はその値を読むだけなので通信は増えない。</li>
+      <li><span class="tag tag--ok">問題なし</span><b>致命バグ保護5件・店舗アプリ連携・スマホ操作</b>: 表示だけの追加で、タイマー本体・保存データ・送信内容に触れない。</li></ul>
+    </div>
+    <div class="note"><h2>決定済み(前原さん回答)</h2><ul>
+      <li><span class="tag tag--ok">決定</span><b>設定で「ガラス管」か「ゲーム種(NLH 等)」のどちらか一方</b>を表示。ガラス管のときはゲーム種の行を消して、その高さを管に回す(時計の大きさはほぼ今のまま)。</li>
+      <li><span class="tag tag--ok">決定</span><b>右端に分数だけを丸囲み</b>で表示(例: ⑳)。ブラインドの長さは分単位なので秒は出さない。ブレイク中はブレイクの分数。</li>
+      </ul></div>
+    <div class="note"><h2>残りの確認</h2><ul>
+      <li><span class="tag tag--q">確認</span><b>水の色</b>: 通常=蛍光グリーン、残り1分=黄、10秒=赤、ブレイク=金で時計と連動してよいか。</li>
+      <li><span class="tag tag--q">確認</span><b>開始前カウントダウン中</b>: 管を出すか、隠すか。</li>
+      <li><span class="tag tag--q">確認</span><b>最初の設定</b>: 既定は今までどおり「ゲーム種」か、新しい「ガラス管」か。</li>
+      <li><span class="tag tag--q">確認</span><b>4分割マルチ表示</b>: 今回は対象外(単一画面のみ)でよいか。</li></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement, scr=document.getElementById('screen'), g=document.getElementById('gauge');
+  var timeEl=document.getElementById('time'), cap=document.getElementById('cap'), lv=document.getElementById('lv'), bl=document.getElementById('bl');
+  var presets={normal:{total:1200,start:1200,label:'LEVEL',lv:'Level 5'},warn:{total:1200,start:60,label:'LEVEL',lv:'Level 5'},
+    danger:{total:1200,start:10,label:'LEVEL',lv:'Level 5'},break:{total:600,start:600,label:'BREAK',lv:'BREAK'},
+    paused:{total:1200,start:740,label:'LEVEL',lv:'Level 5'},prestart:{total:900,start:900,label:'開始まで',lv:'Level 1'}};
+  var cur='normal', total=1200, rem=1200, last=performance.now();
+  function fmt(s){s=Math.max(0,Math.ceil(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+  function set(state){var p=presets[state];cur=state;total=p.total;rem=p.start;scr.dataset.state=state;cap.textContent=String(Math.round(total/60));cap.setAttribute('aria-label','この区間は'+Math.round(total/60)+'分');lv.textContent=p.lv;
+    bl.innerHTML=state==='break'?'休憩中<em>次は 500 / 1,000</em>':'400 / 800<em>ANTE 800</em>';draw()}
+  function draw(){timeEl.textContent=fmt(rem);g.style.setProperty('--p',(rem/total).toFixed(4))}
+  function tick(now){var dt=(now-last)/1000;last=now;
+    if(cur!=='paused'){var speed=(cur==='warn'||cur==='danger')?1:60;rem-=dt*speed;
+      if(cur==='normal'&&rem<=60){cur='warn';scr.dataset.state='warn'}
+      if(cur==='warn'&&rem<=10){cur='danger';scr.dataset.state='danger'}
+      if(rem<=0){var back=scr.dataset.state==='danger'&&presets[scr.dataset.state]?'normal':'normal';set(back);mark('state','normal')}
+    }
+    draw();requestAnimationFrame(tick)}
+  function mark(k,v){document.querySelectorAll('.seg[data-k="'+k+'"] button').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===v))})}
+  document.querySelectorAll('.seg').forEach(function(seg){seg.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;var k=seg.dataset.k,v=b.dataset.v;mark(k,v);
+    if(k==='state')set(v);else if(k==='top')scr.dataset.top=v;else root.dataset.bg=v})});
+  set('normal');requestAnimationFrame(tick);
+})();
+</script>

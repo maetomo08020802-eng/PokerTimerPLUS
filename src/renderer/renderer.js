@@ -307,6 +307,9 @@ const PAYOUT_PRESETS = Object.freeze({
 const el = {
   clock: document.querySelector('.clock'),
   time: document.getElementById('js-time'),
+  // glass-tube-gauge: 時計下のガラス管ゲージ
+  timeGauge: document.getElementById('js-time-gauge'),
+  timeGaugeMinutes: document.getElementById('js-time-gauge-minutes'),
   eventTitle: document.getElementById('js-event-title'),
   eventSubtitle: document.getElementById('js-event-subtitle'),
   eventGameType: document.getElementById('js-event-game-type'),
@@ -965,6 +968,60 @@ function renderTime(remainingMs) {
   if ('prestartFormat' in el.clock.dataset) delete el.clock.dataset.prestartFormat;
   el.time.textContent = formatTime(remainingMs);
   el.clock.dataset.timerState = status === States.BREAK ? 'normal' : classifyTimerState(remainingMs);
+  renderTimeGauge(remainingMs);
+}
+
+// ===== glass-tube-gauge: 時計下のガラス管ゲージ =====
+// 水位 = 残り時間 / そのレベル（ブレイク）の全体時間。0〜1 に clamp。全体時間が不明なら満タン(1)。
+function computeGaugeRatio(remainingMs, durationMinutes) {
+  const totalMs = (typeof durationMinutes === 'number' && Number.isFinite(durationMinutes)) ? durationMinutes * 60 * 1000 : 0;
+  if (totalMs <= 0) return 1;
+  const r = (typeof remainingMs === 'number' && Number.isFinite(remainingMs)) ? remainingMs / totalMs : 1;
+  return Math.min(1, Math.max(0, r));
+}
+
+// 右端の丸囲み数字: 分数のみ（ブラインドは分単位で作る運用）。不明時は空文字。
+// codex-fixes ⑤: 構造は小数分も許容するため、整数はそのまま・小数は第1位まで表示（1.5 → "1.5"）
+function formatGaugeMinutes(durationMinutes) {
+  if (typeof durationMinutes !== 'number' || !Number.isFinite(durationMinutes) || durationMinutes <= 0) return '';
+  const rounded = Math.round(durationMinutes * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+// codex-fixes ①: ゲージの全体時間は「時計が実際に使っている現レベルの全体時間」= state.totalMs を正とする。
+//   構造のみ適用（③ c: 現レベルは旧時間で継続）でも時計と水位・丸数字が一致する。
+//   totalMs 未設定（0 以下）の時だけ構造上のレベル時間にフォールバック。
+function resolveGaugeMinutes(stateTotalMs, levelDurationMinutes) {
+  if (typeof stateTotalMs === 'number' && Number.isFinite(stateTotalMs) && stateTotalMs > 0) return stateTotalMs / 60000;
+  return levelDurationMinutes;
+}
+
+// 毎フレーム呼ばれるため、値が変わった時だけ DOM に書く（前回値キャッシュ）。
+// remainingMs は renderTime が受けた算出済の値を読むだけ（dual-sync 送信・setState は追加しない）。
+const _gaugeCache = { ratio: null, minutes: null, ended: null };
+function renderTimeGauge(remainingMs) {
+  if (!el.timeGauge) return;
+  const { status, currentLevelIndex, totalMs } = getState();
+  // codex-fixes ②: 全レベル超過（IDLE + 残り0）は完走扱いで隠す（→キー超過時は完走オーバーレイが付かない経路があるため、
+  //   hall の finished 復元=IDLE+残り0 と同じ条件で両画面を揃える）。CSS: .time-gauge[data-ended]
+  const ended = status === States.IDLE && typeof remainingMs === 'number' && remainingMs <= 0;
+  if (ended !== _gaugeCache.ended) {
+    _gaugeCache.ended = ended;
+    if (ended) el.timeGauge.dataset.ended = 'true';
+    else delete el.timeGauge.dataset.ended;
+  }
+  const level = getLevel(currentLevelIndex);
+  const minutes = resolveGaugeMinutes(totalMs, level ? level.durationMinutes : undefined);
+  const ratio = Math.round(computeGaugeRatio(remainingMs, minutes) * 1000) / 1000;
+  if (ratio !== _gaugeCache.ratio) {
+    _gaugeCache.ratio = ratio;
+    el.timeGauge.style.setProperty('--gauge-ratio', String(ratio));
+  }
+  const label = formatGaugeMinutes(minutes);
+  if (label !== _gaugeCache.minutes) {
+    _gaugeCache.minutes = label;
+    if (el.timeGaugeMinutes) el.timeGaugeMinutes.textContent = label;
+  }
 }
 
 function computeNextBreakMs(remainingMs, currentIndex) {
@@ -1389,6 +1446,8 @@ function applyTournament(t) {
     if (typeof ds.timerFont === 'string') {
       applyTimerFont(ds.timerFont);
     }
+    // glass-tube-gauge: キー欠落（旧データ）は既定 'tube'
+    applyGaugeMode(ds.gaugeMode);
   }
   // STEP 10 フェーズC.1.8: ランタイム復元（再起動 / トーナメント切替時の永続値読込）。
   //   C.2.7-A 致命バグ修正の不変条件「ブラインド構造を変えても tournamentRuntime は消えない」と整合。
@@ -1470,6 +1529,12 @@ function applyTournament(t) {
   //   applyTournament は active 切替 / 新規 / 複製 / 起動復元 / dual-sync 受信すべての合流点のため、
   //   ここ 1 点で「トーナメント切替で即更新」を満たす（タブ閉時はヘルパが no-op）。
   updateSettingsCurrentTournamentLabel();
+  // codex R3-3: 大会 id の変化をここ（全切替の合流点）で同期的に数える（送信ゲートの更新は async のため使わない）
+  //   ※ここが例外で黙って止まると、紐づけ応答の往復ガード（R3-3）が効かなくなる。変更時は stageA テスト R3-3a/b を必ず通すこと。
+  try {
+    const _seqId = tournamentState && tournamentState.id ? tournamentState.id : '';
+    if (_seqId !== _dbLinkSeqLastId) { _dbLinkSeqLastId = _seqId; _dbLinkTournamentSeq += 1; }
+  } catch (_) { /* ignore */ }
   // K2: トーナメント切替で送信ゲートを取り直す（切替先が未紐づけなら即 inactive・fire-and-forget）
   try { refreshDbLinkSendState(); } catch (_) { /* ignore */ }
 }
@@ -1518,6 +1583,13 @@ function mapStateToStorageStatus(status) {
   return 'idle';
 }
 
+// 完走状態（IDLE・残り0・最終レベル）か。店舗連携の送信・適用判断用（codex R3-5）。captureCurrentTimerState の完走判定と同一条件を保つこと。
+function isEngineFinishedState(s) {
+  if (!s || s.status !== States.IDLE || s.remainingMs !== 0) return false;
+  const lastLevelIndex = (typeof getLevelCount === 'function') ? getLevelCount() - 1 : -1;
+  return lastLevelIndex >= 0 && (s.currentLevelIndex || 0) === lastLevelIndex;
+}
+
 // 現在の timer.js + state.js の状況を timerState（保存形式）へ変換
 // STEP 6.21.2: running 中は「rebase」方式 — startedAt = now、elapsedSecondsInLevel に現在地の経過秒を入れる
 //              これで store の値だけで future の live elapsed = elapsed + (future_now - startedAt) で計算可能
@@ -1551,13 +1623,31 @@ function captureCurrentTimerState() {
   const remainSec = Math.max(0, Math.round((s.remainingMs || 0) / 1000));
   const elapsed = Math.max(0, totalSec - remainSec);
   const now = Date.now();
-  return {
+  const out = {
     status,
     currentLevel: (s.currentLevelIndex || 0) + 1,
     elapsedSecondsInLevel: elapsed,
     startedAt: status === 'running' ? now : null,
     pausedAt:  status === 'paused'  ? now : null
   };
+  // clock-sync-structure-only: 現レベルが構造と異なる全体時間で走っている時（構造のみ適用＝③c）だけ、
+  //   実際の全体秒を残す。受け側（hall 再計算・復元・停電復帰）が経過秒を正しい全体時間から引けるようにする。
+  if (status === 'running' || status === 'paused') {
+    const lv = (typeof getLevel === 'function') ? getLevel(s.currentLevelIndex || 0) : null;
+    const structMs = (lv && typeof lv.durationMinutes === 'number') ? lv.durationMinutes * 60 * 1000 : 0;
+    if (totalSec > 0 && structMs > 0 && Math.abs((s.totalMs || 0) - structMs) >= 1000) {
+      out.levelTotalSeconds = totalSec;
+    }
+  }
+  return out;
+}
+
+// clock-sync-structure-only: live timerState の現レベル全体時間（ms）。levelTotalSeconds が有効かつ
+//   そのレベル（currentLevel-1 === idx）の値である時だけ返し、それ以外は 0（＝構造時間を使う）。
+function _liveLevelTotalMs(live, idx) {
+  const lts = live && live.levelTotalSeconds;
+  if (!(typeof lts === 'number' && Number.isFinite(lts) && lts > 0)) return 0;
+  return ((Number(live.currentLevel) || 1) - 1 === idx) ? Math.floor(lts) * 1000 : 0;
 }
 
 // STEP 6.21.2: 並行進行モデルのコア — store の timerState と blinds（preset.levels）から
@@ -1585,6 +1675,7 @@ function computeLiveTimerState(ts, levels) {
   //   currentLevel > levels.length の状態が一時的に発生し、durSecOf が Infinity を返して
   //   while ループが即 break、elapsed が無効レベルの値のまま伝搬する。事前クランプで防御。
   let level = Math.max(1, Math.min(levels.length, Number(ts.currentLevel) || 1));
+  const lts0 = (level === Number(ts.currentLevel) && Number.isFinite(ts.levelTotalSeconds) && ts.levelTotalSeconds > 0) ? ts.levelTotalSeconds : 0;
 
   // レベル長は durationMinutes（既存仕様）から秒換算
   const durSecOf = (idx) => {
@@ -1597,7 +1688,7 @@ function computeLiveTimerState(ts, levels) {
 
   // レベル繰り上げ（停電中の進行分も含む）
   while (true) {
-    const dur = durSecOf(level - 1);
+    const dur = (lts0 && level === Number(ts.currentLevel)) ? lts0 : durSecOf(level - 1);
     if (elapsed < dur) break;
     elapsed -= dur;
     level += 1;
@@ -1607,7 +1698,7 @@ function computeLiveTimerState(ts, levels) {
       //   新: 'finished' で完了を明示、applyTimerStateToTimer は idle 同様タイマー再開しない。
       level = levels.length;
       const lastDur = durSecOf(level - 1);
-      return {
+      const fin = {
         ...ts,
         status: 'finished',
         currentLevel: level,
@@ -1615,9 +1706,13 @@ function computeLiveTimerState(ts, levels) {
         startedAt: null,
         pausedAt: null
       };
+      delete fin.levelTotalSeconds;   // 完走状態に旧全体時間を残さない（codex C1）
+      return fin;
     }
   }
-  return { ...ts, currentLevel: level, elapsedSecondsInLevel: Math.floor(elapsed) };
+  const live = { ...ts, currentLevel: level, elapsedSecondsInLevel: Math.floor(elapsed) };
+  if (!lts0 || level !== Number(ts.currentLevel)) delete live.levelTotalSeconds;
+  return live;
 }
 
 // v2.1.20-rc1: computeLiveTimerState を秒粒度でメモ化（renderTournamentList 軽量化）。
@@ -1758,6 +1853,18 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
       // v2.1.20-rc10: 多層防御第 2 層 — timer.js 内 force=false ガード（rc8/rc9 ガード抜け race 防止）
       if (!timerReset({ force: false })) {
         try { window.api?.log?.write?.('timer:reset:skip-during-prestart', { ctx: 'applyTimerStateToTimer:finished', role: window.appRole }); } catch (_) {}
+      } else {
+        // codex R2-1: 完走を「最終レベル・残り0・IDLE」（自然完走と同じ形）で保持する。reset 直後の Lv1 満タンのままだと
+        //   次の自動保存で captureCurrentTimerState が idle を保存し、再起動・会場同期で完走表示が消えていた（既存不具合）。
+        //   timer.js 内部（ループ停止・targetTime=0）は reset 済み。runtime（人数等）には触れない。
+        const lastIdx = getLevelCount() - 1;
+        if (lastIdx >= 0) {
+          const lastLv = getLevel(lastIdx);
+          const lastTotal = (lastLv && typeof lastLv.durationMinutes === 'number') ? lastLv.durationMinutes * 60 * 1000 : 0;
+          setState({ status: States.IDLE, currentLevelIndex: lastIdx, remainingMs: 0, totalMs: lastTotal });
+        }
+        // codex R3-5: 店舗連携 ON なら完走をそのまま送る（以前は以後の送信が idle になり店舗側が完走表示にならなかった）
+        try { publishDbLinkClock(); } catch (_) { /* never throw */ }
       }
     }
     else {
@@ -1781,6 +1888,11 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   const live = (Array.isArray(levels) && levels.length > 0)
     ? computeLiveTimerState(ts, levels)
     : ts;
+  // codex C1: 停電/スリープ中の経過で完走した（計算後に finished）場合も、上の finished 経路で扱う
+  //   （時計を再開しない・完走表示）。ts 自体が finished の時は上で return 済みなので再帰は 1 段のみ。
+  if (live && live.status === 'finished' && ts.status !== 'finished') {
+    return applyTimerStateToTimer(live, levels, opts);
+  }
   const levelCount = getLevelCount();
   if (levelCount === 0) {
     if (!isHallApply) {
@@ -1819,7 +1931,10 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
   if (!isHallApply) {
     // operator: 既存経路通り timer.js 関数呼出 → 内部で startLoop / setState 発火
     // 該当レベルから即時開始 → RUNNING / BREAK
-    timerStartAtLevel(idx);
+    // clock-sync-structure-only: 現レベルが構造と異なる全体時間で走っていた場合はその時間で開始
+    const ltsMs = _liveLevelTotalMs(live, idx);
+    if (ltsMs > 0) timerStartAtLevel(idx, { totalMsOverride: ltsMs });
+    else timerStartAtLevel(idx);
     // 経過秒ぶん進める（advanceTimeBy は負値で時間を進める）
     if (elapsedMs > 0) timerAdvanceBy(-elapsedMs);
     if (live.status === 'paused') timerPause();
@@ -1831,7 +1946,8 @@ function applyTimerStateToTimer(ts, levels, opts = {}) {
     //   PAUSED は rAF 停止（静止表示）、RUNNING/BREAK は rAF 起動。
     try {
       const lvl = getLevel(idx);
-      const totalMs = (lvl?.durationMinutes || 0) * 60 * 1000;
+      // clock-sync-structure-only: 現レベルの実際の全体時間（あれば）を優先＝操作側と同じ残り時間
+      const totalMs = _liveLevelTotalMs(live, idx) || (lvl?.durationMinutes || 0) * 60 * 1000;
       const remainingMs = Math.max(0, totalMs - elapsedMs);
       let status;
       if (live.status === 'paused') status = States.PAUSED;
@@ -1967,7 +2083,21 @@ function stopPeriodicTimerStatePersist() {
     timerStatePeriodicInterval = null;
   }
 }
+// codex R2-4: 共有構造の保全（preserveSharedPresetTimers）と 5 秒周期保存の整合。
+//   保全中は周期保存を開始しない／保全開始で世代を進め、進行中の周期保存は書込直前の照合で残りを中止する。
+//   保全側は進行中の周期保存の完了を待ってから最新一覧を読む（古い一覧からの上書きを防ぐ）。
+let _sharedPreserveEpoch = 0;
+let _sharedPreserveBusy = false;
+let _periodicPersistRun = null;
 async function periodicPersistAllRunning() {
+  if (!window.api?.tournaments?.setTimerState) return;
+  // STEP 10 フェーズC.1.1 Fix 2: トーナメント切替中は skip（active id 切替と periodic の race 防御）
+  if (_tournamentSwitching) return;
+  if (_sharedPreserveBusy || _periodicPersistRun) return;
+  _periodicPersistRun = _periodicPersistAllRunningBody(_sharedPreserveEpoch);
+  try { await _periodicPersistRun; } finally { _periodicPersistRun = null; }
+}
+async function _periodicPersistAllRunningBody(epoch) {
   if (!window.api?.tournaments?.setTimerState) return;
   // STEP 10 フェーズC.1.1 Fix 2: トーナメント切替中は skip（active id 切替と periodic の race 防御）
   if (_tournamentSwitching) return;
@@ -1991,6 +2121,8 @@ async function periodicPersistAllRunning() {
       };
     }
     if (ts.status !== 'running') continue;
+    // codex R2-4: 書込直前に照合。読込後に共有構造の保全が始まっていたら、古い一覧からの保存を中止
+    if (_sharedPreserveBusy || epoch !== _sharedPreserveEpoch) return;
     try {
       await window.api.tournaments.setTimerState(t.id, ts);
     } catch (err) {
@@ -2242,6 +2374,12 @@ function _refreshDisplayAfterStructureChange() {
       try { updateOperatorPane(state); } catch (_) {}
       try { renderTime(state.remainingMs); } catch (_) {}
       try { renderNextBreak(state.remainingMs, state.currentLevelIndex); } catch (_) {}
+      // clock-sync-structure-only: 構造のみ適用は state 変化を起こさず保存が走らないため、ここで保存して
+      //   現レベルの実際の全体時間（levelTotalSeconds）を記録・hall へ配信（一時停止中の hall 再生成でもずれない）。
+      //   PRE_START 由来は対象外（captureCurrentTimerState が idle 扱いで保存するため触らない）。
+      if (!(typeof isPreStartActive === 'function' && isPreStartActive())) {
+        try { schedulePersistTimerState(); } catch (_) {}
+      }
     }
   } catch (_) { /* never throw from display refresh */ }
 }
@@ -2599,7 +2737,7 @@ function openResetDialog() {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側はダイアログを開かせない
   if (typeof el.resetDialog.showModal === 'function') {
     el.resetDialog.showModal();
-  } else if (window.confirm('タイマーをリセットしますか？')) {
+  } else if (window.confirm('タイマーをリセットしますか？\n参加人数・リエントリー・アドオンの数も 0 に戻ります（保証プライズ・ブラインド・料金・配当の設定はそのままです）。')) {
     handleReset();   // STEP 6.6: tournamentRuntime もクリア
   }
 }
@@ -3912,6 +4050,28 @@ async function handleFontThumbClick(value) {
   }
 }
 
+// ===== glass-tube-gauge: 時計の下の表示（ガラス管 / ゲーム種）切替 =====
+// data-gauge-mode 属性を documentElement にセット → CSS が .time-gauge / .event-game-type の一方を表示。
+const VALID_GAUGE_MODES = ['tube', 'gameType'];
+
+function applyGaugeMode(value) {
+  const v = VALID_GAUGE_MODES.includes(value) ? value : 'tube';
+  document.documentElement.dataset.gaugeMode = v;
+  for (const r of document.querySelectorAll('input[name="gauge-mode"]')) r.checked = (r.value === v);
+}
+
+async function handleGaugeModeChange(value) {
+  applyGaugeMode(value);
+  if (window.api?.tournaments?.setDisplaySettings && tournamentState.id) {
+    try {
+      await window.api.tournaments.setDisplaySettings(tournamentState.id, { gaugeMode: value });
+    } catch (err) {
+      try { window.api?.log?.write?.('error:caught:handleGaugeModeChange', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
+      console.warn('時計下の表示設定の保存に失敗:', err);
+    }
+  }
+}
+
 // ===== STEP 6.7: ボトムバー非表示トグル（H キー） =====
 // body.bottom-bar-hidden クラスで CSS から bottom-bar を隠し、テロップを拡大表示する。
 // 状態は display.bottomBarHidden に永続化（起動時に復元）。
@@ -4254,6 +4414,8 @@ function bindDbLinkTabHandlers() {
       const db = pickList.find((t) => t.id === dbId) || null;
       if (!curId || !db) { showLinkStatus('紐づけ先の大会が選択されていません'); return; }
       showLinkStatus('紐づけ中...');
+      // codex R3-3: 要求時の大会切替連番を控え、応答時に往復（A→B→A）が無かったかを照合する
+      const reqSeq = _dbLinkTournamentSeq;
       let res = null;
       try {
         res = await window.api?.dblink?.linkAndInit?.({
@@ -4270,7 +4432,14 @@ function bindDbLinkTabHandlers() {
         publishDbLinkRuntime(true);
       } else if (res.mode === 'connected' && res.clock) {
         // K3: 進行中の既存時計へ接続した場合は DB 状態に PC が従う（仕様2・6-B ⑧ の完成）
-        applyDbToEngine(res.clock);
+        //   codex C3: 紐づけ中に大会を切り替えていたら適用しない（要求時の PC 大会・DB 大会で照合）
+        //   codex R3-3: 往復して同じ大会に戻っていても、連番が違えば古い応答として時計・人数とも採用しない
+        //   （紐づけ自体は成立済み＝次にこの大会を開いた時の初回 probe で正しく同期する）
+        if (reqSeq === _dbLinkTournamentSeq) {
+          applyDbToEngine(res.clock, { pcId: curId, dbId: db.id });
+        } else {
+          try { window.api?.log?.write?.('dblink:link-stale-skip', { pcId: curId, reqSeq, curSeq: _dbLinkTournamentSeq }); } catch (_) {}
+        }
       }
       // K4: 紐づけ確定時に現在の表示メタ/ロゴを初回押し出し（display は時計と独立の PC 正
       //   =connected でも送る。※applyDbLinkSendGate の activation 経路とは force/dedupe で重複無害）
@@ -4290,7 +4459,25 @@ function bindDbLinkTabHandlers() {
 // OFF / 未設定 / 未紐づけ / hall ロールでは先頭 early return（既定 OFF で新コストゼロ）。
 
 // 現在のトーナメントが送信対象か（remote-control の _remoteEnabled と同型のキャッシュ）
-let _dbLinkSend = { active: false, pcId: '' };
+let _dbLinkSend = { active: false, pcId: '', dbId: '' };
+// codex C3: 連携対象（PC 大会 / DB 大会 / 有効状態）が変わるたびに増やす世代番号。
+//   非同期応答の適用前に「要求した時と同じ対象・世代か」を照合し、別大会への誤適用を防ぐ。
+let _dbLinkGen = 0;
+// codex R3-4: 画面固有 ID。画面を作り直すと _dbLinkGen は 0 に戻るため、main に残った旧画面の送信の通知を
+//   新画面が同じ世代番号で誤適用しないよう origin に添えて照合する（外部送信の本文には載らない）。
+const _dbLinkInstanceId = (() => {
+  try { if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID(); } catch (_) { /* fallback */ }
+  return `i${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+})();
+// codex R3-3: 現在の大会 id が変わった回数（連携の有無に関係なく増やす）。applyTournament で同期的に更新する。
+//   紐づけ応答待ちの間に A→B→A と往復しても、応答時に連番の違いで検出できる。
+let _dbLinkTournamentSeq = 0;
+let _dbLinkSeqLastId = '';
+// codex 段階A A-1: 大会切替中（表示中の大会 id は切替先に変わったが、時計エンジンがまだ切替先の状態へ
+//   復元されていない区間）の印。切替先 id を入れ、復元が終わったら空に戻す。この間は時計・人数を送らない。
+let _dbLinkSwitchHoldId = '';
+// 送信ゲートが予約した同期（runDbLinkActivation）の宛先。実行前なら切替完了側（finishDbLinkSwitch）は重ねて呼ばない
+let _dbLinkActivationScheduledFor = '';
 // runtime の直前送信スナップショット（同値なら IPC すら出さない dedupe）
 let _dbLinkLastRuntimeJson = '';
 // K4: 表示メタの直前送信スナップショット（runtime と同型の dedupe）
@@ -4319,8 +4506,14 @@ function applyDbLinkSendGate(status) {
   const linked = !!(s.configured && curId && s.links && s.links[curId] && typeof s.links[curId] === 'object');
   const active = linked && window.appRole !== 'hall';
   const wasActive = _dbLinkSend.active;
-  _dbLinkSend = { active, pcId: active ? curId : '' };
-  if (active && !wasActive) {
+  const dbId = active && typeof s.links[curId].id === 'string' ? s.links[curId].id : '';
+  const nextPcId = active ? curId : '';
+  if (active !== _dbLinkSend.active || nextPcId !== _dbLinkSend.pcId || dbId !== _dbLinkSend.dbId) _dbLinkGen += 1;
+  // codex 段階A A-1: 連携 ON の大会どうしの切替（または同じ大会の紐づけ先変更）も「新しく送り始める」扱いにする
+  //   （以前は OFF→ON の時だけで、A→B の切替では前の大会の送信控えが残り、B の初回送信が重複扱いで落ち得た）
+  const targetChanged = active && wasActive && (nextPcId !== _dbLinkSend.pcId || dbId !== _dbLinkSend.dbId);
+  _dbLinkSend = { active, pcId: nextPcId, dbId };
+  if (active && (!wasActive || targetChanged)) {
     _dbLinkLastRuntimeJson = ''; // 再開時は次の runtime を必ず送る
     _dbLinkLastDisplayJson = ''; // K4: 表示メタも同様（次の display を必ず送る）
   }
@@ -4328,15 +4521,30 @@ function applyDbLinkSendGate(status) {
   //   （起動・大会切替・紐づけ直後。仕様2「ON の大会は DB が正」の帰結。読取のみ）
   updateDbLinkIndicator();
   syncDbLinkProbe();
-  if (active && !wasActive) {
-    setTimeout(() => {
-      runDbLinkProbe(true);
-      // K4: activation 時に現在の表示メタ/ロゴを押し出す（起動・大会切替・紐づけ直後。
-      //   display は PC が正=last-write-wins・ロゴは署名 dedupe で同一なら main 側スキップ）
-      publishDbLinkDisplay(true);
-      publishDbLinkLogo();
-    }, 0);
+  // codex 段階A A-1: 大会切替中（_dbLinkSwitchHoldId）はここでは同期しない。切替処理が時計の復元を終えてから
+  //   runDbLinkActivation を呼ぶ（復元前の古い時計へ DB 状態を当てて、直後の復元で上書きされるのを防ぐ）
+  if (active && (!wasActive || targetChanged) && !_dbLinkSwitchHoldId) {
+    _dbLinkActivationScheduledFor = nextPcId;
+    setTimeout(() => { _dbLinkActivationScheduledFor = ''; runDbLinkActivation(); }, 0);
   }
+}
+
+// 連携対象になった直後の同期（起動・大会切替・紐づけ直後）: DB 状態へ従う probe と、表示メタ/ロゴの押し出し。
+//   K4: display は PC が正=last-write-wins・ロゴは署名 dedupe で同一なら main 側スキップ
+function runDbLinkActivation() {
+  runDbLinkProbe(true);
+  publishDbLinkDisplay(true);
+  publishDbLinkLogo();
+}
+
+// codex 段階A A-1: 時計・人数を送ってよいか。送信先（ゲートの PC 大会）と、送る値の持ち主（表示中の大会・
+//   時計エンジンの状態）が一致する時だけ true。大会切替の直後は表示中の大会 id と人数が先に切替先へ変わり、
+//   送信ゲートの更新（async）と時計の復元は後から来るため、ゲートの宛先だけを見て送ると別大会の値を送ってしまう。
+function _dbLinkSendTargetOk() {
+  if (!_dbLinkSend.active || !_dbLinkSend.pcId) return false;
+  if (!tournamentState || tournamentState.id !== _dbLinkSend.pcId) return false;
+  if (_dbLinkSwitchHoldId) return false;
+  return true;
 }
 
 // ===== K3: 「連携切断中」バッジ + 復帰 probe + DB→engine 反映アダプタ =====
@@ -4359,14 +4567,51 @@ function syncDbLinkProbe() {
   }
 }
 
+// clock-sync-structure-only（codex C2）: DB→PC の level 反映で現レベルを開始する全体時間（ms）。0 = 構造時間で開始。
+//   - 同じレベルの継続で、指定残りが PC の実際の全体時間に収まる → PC の全体時間（構造のみ適用の旧時間を保つ）
+//   - それ以外で、指定残りが構造時間を超える → 指定残りそのもの（前レベルへ戻さない・満タンから開始）
+//   - それ以外 → 0（従来どおり構造時間）
+// codex R2-2: API の時計行に「そのレベルの全体時間」が無いため、継続と再開始は残り時間だけでは完全に判別できない。
+//   店舗側で同レベルを開始し直すと残り=構造時間ちょうどになるため、構造時間と ±DB_RESTART_TOLERANCE_MS で一致し、
+//   かつ PC の全体時間と異なる時は「再開始」とみなして構造時間で開始する（偶然一致する継続は誤判定しうる=report 未解決事項）。
+const DB_RESTART_TOLERANCE_MS = 1500;
+function decideDbLevelStartTotalMs({ sameLevel, localTotalMs, structTotalMs, remainingTargetMs, dbLevelTotalMs }) {
+  const remaining = Number(remainingTargetMs);
+  if (!Number.isFinite(remaining)) return 0;
+  // codex R3-2（段階B）: DB が現レベルの全体時間を持っていれば推定せずそれを使う（継続/再開始を残り時間から推し量らない）。
+  //   構造時間と同じなら 0（従来どおり構造時間で開始＝上書き記録を残さない）。残りが全体時間を超える不整合な行は
+  //   使わず従来の判定へ（R3-1: 開始する全体時間 < 指定残り にしない）。NULL（旧データ・旧 PC）も従来の判定。
+  const dbTotal = (Number.isSafeInteger(dbLevelTotalMs) && dbLevelTotalMs > 0) ? dbLevelTotalMs : 0;
+  if (dbTotal > 0 && remaining <= dbTotal) {
+    const structExact = (Number.isFinite(structTotalMs) && structTotalMs > 0) ? Math.floor(structTotalMs) : 0;
+    return dbTotal === structExact ? 0 : dbTotal;
+  }
+  // codex R3-1: 再開始とみなすのは「残り ≤ 構造時間」の時だけ（再開始なら残りが構造時間を超えることはない）。
+  //   構造時間を 1ms でも超える残りを構造時間で開始すると advanceTimeBy が前レベルへ繰り越していた。
+  const looksRestart = Number.isFinite(structTotalMs) && structTotalMs > 0 &&
+    remaining <= structTotalMs && structTotalMs - remaining <= DB_RESTART_TOLERANCE_MS &&
+    Number.isFinite(localTotalMs) && Math.abs(localTotalMs - structTotalMs) > DB_RESTART_TOLERANCE_MS;
+  const local = (Number.isFinite(localTotalMs) && localTotalMs > 0) ? Math.floor(localTotalMs) : 0;
+  const struct = (Number.isFinite(structTotalMs) && structTotalMs > 0) ? Math.floor(structTotalMs) : 0;
+  let total = 0;
+  if (sameLevel && looksRestart) total = 0;
+  else if (sameLevel && local > 0 && remaining <= local) total = local;
+  // codex R3-1: どの分岐でも「開始する全体時間 < 指定残り」にしない（前レベルへの意図しない繰越を構造的に防ぐ）
+  const effective = total || struct;
+  if (remaining > effective) total = (sameLevel && local >= remaining) ? local : Math.floor(remaining);
+  return total;
+}
+
 // probe 実行: GET /clock（main 経由）→ 成功なら DB 状態を engine へ適用（復帰時は DB が正）。
 //   initial=true は activation 直後の初回同期（down でなくても実行）。
 async function runDbLinkProbe(initial) {
   if (!_dbLinkSend.active) return;
   if (!initial && !_dbLinkDown) return;
+  // codex C3: 要求時の対象を控え、応答時に現在の対象と照合してから適用する
+  const origin = { pcId: _dbLinkSend.pcId, dbId: _dbLinkSend.dbId, gen: _dbLinkGen };
   try {
-    const res = await window.api?.dblink?.probe?.({ tournamentId: _dbLinkSend.pcId });
-    if (res && res.ok && res.clock) applyDbToEngine(res.clock);
+    const res = await window.api?.dblink?.probe?.({ tournamentId: origin.pcId });
+    if (res && res.ok && res.clock) applyDbToEngine(res.clock, origin);
   } catch (_) { /* never throw */ }
 }
 
@@ -4381,9 +4626,34 @@ async function runDbLinkProbe(initial) {
  * - runtime 採用は c18 パターン遵守（schedulePersistRuntime = 永続化フック 9 箇所目）。
  *   special_enabled（大会設定）は採用しない（仕様3「PC 側設定に非書込」）。
  */
-function applyDbToEngine(clock) {
+// codex C3: 非同期応答の送り先照合。origin = { pcId, dbId, gen? }。現在の連携対象と一致する時だけ true。
+//   gen 指定時は世代も一致が必要（A→B→A の往復で古い A の応答を弾く）。
+// codex R2-3: 現在の送信元（要求発生時点の origin として送信に添える）
+function _dbLinkOriginNow() {
+  return { pcId: _dbLinkSend.pcId, dbId: _dbLinkSend.dbId, gen: _dbLinkGen, inst: _dbLinkInstanceId };
+}
+
+// codex R3-4: opts.requireInst=true（main からの通知経路）は画面固有 ID の一致が必須（空・不一致は破棄）。
+//   probe・紐づけの応答は呼び出した画面にしか返らないため inst 不要（従来どおり）。
+function isDbLinkOriginCurrent(origin, opts) {
+  if (!origin || typeof origin !== 'object') return false;
+  if (opts && opts.requireInst && (typeof origin.inst !== 'string' || !origin.inst || origin.inst !== _dbLinkInstanceId)) return false;
+  if (!_dbLinkSend.active || !_dbLinkSend.pcId) return false;
+  if (!tournamentState || tournamentState.id !== _dbLinkSend.pcId) return false;
+  if (origin.pcId !== _dbLinkSend.pcId) return false;
+  if (typeof origin.dbId !== 'string' || !origin.dbId || origin.dbId !== _dbLinkSend.dbId) return false;
+  if (origin.gen !== undefined && origin.gen !== _dbLinkGen) return false;
+  return true;
+}
+
+function applyDbToEngine(clock, origin, opts) {
   if (!_dbLinkSend.active || !clock || typeof clock !== 'object') return;
   if (_dbLinkApplying) return;
+  // codex C3: 応答元が現在の連携対象と一致しなければ、時計・人数・保存のいずれにも触れず破棄
+  if (!isDbLinkOriginCurrent(origin, opts)) {
+    try { window.api?.log?.write?.('dblink:stale-origin-skip', { pcId: origin && origin.pcId, cur: _dbLinkSend.pcId }); } catch (_) {}
+    return;
+  }
   _dbLinkApplying = true;
   // 案件231: stale idle/finished ガード発火時に「適用せず PC 状態を再送する」フラグ。
   //   送信は finally で _dbLinkApplying を解除した後に行う（publishDbLinkClock 冒頭の
@@ -4395,7 +4665,9 @@ function applyDbToEngine(clock) {
       status: st.status,
       currentLevelIndex: st.currentLevelIndex,
       remainingMs: st.remainingMs,
-      isPreStart: isPreStartActive()
+      totalMs: st.totalMs,                  // codex R3-2: 現レベル全体時間の差も適用判断に使う
+      isPreStart: isPreStartActive(),
+      finished: isEngineFinishedState(st)   // codex R3-5
     }, clock, Date.now());
     if (plan) {
       if (plan.kind === 'republish') {
@@ -4441,9 +4713,25 @@ function applyDbToEngine(clock) {
         const levelCount = getLevelCount();
         if (levelCount <= 0) return;
         const idx = Math.min(plan.levelIndex, levelCount - 1);
+        // clock-sync-structure-only: 現レベルをどの全体時間で開始し直すかを決める（送信項目は不変）。
+        //   codex C2: 同じレベル番号でも「継続」か「新しい時間で再開始」かを区別し、DB の指定残り時間が
+        //   どちらの全体時間にも収まらない時は残り時間そのものを全体とする（advanceTimeBy のケース B で
+        //   前レベルへ戻さない）。範囲外レベルを丸めた場合（plan.levelIndex !== idx）は継続扱いしない。
+        const sameLevel = plan.levelIndex === idx && !isPreStartActive() && st.currentLevelIndex === idx &&
+          (st.status === States.RUNNING || st.status === States.BREAK || st.status === States.PAUSED);
+        const structLv = getLevel(idx);
+        const keepTotalMs = decideDbLevelStartTotalMs({
+          sameLevel,
+          localTotalMs: st.totalMs,
+          structTotalMs: (structLv && typeof structLv.durationMinutes === 'number') ? structLv.durationMinutes * 60 * 1000 : 0,
+          remainingTargetMs: plan.remainingTargetMs,
+          // codex R3-2: 範囲外レベルを丸めた時は DB の全体時間（別レベルの値）を使わない
+          dbLevelTotalMs: plan.levelIndex === idx ? plan.levelTotalMs : null
+        });
         // PRE_START からレベルへ移る場合は先に解除（startAtLevel は isPreStart を消さないため）
         if (isPreStartActive()) timerCancelPreStart();
-        timerStartAtLevel(idx);
+        if (keepTotalMs > 0) timerStartAtLevel(idx, { totalMsOverride: keepTotalMs });
+        else timerStartAtLevel(idx);
         if (plan.paused) timerPause();
         // 負の remainingTarget は advanceTimeBy の既存レベル繰越が正しく着地させる
         timerAdvanceBy(plan.remainingTargetMs - getState().remainingMs);
@@ -4476,7 +4764,7 @@ function applyDbToEngine(clock) {
 // 時計状態（record）の送信。呼び出し時点の engine スナップショットから payload を組む。
 // opts.finished は onTournamentComplete フック専用（PC は完走後 IDLE に戻るため）。
 function publishDbLinkClock(opts) {
-  if (!_dbLinkSend.active) return;
+  if (!_dbLinkSendTargetOk()) return;   // codex 段階A A-1: 送信先と値の持ち主が一致する時だけ
   if (_dbLinkApplying) return; // K3: DB→engine 適用中は送信しない（往復ループ遮断）
   try {
     const st = getState();
@@ -4487,17 +4775,21 @@ function publishDbLinkClock(opts) {
       isPreStart: isPreStartActive(),
       preStartTotalMs: getPreStartTotalMs(),
       nowMs: Date.now(),
-      finished: !!(opts && opts.finished)
+      // codex R3-5: 完走の瞬間のフックに加え、完走状態（復元直後を含む）なら常に finished で送る
+      finished: !!(opts && opts.finished) || isEngineFinishedState(st),
+      // codex R3-2（段階B）: 現レベルの全体時間（構造のみ適用で旧時間を保った場合はその値）。進行中・一時停止中は毎回送る
+      levelTotalMs: st.totalMs
     });
     if (!payload) return;
-    window.api?.dblink?.publishRecord?.({ tournamentId: _dbLinkSend.pcId, record: payload });
+    // codex R2-3: 送信元（PC 大会・DB 大会・世代）を添える。競合時の取り直し push はこの origin で照合される
+    window.api?.dblink?.publishRecord?.({ tournamentId: _dbLinkSend.pcId, record: payload, origin: _dbLinkOriginNow() });
   } catch (_) { /* never throw */ }
 }
 
 // 人数系（runtime）の送信。表示更新の集約点から呼ばれるため JSON 比較で dedupe する。
 // force=true は紐づけ直後の初期送信用（dedupe を通さず必ず送る）。
 function publishDbLinkRuntime(force) {
-  if (!_dbLinkSend.active) return;
+  if (!_dbLinkSendTargetOk()) return;   // codex 段階A A-1: 送信先と値の持ち主が一致する時だけ
   if (_dbLinkApplying) return; // K3: DB→engine 適用中は送信しない（往復ループ遮断）
   try {
     const ss = (tournamentState && tournamentState.specialStack) || null;
@@ -4506,7 +4798,7 @@ function publishDbLinkRuntime(force) {
     const json = JSON.stringify(payload);
     if (!force && json === _dbLinkLastRuntimeJson) return;
     _dbLinkLastRuntimeJson = json;
-    window.api?.dblink?.publishRuntime?.({ tournamentId: _dbLinkSend.pcId, runtime: payload });
+    window.api?.dblink?.publishRuntime?.({ tournamentId: _dbLinkSend.pcId, runtime: payload, origin: _dbLinkOriginNow() });
   } catch (_) { /* never throw */ }
 }
 
@@ -4570,7 +4862,8 @@ subscribe((state, prev) => {
 
 // K3: main からの push（切断/復帰 health・conflict 時の apply-db）を受ける。
 //   inactive の間もイベント自体は届くが、ゲート（updateDbLinkIndicator / applyDbToEngine 冒頭）で無害。
-window.api?.dblink?.onEvent?.((payload) => {
+// codex R2-3: テストで実経路（送信→競合取得→push 受信）を駆動できるよう名前付き関数にした（処理内容は同じ）。
+function handleDbLinkEvent(payload) {
   if (!payload || typeof payload !== 'object') return;
   if (payload.type === 'health') {
     _dbLinkDown = !!payload.down;
@@ -4578,9 +4871,14 @@ window.api?.dblink?.onEvent?.((payload) => {
     syncDbLinkProbe();
   } else if (payload.type === 'apply-db' && payload.clock) {
     // conflict = 他端末が更新した ⇒ DB に従う（仕様2・K2 の一時逸脱を解消）
-    applyDbToEngine(payload.clock);
+    //   codex C3/R2-3: 競合した送信を出した時点の origin（PC 大会・DB 大会・世代）を main が返す。
+    //   受信時の現在値から作り直さない（A→B→A・連携 OFF→ON 後の古い応答を世代で弾く）。origin 無しは破棄。
+    const o = payload.origin && typeof payload.origin === 'object' ? payload.origin : null;
+    //   codex R3-4: 画面固有 ID（inst）も転送し、この経路では一致を必須にする（作り直し前の画面の送信を弾く）
+    applyDbToEngine(payload.clock, o ? { pcId: o.pcId, dbId: payload.dbId, gen: o.gen, inst: o.inst } : null, { requireInst: true });
   }
-});
+}
+window.api?.dblink?.onEvent?.(handleDbLinkEvent);
 
 // ===== STEP 9-B: 左上ロゴ管理 =====
 
@@ -5298,7 +5596,9 @@ function buildTournamentListItem(t, ts, isActive, listLength = 99) {
     toggle.dataset.action = 'toggle';
     toggle.textContent = (ts.status === 'running') ? '一時停止' : '再開';
     actions.appendChild(toggle);
-
+  }
+  // list-reset ③: リセットは進行中/一時停止中に加え、完走済み・人数等が残っている待機中の大会にも出す
+  if (ts.status === 'running' || ts.status === 'paused' || ts.status === 'finished' || hasListResetableCounts(t)) {
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'tournament-list__btn';
@@ -5369,13 +5669,74 @@ async function handleTournamentListToggle(id, currentStatus) {
   await renderTournamentListWithDedup();
 }
 
+// list-reset ③: 一覧の大会に 0 に戻す対象の数（人数・リエントリー・アドオン・特殊スタック適用人数）が残っているか
+function hasListResetableCounts(t) {
+  const rt = (t && t.runtime) || {};
+  const ss = (t && t.specialStack) || {};
+  return (Number(rt.playersInitial) || 0) > 0 || (Number(rt.playersRemaining) || 0) > 0 ||
+    (Number(rt.reentryCount) || 0) > 0 || (Number(rt.addOnCount) || 0) > 0 || (Number(ss.appliedCount) || 0) > 0;
+}
+
 // 一覧の「リセット」ボタン: 確認 → idle 状態に戻す。アクティブなら timer.js も reset()
+// list-reset（2026-10-10 前原 GO）: 時計に加えて人数・リエントリー・アドオン・特殊スタック適用人数も 0 に戻す
+//   （画面下のリセットボタン handleReset と同じ範囲）。保証プライズ・ブラインド・料金・配当の設定・テロップ等は残す。
+//   店舗連携 ON の裏の大会は、店舗側の古い進行中の行で打ち消されるため「選んでからリセット」に限る（④）。
+const LIST_RESET_LINKED_MESSAGE = '店舗連携中の大会は、先に一覧で「選択」してからリセットしてください。';
+const LIST_RESET_BUSY_MESSAGE = '大会の切り替え中です。少し待ってから、もう一度「リセット」を押してください。';
+const LIST_RESET_IN_PROGRESS_MESSAGE = '大会のリセットを保存中です。少し待ってから、もう一度お試しください。';
+// codex 段階A r2 F1: 大会の切替（プルダウン/一覧の選択）は 1 つずつ。実行中に次の切替・新規・複製・削除は受け付けない
+const TOURNAMENT_SWITCH_BUSY_MESSAGE = '大会の切り替え中です。切り替えが終わってから、もう一度お試しください。';
+let _tournamentSelectInFlight = false;
+// codex 段階A A-2: 一覧リセット（裏の大会の保存）中は大会の切替・新規・複製・削除を受け付けない
+let _listResetInFlight = false;
+const LIST_RESET_SAVE_FAILED_MESSAGE = '時計は待機に戻しましたが、人数などを 0 に戻す保存に失敗しました。少し待ってから、もう一度「リセット」を押してください。';
+// codex 段階A A-2: 大会切替（表示中の大会 id・時計の復元）が進行中か
+function isTournamentSwitchBusy() {
+  return !!(_tournamentSelectInFlight || _dbLinkSwitchHoldId || _tournamentSwitching || _tournamentDeleteInFlight);
+}
 async function handleTournamentListReset(id, name) {
   if (window.appRole === 'hall') return;  // v2.0.1 Fix B5: hall はリスト操作不可
-  if (!window.confirm(`「${name || '(無題)'}」のタイマーをリセットします。よろしいですか？`)) return;
+  if (_listResetInFlight) return;
+  if (isTournamentSwitchBusy()) { window.alert(LIST_RESET_BUSY_MESSAGE); return; }
+  // codex 段階A A-2: 連携の有無は表示中かどうかに関係なく、書き換えの前に確定させる
+  let linked = false;
+  try {
+    const st = await window.api?.dblink?.getStatus?.();
+    linked = !!(st && st.configured && st.links && st.links[id] && typeof st.links[id] === 'object');
+  } catch (_) { linked = false; }
+  if (linked && id !== tournamentState.id) { window.alert(LIST_RESET_LINKED_MESSAGE); return; }
+  if (!window.confirm(`「${name || '(無題)'}」をリセットします。\n時計に加えて、参加人数・リエントリー・アドオンの数も 0 に戻ります（保証プライズ・ブラインド・料金・配当の設定はそのままです）。よろしいですか？`)) return;
+  // 確認の後（ここから先は待たずに判定・実行する）。確認前の通信待ちで状態が変わっていたら書き換えずにやめる
+  if (isTournamentSwitchBusy()) { window.alert(LIST_RESET_BUSY_MESSAGE); return; }
+  const isActiveNow = (id === tournamentState.id);
+  if (linked && !isActiveNow) { window.alert(LIST_RESET_LINKED_MESSAGE); return; }
   const idleState = { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
-  await window.api.tournaments.setTimerState(id, idleState);
-  if (id === tournamentState.id) {
+  if (!isActiveNow) {
+    // 裏の大会（未連携）: 時計 idle・人数系・特殊スタック適用人数を 0 で保存（既存の保存 API のみ・渡した項目以外は現値のまま）。
+    //   保存が終わるまで大会の切替・新規・複製・削除を受け付けない（途中で表示中になると部分リセットになるため）
+    _listResetInFlight = true;
+    let saved = true;
+    try {
+      try {
+        const r0 = await window.api.tournaments.setTimerState(id, idleState);
+        if (r0 && r0.ok === false) saved = false;
+      } catch (_) { saved = false; }
+      try {
+        const r1 = await window.api.tournaments.setRuntime(id, { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 });
+        if (r1 && r1.ok === false) saved = false;
+      } catch (_) { saved = false; }
+      try {
+        const r2 = await window.api.tournaments.save({ id, specialStack: { appliedCount: 0 } });
+        if (r2 && r2.ok === false) saved = false;
+      } catch (_) { saved = false; }
+    } finally {
+      _listResetInFlight = false;
+    }
+    if (!saved) window.alert(LIST_RESET_SAVE_FAILED_MESSAGE);
+  } else {
+    // 表示中の大会: 待たずに一度で、人数系 0（保存・会場画面・店舗連携へ反映）→ 時計リセット → 店舗へ待機送信
+    //   （handleReset と同じ resetTournamentRuntime 経路。途中で await しないので、対象が切り替わる余地がない）
+    resetTournamentRuntime();
     // v2.2.2 hotfix Phase 2 第 1 段階 §A.4: timerReset 呼出元観測（caller log）
     try {
       window.api?.log?.write?.('timer:reset:caller', {
@@ -5386,6 +5747,11 @@ async function handleTournamentListReset(id, name) {
       });
     } catch (_) {}
     timerReset();
+    el.clock?.classList.remove('clock--timer-finished');
+    // 店舗連携 ON なら待機を明示送信（handleReset と同じ理由）
+    try { publishDbLinkClock(); } catch (_) { /* never throw */ }
+    // 一覧表示用の保存（従来どおり。上の処理は終わっているので、この待ちの間に切り替わっても対象はずれない）
+    try { await window.api.tournaments.setTimerState(id, idleState); } catch (_) { /* ignore */ }
   }
   await renderTournamentListWithDedup();
 }
@@ -5446,66 +5812,102 @@ async function handleTournamentSelectChange() {
   if (!el.tournamentSelect || !window.api?.tournaments) return;
   const newId = el.tournamentSelect.value;
   if (!newId || newId === tournamentState.id) return;
-
-  // settings-scope-clarity dirty-switch-guard: ブラインド未保存編集中なら破棄/やめる確認。
-  //   やめる時は dropdown 値を現 active に戻す（既存 payouts キャンセルと同パターン）。
-  if (!(await confirmDiscardBlindsDirtyIfNeeded())) {
-    el.tournamentSelect.value = tournamentState.id;
-    return;
-  }
-
-  // STEP 10 フェーズC.2 中 2: 切替前に賞金 % 合計が不正なら確認ダイアログ
-  //   現状の form の payouts が 100% でないまま silent save される問題（fix11 B-1）対策
-  if (!isPayoutsValid()) {
-    const ok = window.confirm(
-      '現在のトーナメントの賞金合計が 100% ではありません。\nこのまま切り替えると不正な値で保存されます。続行しますか？'
-    );
-    if (!ok) {
-      // キャンセル: dropdown 値を旧 active に戻す
+  // codex 段階A A-2: 一覧リセットの保存中は切り替えない（プルダウンは現在の大会に戻す）
+  if (_listResetInFlight) { el.tournamentSelect.value = tournamentState.id; window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }
+  // codex 段階A r2 F1: 切替の実行中（前段の確認・保存の待ちを含む）や新規・複製・削除の実行中は、次の切替を始めない。
+  //   重なると、先の切替の復元が後の切替の表示中の大会へ時計を戻し、後の切替の「切替中」印を外してしまうため。
+  if (isTournamentSwitchBusy()) { el.tournamentSelect.value = tournamentState.id; window.alert(TOURNAMENT_SWITCH_BUSY_MESSAGE); return; }
+  _tournamentSelectInFlight = true;
+  try {
+    // settings-scope-clarity dirty-switch-guard: ブラインド未保存編集中なら破棄/やめる確認。
+    //   やめる時は dropdown 値を現 active に戻す（既存 payouts キャンセルと同パターン）。
+    if (!(await confirmDiscardBlindsDirtyIfNeeded())) {
       el.tournamentSelect.value = tournamentState.id;
       return;
     }
-  }
 
-  // 1) 旧アクティブの timerState を rebase 保存（running なら startedAt=now で時刻計算の起点を更新）
-  //    ※ pause はしない（裏で running を継続させる）
-  const prevId = tournamentState.id;
-  try {
-    const prevTimerState = captureCurrentTimerState();
-    await window.api.tournaments.setTimerState(prevId, prevTimerState);
-  } catch (err) {
-    try { window.api?.log?.write?.('error:caught:switchActive.preserveTimerState', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
-    console.warn('切替前 timerState 保存失敗:', err);
-  }
+    // STEP 10 フェーズC.2 中 2: 切替前に賞金 % 合計が不正なら確認ダイアログ
+    //   現状の form の payouts が 100% でないまま silent save される問題（fix11 B-1）対策
+    if (!isPayoutsValid()) {
+      const ok = window.confirm(
+        '現在のトーナメントの賞金合計が 100% ではありません。\nこのまま切り替えると不正な値で保存されます。続行しますか？'
+      );
+      if (!ok) {
+        // キャンセル: dropdown 値を旧 active に戻す
+        el.tournamentSelect.value = tournamentState.id;
+        return;
+      }
+    }
 
-  // 2) 切替前のフォーム編集内容を保存（旧 active の id で）
-  try {
-    const current = readTournamentForm();
-    current.id = prevId;
-    await window.api.tournaments.save(current);
-  } catch (err) {
-    try { window.api?.log?.write?.('error:caught:switchActive.preserveForm', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
-    console.warn('切替前の自動保存に失敗:', err);
-  }
+    // 1) 旧アクティブの timerState を rebase 保存（running なら startedAt=now で時刻計算の起点を更新）
+    //    ※ pause はしない（裏で running を継続させる）
+    const prevId = tournamentState.id;
+    try {
+      const prevTimerState = captureCurrentTimerState();
+      await window.api.tournaments.setTimerState(prevId, prevTimerState);
+    } catch (err) {
+      try { window.api?.log?.write?.('error:caught:switchActive.preserveTimerState', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
+      console.warn('切替前 timerState 保存失敗:', err);
+    }
 
-  // 3) active 切替 + UI 反映
-  try {
-    const result = await window.api.tournaments.setActive(newId);
-    if (result) applyTournament(result);
-  } catch (err) {
-    console.warn('active 切替失敗:', err);
-  }
-  await loadTournamentIntoForm(newId);
+    // 2) 切替前のフォーム編集内容を保存（旧 active の id で）
+    try {
+      const current = readTournamentForm();
+      current.id = prevId;
+      await window.api.tournaments.save(current);
+    } catch (err) {
+      try { window.api?.log?.write?.('error:caught:switchActive.preserveForm', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
+      console.warn('切替前の自動保存に失敗:', err);
+    }
 
-  // 4) 新アクティブの blind preset を適用してから timerState を復元（時刻計算で live 復元 + silent）
-  await restoreActiveTimerStateFromStore(newId, { silent: true });
-  await renderTournamentListWithDedup();
+    // codex 段階A A-2: 前段の待ち（未保存確認・切替前の保存）の間に一覧リセットが始まっていたら、ここで切り替えない
+    if (_listResetInFlight) { el.tournamentSelect.value = tournamentState.id; window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }
+    // 3) active 切替 + UI 反映
+    //   codex 段階A A-1: ここから時計の復元が終わるまでは「切替中」。店舗連携の時計・人数を送らない
+    //   （表示中の大会 id・人数は切替先、時計エンジンは切替前の状態、送信ゲートは更新待ち、が混在する区間）
+    _dbLinkSwitchHoldId = newId;
+    try {
+      try {
+        const result = await window.api.tournaments.setActive(newId);
+        if (result) applyTournament(result);
+      } catch (err) {
+        console.warn('active 切替失敗:', err);
+      }
+      await loadTournamentIntoForm(newId);
+
+      // 4) 新アクティブの blind preset を適用してから timerState を復元（時刻計算で live 復元 + silent）
+      await restoreActiveTimerStateFromStore(newId, { silent: true });
+    } finally {
+      if (_dbLinkSwitchHoldId === newId) _dbLinkSwitchHoldId = '';
+    }
+    // codex 段階A A-1: 復元が終わってから送信ゲートを確定し、切替先が連携 ON なら DB 状態へ同期する
+    //   （時計は DB が正・人数も DB 採用。PC の値は以後の操作で送る）
+    await finishDbLinkSwitch(newId);
+    await renderTournamentListWithDedup();
+  } finally {
+    _tournamentSelectInFlight = false;
+  }
+}
+
+// codex 段階A A-1: 大会切替の完了後に、送信ゲートを取り直してから連携 ON なら同期する。
+async function finishDbLinkSwitch(id) {
+  try { await refreshDbLinkSendState(); } catch (_) { /* ignore */ }
+  if (_dbLinkSend.active && _dbLinkSend.pcId === id && tournamentState && tournamentState.id === id) {
+    _dbLinkLastRuntimeJson = '';
+    _dbLinkLastDisplayJson = '';
+    // 切替中の印を外した後にゲート側が同じ宛先の同期を予約済みなら、そちらに任せる（probe を 2 回走らせない）
+    if (_dbLinkActivationScheduledFor !== id) runDbLinkActivation();
+  }
 }
 
 // STEP 6.21 / 6.21.2: 指定 id の保存済み timerState を timer.js に復元する。
 // blindPresetId に応じて構造を再ロードしてから computeLiveTimerState 経由で applyTimerStateToTimer を呼ぶ。
 // opts.silent: true なら復元直後の音再生を抑止
 async function restoreActiveTimerStateFromStore(id, opts = {}) {
+  // codex 段階A r2 F1: 復元開始時の大会切替連番を控え、待ちの後で表示中の大会が変わっていたら構造・時計とも当てない
+  //   （スリープ復帰の再同期など、切替とは別経路の復元が切替と重なった場合も古い大会の時計を戻さない）
+  const seqAtStart = _dbLinkTournamentSeq;
+  const isStale = () => (seqAtStart !== _dbLinkTournamentSeq || !tournamentState || tournamentState.id !== id);
   try {
     const list = await _tournamentsListDedup() || [];
     const found = list.find((t) => t.id === id);
@@ -5514,11 +5916,19 @@ async function restoreActiveTimerStateFromStore(id, opts = {}) {
     let levels = null;
     if (found.blindPresetId) {
       const preset = await loadPresetById(found.blindPresetId);
+      if (isStale()) {
+        try { window.api?.log?.write?.('timer:restore:stale-skip', { id, cur: tournamentState && tournamentState.id }); } catch (_) {}
+        return;
+      }
       if (preset) {
         try { setStructure(preset); } catch (err) { console.warn('構造切替失敗:', err); }
         levels = preset.levels || null;
         if (levels) blindPresetCache.set(found.blindPresetId, levels);
       }
+    }
+    if (isStale()) {
+      try { window.api?.log?.write?.('timer:restore:stale-skip', { id, cur: tournamentState && tournamentState.id }); } catch (_) {}
+      return;
     }
     applyTimerStateToTimer(found.timerState, levels, { silent: !!opts.silent });
   } catch (err) {
@@ -5546,6 +5956,8 @@ async function handleTournamentNew() {
   if (!(await confirmDiscardBlindsDirtyIfNeeded())) return;
   // STEP 10 フェーズC.2 軽 11: 連打ガード（async 中の重複実行で複数の新規が作られないよう）
   if (handleTournamentNew._inFlight) return;
+  if (_listResetInFlight) { window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }   // codex 段階A A-2: 一覧リセットの保存中は切り替えない
+  if (isTournamentSwitchBusy()) { window.alert(TOURNAMENT_SWITCH_BUSY_MESSAGE); return; }   // codex 段階A r2 F1: 切替の実行中は始めない
   handleTournamentNew._inFlight = true;
   // STEP 10 フェーズC.1.1 Fix 2: トーナメント切替中は periodic persist を skip させる
   _tournamentSwitching = true;
@@ -5642,6 +6054,8 @@ async function handleTournamentDuplicate() {
   // v2.0.4 D-1 fix: 連打ガード（async 中の重複実行で複数の複製が作られないよう、
   //   handleTournamentNew と同じ _inFlight パターンを適用）
   if (handleTournamentDuplicate._inFlight) return;
+  if (_listResetInFlight) { window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }   // codex 段階A A-2: 一覧リセットの保存中は切り替えない
+  if (isTournamentSwitchBusy()) { window.alert(TOURNAMENT_SWITCH_BUSY_MESSAGE); return; }   // codex 段階A r2 F1: 切替の実行中は始めない
   handleTournamentDuplicate._inFlight = true;
   // STEP 10 フェーズC.1.1 Fix 2: 複製も active 切替を伴うため periodic skip（finally で確実解除）
   _tournamentSwitching = true;
@@ -5669,6 +6083,8 @@ async function _handleTournamentDuplicateImpl() {
   //   が main.js の normalizeTournament でデフォルト値に reset されていた（複製機能の期待値違反）。
   //   readTournamentForm() の全フィールドを spread してから id / name / timerState / title だけ上書きする。
   const current = readTournamentForm();
+  // codex-fixes ③: 複製元の「時計の下の表示」を引き継ぐ（readTournamentForm は displaySettings を持たない）
+  const srcGaugeMode = await _resolveSavedGaugeMode(current.id);
   const cloned = {
     ...current,
     // STEP 10 フェーズC.1.1 Fix 7: ID 衝突防止
@@ -5688,6 +6104,16 @@ async function _handleTournamentDuplicateImpl() {
       setTournamentHint('複製に失敗しました', 'error');
     }
     return;
+  }
+  // codex-fixes ③: 他の表示設定は既存どおり（新規 ID の既定補完）のまま、gaugeMode だけ部分更新で複製元に揃える。
+  //   setActive より前に保存するため、setActive の hall 配信（displaySettings）にも反映される。
+  if (srcGaugeMode && result.tournament?.displaySettings?.gaugeMode !== srcGaugeMode) {
+    try {
+      const r2 = await window.api.tournaments.setDisplaySettings(cloned.id, { gaugeMode: srcGaugeMode });
+      if (r2?.ok && r2.displaySettings) result.tournament = { ...result.tournament, displaySettings: r2.displaySettings };
+    } catch (err) {
+      try { window.api?.log?.write?.('error:caught:duplicateGaugeMode', { message: err?.message }); } catch (_) {}
+    }
   }
   await window.api.tournaments.setActive(cloned.id);
   applyTournament(result.tournament);
@@ -5732,6 +6158,18 @@ async function _handleTournamentDuplicateImpl() {
   }
 }
 
+// codex-fixes ③: 保存済みトーナメントの gaugeMode を取得（取得不可・不正値は null=引継ぎなし）
+async function _resolveSavedGaugeMode(id) {
+  if (typeof id !== 'string' || !id) return null;
+  try {
+    const list = await _tournamentsListDedup() || [];
+    const mode = list.find((t) => t && t.id === id)?.displaySettings?.gaugeMode;
+    return VALID_GAUGE_MODES.includes(mode) ? mode : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // STEP 7.x ③-d: トーナメント削除確認ダイアログ（Promise ベース、Esc → cancel 紐付け）
 let _tournamentDeleteHandlers = null;
 function showTournamentDeleteConfirm(name) {
@@ -5762,6 +6200,8 @@ async function handleTournamentRowDelete(id, name) {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は削除不可
   if (!window.api?.tournaments) return;
   if (_tournamentDeleteInFlight) return;   // ダイアログまたは IPC 進行中
+  if (_listResetInFlight) { window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }   // codex 段階A A-2: 一覧リセットの保存中は削除しない
+  if (isTournamentSwitchBusy()) { window.alert(TOURNAMENT_SWITCH_BUSY_MESSAGE); return; }   // codex 段階A r2 F1: 切替の実行中は始めない
   // settings-scope-clarity dirty-switch-guard: active 卓を削除すると別卓へ active が切り替わる経路。
   //   その時だけ未保存編集確認（非 active 卓削除や非 dirty では不要 prompt を出さない）。
   if (id === tournamentState.id && !(await confirmDiscardBlindsDirtyIfNeeded())) return;
@@ -7247,6 +7687,65 @@ async function findOtherTournamentsUsingPreset(presetId) {
     .map((t) => t.name || t.title || '(無題)');
 }
 
+// clock-sync-structure-only（codex C4）: 共有ブラインド構造を上書きする時、非表示の大会の timerState を
+//   旧構造で評価して「現レベルの元の全体秒（levelTotalSeconds）」を付けた状態へ組み直す純関数。変更不要なら null。
+//   running は旧構造で現在地まで進め（停電中と同じ計算）、startedAt=now で rebase。完走していれば finished。
+function planSharedPresetTimerPreserve(ts, oldLevels, newLevels, nowMs) {
+  if (!ts || typeof ts !== 'object' || (ts.status !== 'running' && ts.status !== 'paused')) return null;
+  if (!Array.isArray(oldLevels) || oldLevels.length === 0) return null;
+  const live = ts.status === 'running' ? computeLiveTimerState(ts, oldLevels) : { ...ts };
+  if (live.status === 'finished') return live;
+  const idx = (Number(live.currentLevel) || 1) - 1;
+  if (idx < 0 || idx >= oldLevels.length) return null;
+  const valid = Number.isFinite(live.levelTotalSeconds) && live.levelTotalSeconds > 0;
+  const oldSec = valid ? Math.floor(live.levelTotalSeconds) : Math.round((Number(oldLevels[idx]?.durationMinutes) || 0) * 60);
+  const nl = Array.isArray(newLevels) ? newLevels[idx] : null;
+  const newSec = nl && typeof nl.durationMinutes === 'number' ? Math.round(nl.durationMinutes * 60) : null;
+  const next = { ...live };
+  if (ts.status === 'running') next.startedAt = nowMs;
+  // codex R2-5: 既存の override は消さない（構造の保存が失敗しても旧構造で正しく復元できるように）。
+  //   新構造と一致して不要になった override も値は実際の全体時間なので、残しても計算は変わらない。
+  if (!valid && oldSec > 0 && newSec !== null && Math.abs(oldSec - newSec) >= 1) next.levelTotalSeconds = oldSec;
+  if (ts.status === 'paused' && next.levelTotalSeconds === ts.levelTotalSeconds) return null;
+  return next;
+}
+
+// codex C4: 共有構造の上書き（「すべてに反映」）直前に、同じ構造を使う非表示の大会の timerState を保全する。
+//   選択中の大会はエンジン側（captureCurrentTimerState）が扱うため対象外。失敗しても保存自体は続行。
+//   戻り値: true=保全完了（対象なし含む）/ false=保全できなかった（呼出側は構造の上書きを中止する）。
+//   codex R2-4: 開始時に _sharedPreserveBusy=true・世代を進め、進行中の周期保存の完了を待ってから最新一覧を読む。
+//   busy の解除は呼出側（構造の保存完了後）が endSharedPresetPreserve() で行う。
+async function preserveSharedPresetTimers(presetId, newLevels) {
+  if (!presetId || window.appRole === 'hall' || !window.api?.tournaments?.setTimerState) return true;
+  _sharedPreserveBusy = true;
+  _sharedPreserveEpoch += 1;
+  try {
+    if (_periodicPersistRun) { try { await _periodicPersistRun; } catch (_) {} }
+    // 保全開始前に始まった一覧取得（古い可能性）を使い回さず、終わるのを待ってから取り直す
+    if (_tournamentsListInFlight) { try { await _tournamentsListInFlight; } catch (_) {} }
+    const list = await _tournamentsListDedup() || [];
+    const targets = list.filter((t) => t && t.blindPresetId === presetId && t.id !== tournamentState.id && t.timerState);
+    if (targets.length === 0) return true;
+    const preset = await loadPresetById(presetId);   // 上書き前の保存済み構造（旧時間）
+    const oldLevels = preset?.levels || null;
+    const now = Date.now();
+    for (const t of targets) {
+      const next = planSharedPresetTimerPreserve(t.timerState, oldLevels, newLevels, now);
+      if (!next) continue;
+      const res = await window.api.tournaments.setTimerState(t.id, next);
+      // codex R2-5: { ok: false } も失敗（未保全のまま成功扱いにしない）
+      if (!res || res.ok === false) return false;
+    }
+    return true;
+  } catch (err) {
+    try { window.api?.log?.write?.('error:caught:preserveSharedPresetTimers', { message: err?.message }); } catch (_) {}
+    return false;
+  }
+}
+function endSharedPresetPreserve() {
+  _sharedPreserveBusy = false;
+}
+
 // settings-scope-clarity STEP2: 共有保存の3択モーダル。Promise<'all'|'copy'|'cancel'> を返す。
 //   既存 confirm-dialog 様式（<dialog showModal>、position:fixed 不使用、hall 側は CSS で自動非表示）。
 function showBlindShareModal(otherNames) {
@@ -7350,6 +7849,7 @@ function updateBlindsEditingTargetLabel() {
 
 async function _savePresetCore() {
   let presetToSave;
+  let preserveHeld = false;   // codex R2-4: 共有構造の保全中（周期保存を止めている）か
   if (blindsEditor.meta?.builtin) {
     // STEP 6.21.5: フォーマット保護 — 元名と同一 / 空 のまま保存しようとしたら拒否
     const inputName = (blindsEditor.draft.name || '').trim();
@@ -7386,6 +7886,17 @@ async function _savePresetCore() {
         presetToSave.id = generateUniqueId('user');
       }
       // 'all' → 同 ID 上書き（presetToSave.id は draft の元 ID のまま）＝共有する全トーナメントに反映。
+      if (choice === 'all') {
+        // codex C4: 上書き前に、共有している他の大会の「現レベルの元の長さ」を保存して③c（進行中レベルは旧時間で継続）を守る
+        preserveHeld = true;
+        const preserved = await preserveSharedPresetTimers(blindsEditor.meta?.id, presetToSave.levels);
+        if (!preserved) {
+          // codex R2-5: 保全できなければ構造も上書きしない（部分的な不整合を作らない）
+          endSharedPresetPreserve();
+          setBlindsHint('保存に失敗しました（他のトーナメントの進行状態を保存できませんでした）', 'error');
+          return false;
+        }
+      }
     }
   }
 
@@ -7430,6 +7941,9 @@ async function _savePresetCore() {
   } catch (err) {
     setBlindsHint('保存エラー: ' + err.message, 'error');
     return false;
+  } finally {
+    // codex R2-4: 構造の保存（成功・失敗とも）が終わってから周期保存を再開する
+    if (preserveHeld) endSharedPresetPreserve();
   }
 }
 
@@ -7536,6 +8050,8 @@ function showBlindsApplyModal({ showApplyOnly = false } = {}) {
 async function applyBlindsKeepProgress(newDraft) {
   // 1) 現在の timerState を捕獲（active = 編集対象前提）
   const currentTs = captureCurrentTimerState();
+  // clock-sync-structure-only: 経過時間保持は「新構造の時間で再計算」する仕様のため旧全体時間は使わない
+  delete currentTs.levelTotalSeconds;
   // 2) 新 levels を当てて live state を再計算（経過秒は維持、レベル繰上げ自動）
   const newLevels = newDraft.levels || [];
   // captureCurrentTimerState は status='running' 時に startedAt=Date.now() を返すため、
@@ -8088,6 +8604,10 @@ document.querySelectorAll('input[name="pip-size"]').forEach((radio) => {
 el.pipShowTimer?.addEventListener('click', handlePipShowTimer);
 el.pipShowSlideshow?.addEventListener('click', handlePipShowSlideshow);
 
+document.querySelectorAll('input[name="gauge-mode"]').forEach((radio) => {
+  radio.addEventListener('change', () => { if (radio.checked) handleGaugeModeChange(radio.value); });
+});
+
 el.fontPicker?.addEventListener('click', (event) => {
   const target = event.target.closest('.font-thumb');
   if (!target) return;
@@ -8539,6 +9059,15 @@ function resetTournamentRuntime() {
   // STEP 6.9: rebuyCount → reentryCount
   tournamentRuntime.reentryCount = 0;
   tournamentRuntime.addOnCount = 0;
+  // list-reset（2026-10-10 前原 GO ①）: 特殊スタックの適用人数も大会中に増やす「数」なので 0 に戻す（有効/チップ数/名称の設定は残す）
+  const _ss = tournamentState.specialStack;
+  if (_ss && (Number(_ss.appliedCount) || 0) !== 0) {
+    _ss.appliedCount = 0;
+    if (el.tournamentSpecialStackCount) el.tournamentSpecialStackCount.value = '0';
+    if (window.api?.tournament?.set) {
+      window.api.tournament.set({ specialStack: { ..._ss } }).catch(() => {});
+    }
+  }
   renderStaticInfo();
   // STEP 10 フェーズC.1.8: 明示的「タイマーリセット」時の 0 値も永続化（次回起動時も 0 を維持）
   schedulePersistRuntime();
@@ -8568,6 +9097,8 @@ function handleReset() {
   timerReset();
   // STEP 10 フェーズC.1.2 Fix 2: タイマーリセットで finished オーバーレイも解除
   el.clock?.classList.remove('clock--timer-finished');
+  // list-reset: 店舗連携 ON なら待機を明示送信（1 レベル構成の完走からのリセットは status/レベルが変わらず購読が発火しない）
+  try { publishDbLinkClock(); } catch (_) { /* never throw */ }
 }
 
 // STEP 10 フェーズC.2.7-A Fix 1: ブラインド構造のリセット専用（currentLevel=0 + remainingMs=duration）。
@@ -8662,6 +9193,7 @@ async function loadInitialSettings() {
   let marqueeInit = { enabled: true, text: '', speed: 'normal' };
   let bgInit = 'navy';
   let fontInit = 'jetbrains';
+  let gaugeModeInit = 'tube';   // glass-tube-gauge
   let bottomBarHiddenInit = false;
   let venueNameInit = '';
   if (window.api?.settings?.getAll) {
@@ -8681,6 +9213,8 @@ async function loadInitialSettings() {
       else if (all?.display?.background)             bgInit = all.display.background;
       if (activeT?.displaySettings?.timerFont)       fontInit = activeT.displaySettings.timerFont;
       else if (all?.display?.timerFont)              fontInit = all.display.timerFont;
+      // glass-tube-gauge: アクティブ大会 → グローバル → 既定 'tube'
+      gaugeModeInit = activeT?.displaySettings?.gaugeMode ?? all?.display?.gaugeMode ?? 'tube';
       // STEP 10 フェーズC.1.3 / v2.5.0: backgroundImage は imagesStore、overlay は displaySettings
       const dsImage   = (typeof _initImages.backgroundImage === 'string') ? _initImages.backgroundImage : '';
       const dsOverlay = activeT?.displaySettings?.backgroundOverlay ?? all?.display?.backgroundOverlay ?? 'mid';
@@ -8732,6 +9266,7 @@ async function loadInitialSettings() {
   // STEP 10 フェーズC.1.4-fix3 Fix 3: 起動時に画像合計サイズを評価し、150MB 超なら警告ポップアップ + ⚠ 表示
   checkImagesTotalSizeAndWarn().catch(() => {});
   applyTimerFont(fontInit);
+  applyGaugeMode(gaugeModeInit);
   applyMarquee(marqueeInit);
   applyBottomBarHidden(bottomBarHiddenInit);
   // STEP 6.22: 店舗名表示 + 入力欄の初期値同期
@@ -9043,6 +9578,7 @@ if (__appRole === 'hall') {
         // 背景プリセット / フォント / 背景画像 / overlay / breakImages / interval / pipSize の反映
         if (typeof value.background === 'string') applyBackground(value.background);
         if (typeof value.timerFont === 'string') applyTimerFont(value.timerFont);
+        if (typeof value.gaugeMode === 'string') applyGaugeMode(value.gaugeMode);
         if (typeof value.backgroundImage === 'string') {
           bgImageState.dataUrl = value.backgroundImage;
         }

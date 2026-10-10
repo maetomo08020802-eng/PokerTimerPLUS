@@ -189,6 +189,9 @@ function makeStore(initial) {
   };
 }
 
+// 非同期テストが途中で止まったまま終了すると exit 0 で偽 PASS になるため、最後まで到達しなければ失敗にする
+let completed = false;
+process.on('exit', () => { if (!completed) { console.log('FAIL: テストが最後まで実行されなかった'); process.exitCode = 1; } });
 (async () => {
   // -- 未設定 → fetch を一切呼ばない --
   let fetchCalls = 0;
@@ -704,6 +707,7 @@ function makeStore(initial) {
 
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
 
+  completed = true;
   console.log(`db-link.test.js: ${count} assertions passed`);
 })().catch((err) => {
   console.error(err);

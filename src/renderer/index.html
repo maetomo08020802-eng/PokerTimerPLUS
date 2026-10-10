@@ -202,6 +202,12 @@
         </div>
       </div>
 
+      <!-- glass-tube-gauge: 残り時間のガラス管ゲージ。外寸固定・水位は CSS 変数 --gauge-ratio で切り抜き（layout 非影響） -->
+      <div class="time-gauge" id="js-time-gauge" aria-hidden="true">
+        <div class="time-gauge__tube"><div class="time-gauge__liquid"></div></div>
+        <div class="time-gauge__minutes" id="js-time-gauge-minutes"></div>
+      </div>
+
       <div class="card-stack">
         <!-- STEP 10 フェーズB: BLINDS / NEXT LEVEL カードを構造型ごとの動的レンダリングに刷新。
              中身は renderer.js の renderBlindsContent() が data-structure 属性付き grid で生成。
@@ -391,7 +397,7 @@
 
   <!-- リセット確認ダイアログ -->
   <dialog class="confirm-dialog" id="js-reset-dialog">
-    <p class="confirm-dialog__message">タイマーをリセットしますか？</p>
+    <p class="confirm-dialog__message">タイマーをリセットしますか？<br>参加人数・リエントリー・アドオンの数も 0 に戻ります（保証プライズ・ブラインド・料金・配当の設定はそのままです）。</p>
     <div class="confirm-dialog__actions">
       <button type="button" class="btn btn--ghost" value="cancel" id="js-reset-cancel">キャンセル</button>
       <button type="button" class="btn btn--primary" value="ok" id="js-reset-ok">リセット</button>
@@ -599,6 +605,20 @@
               <span class="font-thumb__label">Space Mono</span>
             </button>
           </div>
+        </div>
+
+        <!-- glass-tube-gauge: 時計の下の表示（ガラス管ゲージ / ゲーム種ラベル の排他切替） -->
+        <div class="form-row">
+          <span class="form-row__label">時計の下の表示</span>
+          <div class="gauge-mode-picker" id="js-gauge-mode-picker">
+            <label class="gauge-mode-picker__option">
+              <input type="radio" name="gauge-mode" value="tube" checked> ガラス管（残り時間ゲージ）
+            </label>
+            <label class="gauge-mode-picker__option">
+              <input type="radio" name="gauge-mode" value="gameType"> ゲーム種（NLH 等）
+            </label>
+          </div>
+          <p class="form-row__hint">ガラス管を選ぶとゲーム種の表示は消え、その分の高さを使って管を表示します。管の右端の数字はそのレベル（ブレイク）の長さ（分）です。</p>
         </div>
 
       </section>
