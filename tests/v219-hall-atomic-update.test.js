@@ -24,8 +24,11 @@ const DUAL_SYNC = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'dual-sync.
 const RENDERER  = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'renderer.js'), 'utf8');
 
 let pass = 0, fail = 0;
-function test(name, fn) {
-  try { fn(); console.log('PASS:', name); pass++; }
+// 非同期テストが途中で止まったまま終了すると exit 0 で偽 PASS になるため、最後まで到達しなければ失敗にする
+let completed = false;
+process.on('exit', () => { if (!completed) { console.log('FAIL: テストが最後まで実行されなかった'); process.exitCode = 1; } });
+async function test(name, fn) {
+  try { await fn(); console.log('PASS:', name); pass++; }
   catch (err) { console.log('FAIL:', name, '\n  ', err.message); fail++; }
 }
 
@@ -83,11 +86,12 @@ function buildBufferSandbox(applySpy) {
   return ctx;
 }
 
+(async () => {
 // ============================================================
 // T1: _diffBuffer が空時、新 diff 到着で requestAnimationFrame が登録される
 // （v2.1.9: setTimeout(0) → requestAnimationFrame に変更）
 // ============================================================
-test('T1 (Fix 1): _diffBuffer 空時、_bufferDiff で _flushTimer が登録される', () => {
+await test('T1 (Fix 1): _diffBuffer 空時、_bufferDiff で _flushTimer が登録される', () => {
   const ctx = buildBufferSandbox(() => {});
   // 静的: _flushTimer === null チェック + requestAnimationFrame で flush 予約が存在
   assert.match(DUAL_SYNC, /if\s*\(\s*_flushTimer\s*===\s*null\s*\)\s*\{[\s\S]*?_flushTimer\s*=\s*requestAnimationFrame\(/,
@@ -102,7 +106,7 @@ test('T1 (Fix 1): _diffBuffer 空時、_bufferDiff で _flushTimer が登録さ�
 // ============================================================
 // T2: _flushTimer 登録済時、追加 diff は buffer に積まれるだけで新タイマー登録なし
 // ============================================================
-test('T2 (Fix 1): _flushTimer 登録済時、追加 diff で新タイマー登録されない', () => {
+await test('T2 (Fix 1): _flushTimer 登録済時、追加 diff で新タイマー登録されない', () => {
   const ctx = buildBufferSandbox(() => {});
   ctx._bufferDiff({ kind: 'timerState', value: { status: 'running' } });
   const firstTimer = ctx._flushTimer;
@@ -116,7 +120,7 @@ test('T2 (Fix 1): _flushTimer 登録済時、追加 diff で新タイマー登�
 // ============================================================
 // T3: 異なる kind が 5 件 buffer された後の flush で受信順を保持して apply される
 // ============================================================
-test('T3 (Fix 1): 異なる kind 5 件、flush 後に受信順で apply', async () => {
+await test('T3 (Fix 1): 異なる kind 5 件、flush 後に受信順で apply', async () => {
   const applied = [];
   const ctx = buildBufferSandbox((diff) => applied.push(diff.kind));
   ctx._bufferDiff({ kind: 'timerState',         value: 1 });
@@ -136,7 +140,7 @@ test('T3 (Fix 1): 異なる kind 5 件、flush 後に受信順で apply', async 
 // ============================================================
 // T4: 同一 kind 3 件 buffer の場合、最後の値だけ apply される（dedup）
 // ============================================================
-test('T4 (Fix 1): 同一 kind 3 件、最後の値のみ apply（dedup）', async () => {
+await test('T4 (Fix 1): 同一 kind 3 件、最後の値のみ apply（dedup）', async () => {
   const applied = [];
   const ctx = buildBufferSandbox((diff) => applied.push(diff));
   ctx._bufferDiff({ kind: 'tournamentRuntime', value: { playersInitial: 9, _seq: 1 } });
@@ -150,7 +154,7 @@ test('T4 (Fix 1): 同一 kind 3 件、最後の値のみ apply（dedup）', asyn
 // ============================================================
 // T5: flush 中に例外発生しても、他の diff の apply が継続される
 // ============================================================
-test('T5 (Fix 2): apply 中の例外は握り潰され、他 diff は継続', async () => {
+await test('T5 (Fix 2): apply 中の例外は握り潰され、他 diff は継続', async () => {
   const applied = [];
   const ctx = buildBufferSandbox((diff) => {
     if (diff.kind === 'displaySettings') throw new Error('intentional throw');
@@ -167,7 +171,7 @@ test('T5 (Fix 2): apply 中の例外は握り潰され、他 diff は継続', as
 // ============================================================
 // T6: hall window 破棄時に _flushTimer がクリアされる
 // ============================================================
-test('T6 (Fix 2): beforeunload で _flushTimer + _diffBuffer がクリアされる', () => {
+await test('T6 (Fix 2): beforeunload で _flushTimer + _diffBuffer がクリアされる', () => {
   const ctx = buildBufferSandbox(() => {});
   ctx._bufferDiff({ kind: 'timerState', value: 1 });
   ctx._bufferDiff({ kind: 'logoUrl',    value: 2 });
@@ -190,7 +194,7 @@ test('T6 (Fix 2): beforeunload で _flushTimer + _diffBuffer がクリアされ�
 // ============================================================
 // T7: operator 側では buffer 機構を通らない（subscribeStateSync は hall guard 内のみ）
 // ============================================================
-test('T7 (Fix 1): operator 側では buffer 機構を通らない', () => {
+await test('T7 (Fix 1): operator 側では buffer 機構を通らない', () => {
   // initDualSyncForHall 内で hall ガード後に subscribeStateSync が登録される
   const body = extractFnBody(DUAL_SYNC, /export\s+async\s+function\s+initDualSyncForHall\s*\([^)]*\)\s*\{/);
   assert.ok(body, 'initDualSyncForHall 関数本体が抽出できない');
@@ -214,7 +218,7 @@ test('T7 (Fix 1): operator 側では buffer 機構を通らない', () => {
 // ============================================================
 // T8: preStartState diff も buffer 経路を通る（v2.1.6 機構と両立）
 // ============================================================
-test('T8 (Fix 1): preStartState diff も buffer 経路を通る', async () => {
+await test('T8 (Fix 1): preStartState diff も buffer 経路を通る', async () => {
   const applied = [];
   const ctx = buildBufferSandbox((diff) => applied.push(diff));
   // edge イベント（即時）+ rAF tick（1秒間引き）の両方が buffer を通ることを検証
@@ -235,7 +239,7 @@ test('T8 (Fix 1): preStartState diff も buffer 経路を通る', async () => {
 // ============================================================
 // T9: buffer サイズ上限（100 件）超過時の挙動（警告ログ + 古い順破棄）
 // ============================================================
-test('T9 (Fix 2): _diffBuffer 上限 100 件超過、古い順破棄 + 警告', async () => {
+await test('T9 (Fix 2): _diffBuffer 上限 100 件超過、古い順破棄 + 警告', async () => {
   const applied = [];
   const ctx = buildBufferSandbox((diff) => applied.push(diff));
   // console.warn を spy
@@ -268,5 +272,7 @@ test('T9 (Fix 2): _diffBuffer 上限 100 件超過、古い順破棄 + 警告', 
 });
 
 // ============================================================
+completed = true;
 console.log(`\nSummary: ${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
+})().catch((err) => { console.error('FATAL:', err); process.exit(1); });

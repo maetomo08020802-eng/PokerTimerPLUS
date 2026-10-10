@@ -29,6 +29,9 @@ const server = require('../src/remote/server');
 const discover = require('../src/remote/discover');
 
 let pass = 0, fail = 0;
+// 非同期テストが途中で止まったまま終了すると exit 0 で偽 PASS になるため、最後まで到達しなければ失敗にする
+let completed = false;
+process.on('exit', () => { if (!completed) { console.log('FAIL: テストが最後まで実行されなかった'); process.exitCode = 1; } });
 async function test(name, fn) {
   try { await fn(); console.log('PASS:', name); pass++; }
   catch (err) { console.log('FAIL:', name, '\n  ', err && err.message); fail++; }
@@ -358,6 +361,7 @@ function opWithToken(port, op, token, extra = {}) {
   });
 
   // ============================================================
+  completed = true;
   console.log(`\n=== remote-control Phase 1a: ${pass} passed / ${fail} failed ===`);
   process.exit(fail === 0 ? 0 : 1);
 })().catch((err) => { console.error('FATAL:', err); process.exit(1); });
