@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-10-10** — **glass-tube-gauge(時計下ガラス管ゲージ)実機確認OK・Codex査定待ち**。前リリース v2.10.1(案件231)配信済。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-10-10** — **glass-tube-gauge 一式は未commit。Codex R3-1(致命・出荷前必須)を Claude が修正済(テスト2012件全PASS)→ R3 完了レビュー中・新Codexセッションで再査定待ち**。後続課題4件(R3-2〜5)は前原指示で全件完全修正の方針=指揮役へ報告。前リリース v2.10.1(案件231)配信済。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| glass-tube-gauge(時計下ガラス管ゲージ+ゲーム種と排他切替) | 🟡 Codex査定待ち(実機OK) | brief/review=`.cc-briefs/2026-10-10_glass-tube-gauge_{brief,review}.md`・plan=`.cc-plans/2026-10-10_glass-tube-gauge_plan.md`・report=`.cc-reports/2026-10-10_glass-tube-gauge.md`・branch `feature/glass-tube-gauge` |
+| glass-tube-gauge一式 + clock-sync-structure-only | 🔵 R3-1 修正済・完了レビュー中→新Codexセッションで再査定待ち(未commit)。後続 R3-2〜5 は指揮役判断待ち | 依頼=`.cc-briefs/2026-10-10_clock-sync-structure-only_codex-r3_brief.md`・報告=`.cc-reports/2026-10-10_clock-sync-structure-only_codex-r3.md`・指揮役報告=`.cc-reports/2026-10-10_指揮役報告_時計同期の完全修正計画.md`・引継ぎ=`.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`・branch `feature/glass-tube-gauge` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -56,18 +56,19 @@
 |------|----|
 | 配信済リリース | 20件(v1.0.0〜v2.10.1)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 1件(glass-tube-gauge・実機確認OK・Codex査定待ち)|
-| 最新テスト件数 | 1907件 全PASS(feature/glass-tube-gauge・+23。※計数手段差で旧1880は同手段1884) |
-| 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
+| オープン作業 | 1件(glass-tube-gauge 一式・R3 レビュー/Codex再査定/指揮役判断待ち)|
+| 最新テスト件数 | 2013件 全PASS(feature/glass-tube-gauge 作業ツリー・計数スクリプト基準。v2.10.1 時点は同手段 1884) |
+| 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化9箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.10.1 配信済(`81220e8`)。作業ブランチ `feature/glass-tube-gauge`(feat `47b4fcf`/test `99a308e`/docs `eb44b84`+report/PROGRESS)・未 merge・未 push。
-- **現在地(2026-10-10)**: glass-tube-gauge 実装完了・完了review承認(single・致命0/軽微4是正済)。時計下の蛍光ガラス管(水位=残り/全体・右端に分数丸囲み・色は時計連動・PRE_START 非表示)+設定「時計の下の表示」=ガラス管/ゲーム種の排他(既定ガラス管)。テスト1907件全PASS・位置ずれ0(7状態×2解像度)。前原実機確認OK(2026-10-10)。**次=Codex(別AI)査定結果の検証→前原 GO で v2.11.0 配信**。
+- **git**: `main` = v2.10.1(`81220e8`)。作業ブランチ `feature/glass-tube-gauge`(未 push)。
+- **現在地(2026-10-10)**: R3-1 修正済・完了review承認(dual・致命0)・テスト2013件全PASS。指揮役判断=今の状態を v2.11.0 として先に配信(commit→Codex r5→前原実機確認→前原GO)→段階A(R3-3〜5・v2.11.1)→段階B(R3-2・customer-app 先行)。
+- **新セッション入口**: `.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`。R3 報告は `.cc-reports/2026-10-10_clock-sync-structure-only_codex-r3.md`(作成済)。
 - **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須。package-lock root version ドリフトも配信時に是正。
-- 参照: report=`.cc-reports/2026-10-10_glass-tube-gauge.md`・モック=`docs/mockups/2026-10-10_glass-tube-gauge_mock.html`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
+- 参照: report=`.cc-reports/2026-10-10_glass-tube-gauge{,_codex-fixes}.md`・モック=`docs/mockups/2026-10-10_glass-tube-gauge_mock.html`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
 
