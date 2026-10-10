@@ -4575,9 +4575,17 @@ function syncDbLinkProbe() {
 //   店舗側で同レベルを開始し直すと残り=構造時間ちょうどになるため、構造時間と ±DB_RESTART_TOLERANCE_MS で一致し、
 //   かつ PC の全体時間と異なる時は「再開始」とみなして構造時間で開始する（偶然一致する継続は誤判定しうる=report 未解決事項）。
 const DB_RESTART_TOLERANCE_MS = 1500;
-function decideDbLevelStartTotalMs({ sameLevel, localTotalMs, structTotalMs, remainingTargetMs }) {
+function decideDbLevelStartTotalMs({ sameLevel, localTotalMs, structTotalMs, remainingTargetMs, dbLevelTotalMs }) {
   const remaining = Number(remainingTargetMs);
   if (!Number.isFinite(remaining)) return 0;
+  // codex R3-2（段階B）: DB が現レベルの全体時間を持っていれば推定せずそれを使う（継続/再開始を残り時間から推し量らない）。
+  //   構造時間と同じなら 0（従来どおり構造時間で開始＝上書き記録を残さない）。残りが全体時間を超える不整合な行は
+  //   使わず従来の判定へ（R3-1: 開始する全体時間 < 指定残り にしない）。NULL（旧データ・旧 PC）も従来の判定。
+  const dbTotal = (Number.isSafeInteger(dbLevelTotalMs) && dbLevelTotalMs > 0) ? dbLevelTotalMs : 0;
+  if (dbTotal > 0 && remaining <= dbTotal) {
+    const structExact = (Number.isFinite(structTotalMs) && structTotalMs > 0) ? Math.floor(structTotalMs) : 0;
+    return dbTotal === structExact ? 0 : dbTotal;
+  }
   // codex R3-1: 再開始とみなすのは「残り ≤ 構造時間」の時だけ（再開始なら残りが構造時間を超えることはない）。
   //   構造時間を 1ms でも超える残りを構造時間で開始すると advanceTimeBy が前レベルへ繰り越していた。
   const looksRestart = Number.isFinite(structTotalMs) && structTotalMs > 0 &&
@@ -4657,6 +4665,7 @@ function applyDbToEngine(clock, origin, opts) {
       status: st.status,
       currentLevelIndex: st.currentLevelIndex,
       remainingMs: st.remainingMs,
+      totalMs: st.totalMs,                  // codex R3-2: 現レベル全体時間の差も適用判断に使う
       isPreStart: isPreStartActive(),
       finished: isEngineFinishedState(st)   // codex R3-5
     }, clock, Date.now());
@@ -4715,7 +4724,9 @@ function applyDbToEngine(clock, origin, opts) {
           sameLevel,
           localTotalMs: st.totalMs,
           structTotalMs: (structLv && typeof structLv.durationMinutes === 'number') ? structLv.durationMinutes * 60 * 1000 : 0,
-          remainingTargetMs: plan.remainingTargetMs
+          remainingTargetMs: plan.remainingTargetMs,
+          // codex R3-2: 範囲外レベルを丸めた時は DB の全体時間（別レベルの値）を使わない
+          dbLevelTotalMs: plan.levelIndex === idx ? plan.levelTotalMs : null
         });
         // PRE_START からレベルへ移る場合は先に解除（startAtLevel は isPreStart を消さないため）
         if (isPreStartActive()) timerCancelPreStart();
@@ -4765,7 +4776,9 @@ function publishDbLinkClock(opts) {
       preStartTotalMs: getPreStartTotalMs(),
       nowMs: Date.now(),
       // codex R3-5: 完走の瞬間のフックに加え、完走状態（復元直後を含む）なら常に finished で送る
-      finished: !!(opts && opts.finished) || isEngineFinishedState(st)
+      finished: !!(opts && opts.finished) || isEngineFinishedState(st),
+      // codex R3-2（段階B）: 現レベルの全体時間（構造のみ適用で旧時間を保った場合はその値）。進行中・一時停止中は毎回送る
+      levelTotalMs: st.totalMs
     });
     if (!payload) return;
     // codex R2-3: 送信元（PC 大会・DB 大会・世代）を添える。競合時の取り直し push はこの origin で照合される

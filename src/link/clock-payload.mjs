@@ -64,6 +64,13 @@ export function buildRecordPayload(p) {
     if (total <= 0) return null;
     payload.pre_start_total_ms = total;
   }
+  // codex R3-2（段階B・2026-10-10 前原承認=INVARIANT 例外②に追記）: 現レベル（ブレイク）の全体時間。
+  //   進行中・一時停止中（開始前カウントダウン由来を除く）は毎回送る（店舗側は毎回上書きのため・継続でも現在値）。
+  //   それ以外（待機・開始前・完走）と値が不明な時は項目ごと省略＝店舗側は NULL（旧 PC と同じ扱い）。
+  if ((status === 'running' || (status === 'paused' && !p.isPreStart))) {
+    const lt = Math.floor(Number(p.levelTotalMs));
+    if (Number.isSafeInteger(lt) && lt > 0) payload.level_total_ms = lt;
+  }
   return payload;
 }
 
@@ -106,6 +113,11 @@ function _clampIdx(v) {
   return Number.isSafeInteger(v) && v >= 0 ? v : 0;
 }
 
+// codex R3-2: DB の現レベル全体時間（level_total_ms）。正の整数のみ採用、それ以外（NULL=旧データ・不正）は null。
+function _levelTotalOrNull(v) {
+  return Number.isSafeInteger(v) && v > 0 ? v : null;
+}
+
 /**
  * DB clock 行 → 適用プラン。
  * @param {object} local {status(PC States 文字列), currentLevelIndex, remainingMs, isPreStart, finished?}
@@ -119,10 +131,23 @@ function _clampIdx(v) {
  *   {kind:'republish', reason:'stale-idle'|'stale-finished'} → 追従しない。PC の現在状態を
  *     DB へ再送させる（stale 行への追従でローカル進行中タイマーが巻き戻る実店舗バグの根治）
  *   {kind:'prestart', remainingMs, totalMs, paused}          → restorePreStart 系
- *   {kind:'level', levelIndex, remainingTargetMs, paused}    → startAtLevel→(pause)→advanceTimeBy
+ *   {kind:'level', levelIndex, remainingTargetMs, paused, levelTotalMs} → startAtLevel→(pause)→advanceTimeBy
+ *     levelTotalMs = DB の現レベル全体時間（codex R3-2・無い/不正の時は項目なし=従来の推定）
  *   ※ remainingTargetMs は負も可 = advanceTimeBy の既存レベル繰越に委譲
  *     （断中にレベル境界を跨いだ DB 状態も正しく着地する）
  */
+// codex R3-2: 残り時間は合っていても、現レベルの全体時間（ゲージの基準・経過時間）が DB と違えば適用し直す。
+//   local.totalMs が無い（旧呼出）・DB 側が NULL の時は従来どおり比較しない。
+//   DB 行が不整合（残り > 全体時間）な時は、適用しても DB の全体時間は採用されない（R3-1 の保証で従来判定）ため
+//   比較しない（取り込みのたびに同じ再適用を繰り返さない）。
+function _levelTotalDiffers(local, levelTotalMs, remainingMs) {
+  if (levelTotalMs === null) return false;
+  if (Number.isFinite(remainingMs) && remainingMs > levelTotalMs) return false;
+  const lt = Number(local && local.totalMs);
+  if (!Number.isFinite(lt) || lt <= 0) return false;
+  return Math.abs(lt - levelTotalMs) >= APPLY_TOLERANCE_MS;
+}
+
 export function planClockApply(local, db, nowMs) {
   if (!db || typeof db !== 'object' || !local || typeof local !== 'object') return null;
   switch (db.status) {
@@ -153,17 +178,19 @@ export function planClockApply(local, db, nowMs) {
         return { kind: 'prestart', remainingMs: paused, totalMs: preTotal, paused: true };
       }
       const idx = _clampIdx(db.current_level_index);
+      const levelTotalMs = _levelTotalOrNull(db.level_total_ms);
       if (local.status === 'PAUSED' && !local.isPreStart && local.currentLevelIndex === idx &&
-          Math.abs(local.remainingMs - paused) < APPLY_TOLERANCE_MS) return null;
-      return { kind: 'level', levelIndex: idx, remainingTargetMs: paused, paused: true };
+          Math.abs(local.remainingMs - paused) < APPLY_TOLERANCE_MS && !_levelTotalDiffers(local, levelTotalMs, paused)) return null;
+      return { kind: 'level', levelIndex: idx, remainingTargetMs: paused, paused: true, ...(levelTotalMs !== null ? { levelTotalMs } : {}) };
     }
     case 'running': {
       const idx = _clampIdx(db.current_level_index);
       const target = Math.floor(Number(db.end_at_ms) || 0) - nowMs; // 負も可（繰越委譲）
+      const levelTotalMs = _levelTotalOrNull(db.level_total_ms);
       const localRunning = local.status === 'RUNNING' || local.status === 'BREAK';
       if (localRunning && local.currentLevelIndex === idx &&
-          Math.abs(local.remainingMs - target) < APPLY_TOLERANCE_MS) return null;
-      return { kind: 'level', levelIndex: idx, remainingTargetMs: target, paused: false };
+          Math.abs(local.remainingMs - target) < APPLY_TOLERANCE_MS && !_levelTotalDiffers(local, levelTotalMs, target)) return null;
+      return { kind: 'level', levelIndex: idx, remainingTargetMs: target, paused: false, ...(levelTotalMs !== null ? { levelTotalMs } : {}) };
     }
     default:
       return null;
