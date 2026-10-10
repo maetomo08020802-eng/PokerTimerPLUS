@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-08-09** — **v2.10.1 配信完了(案件231=進行中タイマー巻き戻り根治)クローズ**。連携ON大会でDBのstale idle/finished行に追従して巻き戻るバグを「追従せずrepublish」方式で修正。実機確認OK(前原)→ main merge `08b9df0`・tag v2.10.1・GitHub Release Latest(自動更新有効)。テスト1880件全PASS。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-10-10** — **glass-tube-gauge(時計下ガラス管ゲージ)実装完了・完了レビュー中**。前リリース v2.10.1(案件231)配信済。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | — | 安定運用フェーズ(v2.10.1 配信済・案件231 クローズ) |
+| glass-tube-gauge(時計下ガラス管ゲージ+ゲーム種と排他切替) | 🔵 レビュー待ち | brief/review=`.cc-briefs/2026-10-10_glass-tube-gauge_{brief,review}.md`・plan=`.cc-plans/2026-10-10_glass-tube-gauge_plan.md`・report=`.cc-reports/2026-10-10_glass-tube-gauge.md`・branch `feature/glass-tube-gauge` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -56,18 +56,18 @@
 |------|----|
 | 配信済リリース | 20件(v1.0.0〜v2.10.1)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 0件(案件231=v2.10.1 配信済クローズ・安定運用フェーズ)|
-| 最新テスト件数 | 1880件 全PASS(db-link 173 / db-link-payload 118 含む) |
+| オープン作業 | 1件(glass-tube-gauge・レビュー待ち)|
+| 最新テスト件数 | 1907件 全PASS(feature/glass-tube-gauge・+23。※計数手段差で旧1880は同手段1884) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化8箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = **v2.10.1 配信済**(merge `08b9df0`・tag v2.10.1・GitHub Release Latest・latest.yml 自動更新有効・ancestry 確認済)。feature/dblink-stale-idle-guard は役目終了(削除可)。
-- **現在地(2026-08-09)**: 案件231(進行中タイマー巻き戻り根治)を調査→brief→実装→dual review承認→前原実機確認OK→**v2.10.1 として配信完了=クローズ**。**次のアクション=なし(安定運用フェーズ)**。次案件は前原指示待ち。軽微メモ: package-lock.json root version が 2.8.0 のまま(既存ドリフト・ビルドは package.json 参照で実害なし・次回リリース定例で是正)。②通貨「P$」はコード外=大会毎設定(前原PCは「+2 LUCKY HUNT」1件のみ・設定画面で変更)。残提案(report §7)=DB paused/prestart 行の stale 同種ガード・stale 行の runtime 巻き戻り・送信失敗 payload 破棄設計の再送検討。
-- **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く。機能を実機に届けるには **tag+Release 公開が必須**(`git merge-base --is-ancestor <commit> <tag>` で確認)。
-- 参照: 調査=`.cc-reports/2026-08-09_調査_カウントダウン巻き戻り+通貨単位.md` / 実装=`.cc-reports/2026-08-09_案件231_dblink-stale-idle-guard.md` / release-prep=`.cc-reports/2026-08-09_案件231_v2101-release-prep.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
+- **git**: `main` = v2.10.1 配信済(`81220e8`)。作業ブランチ `feature/glass-tube-gauge`(feat `47b4fcf`/test `99a308e`/docs `eb44b84`+report/PROGRESS)・未 merge・未 push。
+- **現在地(2026-10-10)**: glass-tube-gauge 実装完了→完了レビュー(cc-review2 single)へ。時計下の蛍光ガラス管(水位=残り/全体・右端に分数丸囲み・色は時計連動・PRE_START 非表示)+設定「時計の下の表示」=ガラス管/ゲーム種の排他(既定ガラス管)。テスト1907件全PASS・位置ずれ0(7状態×2解像度)。**次=完了レビュー→前原実機確認(6-B)→前原 GO で配信**。
+- **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須。package-lock root version ドリフトも配信時に是正。
+- 参照: report=`.cc-reports/2026-10-10_glass-tube-gauge.md`・モック=`docs/mockups/2026-10-10_glass-tube-gauge_mock.html`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
 
