@@ -4473,6 +4473,11 @@ const _dbLinkInstanceId = (() => {
 //   紐づけ応答待ちの間に A→B→A と往復しても、応答時に連番の違いで検出できる。
 let _dbLinkTournamentSeq = 0;
 let _dbLinkSeqLastId = '';
+// codex 段階A A-1: 大会切替中（表示中の大会 id は切替先に変わったが、時計エンジンがまだ切替先の状態へ
+//   復元されていない区間）の印。切替先 id を入れ、復元が終わったら空に戻す。この間は時計・人数を送らない。
+let _dbLinkSwitchHoldId = '';
+// 送信ゲートが予約した同期（runDbLinkActivation）の宛先。実行前なら切替完了側（finishDbLinkSwitch）は重ねて呼ばない
+let _dbLinkActivationScheduledFor = '';
 // runtime の直前送信スナップショット（同値なら IPC すら出さない dedupe）
 let _dbLinkLastRuntimeJson = '';
 // K4: 表示メタの直前送信スナップショット（runtime と同型の dedupe）
@@ -4504,8 +4509,11 @@ function applyDbLinkSendGate(status) {
   const dbId = active && typeof s.links[curId].id === 'string' ? s.links[curId].id : '';
   const nextPcId = active ? curId : '';
   if (active !== _dbLinkSend.active || nextPcId !== _dbLinkSend.pcId || dbId !== _dbLinkSend.dbId) _dbLinkGen += 1;
+  // codex 段階A A-1: 連携 ON の大会どうしの切替（または同じ大会の紐づけ先変更）も「新しく送り始める」扱いにする
+  //   （以前は OFF→ON の時だけで、A→B の切替では前の大会の送信控えが残り、B の初回送信が重複扱いで落ち得た）
+  const targetChanged = active && wasActive && (nextPcId !== _dbLinkSend.pcId || dbId !== _dbLinkSend.dbId);
   _dbLinkSend = { active, pcId: nextPcId, dbId };
-  if (active && !wasActive) {
+  if (active && (!wasActive || targetChanged)) {
     _dbLinkLastRuntimeJson = ''; // 再開時は次の runtime を必ず送る
     _dbLinkLastDisplayJson = ''; // K4: 表示メタも同様（次の display を必ず送る）
   }
@@ -4513,15 +4521,30 @@ function applyDbLinkSendGate(status) {
   //   （起動・大会切替・紐づけ直後。仕様2「ON の大会は DB が正」の帰結。読取のみ）
   updateDbLinkIndicator();
   syncDbLinkProbe();
-  if (active && !wasActive) {
-    setTimeout(() => {
-      runDbLinkProbe(true);
-      // K4: activation 時に現在の表示メタ/ロゴを押し出す（起動・大会切替・紐づけ直後。
-      //   display は PC が正=last-write-wins・ロゴは署名 dedupe で同一なら main 側スキップ）
-      publishDbLinkDisplay(true);
-      publishDbLinkLogo();
-    }, 0);
+  // codex 段階A A-1: 大会切替中（_dbLinkSwitchHoldId）はここでは同期しない。切替処理が時計の復元を終えてから
+  //   runDbLinkActivation を呼ぶ（復元前の古い時計へ DB 状態を当てて、直後の復元で上書きされるのを防ぐ）
+  if (active && (!wasActive || targetChanged) && !_dbLinkSwitchHoldId) {
+    _dbLinkActivationScheduledFor = nextPcId;
+    setTimeout(() => { _dbLinkActivationScheduledFor = ''; runDbLinkActivation(); }, 0);
   }
+}
+
+// 連携対象になった直後の同期（起動・大会切替・紐づけ直後）: DB 状態へ従う probe と、表示メタ/ロゴの押し出し。
+//   K4: display は PC が正=last-write-wins・ロゴは署名 dedupe で同一なら main 側スキップ
+function runDbLinkActivation() {
+  runDbLinkProbe(true);
+  publishDbLinkDisplay(true);
+  publishDbLinkLogo();
+}
+
+// codex 段階A A-1: 時計・人数を送ってよいか。送信先（ゲートの PC 大会）と、送る値の持ち主（表示中の大会・
+//   時計エンジンの状態）が一致する時だけ true。大会切替の直後は表示中の大会 id と人数が先に切替先へ変わり、
+//   送信ゲートの更新（async）と時計の復元は後から来るため、ゲートの宛先だけを見て送ると別大会の値を送ってしまう。
+function _dbLinkSendTargetOk() {
+  if (!_dbLinkSend.active || !_dbLinkSend.pcId) return false;
+  if (!tournamentState || tournamentState.id !== _dbLinkSend.pcId) return false;
+  if (_dbLinkSwitchHoldId) return false;
+  return true;
 }
 
 // ===== K3: 「連携切断中」バッジ + 復帰 probe + DB→engine 反映アダプタ =====
@@ -4730,7 +4753,7 @@ function applyDbToEngine(clock, origin, opts) {
 // 時計状態（record）の送信。呼び出し時点の engine スナップショットから payload を組む。
 // opts.finished は onTournamentComplete フック専用（PC は完走後 IDLE に戻るため）。
 function publishDbLinkClock(opts) {
-  if (!_dbLinkSend.active) return;
+  if (!_dbLinkSendTargetOk()) return;   // codex 段階A A-1: 送信先と値の持ち主が一致する時だけ
   if (_dbLinkApplying) return; // K3: DB→engine 適用中は送信しない（往復ループ遮断）
   try {
     const st = getState();
@@ -4753,7 +4776,7 @@ function publishDbLinkClock(opts) {
 // 人数系（runtime）の送信。表示更新の集約点から呼ばれるため JSON 比較で dedupe する。
 // force=true は紐づけ直後の初期送信用（dedupe を通さず必ず送る）。
 function publishDbLinkRuntime(force) {
-  if (!_dbLinkSend.active) return;
+  if (!_dbLinkSendTargetOk()) return;   // codex 段階A A-1: 送信先と値の持ち主が一致する時だけ
   if (_dbLinkApplying) return; // K3: DB→engine 適用中は送信しない（往復ループ遮断）
   try {
     const ss = (tournamentState && tournamentState.specialStack) || null;
@@ -5646,38 +5669,57 @@ function hasListResetableCounts(t) {
 //   （画面下のリセットボタン handleReset と同じ範囲）。保証プライズ・ブラインド・料金・配当の設定・テロップ等は残す。
 //   店舗連携 ON の裏の大会は、店舗側の古い進行中の行で打ち消されるため「選んでからリセット」に限る（④）。
 const LIST_RESET_LINKED_MESSAGE = '店舗連携中の大会は、先に一覧で「選択」してからリセットしてください。';
+const LIST_RESET_BUSY_MESSAGE = '大会の切り替え中です。少し待ってから、もう一度「リセット」を押してください。';
+const LIST_RESET_IN_PROGRESS_MESSAGE = '大会のリセットを保存中です。少し待ってから、もう一度お試しください。';
+// codex 段階A A-2: 一覧リセット（裏の大会の保存）中は大会の切替・新規・複製・削除を受け付けない
+let _listResetInFlight = false;
 const LIST_RESET_SAVE_FAILED_MESSAGE = '時計は待機に戻しましたが、人数などを 0 に戻す保存に失敗しました。少し待ってから、もう一度「リセット」を押してください。';
+// codex 段階A A-2: 大会切替（表示中の大会 id・時計の復元）が進行中か
+function isTournamentSwitchBusy() {
+  return !!(_dbLinkSwitchHoldId || _tournamentSwitching || _tournamentDeleteInFlight);
+}
 async function handleTournamentListReset(id, name) {
   if (window.appRole === 'hall') return;  // v2.0.1 Fix B5: hall はリスト操作不可
-  const isActiveRow = (id === tournamentState.id);
-  if (!isActiveRow) {
-    let linked = false;
-    try {
-      const st = await window.api?.dblink?.getStatus?.();
-      linked = !!(st && st.configured && st.links && st.links[id] && typeof st.links[id] === 'object');
-    } catch (_) { linked = false; }
-    if (linked) { window.alert(LIST_RESET_LINKED_MESSAGE); return; }
-  }
+  if (_listResetInFlight) return;
+  if (isTournamentSwitchBusy()) { window.alert(LIST_RESET_BUSY_MESSAGE); return; }
+  // codex 段階A A-2: 連携の有無は表示中かどうかに関係なく、書き換えの前に確定させる
+  let linked = false;
+  try {
+    const st = await window.api?.dblink?.getStatus?.();
+    linked = !!(st && st.configured && st.links && st.links[id] && typeof st.links[id] === 'object');
+  } catch (_) { linked = false; }
+  if (linked && id !== tournamentState.id) { window.alert(LIST_RESET_LINKED_MESSAGE); return; }
   if (!window.confirm(`「${name || '(無題)'}」をリセットします。\n時計に加えて、参加人数・リエントリー・アドオンの数も 0 に戻ります（保証プライズ・ブラインド・料金・配当の設定はそのままです）。よろしいですか？`)) return;
-  const idleState = { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
-  await window.api.tournaments.setTimerState(id, idleState);
-  // 通信を待つ間に表示中の大会が切り替わり得るため、待った後の状態で「表示中か」を決め直す（別の大会の人数を消さない）
+  // 確認の後（ここから先は待たずに判定・実行する）。確認前の通信待ちで状態が変わっていたら書き換えずにやめる
+  if (isTournamentSwitchBusy()) { window.alert(LIST_RESET_BUSY_MESSAGE); return; }
   const isActiveNow = (id === tournamentState.id);
+  if (linked && !isActiveNow) { window.alert(LIST_RESET_LINKED_MESSAGE); return; }
+  const idleState = { status: 'idle', currentLevel: 1, elapsedSecondsInLevel: 0, startedAt: null, pausedAt: null };
   if (!isActiveNow) {
-    // 裏の大会: 保存データの人数系と特殊スタック適用人数を 0 で上書き（既存の保存 API のみ・渡した項目以外は現値のまま）
+    // 裏の大会（未連携）: 時計 idle・人数系・特殊スタック適用人数を 0 で保存（既存の保存 API のみ・渡した項目以外は現値のまま）。
+    //   保存が終わるまで大会の切替・新規・複製・削除を受け付けない（途中で表示中になると部分リセットになるため）
+    _listResetInFlight = true;
     let saved = true;
     try {
-      const r1 = await window.api.tournaments.setRuntime(id, { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 });
-      if (r1 && r1.ok === false) saved = false;
-    } catch (_) { saved = false; }
-    try {
-      const r2 = await window.api.tournaments.save({ id, specialStack: { appliedCount: 0 } });
-      if (r2 && r2.ok === false) saved = false;
-    } catch (_) { saved = false; }
+      try {
+        const r0 = await window.api.tournaments.setTimerState(id, idleState);
+        if (r0 && r0.ok === false) saved = false;
+      } catch (_) { saved = false; }
+      try {
+        const r1 = await window.api.tournaments.setRuntime(id, { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 });
+        if (r1 && r1.ok === false) saved = false;
+      } catch (_) { saved = false; }
+      try {
+        const r2 = await window.api.tournaments.save({ id, specialStack: { appliedCount: 0 } });
+        if (r2 && r2.ok === false) saved = false;
+      } catch (_) { saved = false; }
+    } finally {
+      _listResetInFlight = false;
+    }
     if (!saved) window.alert(LIST_RESET_SAVE_FAILED_MESSAGE);
-  }
-  if (isActiveNow) {
-    // 人数系を 0 にして保存・会場画面・店舗連携へ反映（handleReset と同じ resetTournamentRuntime 経路）
+  } else {
+    // 表示中の大会: 待たずに一度で、人数系 0（保存・会場画面・店舗連携へ反映）→ 時計リセット → 店舗へ待機送信
+    //   （handleReset と同じ resetTournamentRuntime 経路。途中で await しないので、対象が切り替わる余地がない）
     resetTournamentRuntime();
     // v2.2.2 hotfix Phase 2 第 1 段階 §A.4: timerReset 呼出元観測（caller log）
     try {
@@ -5692,6 +5734,8 @@ async function handleTournamentListReset(id, name) {
     el.clock?.classList.remove('clock--timer-finished');
     // 店舗連携 ON なら待機を明示送信（handleReset と同じ理由）
     try { publishDbLinkClock(); } catch (_) { /* never throw */ }
+    // 一覧表示用の保存（従来どおり。上の処理は終わっているので、この待ちの間に切り替わっても対象はずれない）
+    try { await window.api.tournaments.setTimerState(id, idleState); } catch (_) { /* ignore */ }
   }
   await renderTournamentListWithDedup();
 }
@@ -5752,6 +5796,8 @@ async function handleTournamentSelectChange() {
   if (!el.tournamentSelect || !window.api?.tournaments) return;
   const newId = el.tournamentSelect.value;
   if (!newId || newId === tournamentState.id) return;
+  // codex 段階A A-2: 一覧リセットの保存中は切り替えない（プルダウンは現在の大会に戻す）
+  if (_listResetInFlight) { el.tournamentSelect.value = tournamentState.id; window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }
 
   // settings-scope-clarity dirty-switch-guard: ブラインド未保存編集中なら破棄/やめる確認。
   //   やめる時は dropdown 値を現 active に戻す（既存 payouts キャンセルと同パターン）。
@@ -5794,18 +5840,41 @@ async function handleTournamentSelectChange() {
     console.warn('切替前の自動保存に失敗:', err);
   }
 
+  // codex 段階A A-2: 前段の待ち（未保存確認・切替前の保存）の間に一覧リセットが始まっていたら、ここで切り替えない
+  if (_listResetInFlight) { el.tournamentSelect.value = tournamentState.id; window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }
   // 3) active 切替 + UI 反映
+  //   codex 段階A A-1: ここから時計の復元が終わるまでは「切替中」。店舗連携の時計・人数を送らない
+  //   （表示中の大会 id・人数は切替先、時計エンジンは切替前の状態、送信ゲートは更新待ち、が混在する区間）
+  _dbLinkSwitchHoldId = newId;
   try {
-    const result = await window.api.tournaments.setActive(newId);
-    if (result) applyTournament(result);
-  } catch (err) {
-    console.warn('active 切替失敗:', err);
-  }
-  await loadTournamentIntoForm(newId);
+    try {
+      const result = await window.api.tournaments.setActive(newId);
+      if (result) applyTournament(result);
+    } catch (err) {
+      console.warn('active 切替失敗:', err);
+    }
+    await loadTournamentIntoForm(newId);
 
-  // 4) 新アクティブの blind preset を適用してから timerState を復元（時刻計算で live 復元 + silent）
-  await restoreActiveTimerStateFromStore(newId, { silent: true });
+    // 4) 新アクティブの blind preset を適用してから timerState を復元（時刻計算で live 復元 + silent）
+    await restoreActiveTimerStateFromStore(newId, { silent: true });
+  } finally {
+    _dbLinkSwitchHoldId = '';
+  }
+  // codex 段階A A-1: 復元が終わってから送信ゲートを確定し、切替先が連携 ON なら DB 状態へ同期する
+  //   （時計は DB が正・人数も DB 採用。PC の値は以後の操作で送る）
+  await finishDbLinkSwitch(newId);
   await renderTournamentListWithDedup();
+}
+
+// codex 段階A A-1: 大会切替の完了後に、送信ゲートを取り直してから連携 ON なら同期する。
+async function finishDbLinkSwitch(id) {
+  try { await refreshDbLinkSendState(); } catch (_) { /* ignore */ }
+  if (_dbLinkSend.active && _dbLinkSend.pcId === id && tournamentState && tournamentState.id === id) {
+    _dbLinkLastRuntimeJson = '';
+    _dbLinkLastDisplayJson = '';
+    // 切替中の印を外した後にゲート側が同じ宛先の同期を予約済みなら、そちらに任せる（probe を 2 回走らせない）
+    if (_dbLinkActivationScheduledFor !== id) runDbLinkActivation();
+  }
 }
 
 // STEP 6.21 / 6.21.2: 指定 id の保存済み timerState を timer.js に復元する。
@@ -5852,6 +5921,7 @@ async function handleTournamentNew() {
   if (!(await confirmDiscardBlindsDirtyIfNeeded())) return;
   // STEP 10 フェーズC.2 軽 11: 連打ガード（async 中の重複実行で複数の新規が作られないよう）
   if (handleTournamentNew._inFlight) return;
+  if (_listResetInFlight) { window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }   // codex 段階A A-2: 一覧リセットの保存中は切り替えない
   handleTournamentNew._inFlight = true;
   // STEP 10 フェーズC.1.1 Fix 2: トーナメント切替中は periodic persist を skip させる
   _tournamentSwitching = true;
@@ -5948,6 +6018,7 @@ async function handleTournamentDuplicate() {
   // v2.0.4 D-1 fix: 連打ガード（async 中の重複実行で複数の複製が作られないよう、
   //   handleTournamentNew と同じ _inFlight パターンを適用）
   if (handleTournamentDuplicate._inFlight) return;
+  if (_listResetInFlight) { window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }   // codex 段階A A-2: 一覧リセットの保存中は切り替えない
   handleTournamentDuplicate._inFlight = true;
   // STEP 10 フェーズC.1.1 Fix 2: 複製も active 切替を伴うため periodic skip（finally で確実解除）
   _tournamentSwitching = true;
@@ -6092,6 +6163,7 @@ async function handleTournamentRowDelete(id, name) {
   if (window.appRole === 'hall') return;   // v2.0.0 STEP 3: ホール側は削除不可
   if (!window.api?.tournaments) return;
   if (_tournamentDeleteInFlight) return;   // ダイアログまたは IPC 進行中
+  if (_listResetInFlight) { window.alert(LIST_RESET_IN_PROGRESS_MESSAGE); return; }   // codex 段階A A-2: 一覧リセットの保存中は削除しない
   // settings-scope-clarity dirty-switch-guard: active 卓を削除すると別卓へ active が切り替わる経路。
   //   その時だけ未保存編集確認（非 active 卓削除や非 dirty では不要 prompt を出さない）。
   if (id === tournamentState.id && !(await confirmDiscardBlindsDirtyIfNeeded())) return;
