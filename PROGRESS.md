@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| v2.11.0 一式(glass-tube-gauge+時計同期+段階A/一覧リセット+段階B) | 🔵 段階A=**Codex 合格**(2026-10-11・`dd40fb5`・F1/F2 是正確認・致命0・追加指摘なし)。段階B=B-1 本番反映済(customer-app `58c836bb`)・B-2(PC)=実装済・dual review 承認・commit 済→Codex 査定待ち(report=`.cc-reports/2026-10-11_stageB_r3-2_level-total.md`) | report=`.cc-reports/2026-10-11_stageA_codex-fixes_r2.md`・依頼=`.cc-briefs/2026-10-11_stageA_codex-fixes_r2_brief.md`・Codex入口=`.cc-briefs/2026-10-11_stageA_codex-handoff.md` |
+| v2.11.0 一式(glass-tube-gauge+時計同期+段階A/一覧リセット+段階B) | 🟡 **5 項目すべて Codex 合格**(段階A `dd40fb5`・段階B `c14634e`・2026-10-11)→**前原の v2.11.0 全体実機確認待ち**→前原の直接 GO で配信 | 実機確認シナリオ=`.cc-reports/2026-10-11_v2.11.0_実機確認シナリオ.md`・branch `feature/glass-tube-gauge` `c14634e`(未 push) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -64,8 +64,8 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `feature/glass-tube-gauge`(未 push・push/配信は v2.11.0 全体の前原 GO 後)。`34f2d48`(A-1/A-2)の上に F1/F2 修正を commit 済。段階B の B-2(R3-2 PC 側・level_total_ms 送受信)を commit 済(`feature/glass-tube-gauge` へ fast-forward 取込済)。
-- **現在地(2026-10-11)**: 段階A Codex r2 の F1(重複切替で保護解除・致命)/F2(復元失敗を PASS にするテスト・中)を修正(切替の直列化+復元前の照合・テストの実依存組込み+復元警告で FAIL)。テスト stageA 44件・陰性対照29通り全検出・npm test exit 0。**段階A は Codex 合格(2026-10-11・`dd40fb5`)**。**次**=段階B の B-2=実装済(stageB 15件・陰性対照10全検出・CLAUDE.md INVARIANT 例外②追記を同 commit)→dual review 承認→**Codex 査定待ち**(B-1 は本番反映済=customer-app `58c836bb`・migration 0202)→v2.11.0 全体の前原実機確認→前原 GO で 1 回配信。区切りごとに指揮役(session id `local_93fe8768-657a-49fe-a8a3-bc32f26f4cd0`)へ報告。
+- **git**: `main` = v2.10.1(`81220e8`)。`feature/glass-tube-gauge` = `c14634e`(v2.11.0 候補・未 push・push/配信は前原の直接 GO 後)。作業用 worktree・stash は片付け済。
+- **現在地(2026-10-11)**: **v2.11.0 の 5 項目すべて Codex 合格**(glass-tube-gauge+時計同期〜R3-1=r5 合格/テスト完走ガード/段階A R3-3/4/5+一覧リセット=`dd40fb5` 合格/段階B R3-2=`c14634e` 合格・customer-app 案件333 本番反映済)。npm test exit 0(stageA 44・stageB 15・clock-sync-codex 62)。**次**=前原の v2.11.0 全体実機確認(シナリオ表 `.cc-reports/2026-10-11_v2.11.0_実機確認シナリオ.md`・約60分・A=PC単体/B=HDMI/C=連携ON本番)→前原の直接 GO→version 2.11.0 bump(version assertion 一括・package-lock 是正)→main merge・push→tag・GitHub Release→Latest 反映確認。区切りごとに指揮役(session id `local_93fe8768-657a-49fe-a8a3-bc32f26f4cd0`)へ報告。
 - **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須。package-lock root version ドリフトも配信時に是正。
 - 参照: report=`.cc-reports/2026-10-10_glass-tube-gauge{,_codex-fixes}.md`・モック=`docs/mockups/2026-10-10_glass-tube-gauge_mock.html`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
