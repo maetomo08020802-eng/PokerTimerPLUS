@@ -65,7 +65,7 @@
 ## 直近の状態(次セッション起点)
 
 - **git**: `main` = v2.10.1(`81220e8`)。`feature/glass-tube-gauge` = commit 済(`f9479ce` ガラス管Codex対応 / `db96f8c` 時計同期一式〜R3-1 / `f9ae8f3` docs)・**未 push**(push・配信は前原 GO 後)。
-- **現在地(2026-10-10)**: R3-1 修正済・完了review承認・テスト2013件全PASS。**Codex r5 合格(対象 `f9ae8f3`・R3-1 是正済・致命0・追加指摘なし・npm test exit 0)**。指揮役判断=この状態を v2.11.0 として先に配信。**次=前原実機確認(R3 6-B ①連携ON一時停止反映/②完走復元の店舗側表示=既知)→前原の直接GOで配信**→段階A(R3-3/4/5・v2.11.1)→段階B(R3-2・customer-app 先行。CLAUDE.md INVARIANT例外②の追記は前原承認済=B の PC 実装と同じ commit で)。区切りごとに指揮役へ一言報告。
+- **現在地(2026-10-10)**: R3-1 修正済・完了review承認・テスト2013件全PASS。**Codex r5 合格(対象 `f9ae8f3`・R3-1 是正済・致命0・追加指摘なし・npm test exit 0)**。指揮役判断=この状態を v2.11.0 として先に配信。**次=前原実機確認(R3 6-B ①連携ON一時停止反映/②完走復元の店舗側表示=既知)→前原の直接GOで配信**→段階A(R3-3/4/5・v2.11.1。**先行分=テスト完走ガード4本は別ブランチ `feature/stage-a-async-test-guard`(`7e97d12`)に commit 済・陰性対照済**=配信後 main へ載せ替え・review は段階Aと一緒に dual)→段階B(R3-2・customer-app 先行。CLAUDE.md INVARIANT例外②の追記は前原承認済=B の PC 実装と同じ commit で)。区切りごとに指揮役へ一言報告。
 - **新セッション入口**: `.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`。R3 報告は `.cc-reports/2026-10-10_clock-sync-structure-only_codex-r3.md`(作成済)。
 - **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須。package-lock root version ドリフトも配信時に是正。
 - 参照: report=`.cc-reports/2026-10-10_glass-tube-gauge{,_codex-fixes}.md`・モック=`docs/mockups/2026-10-10_glass-tube-gauge_mock.html`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
