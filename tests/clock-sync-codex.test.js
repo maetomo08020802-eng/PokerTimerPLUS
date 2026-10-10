@@ -77,7 +77,7 @@ const NAMES = ['mapStateToStorageStatus', 'captureCurrentTimerState', '_liveLeve
   'applyTimerStateToTimer', 'isDbLinkOriginCurrent', 'decideDbLevelStartTotalMs', 'applyDbToEngine', 'runDbLinkProbe',
   'planSharedPresetTimerPreserve', 'preserveSharedPresetTimers', 'endSharedPresetPreserve', '_dbLinkOriginNow', 'handleDbLinkEvent',
   'periodicPersistAllRunning', '_periodicPersistAllRunningBody', 'applyBlindsKeepProgress', '_refreshDisplayAfterStructureChange',
-  'resolveGaugeMinutes', 'computeGaugeRatio'];
+  'resolveGaugeMinutes', 'computeGaugeRatio', 'isEngineFinishedState'];
 
 // env は外から書き換え可能（遅延応答中の大会切替を再現するため env オブジェクトを返す）
 function buildRenderer(mods, { role = 'operator-solo', extra = {} } = {}) {
@@ -185,6 +185,7 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
   });
   const linkExtra = (op, extra = {}) => ({
     _dbLinkSend: { active: true, pcId: 'T-A', dbId: 'DB-A' }, _dbLinkGen: 1, _dbLinkApplying: false, _dbLinkDown: false,
+    _dbLinkInstanceId: 'INST-A',   // R3-4: 画面固有 ID
     planClockApply: payload.planClockApply, planRuntimeApply: payload.planRuntimeApply,
     tournamentState: { id: 'T-A' }, tournamentRuntime: { playersInitial: 10, playersRemaining: 8, reentryCount: 0, addOnCount: 0 },
     ...extra
@@ -322,12 +323,13 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
     const LINK = read('src', 'link', 'db-link.js');
     // R2-3 で origin（送信時点の PC 大会・世代）も返すよう変更
     assert.match(LINK, /_notify\(\{ type: 'apply-db', clock: clock\.clock, dbId, origin: \(meta && meta\.origin\) \|\| null \}\)/);
-    assert.match(RENDERER, /applyDbToEngine\(payload\.clock, o \? \{ pcId: o\.pcId, dbId: payload\.dbId, gen: o\.gen \} : null\)/);
+    // R3-4 で画面固有 ID（inst）の転送と、通知経路での一致必須（requireInst）を追加
+    assert.match(RENDERER, /applyDbToEngine\(payload\.clock, o \? \{ pcId: o\.pcId, dbId: payload\.dbId, gen: o\.gen, inst: o\.inst \} : null, \{ requireInst: true \}\)/);
     assert.match(RENDERER, /applyDbToEngine\(res\.clock, \{ pcId: curId, dbId: db\.id \}\)/);
     assert.match(RENDERER, /applyDbToEngine\(res\.clock, origin\)/);
-    const calls = (RENDERER.match(/applyDbToEngine\([^)\n]*\)/g) || []).filter((c) => c !== 'applyDbToEngine(clock, origin)');
+    const calls = (RENDERER.match(/applyDbToEngine\([^)\n]*\)/g) || []).filter((c) => c !== 'applyDbToEngine(clock, origin, opts)');
     assert.equal(calls.length, 3, calls.join(' | '));
-    assert.match(src('applyDbToEngine'), /if \(!isDbLinkOriginCurrent\(origin\)\)/);
+    assert.match(src('applyDbToEngine'), /if \(!isDbLinkOriginCurrent\(origin, opts\)\)/);
   });
 
   // ============================================================
@@ -521,10 +523,10 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
     return events.find((e) => e.type === 'apply-db');
   }
   await test('R2-3a: db-link は競合した送信の origin（PC 大会・世代）と DB 大会 id を push に載せる（外部送信 body には載せない）', async () => {
-    const ev = await conflictPush({ origin: { pcId: 'T-A', dbId: 'DB-A', gen: 1 } });
+    const ev = await conflictPush({ origin: { pcId: 'T-A', dbId: 'DB-A', gen: 1, inst: 'INST-A' } });
     assert.ok(ev, 'apply-db が届く');
     assert.equal(ev.dbId, 'DB-A');
-    assert.deepEqual(ev.origin, { pcId: 'T-A', gen: 1 });
+    assert.deepEqual(ev.origin, { pcId: 'T-A', gen: 1, inst: 'INST-A' });   // R3-4: 画面固有 ID も返す
   });
   for (const [label, cur, expectApplied] of [
     ['同じ世代（正しい応答）', { _dbLinkGen: 1 }, true],
@@ -533,7 +535,7 @@ const classRec = () => { const set = new Set(); return { set, el: { clock: { cla
     ['接続先変更（DB-X）', { _dbLinkSend: { active: true, pcId: 'T-A', dbId: 'DB-X' }, _dbLinkGen: 2 }, false]
   ]) {
     await test(`R2-3b(${label}): 送信→409→取り直し→push 受信の実経路で、${expectApplied ? '反映して保存' : '時計・人数・保存とも触れない'}`, async () => {
-      const ev = await conflictPush({ origin: { pcId: 'T-A', dbId: 'DB-A', gen: 1 } });
+      const ev = await conflictPush({ origin: { pcId: 'T-A', dbId: 'DB-A', gen: 1, inst: 'INST-A' } });
       const op = await pausedAt20();
       let persisted = 0;
       const r = buildRenderer(op, { extra: linkExtra(op, { schedulePersistRuntime: () => { persisted++; }, ...cur }) });

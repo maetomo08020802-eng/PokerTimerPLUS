@@ -35,7 +35,7 @@
 
 - **致命バグ保護 5 件は全件維持**: resetBlindProgressOnly / timerState destructure 除外 / ensureEditorEditableState 4 重防御 / AudioContext resume / runtime 永続化 8 箇所。1 件でも壊す変更は禁止。report に全件「影響なし or 影響あり+対処」を明記。【標準制約 / DoD / 段階1 条件4】
 - **既存テスト全 PASS 維持**: skip / コメントアウト / 無効化は禁止。件数・PASS 状況に変化があれば構築士2 review 必須。【DoD「既存テスト全 PASS 維持」】
-- **tournamentRuntime は消さない**: 完全リセットは `handleReset()`（タイマーリセットボタン経由のみ）、ブラインド適用系は `resetBlindProgressOnly()`。runtime（人数・リエントリー・アドオン）消失は致命バグ。
+- **tournamentRuntime は消さない**: 完全リセットは `handleReset()`（タイマーリセットボタン経由）と、設定画面の大会一覧の「リセット」（`handleTournamentListReset`。利用者が確認ダイアログで同意した時のみ）の 2 経路のみ【2026-10-10 前原承認・一覧リセット】、ブラインド適用系は `resetBlindProgressOnly()`。runtime（人数・リエントリー・アドオン）消失は致命バグ。`resetTournamentRuntime` の呼出元が 2 経路に限られることは `tests/stageA-r3-345-list-reset.test.js` L12 で担保。
 - **入力中保護**: DOM 再構築は `isUserTypingInInput()` でガード（打鍵中の値消失・フォーカス喪失の再発禁止）。
 - **編集モード readonly 解除**: 複製/新規作成は `ensureEditorEditableState()` を同期＋RAF 内で 2 回呼ぶ。
 - **ブランディング保護**: アプリ名 `PokerTimerPLUS+`・`presented by Yu Shimomachi`・About クレジット・発行元・`logo-yushitamachi.svg` を設定で変更/非表示/差し替え可能にしない。【禁止事項（ブランディング保護）】

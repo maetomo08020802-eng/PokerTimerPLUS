@@ -108,7 +108,8 @@ function _clampIdx(v) {
 
 /**
  * DB clock 行 → 適用プラン。
- * @param {object} local {status(PC States 文字列), currentLevelIndex, remainingMs, isPreStart}
+ * @param {object} local {status(PC States 文字列), currentLevelIndex, remainingMs, isPreStart, finished?}
+ *   finished = PC が完走状態（IDLE・最終レベル・残り0）。codex R3-5 で追加（省略時 false=従来どおり）
  * @param {object} db    {status(API 5値), current_level_index, end_at_ms, paused_remaining_ms, pre_start_total_ms}
  * @param {number} nowMs Date.now()（注入可能）
  * @returns null（適用不要）|
@@ -129,6 +130,9 @@ export function planClockApply(local, db, nowMs) {
     // ローカルが進行中（IDLE 以外 or PRE_START）の時は追従せず republish（PC が正）。
     // ローカルも IDLE なら従来どおり null（適用不要・挙動不変）。
     case 'idle':
+      // codex R3-5: PC が完走（復元直後を含む）なのに DB が idle → 追従せず PC の完走を再送（終端状態は PC が正）。
+      //   逆方向（DB finished・PC 非完走の待機）は起動復元と初回 probe の順序が保証されないため扱わない（従来どおり null）。
+      if (local.status === 'IDLE' && !local.isPreStart && local.finished === true) return { kind: 'republish', reason: 'stale-idle-finished' };
       return (local.status === 'IDLE' && !local.isPreStart) ? null : { kind: 'republish', reason: 'stale-idle' };
     case 'finished':
       return (local.status === 'IDLE' && !local.isPreStart) ? null : { kind: 'republish', reason: 'stale-finished' };

@@ -29,5 +29,6 @@ paths:
 ### tournamentRuntime 不変条件（2026-04-30 確定、v1.2.0）
 - 「ブラインド構造を変えても tournamentRuntime（プレイヤー人数・リエントリー・アドオン）は絶対に消えない」
 - `handleReset()` は明示的「タイマーリセット」ボタン経由のみ（runtime 含む完全リセット）
+- 例外: 設定画面の大会一覧の「リセット」（`handleTournamentListReset`）も、利用者が確認ダイアログで同意した時のみ runtime を 0 にする（2026-10-10 前原承認）。`resetTournamentRuntime` の呼出元はこの 2 経路のみ（`tests/stageA-r3-345-list-reset.test.js` L12）
 - ブラインド適用系（保存して適用→リセット / handlePresetApply の reset）は `resetBlindProgressOnly()` を使う
 - `tests/runtime-preservation.test.js` で静的解析により担保（C.2.7-A 致命バグ 8-8 修正）

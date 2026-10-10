@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| glass-tube-gauge一式 + clock-sync-structure-only | 🔵 R3-1 修正済・完了レビュー中→新Codexセッションで再査定待ち(未commit)。後続 R3-2〜5 は指揮役判断待ち | 依頼=`.cc-briefs/2026-10-10_clock-sync-structure-only_codex-r3_brief.md`・報告=`.cc-reports/2026-10-10_clock-sync-structure-only_codex-r3.md`・指揮役報告=`.cc-reports/2026-10-10_指揮役報告_時計同期の完全修正計画.md`・引継ぎ=`.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`・branch `feature/glass-tube-gauge` |
+| v2.11.0 一式(glass-tube-gauge+時計同期〜R3-1+テスト完走ガード+段階A+一覧リセット+段階B) | 🟢 段階A+一覧リセット=実装済・完了review r1 承認・commit 済(CLAUDE.md INVARIANT 追記=前原直接OK 2026-10-10)・Codex 査定待ち/段階B=customer-app 依頼書起案中 | report=`.cc-reports/2026-10-10_stageA_r3-345_list-reset.md`・review=`.cc-briefs/2026-10-10_stageA_r3-345_list-reset_r1_completion_review.md`・引継ぎ=`.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`・branch `feature/glass-tube-gauge` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -65,7 +65,7 @@
 ## 直近の状態(次セッション起点)
 
 - **git**: `main` = v2.10.1(`81220e8`)。`feature/glass-tube-gauge` = 時計同期〜R3-1(`f9ae8f3`・Codex r5 合格)+テスト完走ガード(`0748a39`)まで commit 済・**未 push**(push・配信は前原 GO 後)。
-- **現在地(2026-10-10)**: **v2.11.0 は全部直してから1回で配信**(前原訂正・旧「先に配信」判断は取消)。順番=①テスト完走ガード(**済**・陰性対照済)→②段階A(R3-3/4/5)+一覧リセット(前原GO・`.cc-plans/2026-10-10_list-reset-runtime_plan.md`)=dual review+Codex 査定→③段階B(R3-2・customer-app 側 B-1 の本番反映が前提・依頼書は指揮役へ。CLAUDE.md INVARIANT例外②の追記は B の PC 実装と同じ commit で)。各段階=実装→review→Codex(致命0で合格・3回まで)。**前原実機確認は最後に v2.11.0 全体で1回**→前原の直接GOで version・tag・Release を1回。区切りごとに指揮役へ一言報告。
+- **現在地(2026-10-10)**: **v2.11.0 は全部直してから1回で配信**(前原訂正・旧「先に配信」判断は取消)。順番=①テスト完走ガード(**済**・陰性対照済)→②段階A(R3-3/4/5)+一覧リセット=**実装済・commit 済**(テスト全PASS・新規26件・陰性対照11全検出・report=`.cc-reports/2026-10-10_stageA_r3-345_list-reset.md`)→**dual review r1 承認(軽微是正済・新規28件)**→Codex 査定。CLAUDE.md INVARIANT 追記=前原直接OK・同 commit 済→③段階B(R3-2・customer-app 側 B-1 の本番反映が前提・依頼書は指揮役へ。CLAUDE.md INVARIANT例外②の追記は B の PC 実装と同じ commit で)。各段階=実装→review→Codex(致命0で合格・3回まで)。**前原実機確認は最後に v2.11.0 全体で1回**→前原の直接GOで version・tag・Release を1回。区切りごとに指揮役へ一言報告。
 - **新セッション入口**: `.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`。R3 報告は `.cc-reports/2026-10-10_clock-sync-structure-only_codex-r3.md`(作成済)。
 - **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須。package-lock root version ドリフトも配信時に是正。
 - 参照: report=`.cc-reports/2026-10-10_glass-tube-gauge{,_codex-fixes}.md`・モック=`docs/mockups/2026-10-10_glass-tube-gauge_mock.html`。温存候補=v2.3.0 PRE_START永続化(前原判断)。

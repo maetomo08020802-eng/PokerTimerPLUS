@@ -480,11 +480,13 @@ function publishRuntime(pcTournamentId, runtime, origin) {
 }
 
 // codex R2-3: renderer が送信に添える送信元（PC 大会 id・世代）。body には載せず、競合時の取り直し通知で返すだけ。
+// codex R3-4: 画面固有 ID（inst）も保持する。画面の作り直しで世代が 0 に戻っても、旧画面の送信の通知を新画面が弾ける。
 function _sanitizeOrigin(o) {
   if (!o || typeof o !== 'object') return null;
   return {
     pcId: typeof o.pcId === 'string' ? o.pcId : '',
-    gen: Number.isSafeInteger(o.gen) ? o.gen : null
+    gen: Number.isSafeInteger(o.gen) ? o.gen : null,
+    inst: (typeof o.inst === 'string' && o.inst.length > 0 && o.inst.length <= 64) ? o.inst : ''
   };
 }
 
