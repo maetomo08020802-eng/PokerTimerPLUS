@@ -4503,3 +4503,139 @@ body:has(dialog[open]) [data-role="operator"] .operator-pane {
   z-index: 1;
 }
 
+
+/* ===== glass-tube-gauge: 時計下のガラス管ゲージ（2026-10-10） =====
+   - 外寸固定（width 54vw = BLINDS カード幅 / height 2.6vh）。水位は CSS 変数 --gauge-ratio を
+     clip-path で切り抜くだけ → layout 非影響（transform: scale 不使用・position: fixed 不使用）。
+   - 色は既存の .clock[data-timer-state] / [data-status] に連動（新しいしきい値は作らない）。
+   - ゲーム種ラベルとは :root[data-gauge-mode] で排他。切替は設定変更時のみ（実行中の shift なし）。
+   - PRE_START 中は visibility: hidden で領域を保持したまま隠す（shift 0）。 */
+.time-gauge {
+  --gauge-c1: #39ffb0;   /* 蛍光グリーン（明） */
+  --gauge-c2: #00d9ff;   /* 蛍光グリーン（奥） */
+  flex: 0 0 auto;
+  align-self: center;
+  width: 54vw;
+  height: 2.6vh;
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+  overflow: visible;
+  pointer-events: none;
+}
+.clock[data-timer-state="warn"]   .time-gauge { --gauge-c1: #ffe14a; --gauge-c2: #ff9f1a; }
+.clock[data-timer-state="danger"] .time-gauge { --gauge-c1: #ff5a4f; --gauge-c2: #ff1f6a; }
+.clock[data-status="BREAK"]       .time-gauge { --gauge-c1: #ffe6a0; --gauge-c2: var(--gold); }
+
+.time-gauge__tube {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02) 45%, rgba(0, 0, 0, 0.35));
+  box-shadow:
+    inset 0 0 0 0.12vw rgba(255, 255, 255, 0.38),
+    inset 0 -0.4vh 0.6vh rgba(0, 0, 0, 0.45),
+    0 0 0 0.1vw rgba(0, 0, 0, 0.6);
+}
+/* ガラスの光沢（水の上に重ねる） */
+.time-gauge__tube::after {
+  content: '';
+  position: absolute;
+  left: 3%;
+  right: 3%;
+  top: 14%;
+  height: 22%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55) 20%, rgba(255, 255, 255, 0.2) 80%, transparent);
+}
+.time-gauge__liquid {
+  position: absolute;
+  inset: 0.35vh 0.2vw;
+  border-radius: 999px;
+  overflow: hidden;
+  clip-path: inset(0 calc((1 - var(--gauge-ratio, 1)) * 100%) 0 0 round 999px);
+  background: linear-gradient(90deg, var(--gauge-c2), var(--gauge-c1));
+  box-shadow: 0 0 1.2vw var(--gauge-c1);
+  filter: drop-shadow(0 0 0.5vw var(--gauge-c1));
+  transition: background 0.3s ease-out;
+}
+/* 気泡（background-position のみ動かす＝合成のみ・layout 非影響） */
+.time-gauge__liquid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 12% 70%, rgba(255, 255, 255, 0.55) 0 0.16vw, transparent 0.2vw),
+    radial-gradient(circle at 38% 40%, rgba(255, 255, 255, 0.45) 0 0.12vw, transparent 0.16vw),
+    radial-gradient(circle at 63% 65%, rgba(255, 255, 255, 0.50) 0 0.14vw, transparent 0.18vw),
+    radial-gradient(circle at 85% 35%, rgba(255, 255, 255, 0.40) 0 0.10vw, transparent 0.14vw);
+  background-size: 18vw 100%;
+  animation: time-gauge-bubbles 6s linear infinite;
+}
+.time-gauge__liquid::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), transparent);
+}
+@keyframes time-gauge-bubbles {
+  to { background-position: -18vw 0; }
+}
+
+/* 右端: そのレベル（ブレイク）の分数を丸囲み。管より大きい分は上下にはみ出す（layout 非影響） */
+.time-gauge__minutes {
+  flex: 0 0 auto;
+  width: 4.2vh;
+  height: 4.2vh;
+  margin-block: -0.8vh;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-numeric);
+  font-weight: 700;
+  font-size: 2.1vh;
+  line-height: 1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  border: 0.22vh solid var(--gauge-c1);
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0.8vw var(--gauge-c1), inset 0 0 0.6vh rgba(255, 255, 255, 0.12);
+  transition: border-color 0.3s ease-out, box-shadow 0.3s ease-out;
+}
+
+/* 一時停止中: 水をくすませ、気泡を止める */
+.clock[data-status="PAUSED"] .time-gauge__liquid { filter: grayscale(70%); }
+.clock[data-status="PAUSED"] .time-gauge__liquid::before { animation-play-state: paused; }
+
+/* 開始前カウントダウン中は隠す（領域は保持） */
+.clock[data-status="PRE_START"] .time-gauge,
+.clock[data-prestart-paused="true"] .time-gauge {
+  visibility: hidden;
+}
+
+/* 排他切替: ガラス管 ⇄ ゲーム種ラベル */
+:root[data-gauge-mode="tube"] .event-game-type { display: none; }
+:root[data-gauge-mode="gameType"] .time-gauge { display: none; }
+
+/* 設定タブ: 時計の下の表示 */
+.gauge-mode-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6vh 1.6vw;
+}
+.gauge-mode-picker__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4vw;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .time-gauge__liquid::before { animation: none; }
+}

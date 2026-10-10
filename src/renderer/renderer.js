@@ -307,6 +307,9 @@ const PAYOUT_PRESETS = Object.freeze({
 const el = {
   clock: document.querySelector('.clock'),
   time: document.getElementById('js-time'),
+  // glass-tube-gauge: 時計下のガラス管ゲージ
+  timeGauge: document.getElementById('js-time-gauge'),
+  timeGaugeMinutes: document.getElementById('js-time-gauge-minutes'),
   eventTitle: document.getElementById('js-event-title'),
   eventSubtitle: document.getElementById('js-event-subtitle'),
   eventGameType: document.getElementById('js-event-game-type'),
@@ -965,6 +968,41 @@ function renderTime(remainingMs) {
   if ('prestartFormat' in el.clock.dataset) delete el.clock.dataset.prestartFormat;
   el.time.textContent = formatTime(remainingMs);
   el.clock.dataset.timerState = status === States.BREAK ? 'normal' : classifyTimerState(remainingMs);
+  renderTimeGauge(remainingMs);
+}
+
+// ===== glass-tube-gauge: 時計下のガラス管ゲージ =====
+// 水位 = 残り時間 / そのレベル（ブレイク）の全体時間。0〜1 に clamp。全体時間が不明なら満タン(1)。
+function computeGaugeRatio(remainingMs, durationMinutes) {
+  const totalMs = (typeof durationMinutes === 'number' && Number.isFinite(durationMinutes)) ? durationMinutes * 60 * 1000 : 0;
+  if (totalMs <= 0) return 1;
+  const r = (typeof remainingMs === 'number' && Number.isFinite(remainingMs)) ? remainingMs / totalMs : 1;
+  return Math.min(1, Math.max(0, r));
+}
+
+// 右端の丸囲み数字: 分数のみ（ブラインドは分単位で作る運用）。不明時は空文字
+function formatGaugeMinutes(durationMinutes) {
+  if (typeof durationMinutes !== 'number' || !Number.isFinite(durationMinutes) || durationMinutes <= 0) return '';
+  return String(Math.round(durationMinutes));
+}
+
+// 毎フレーム呼ばれるため、値が変わった時だけ DOM に書く（前回値キャッシュ）。
+// remainingMs は renderTime が受けた算出済の値を読むだけ（dual-sync 送信・setState は追加しない）。
+const _gaugeCache = { ratio: null, minutes: null };
+function renderTimeGauge(remainingMs) {
+  if (!el.timeGauge) return;
+  const level = getLevel(getState().currentLevelIndex);
+  const minutes = level ? level.durationMinutes : undefined;
+  const ratio = Math.round(computeGaugeRatio(remainingMs, minutes) * 1000) / 1000;
+  if (ratio !== _gaugeCache.ratio) {
+    _gaugeCache.ratio = ratio;
+    el.timeGauge.style.setProperty('--gauge-ratio', String(ratio));
+  }
+  const label = formatGaugeMinutes(minutes);
+  if (label !== _gaugeCache.minutes) {
+    _gaugeCache.minutes = label;
+    if (el.timeGaugeMinutes) el.timeGaugeMinutes.textContent = label;
+  }
 }
 
 function computeNextBreakMs(remainingMs, currentIndex) {
@@ -1389,6 +1427,8 @@ function applyTournament(t) {
     if (typeof ds.timerFont === 'string') {
       applyTimerFont(ds.timerFont);
     }
+    // glass-tube-gauge: キー欠落（旧データ）は既定 'tube'
+    applyGaugeMode(ds.gaugeMode);
   }
   // STEP 10 フェーズC.1.8: ランタイム復元（再起動 / トーナメント切替時の永続値読込）。
   //   C.2.7-A 致命バグ修正の不変条件「ブラインド構造を変えても tournamentRuntime は消えない」と整合。
@@ -3908,6 +3948,28 @@ async function handleFontThumbClick(value) {
     } catch (err) {
       try { window.api?.log?.write?.('error:caught:handleFontThumbClick', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
       console.warn('フォント設定の保存に失敗:', err);
+    }
+  }
+}
+
+// ===== glass-tube-gauge: 時計の下の表示（ガラス管 / ゲーム種）切替 =====
+// data-gauge-mode 属性を documentElement にセット → CSS が .time-gauge / .event-game-type の一方を表示。
+const VALID_GAUGE_MODES = ['tube', 'gameType'];
+
+function applyGaugeMode(value) {
+  const v = VALID_GAUGE_MODES.includes(value) ? value : 'tube';
+  document.documentElement.dataset.gaugeMode = v;
+  for (const r of document.querySelectorAll('input[name="gauge-mode"]')) r.checked = (r.value === v);
+}
+
+async function handleGaugeModeChange(value) {
+  applyGaugeMode(value);
+  if (window.api?.tournaments?.setDisplaySettings && tournamentState.id) {
+    try {
+      await window.api.tournaments.setDisplaySettings(tournamentState.id, { gaugeMode: value });
+    } catch (err) {
+      try { window.api?.log?.write?.('error:caught:handleGaugeModeChange', { message: err?.message, stack_top: (err?.stack || '').split('\n')[1] }); } catch (_) {}
+      console.warn('時計下の表示設定の保存に失敗:', err);
     }
   }
 }
@@ -8088,6 +8150,10 @@ document.querySelectorAll('input[name="pip-size"]').forEach((radio) => {
 el.pipShowTimer?.addEventListener('click', handlePipShowTimer);
 el.pipShowSlideshow?.addEventListener('click', handlePipShowSlideshow);
 
+document.querySelectorAll('input[name="gauge-mode"]').forEach((radio) => {
+  radio.addEventListener('change', () => { if (radio.checked) handleGaugeModeChange(radio.value); });
+});
+
 el.fontPicker?.addEventListener('click', (event) => {
   const target = event.target.closest('.font-thumb');
   if (!target) return;
@@ -8662,6 +8728,7 @@ async function loadInitialSettings() {
   let marqueeInit = { enabled: true, text: '', speed: 'normal' };
   let bgInit = 'navy';
   let fontInit = 'jetbrains';
+  let gaugeModeInit = 'tube';   // glass-tube-gauge
   let bottomBarHiddenInit = false;
   let venueNameInit = '';
   if (window.api?.settings?.getAll) {
@@ -8681,6 +8748,8 @@ async function loadInitialSettings() {
       else if (all?.display?.background)             bgInit = all.display.background;
       if (activeT?.displaySettings?.timerFont)       fontInit = activeT.displaySettings.timerFont;
       else if (all?.display?.timerFont)              fontInit = all.display.timerFont;
+      // glass-tube-gauge: アクティブ大会 → グローバル → 既定 'tube'
+      gaugeModeInit = activeT?.displaySettings?.gaugeMode ?? all?.display?.gaugeMode ?? 'tube';
       // STEP 10 フェーズC.1.3 / v2.5.0: backgroundImage は imagesStore、overlay は displaySettings
       const dsImage   = (typeof _initImages.backgroundImage === 'string') ? _initImages.backgroundImage : '';
       const dsOverlay = activeT?.displaySettings?.backgroundOverlay ?? all?.display?.backgroundOverlay ?? 'mid';
@@ -8732,6 +8801,7 @@ async function loadInitialSettings() {
   // STEP 10 フェーズC.1.4-fix3 Fix 3: 起動時に画像合計サイズを評価し、150MB 超なら警告ポップアップ + ⚠ 表示
   checkImagesTotalSizeAndWarn().catch(() => {});
   applyTimerFont(fontInit);
+  applyGaugeMode(gaugeModeInit);
   applyMarquee(marqueeInit);
   applyBottomBarHidden(bottomBarHiddenInit);
   // STEP 6.22: 店舗名表示 + 入力欄の初期値同期
@@ -9043,6 +9113,7 @@ if (__appRole === 'hall') {
         // 背景プリセット / フォント / 背景画像 / overlay / breakImages / interval / pipSize の反映
         if (typeof value.background === 'string') applyBackground(value.background);
         if (typeof value.timerFont === 'string') applyTimerFont(value.timerFont);
+        if (typeof value.gaugeMode === 'string') applyGaugeMode(value.gaugeMode);
         if (typeof value.backgroundImage === 'string') {
           bgImageState.dataUrl = value.backgroundImage;
         }

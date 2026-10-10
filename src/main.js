@@ -318,6 +318,14 @@ function sanitizePipSize(value, fallback) {
   }
   return value;
 }
+// glass-tube-gauge: 時計下の表示（'tube'=ガラス管ゲージ / 'gameType'=ゲーム種ラベル）。既定 'tube'
+const VALID_GAUGE_MODES = ['tube', 'gameType'];
+function sanitizeGaugeMode(value, fallback) {
+  if (typeof value !== 'string' || !VALID_GAUGE_MODES.includes(value)) {
+    return VALID_GAUGE_MODES.includes(fallback) ? fallback : 'tube';
+  }
+  return value;
+}
 // STEP 10 フェーズC.1.8: ランタイム情報の sanitize（負値防止 / NaN 弾き / 整数化）
 //   playersInitial / playersRemaining / reentryCount / addOnCount すべて 0 以上の整数。
 function sanitizeRuntime(value, fallback) {
@@ -492,7 +500,8 @@ const DEFAULT_TOURNAMENT_EXT = Object.freeze({
   displaySettings: {
     background: 'navy', timerFont: 'jetbrains',
     backgroundImage: '', backgroundOverlay: 'mid',
-    breakImages: [], breakImageInterval: 10, pipSize: 'medium'
+    breakImages: [], breakImageInterval: 10, pipSize: 'medium',
+    gaugeMode: 'tube'
   },
   // STEP 10 フェーズC.1.8: ランタイム情報（playersInitial / Remaining / reentryCount / addOnCount）の永続化。
   // 旧バージョン（v1.3.0 まで）では renderer メモリのみで保持していたため、アプリ終了 → 再起動で消失していた。
@@ -609,7 +618,8 @@ function getDefaultDisplaySettings() {
     // STEP 10 フェーズC.1.4: 休憩中スライドショー（グローバルから引継ぎ）
     breakImages: sanitizeBreakImages(g.breakImages, []),
     breakImageInterval: sanitizeBreakImageInterval(g.breakImageInterval, 10),
-    pipSize: sanitizePipSize(g.pipSize, 'medium')
+    pipSize: sanitizePipSize(g.pipSize, 'medium'),
+    gaugeMode: sanitizeGaugeMode(g.gaugeMode, 'tube')
   };
 }
 
@@ -741,7 +751,8 @@ const store = new Store({
       // STEP 10 フェーズC.1.4: 休憩中スライドショー
       breakImages: [],
       breakImageInterval: 10,
-      pipSize: 'medium'
+      pipSize: 'medium',
+      gaugeMode: 'tube'
     },
     userPresets: [],   // STEP 3b: ユーザー作成のブラインド構造プリセット配列
     // STEP 3b 拡張: 複数トーナメント保存。旧 tournament（単一）は migrateTournament で配列に変換
@@ -782,7 +793,8 @@ const store = new Store({
       displaySettings: {
         background: 'navy', timerFont: 'jetbrains',
         backgroundImage: '', backgroundOverlay: 'mid',
-        breakImages: [], breakImageInterval: 10, pipSize: 'medium'
+        breakImages: [], breakImageInterval: 10, pipSize: 'medium',
+        gaugeMode: 'tube'
       },
       // STEP 10 フェーズC.1.8: ランタイム永続化
       runtime: { playersInitial: 0, playersRemaining: 0, reentryCount: 0, addOnCount: 0 },
@@ -1149,8 +1161,10 @@ function migrateTournamentSchema(s) {
       }
     }
     // STEP 6.21.6: displaySettings 補完（既存件はグローバル現値でコピー初期化）
+    // glass-tube-gauge: gaugeMode のフォールバック（グローバル現値 → 既定 'tube'）
+    const fallbackGaugeMode = sanitizeGaugeMode(globalDisplay.gaugeMode, 'tube');
     if (!m.displaySettings || typeof m.displaySettings !== 'object') {
-      m.displaySettings = { ...fallbackDisplay };
+      m.displaySettings = { ...fallbackDisplay, gaugeMode: fallbackGaugeMode };
       touched = true;
       filledDisplaySettings += 1;
     } else {
@@ -1162,12 +1176,14 @@ function migrateTournamentSchema(s) {
         timerFont:  VALID_TIMER_FONTS.includes(ds.timerFont)   ? ds.timerFont  : fallbackDisplay.timerFont,
         backgroundOverlay: sanitizeBackgroundOverlay(ds.backgroundOverlay, fallbackDisplay.backgroundOverlay),
         breakImageInterval: sanitizeBreakImageInterval(ds.breakImageInterval, fallbackDisplay.breakImageInterval),
-        pipSize: sanitizePipSize(ds.pipSize, fallbackDisplay.pipSize)
+        pipSize: sanitizePipSize(ds.pipSize, fallbackDisplay.pipSize),
+        gaugeMode: sanitizeGaugeMode(ds.gaugeMode, fallbackGaugeMode)
       };
       if (fixed.background !== ds.background || fixed.timerFont !== ds.timerFont
           || fixed.backgroundOverlay !== ds.backgroundOverlay
           || fixed.breakImageInterval !== ds.breakImageInterval
-          || fixed.pipSize !== ds.pipSize) {
+          || fixed.pipSize !== ds.pipSize
+          || fixed.gaugeMode !== ds.gaugeMode) {
         m.displaySettings = { ...ds, ...fixed };  // 既存の画像フィールド（あれば）を保持してマージ
         touched = true;
       }
@@ -2782,6 +2798,10 @@ function registerIpcHandlers() {
     if ('pipSize' in partial) {
       merged.pipSize = sanitizePipSize(partial.pipSize, current.pipSize || 'medium');
     }
+    // glass-tube-gauge: 時計下の表示モード
+    if ('gaugeMode' in partial) {
+      merged.gaugeMode = sanitizeGaugeMode(partial.gaugeMode, current.gaugeMode || 'tube');
+    }
     store.set('display', merged);
     return merged;
   });
@@ -3181,7 +3201,8 @@ function registerIpcHandlers() {
         timerFont:  VALID_TIMER_FONTS.includes(ds?.timerFont)   ? ds.timerFont  : (fb.timerFont  || 'jetbrains'),
         backgroundOverlay: sanitizeBackgroundOverlay(ds?.backgroundOverlay, fb.backgroundOverlay || 'mid'),
         breakImageInterval: sanitizeBreakImageInterval(ds?.breakImageInterval, fb.breakImageInterval ?? 10),
-        pipSize: sanitizePipSize(ds?.pipSize, fb.pipSize || 'medium')
+        pipSize: sanitizePipSize(ds?.pipSize, fb.pipSize || 'medium'),
+        gaugeMode: sanitizeGaugeMode(ds?.gaugeMode, fb.gaugeMode || 'tube')
       };
     }
     // STEP 6.22.1: marqueeSettings の取り込み（値域検証は sanitizeMarqueeSettings）
@@ -3291,7 +3312,8 @@ function registerIpcHandlers() {
         timerFont:  VALID_TIMER_FONTS.includes(fb.timerFont)   ? fb.timerFont  : 'jetbrains',
         backgroundOverlay: VALID_BG_OVERLAYS.includes(fb.backgroundOverlay) ? fb.backgroundOverlay : 'mid',
         breakImageInterval: sanitizeBreakImageInterval(fb.breakImageInterval, 10),
-        pipSize: sanitizePipSize(fb.pipSize, 'medium')
+        pipSize: sanitizePipSize(fb.pipSize, 'medium'),
+        gaugeMode: sanitizeGaugeMode(fb.gaugeMode, 'tube')
       };
     }
     // STEP 6.22.1: marqueeSettings 既定補完（fallback または現グローバル marquee）
@@ -3360,7 +3382,8 @@ function registerIpcHandlers() {
           timerFont:  VALID_TIMER_FONTS.includes(ds.timerFont)   ? ds.timerFont  : 'jetbrains',
           backgroundOverlay: sanitizeBackgroundOverlay(ds.backgroundOverlay, 'mid'),
           breakImageInterval: sanitizeBreakImageInterval(ds.breakImageInterval, 10),
-          pipSize: sanitizePipSize(ds.pipSize, 'medium')
+          pipSize: sanitizePipSize(ds.pipSize, 'medium'),
+          gaugeMode: sanitizeGaugeMode(ds.gaugeMode, 'tube')
         };
       })(),
       // STEP 6.22.1: トーナメント別テロップ設定
@@ -3564,7 +3587,10 @@ function registerIpcHandlers() {
         : sanitizeBreakImageInterval(cur.breakImageInterval, 10),
       pipSize: ('pipSize' in ds)
         ? sanitizePipSize(ds.pipSize, cur.pipSize || 'medium')
-        : sanitizePipSize(cur.pipSize, 'medium')
+        : sanitizePipSize(cur.pipSize, 'medium'),
+      gaugeMode: ('gaugeMode' in ds)
+        ? sanitizeGaugeMode(ds.gaugeMode, cur.gaugeMode || 'tube')
+        : sanitizeGaugeMode(cur.gaugeMode, 'tube')
     };
     list[idx] = { ...list[idx], displaySettings: nextDs };
     store.set('tournaments', list);
