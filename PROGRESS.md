@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| v2.11.0 一式(glass-tube-gauge+時計同期〜R3-1+テスト完走ガード+段階A+一覧リセット+段階B) | 🟢 段階A+一覧リセット=実装済・完了review r1 承認・commit 済(CLAUDE.md INVARIANT 追記=前原直接OK 2026-10-10)・Codex 査定待ち/段階B=customer-app 依頼書起案中 | report=`.cc-reports/2026-10-10_stageA_r3-345_list-reset.md`・review=`.cc-briefs/2026-10-10_stageA_r3-345_list-reset_r1_completion_review.md`・引継ぎ=`.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`・branch `feature/glass-tube-gauge` |
+| v2.11.0 一式(glass-tube-gauge+時計同期〜R3-1+テスト完走ガード+段階A+一覧リセット+段階B) | 🟢 段階A+一覧リセット=実装済・完了review r1 承認・commit 済(CLAUDE.md INVARIANT 追記=前原直接OK 2026-10-10)・Codex 査定待ち/段階B=customer-app 案件333(B-1)を顧客アプリ20で実装中・PC 側 B-2 は B-1 本番反映の連絡待ち | report=`.cc-reports/2026-10-10_stageA_r3-345_list-reset.md`・review=`.cc-briefs/2026-10-10_stageA_r3-345_list-reset_r1_completion_review.md`・引継ぎ=`.cc-briefs/2026-10-10_clock-sync_codex-handoff.md`・branch `feature/glass-tube-gauge` |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
