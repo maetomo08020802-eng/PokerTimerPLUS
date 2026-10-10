@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-10-11** — **v2.11.0 は「全部直してから1回で配信」に方針変更(前原訂正・指揮役経由)**。中身=glass-tube-gauge+時計同期〜R3-1(Codex r5 合格)+テスト完走ガード+段階A(R3-3/4/5)+一覧リセット+段階B(R3-2)。feature ブランチ commit 済・未 push。前リリース v2.10.1。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-10-11** — **v2.11.0 配信済(Latest・自動更新有効・tag `v2.11.0`=main `c02cfad`)**。中身=蛍光ガラス管ゲージ+時計同期(構造のみ適用)+一覧リセット(人数等も0)+連携の不具合修正(codex R3-1〜R3-5・段階A/B 全件 Codex 合格)。オープン作業なし。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| v2.11.0 一式(glass-tube-gauge+時計同期+段階A/一覧リセット+段階B) | 🟡 **5 項目すべて Codex 合格**(段階A `dd40fb5`・段階B `c14634e`・2026-10-11)→**前原の v2.11.0 全体実機確認待ち**→前原の直接 GO で配信 | 実機確認シナリオ=`.cc-reports/2026-10-11_v2.11.0_実機確認シナリオ.md`・branch `feature/glass-tube-gauge` `c14634e`(未 push) |
+| (なし) | — | — |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -21,6 +21,7 @@
 
 | 配信日 | バージョン | 主要変更(1行) | report |
 |--------|-----------|---------|--------|
+| 2026-10-11 | **v2.11.0** | **蛍光ガラス管ゲージ**(時計下・残り時間の水位・ゲーム種表示と切替)+**時計同期の根治**(構造のみ適用で会場側・再起動・連携がずれない/R3-1〜R3-5)+**一覧リセットで人数等も0**+連携の送信先取り違え・切替競合・完走送信・現レベル全体時間(level_total_ms・customer-app 案件333 と対)。Codex 段階A/B 合格・前原実機OK | `.cc-reports/2026-10-11_v2.11.0_実機確認シナリオ.md`・`2026-10-11_stageB_r3-2_level-total.md`・`2026-10-11_stageA_codex-fixes_r2.md` |
 | 2026-08-09 | **v2.10.1** | **案件231=連携ON大会の進行中タイマー巻き戻り根治**(DBのstale idle/finished行に追従せず `{kind:'republish'}` でPC状態を再送・観測ログ `dblink:stale-skip`+`timer:reset:caller` 追加)。実店舗発生バグ・完了review dual承認・実機確認OK。tag v2.10.1(Latest・自動更新) | `.cc-reports/2026-08-09_案件231_{dblink-stale-idle-guard,v2101-release-prep}.md` |
 | 2026-07-18 | **v2.10.0** | **案件230 K4=PC表示メタ・ロゴ送信**(連携ON大会のみ イベント名/賞金/配当/テロップ/テーマ/アベスタック+ロゴを `/api/pc-timer/display`・`/logo` へ)。coalescer 4種別化+global gap 1.1s(≤54回/分)・6値テーマ丸め・テロップ平文化・ロゴ≤300KB(nativeImage縮小/SVGスキップ)。INVARIANT例外②改定=金銭表示情報の送信を前原承認で明示許容。既定OFF不変。tag v2.10.0(Latest・自動更新) | `.cc-reports/2026-07-18_案件230_K4_PC表示データ送信.md` |
 | 2026-07-18 | **v2.9.0** | **外部DB連携(店舗キー方式・案件229 STEP2=K1接続基盤+紐づけ/K2状態送信・楽観ロック/K3切断表示・OFF停止・DB追従アダプタ)**。設定=URL+店舗キーの2入力・既定OFF=完全ローカル不変・supabase-js不使用(plain fetch)・送信は時計状態+ブラインド構成のみ。tag v2.9.0(自動更新) | `.cc-reports/2026-07-18_案件229_PC店舗キー連携_STEP2-K{1,2,3}.md` |
@@ -54,20 +55,21 @@
 
 | 指標 | 値 |
 |------|----|
-| 配信済リリース | 20件(v1.0.0〜v2.10.1)|
+| 配信済リリース | 21件(v1.0.0〜v2.11.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
-| オープン作業 | 1件(glass-tube-gauge 一式・R3 レビュー/Codex再査定/指揮役判断待ち)|
-| 最新テスト件数 | 2013件 全PASS(feature/glass-tube-gauge 作業ツリー・計数スクリプト基準。v2.10.1 時点は同手段 1884) |
+| オープン作業 | 0件 |
+| 最新テスト件数 | npm test 全PASS(v2.11.0 時点・exit 0)。v2.10.1 以降の追加=glass-tube-gauge 系・clock-sync 系(62/25)・stageA 44・stageB 15。総数は未再集計(2013件=段階A前の計数スクリプト値) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化9箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.10.1(`81220e8`)。`feature/glass-tube-gauge` = `c14634e`(v2.11.0 候補・未 push・push/配信は前原の直接 GO 後)。作業用 worktree・stash は片付け済。
-- **現在地(2026-10-11)**: **v2.11.0 の 5 項目すべて Codex 合格**(glass-tube-gauge+時計同期〜R3-1=r5 合格/テスト完走ガード/段階A R3-3/4/5+一覧リセット=`dd40fb5` 合格/段階B R3-2=`c14634e` 合格・customer-app 案件333 本番反映済)。npm test exit 0(stageA 44・stageB 15・clock-sync-codex 62)。**次**=前原の v2.11.0 全体実機確認(シナリオ表 `.cc-reports/2026-10-11_v2.11.0_実機確認シナリオ.md`・約60分・A=PC単体/B=HDMI/C=連携ON本番)→前原の直接 GO→version 2.11.0 bump(version assertion 一括・package-lock 是正)→main merge・push→tag・GitHub Release→Latest 反映確認。区切りごとに指揮役(session id `local_93fe8768-657a-49fe-a8a3-bc32f26f4cd0`)へ報告。
-- **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須。package-lock root version ドリフトも配信時に是正。
-- 参照: report=`.cc-reports/2026-10-10_glass-tube-gauge{,_codex-fixes}.md`・モック=`docs/mockups/2026-10-10_glass-tube-gauge_mock.html`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
+- **git**: `main` = v2.11.0(`c02cfad`・tag `v2.11.0`・push 済)。GitHub Release v2.11.0 = Latest(installer+blockmap+latest.yml・sha512 整合確認済)。
+- **現在地(2026-10-11)**: **v2.11.0 配信完了**(前原実機OK・直接GO)。オープン作業なし=安定運用フェーズ。customer-app 側は案件333(migration 0202)本番反映済で対になる。
+- **残課題(提案のみ・範囲外)**: 起動時/大会削除で表示中が変わる経路の初回復元と同期の順序/4分割中のスマホ遠隔操作が隠れた単一画面へ届き得る件/走行中に PC で構造を変えても店舗側の構造が古いままの件(customer-app 側)。
+- **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須(74ファイル)。package-lock root version も同時に合わせる(v2.11.0 で 2.8.0→是正済)。
+- 参照: 実機確認シナリオ=`.cc-reports/2026-10-11_v2.11.0_実機確認シナリオ.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
 
 ---
 
