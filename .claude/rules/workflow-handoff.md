@@ -22,8 +22,8 @@ review は「DoD 項目への ✅/❌ + 追加指示のみ」に絞る。既出�
 - **investigation 型 brief（調査・監査・設計探索系）の review = 50〜120 行が現実的下限**。調査結果の事実整理 + 判定根拠 + 次フェーズ方針が含まれるため 5 行では収まらない。「分量が膨らんだ = 異常」とは判定しない（plus2-homepage homepage-performance-audit 案件の事例で確立）
 
 **brief 書き手の厳守事項（2026-05-28 追加、ルール4-A 補足）**:
-- **brief 起案は構築士2（Cowork 版 or サブエージェント版 `cc-kouchikushi2`）の専任業務**。CC は brief を書かない
-- 暗黙的に「CC が brief を書く」運用パターンが発生したら異例事態。CC は **必ず `Agent` ツールで `subagent_type: "cc-kouchikushi2"` を呼出し、サブエージェントに brief 起案を代行させる**（CC 自身は WHAT を確定する権限を持たない、ルール4-A 役割境界の趣旨）
+- **brief 起案は指揮役セッション（Desktop）の専任業務**（2026-10-17〜。Cowork は 2026-07-25 廃止・サブエージェント版 構築士2 は引退）。CC は brief を書かない
+- 暗黙的に「CC が brief を書く」運用パターンが発生したら異例事態。CC は **指揮役セッションに brief 起案を依頼する**（CC 自身は WHAT を確定する権限を持たない、ルール4-A 役割境界の趣旨）
 - 緊急小修正 brief（1〜2 行）であっても CC が直接書き出さず、サブエージェント呼出経由で書き出す
 
 #### B. DoD（Definition of Done）= brief 必須セクション
@@ -110,11 +110,11 @@ Plan 提示時、以下の 3 段階で処理。詳細は `CC構築士2_手順書
 
 **段階 2: サブエージェント呼出**（2026-05-28 拡張。現 Phase 1 では CC が report/plan 書出直後に能動呼出）
 
-4 条件 not met の場合、CC は Cowork に投げずに `cc-kouchikushi2` サブエージェントを自動呼出（Agent ツール、`subagent_type: "cc-kouchikushi2"`）。Plan + brief パスを渡してサブエージェントが軽量 review → `.cc-briefs/...review.md` 自動書出。CC が読んで実装着手。
+4 条件 not met の場合、CC は `plan-reviewer` サブエージェントを自動呼出（Agent ツール、`subagent_type: "plan-reviewer"`。2026-10-17〜。旧のサブエージェント版 構築士2 は引退）。Plan + brief パスを渡してサブエージェントが軽量 review → `.cc-briefs/..._plan_review.md` 自動書出。CC が読んで実装着手。
 
 **段階 3: escalate**（コワーク必要）
 
-サブエージェント自身が「致命バグ保護違反疑い / 真の新規判断 / 大方針変更（v2.x 不変条件への影響等）」を検出した場合のみ stopReason 付き Stop で escalate。前原が Cowork 構築士2 と対話して方針決定 → 修正 brief 起案 → 段階 1 から再実行。
+サブエージェント自身が「致命バグ保護違反疑い / 真の新規判断 / 大方針変更（v2.x 不変条件への影響等）」を検出した場合のみ stopReason 付き Stop で escalate。前原が指揮役セッション（Desktop）で方針決定 → 修正 brief 起案 → 段階 1 から再実行（Cowork は 2026-07-25 廃止）。
 
 **判断に迷ったら**: 段階 2（サブエージェント呼出）側に倒す。escalate が必要かは構築士2 自身が判断する設計。CC が `AskUserQuestion` / `ExitPlanMode` で立ち止まることは禁止（自走必須ルール、CLAUDE.md「禁止事項（実装ルール）」末尾参照）。
 
