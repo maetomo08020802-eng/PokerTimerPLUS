@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-10-11** — **v2.11.0 配信済(Latest・自動更新有効・tag `v2.11.0`=main `c02cfad`)**。中身=蛍光ガラス管ゲージ+時計同期(構造のみ適用)+一覧リセット(人数等も0)+連携の不具合修正(codex R3-1〜R3-5・段階A/B 全件 Codex 合格)。オープン作業なし。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-10-22** — 配信中 = **v2.11.0**(Latest・tag `v2.11.0`=main `c02cfad`)。**v2.12.0(依存更新+Electron 44)実装済・レビュー中**(ブランチ `feature/v2.12.0-deps-electron44`)。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| (なし) | — | — |
+| v2.12.0-deps 依存更新+Electron 31→44 | 🔵 レビュー待ち(cc-review2 dual → Codex astra xhigh)→ 🟡 前原実機(6-B) | `.cc-reports/2026-10-22_v2.12.0-deps_依存更新とElectron44.md`・branch `feature/v2.12.0-deps-electron44`(`a298a47`/`313fab7`・未 push) |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -65,8 +65,8 @@
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.11.0(`c02cfad`・tag `v2.11.0`・push 済)。GitHub Release v2.11.0 = Latest(installer+blockmap+latest.yml・sha512 整合確認済)。
-- **現在地(2026-10-11)**: **v2.11.0 配信完了**(前原実機OK・直接GO)。オープン作業なし=安定運用フェーズ。customer-app 側は案件333(migration 0202)本番反映済で対になる。
+- **git**: `main` = v2.11.0(`c02cfad`・tag `v2.11.0`・push 済・Release Latest)。作業ブランチ `feature/v2.12.0-deps-electron44` = 段階1 `a298a47`(updater 6.8.9/builder 26.15.3/sharp 0.35.5)+段階2 `313fab7`(Electron 44.9.3)・未 push・version bump 未。
+- **現在地(2026-10-22)**: v2.12.0 依存更新を実装(前原GO・1回配布・npm audit 24→9・配布物の警告0・npm test 全PASS・テスト専用別名アプリで旧→新/新→次の自動更新+戻し+画面配置差0を確認)。次=完了review→Codex 致命0→前原実機(6-B)→リリースGO。Electron 44 のサポート終了 2027-03-02=次の更新は 2027-02 まで。調査=`.cc-reports/2026-10-22_dep-audit_依存警告の分類と更新計画.md`。
 - **残課題(提案のみ・範囲外)**: 起動時/大会削除で表示中が変わる経路の初回復元と同期の順序/4分割中のスマホ遠隔操作が隠れた単一画面へ届き得る件/走行中に PC で構造を変えても店舗側の構造が古いままの件(customer-app 側)。
 - **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須(74ファイル)。package-lock root version も同時に合わせる(v2.11.0 で 2.8.0→是正済)。
 - 参照: 実機確認シナリオ=`.cc-reports/2026-10-11_v2.11.0_実機確認シナリオ.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
