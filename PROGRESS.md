@@ -4,7 +4,7 @@
 > バージョン単位のリリース進行型(タイマーアプリのフリー配布ソフト)。
 > ⚠️ 表内パスは CC 用参照(チャットではタップ不可・コピーしてエディタで開く)。
 
-**最終更新: 2026-10-22** — 配信中 = **v2.11.0**(Latest・tag `v2.11.0`=main `c02cfad`)。**v2.12.0(依存更新+Electron 44)実装済・レビュー合格・前原実機確認待ち**(ブランチ `feature/v2.12.0-deps-electron44`)。再開ポイントは末尾「## 直近の状態」。
+**最終更新: 2026-10-22** — **v2.12.0 配信済(Latest・自動更新有効・tag `v2.12.0`=main `a5f7dc0`)**。中身=依存部品の更新+Electron 31→44(Chromium 152 / Node 24・npm audit 24→9・配布物の警告0)。オープン作業なし。再開ポイントは末尾「## 直近の状態」。
 
 ---
 
@@ -12,7 +12,7 @@
 
 | 案件 | 状態 | 成果物 / 引継ぎ |
 |------|------|--------|
-| v2.12.0-deps 依存更新+Electron 31→44 | 🟡 前原実機確認待ち(完了review dual 承認・Codex astra xhigh 致命0 合格・確認用ビルド `dist/pokertimerplus-setup-2.12.0.exe` 作成済)→ リリースGO | `.cc-reports/2026-10-22_v2.12.0-deps_依存更新とElectron44.md`・branch `feature/v2.12.0-deps-electron44`(`a298a47`/`313fab7`・未 push) |
+| (なし) | — | — |
 > 凡例: `📝 brief起案中` / `🤔 Plan中` / `🟢 実装中` / `🔵 レビュー待ち` / `🟡 実機確認待ち` / `📦 配信準備中`
 
 ---
@@ -21,6 +21,7 @@
 
 | 配信日 | バージョン | 主要変更(1行) | report |
 |--------|-----------|---------|--------|
+| 2026-10-22 | **v2.12.0** | **依存部品の更新+Electron 31→44**(31 はサポート切れ。Chromium 152 / Node 24・electron-updater 6.8.9・electron-builder 26・npm audit 24→9・配布物の警告0)。画面・操作・データ不変。完了review dual+Codex astra xhigh 致命0・前原 GO | `.cc-reports/2026-10-22_v2.12.0-deps_依存更新とElectron44.md` |
 | 2026-10-11 | **v2.11.0** | **蛍光ガラス管ゲージ**(時計下・残り時間の水位・ゲーム種表示と切替)+**時計同期の根治**(構造のみ適用で会場側・再起動・連携がずれない/R3-1〜R3-5)+**一覧リセットで人数等も0**+連携の送信先取り違え・切替競合・完走送信・現レベル全体時間(level_total_ms・customer-app 案件333 と対)。Codex 段階A/B 合格・前原実機OK | `.cc-reports/2026-10-11_v2.11.0_実機確認シナリオ.md`・`2026-10-11_stageB_r3-2_level-total.md`・`2026-10-11_stageA_codex-fixes_r2.md` |
 | 2026-08-09 | **v2.10.1** | **案件231=連携ON大会の進行中タイマー巻き戻り根治**(DBのstale idle/finished行に追従せず `{kind:'republish'}` でPC状態を再送・観測ログ `dblink:stale-skip`+`timer:reset:caller` 追加)。実店舗発生バグ・完了review dual承認・実機確認OK。tag v2.10.1(Latest・自動更新) | `.cc-reports/2026-08-09_案件231_{dblink-stale-idle-guard,v2101-release-prep}.md` |
 | 2026-07-18 | **v2.10.0** | **案件230 K4=PC表示メタ・ロゴ送信**(連携ON大会のみ イベント名/賞金/配当/テロップ/テーマ/アベスタック+ロゴを `/api/pc-timer/display`・`/logo` へ)。coalescer 4種別化+global gap 1.1s(≤54回/分)・6値テーマ丸め・テロップ平文化・ロゴ≤300KB(nativeImage縮小/SVGスキップ)。INVARIANT例外②改定=金銭表示情報の送信を前原承認で明示許容。既定OFF不変。tag v2.10.0(Latest・自動更新) | `.cc-reports/2026-07-18_案件230_K4_PC表示データ送信.md` |
@@ -55,18 +56,18 @@
 
 | 指標 | 値 |
 |------|----|
-| 配信済リリース | 21件(v1.0.0〜v2.11.0)|
+| 配信済リリース | 22件(v1.0.0〜v2.12.0)|
 | アーカイブ済案件 | 10件(`.cc-archive/`)|
 | オープン作業 | 0件 |
-| 最新テスト件数 | npm test 全PASS(v2.11.0 時点・exit 0)。v2.10.1 以降の追加=glass-tube-gauge 系・clock-sync 系(62/25)・stageA 44・stageB 15。総数は未再集計(2013件=段階A前の計数スクリプト値) |
+| 最新テスト件数 | npm test 全PASS(v2.12.0 時点・exit 0・PASS 行 1777・FAIL 0)。総数は未再集計(2013件=段階A前の計数スクリプト値) |
 | 致命バグ保護 | 5件 完全維持(resetBlindProgressOnly / timerState destructure除外 / ensureEditorEditableState 4重防御 / AudioContext resume / runtime永続化9箇所)|
 
 ---
 
 ## 直近の状態(次セッション起点)
 
-- **git**: `main` = v2.11.0(`c02cfad`・tag `v2.11.0`・push 済・Release Latest)。作業ブランチ `feature/v2.12.0-deps-electron44` = 段階1 `a298a47`(updater 6.8.9/builder 26.15.3/sharp 0.35.5)+段階2 `313fab7`(Electron 44.9.3)+release 準備 `735720e`(version 2.12.0)・未 push・tag 未。
-- **現在地(2026-10-22)**: v2.12.0 依存更新を実装(前原GO・1回配布・npm audit 24→9・配布物の警告0・npm test 全PASS・テスト専用別名アプリで旧→新/新→次の自動更新+戻し+画面配置差0を確認)。完了review(dual)承認・Codex(gpt-6-astra xhigh)致命0 合格=r1。確認用ビルド済(`735720e`=version 2.12.0+assertion 74+lock root+CHANGELOG・npm test 全PASS・`dist/pokertimerplus-setup-2.12.0.exe` sha512 整合)。次=前原実機(6-B)→リリースGO(main merge・tag・push・Release 3資産)。実機確認後にコードを直すなら 2.12.1 へ上げて作り直す。前原判断待ち=更新案内「2分」の扱い(Codex W1)。Electron 44 のサポート終了 2027-03-02=次の更新は 2027-02 まで。調査=`.cc-reports/2026-10-22_dep-audit_依存警告の分類と更新計画.md`。
+- **git**: `main` = v2.12.0(merge `a5f7dc0`・tag `v2.12.0`・push 済)。GitHub Release v2.12.0 = Latest(installer+blockmap+latest.yml・公開物の sha512 整合を外部取得で確認・v2.11.0 blockmap も取得可=差分更新可)。
+- **現在地(2026-10-22)**: **v2.12.0 配信完了**(前原リリースGO)。オープン作業なし。**配信後の確認(6-B)**=店舗 PC が v2.11.0 から自動で 2.12.0 になるか(閉じて2分で再起動・人数等が残るか)/音声/HDMI/店舗連携/スマホ遠隔操作/自作ロゴ・背景。**前原判断待ち**=更新案内「2分」の扱い(Codex W1・旧版の案内が出るため今回の更新には新版の文言変更は効かない)。**Electron 44 のサポート終了 2027-03-02=次の Electron 更新は 2027-02 まで**(半年ごと定例化)。本物データの退避=`%LOCALAPPDATA%\PokerTimerPLUS-backup\2026-10-22`(店舗キー含む・不要になれば削除)。
 - **残課題(提案のみ・範囲外)**: 起動時/大会削除で表示中が変わる経路の初回復元と同期の順序/4分割中のスマホ遠隔操作が隠れた単一画面へ届き得る件/走行中に PC で構造を変えても店舗側の構造が古いままの件(customer-app 側)。
 - **★リリース時の教訓**: 「main merge = 配信」ではない。実機は GitHub Release(Latest tag)の自動更新で動く(`git merge-base --is-ancestor <commit> <tag>` で確認)。version assertion 一括 bump 必須(74ファイル)。package-lock root version も同時に合わせる(v2.11.0 で 2.8.0→是正済)。
 - 参照: 実機確認シナリオ=`.cc-reports/2026-10-11_v2.11.0_実機確認シナリオ.md`。温存候補=v2.3.0 PRE_START永続化(前原判断)。
